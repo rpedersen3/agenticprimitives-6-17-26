@@ -178,6 +178,19 @@ importers:
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../types
+      '@noble/curves':
+        specifier: ^1.6.0
+        version: 1.9.1
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+      viem:
+        specifier: ^2.21.0
+        version: 2.50.4(typescript@5.9.3)(zod@4.4.3)
+    devDependencies:
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
 
   packages/key-custody:
     dependencies:
