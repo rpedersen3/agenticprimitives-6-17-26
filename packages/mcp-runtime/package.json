@@ -21,7 +21,7 @@
   },
   "files": ["dist", "spec.md", "README.md"],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo 'no tests yet' && exit 0",
     "clean": "rm -rf dist"

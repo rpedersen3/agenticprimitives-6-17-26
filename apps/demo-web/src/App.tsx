@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { loadOrCreateDemoUser, resetDemoUser, type DemoUser } from './test-user';
+import { signInWithSiwe } from './siwe-flow';
 
-// Each step below is a stub. As the @agenticprimitives/* packages get
-// implemented (per spec 101 priority order), these stubs get replaced with
-// real calls.
+const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID ?? 31337);
+
+// Step 1 (SIWE login) is wired. Steps 2 + 3 remain stubs until
+// @agenticprimitives/delegation + mcp-runtime ship their implementations.
 
 interface DemoState {
   user: DemoUser;
@@ -34,12 +36,15 @@ export function App() {
 
   // STEP 1: SIWE login → JWT session
   const signIn = async () => {
-    append('[1] SIWE login → JWT session (TODO: implement once identity-auth + agent-account are real)');
-    // const message = siwe.buildMessage({ ... });
-    // const signature = await state!.user.account.signMessage({ message });
-    // const res = await fetch('/a2a/auth/siwe-verify', { method: 'POST', body: JSON.stringify({ message, signature }) });
-    // const { smartAccountAddress } = await res.json();
-    // setState(s => s ? { ...s, smartAccountAddress } : s);
+    if (!state) return;
+    append('[1] SIWE: building message + signing with EOA…');
+    const res = await signInWithSiwe(state.user, CHAIN_ID);
+    if (!res.ok) {
+      append(`[1] FAILED: ${res.error}${res.reason ? ` (${res.reason})` : ''}`);
+      return;
+    }
+    append(`[1] ✓ Signed in. wallet=${res.walletAddress} smartAccount=${res.smartAccountAddress} deployed=${res.isDeployed}`);
+    setState((s) => (s ? { ...s, smartAccountAddress: res.smartAccountAddress } : s));
   };
 
   // STEP 2: a2a init session → web builds + signs Delegation → a2a packages it

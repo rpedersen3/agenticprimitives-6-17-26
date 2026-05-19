@@ -7,6 +7,15 @@ dist/
 build/
 *.tsbuildinfo
 
+# Playwright
+playwright-report/
+test-results/
+
+# Foundry cache
+broadcast/
+out/
+cache/
+
 # Env / secrets
 .env
 .env.local

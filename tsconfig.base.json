@@ -20,9 +20,15 @@
     "paths": {
       "@agenticprimitives/types": ["packages/types/src/index.ts"],
       "@agenticprimitives/identity-auth": ["packages/identity-auth/src/index.ts"],
+      "@agenticprimitives/identity-auth/passkey": ["packages/identity-auth/src/methods/passkey.ts"],
+      "@agenticprimitives/identity-auth/siwe": ["packages/identity-auth/src/methods/siwe.ts"],
+      "@agenticprimitives/identity-auth/google": ["packages/identity-auth/src/methods/google.ts"],
       "@agenticprimitives/agent-account": ["packages/agent-account/src/index.ts"],
       "@agenticprimitives/delegation": ["packages/delegation/src/index.ts"],
       "@agenticprimitives/key-custody": ["packages/key-custody/src/index.ts"],
+      "@agenticprimitives/key-custody/local": ["packages/key-custody/src/providers/local.ts"],
+      "@agenticprimitives/key-custody/aws": ["packages/key-custody/src/providers/aws.ts"],
+      "@agenticprimitives/key-custody/gcp": ["packages/key-custody/src/providers/gcp.ts"],
       "@agenticprimitives/tool-policy": ["packages/tool-policy/src/index.ts"],
       "@agenticprimitives/mcp-runtime": ["packages/mcp-runtime/src/index.ts"]
     }

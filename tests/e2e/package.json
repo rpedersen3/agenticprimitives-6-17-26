@@ -1,0 +1,21 @@
+{
+  "name": "@agenticprimitives-demo/e2e",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Playwright E2E tests for the agenticprimitives demo. One spec per feature; runnable independently.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install chromium",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.7.0",
+    "typescript": "^5.5.0"
+  }
+}
