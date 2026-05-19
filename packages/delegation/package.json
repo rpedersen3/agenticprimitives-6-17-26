@@ -1,0 +1,23 @@
+{
+  "name": "@agenticprimitives/delegation",
+  "version": "0.0.1",
+  "description": "Smart-account delegation manager: EIP-712 delegations, caveats, web→agent→MCP token flow, on-chain validation.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo 'no tests yet' && exit 0",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["delegation", "eip-712", "erc-7710", "erc-1271", "caveat", "agentic", "mcp"],
+  "license": "UNLICENSED"
+}

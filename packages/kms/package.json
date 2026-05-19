@@ -1,0 +1,38 @@
+{
+  "name": "@agenticprimitives/kms",
+  "version": "0.0.1",
+  "description": "Pluggable KMS abstraction: envelope encryption for session packages, key-bound signers (local-AES / AWS KMS / GCP KMS), and HMAC providers.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./aws": {
+      "types": "./dist/providers/aws.d.ts",
+      "import": "./dist/providers/aws.js"
+    },
+    "./gcp": {
+      "types": "./dist/providers/gcp.d.ts",
+      "import": "./dist/providers/gcp.js"
+    },
+    "./local": {
+      "types": "./dist/providers/local.d.ts",
+      "import": "./dist/providers/local.js"
+    }
+  },
+  "files": ["dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo 'no tests yet' && exit 0",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["kms", "aws-kms", "gcp-kms", "envelope-encryption", "secp256k1", "session-key", "agentic"],
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "@agenticprimitives/delegation": "workspace:*"
+  }
+}

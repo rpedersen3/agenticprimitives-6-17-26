@@ -1,0 +1,35 @@
+{
+  "name": "@agenticprimitives/auth",
+  "version": "0.0.1",
+  "description": "Privy-style user auth (passkey + SIWE + OAuth) and deterministic ERC-4337 smart account initiation.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./passkey": {
+      "types": "./dist/methods/passkey.d.ts",
+      "import": "./dist/methods/passkey.js"
+    },
+    "./siwe": {
+      "types": "./dist/methods/siwe.d.ts",
+      "import": "./dist/methods/siwe.js"
+    },
+    "./google": {
+      "types": "./dist/methods/google.d.ts",
+      "import": "./dist/methods/google.js"
+    }
+  },
+  "files": ["dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo 'no tests yet' && exit 0",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["auth", "privy", "passkey", "siwe", "erc-4337", "smart-account", "agentic"],
+  "license": "UNLICENSED"
+}
