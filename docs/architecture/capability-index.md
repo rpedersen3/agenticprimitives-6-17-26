@@ -30,7 +30,7 @@ Cross-cutting branded types: Address, Hex, ChainId, BrandedId. Types-only; no ru
 
 ERC-4337 smart-account substrate. Deterministic addressing, factory deployment, ERC-1271 signing, UserOp building. Account-agnostic of which signer signs.
 
-**Public exports** (2): `AgentAccountClient`, `UserOperation`
+**Public exports** (6): `AgentAccountClient`, `AgentAccountClientOpts`, `CreateAgentAccountParams`, `UserOperation`, `Address`, `Hex`
 
 **Read first:** [`CLAUDE.md`](../../packages/agent-account/CLAUDE.md) · [`capability.manifest.json`](../../packages/agent-account/capability.manifest.json) · [`src/index.ts`](../../packages/agent-account/src/index.ts)
 
@@ -38,7 +38,7 @@ ERC-4337 smart-account substrate. Deterministic addressing, factory deployment, 
 
 EIP-712 delegations spanning web app → agent → MCP. Caveats, token envelope, validation, session lifecycle.
 
-**Public exports** (32): `ROOT_AUTHORITY`, `DelegationClient`, `SessionManager`, `SessionStore`, `buildCaveat`, `buildMcpToolScopeCaveat`, `buildDataScopeCaveat`, `buildDelegateBindingCaveat`, `encodeTimestampTerms`, `encodeValueTerms`, `encodeAllowedTargetsTerms`, `encodeAllowedMethodsTerms`, `hashDelegation`, `hashCaveats`, `evaluateCaveats`, `mintDelegationToken`, `verifyDelegationToken`, `verifyCrossDelegation`, `isRevoked`, `revokeDelegation`, `Delegation`, `Caveat`, `DataScopeGrant`, `DelegationTokenClaims`, `EnforcerAddressMap`, `JtiStore`, `CaveatContext`, `VerifyOpts`, `VerifyError`, `SessionRow`, `SessionPackage`, `SessionMeta`
+**Public exports** (37): `ROOT_AUTHORITY`, `DelegationClient`, `DelegationClientOpts`, `SessionManager`, `SessionStore`, `buildCaveat`, `buildMcpToolScopeCaveat`, `buildDataScopeCaveat`, `buildDelegateBindingCaveat`, `encodeTimestampTerms`, `encodeValueTerms`, `encodeAllowedTargetsTerms`, `encodeAllowedMethodsTerms`, `hashDelegation`, `hashCaveats`, `evaluateCaveats`, `mintDelegationToken`, `verifyDelegationToken`, `verifyCrossDelegation`, `isRevoked`, `revokeDelegation`, `Delegation`, `Caveat`, `CaveatVerdict`, `DataScopeGrant`, `DelegationTokenClaims`, `EnforcerAddressMap`, `JtiStore`, `CaveatContext`, `VerifyOpts`, `VerifyError`, `TxContext`, `SessionRow`, `SessionPackage`, `SessionMeta`, `Address`, `Hex`
 
 **Read first:** [`CLAUDE.md`](../../packages/delegation/CLAUDE.md) · [`capability.manifest.json`](../../packages/delegation/capability.manifest.json) · [`src/index.ts`](../../packages/delegation/src/index.ts)
 
@@ -46,7 +46,7 @@ EIP-712 delegations spanning web app → agent → MCP. Caveats, token envelope,
 
 User auth (passkey + SIWE + Google OAuth), JWT sessions, CSRF, and pluggable Signer interfaces consumed by agent-account and delegation.
 
-**Public exports** (15): `mintSession`, `verifySession`, `SESSION_COOKIE`, `SESSION_TTL_SECONDS`, `csrfTokenFor`, `verifyCsrf`, `deriveSaltFromLabel`, `deriveSaltFromEmail`, `Signer`, `PasskeySigner`, `EOASigner`, `KMSSigner`, `JwtClaims`, `AuthenticatedUser`, `AuthMethod`
+**Public exports** (20): `mintSession`, `verifySession`, `SESSION_COOKIE`, `SESSION_TTL_SECONDS`, `csrfTokenFor`, `verifyCsrf`, `deriveSaltFromLabel`, `deriveSaltFromEmail`, `Signer`, `PasskeySigner`, `PasskeyAssertion`, `EOASigner`, `KMSSigner`, `TypedDataDomain`, `TypedDataTypes`, `JwtClaims`, `AuthenticatedUser`, `AuthMethod`, `Address`, `Hex`
 
 **Read first:** [`CLAUDE.md`](../../packages/identity-auth/CLAUDE.md) · [`capability.manifest.json`](../../packages/identity-auth/capability.manifest.json) · [`src/index.ts`](../../packages/identity-auth/src/index.ts)
 
@@ -54,7 +54,7 @@ User auth (passkey + SIWE + Google OAuth), JWT sessions, CSRF, and pluggable Sig
 
 Envelope encryption + signers + HMAC providers. local-AES/AWS-KMS/GCP-KMS backends behind one A2AKeyProvider interface. No session lifecycle (that's delegation's).
 
-**Public exports** (16): `A2AKeyProvider`, `KmsAccountBackend`, `BuildOpts`, `buildKeyProvider`, `buildSignerBackend`, `buildToolExecutorBackend`, `buildMacProvider`, `getRelayOnlySigner`, `createKmsAccount`, `canonicalContextBytes`, `LocalAesProvider`, `LocalSecp256k1Signer`, `AwsKmsProvider`, `AwsKmsSigner`, `GcpKmsProvider`, `GcpKmsSigner`
+**Public exports** (19): `A2AKeyProvider`, `KmsAccountBackend`, `KmsBackend`, `BuildOpts`, `buildKeyProvider`, `buildSignerBackend`, `buildToolExecutorBackend`, `buildMacProvider`, `getRelayOnlySigner`, `createKmsAccount`, `canonicalContextBytes`, `LocalAesProvider`, `LocalSecp256k1Signer`, `AwsKmsProvider`, `AwsKmsSigner`, `GcpKmsProvider`, `GcpKmsSigner`, `Address`, `Hex`
 
 **Read first:** [`CLAUDE.md`](../../packages/key-custody/CLAUDE.md) · [`capability.manifest.json`](../../packages/key-custody/capability.manifest.json) · [`src/index.ts`](../../packages/key-custody/src/index.ts)
 
@@ -62,7 +62,7 @@ Envelope encryption + signers + HMAC providers. local-AES/AWS-KMS/GCP-KMS backen
 
 Delegation-aware authorization middleware around the official MCP SDK. withDelegation/withCrossDelegation wrappers, JTI replay protection, classification routing.
 
-**Public exports** (14): `withDelegation`, `withCrossDelegation`, `declareResource`, `createSqliteJtiStore`, `createPostgresJtiStore`, `createMemoryJtiStore`, `verifyDelegationForResource`, `verifyCrossDelegationForResource`, `McpResourceVerifyConfig`, `ResourceDefinition`, `MockDelegationSigner`, `createTestConfig`, `withMockedDelegationContext`, `lintMcpClassification`
+**Public exports** (20): `withDelegation`, `withCrossDelegation`, `declareResource`, `createSqliteJtiStore`, `createPostgresJtiStore`, `createMemoryJtiStore`, `verifyDelegationForResource`, `verifyCrossDelegationForResource`, `McpResourceVerifyConfig`, `ResourceDefinition`, `BetterSqlite3DatabaseLike`, `PgPoolLike`, `Address`, `Hex`, `Caveat`, `DataScopeGrant`, `Delegation`, `EnforcerAddressMap`, `JtiStore`, `ToolClassification`
 
 **Read first:** [`CLAUDE.md`](../../packages/mcp-runtime/CLAUDE.md) · [`capability.manifest.json`](../../packages/mcp-runtime/capability.manifest.json) · [`src/index.ts`](../../packages/mcp-runtime/src/index.ts)
 
@@ -70,7 +70,7 @@ Delegation-aware authorization middleware around the official MCP SDK. withDeleg
 
 Protocol-agnostic classification taxonomy + risk tiers + exact-call DSL + decision engine. Consumable by any tool runtime.
 
-**Public exports** (12): `RiskTier`, `ToolClassification`, `ExactCallPolicy`, `PolicyContext`, `PolicyDecision`, `declareTool`, `exactCall`, `matchesExactCall`, `evaluatePolicy`, `clampTtlForRiskTier`, `requiredCaveatsForRiskTier`, `lintClassification`
+**Public exports** (18): `RiskTier`, `ToolClassification`, `ExactCallPolicy`, `PolicyContext`, `PolicyDecision`, `CaveatContext`, `CaveatLike`, `DelegationLike`, `declareTool`, `exactCall`, `matchesExactCall`, `evaluatePolicy`, `clampTtlForRiskTier`, `requiredCaveatsForRiskTier`, `lintClassification`, `LintResult`, `Address`, `Hex`
 
 **Read first:** [`CLAUDE.md`](../../packages/tool-policy/CLAUDE.md) · [`capability.manifest.json`](../../packages/tool-policy/capability.manifest.json) · [`src/index.ts`](../../packages/tool-policy/src/index.ts)
 

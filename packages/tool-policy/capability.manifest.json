@@ -35,13 +35,19 @@
     "ExactCallPolicy",
     "PolicyContext",
     "PolicyDecision",
+    "CaveatContext",
+    "CaveatLike",
+    "DelegationLike",
     "declareTool",
     "exactCall",
     "matchesExactCall",
     "evaluatePolicy",
     "clampTtlForRiskTier",
     "requiredCaveatsForRiskTier",
-    "lintClassification"
+    "lintClassification",
+    "LintResult",
+    "Address",
+    "Hex"
   ],
   "forbiddenTerms": [
     { "term": "@modelcontextprotocol", "reason": "Protocol-agnostic. Importing MCP SDK violates ADR-0003.", "owningPackage": "@agenticprimitives/mcp-runtime" },

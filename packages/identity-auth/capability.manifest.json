@@ -38,11 +38,16 @@
     "deriveSaltFromEmail",
     "Signer",
     "PasskeySigner",
+    "PasskeyAssertion",
     "EOASigner",
     "KMSSigner",
+    "TypedDataDomain",
+    "TypedDataTypes",
     "JwtClaims",
     "AuthenticatedUser",
-    "AuthMethod"
+    "AuthMethod",
+    "Address",
+    "Hex"
   ],
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Authority concept; this package authenticates identity, not authority.", "owningPackage": "@agenticprimitives/delegation" },

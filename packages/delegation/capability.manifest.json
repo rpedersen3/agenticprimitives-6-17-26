@@ -33,6 +33,7 @@
   "publicExports": [
     "ROOT_AUTHORITY",
     "DelegationClient",
+    "DelegationClientOpts",
     "SessionManager",
     "SessionStore",
     "buildCaveat",
@@ -53,6 +54,7 @@
     "revokeDelegation",
     "Delegation",
     "Caveat",
+    "CaveatVerdict",
     "DataScopeGrant",
     "DelegationTokenClaims",
     "EnforcerAddressMap",
@@ -60,9 +62,12 @@
     "CaveatContext",
     "VerifyOpts",
     "VerifyError",
+    "TxContext",
     "SessionRow",
     "SessionPackage",
-    "SessionMeta"
+    "SessionMeta",
+    "Address",
+    "Hex"
   ],
   "forbiddenTerms": [
     { "term": "LocalAesProvider", "reason": "Concrete KMS backend belongs in key-custody. Use the A2AKeyProvider interface here.", "owningPackage": "@agenticprimitives/key-custody" },

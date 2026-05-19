@@ -33,6 +33,7 @@
   "publicExports": [
     "A2AKeyProvider",
     "KmsAccountBackend",
+    "KmsBackend",
     "BuildOpts",
     "buildKeyProvider",
     "buildSignerBackend",
@@ -46,7 +47,9 @@
     "AwsKmsProvider",
     "AwsKmsSigner",
     "GcpKmsProvider",
-    "GcpKmsSigner"
+    "GcpKmsSigner",
+    "Address",
+    "Hex"
   ],
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Authority concept; key-custody only encrypts opaque bytes. Even if the bytes happen to be a serialized delegation, this package doesn't know that.", "owningPackage": "@agenticprimitives/delegation" },

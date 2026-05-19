@@ -40,10 +40,16 @@
     "verifyCrossDelegationForResource",
     "McpResourceVerifyConfig",
     "ResourceDefinition",
-    "MockDelegationSigner",
-    "createTestConfig",
-    "withMockedDelegationContext",
-    "lintMcpClassification"
+    "BetterSqlite3DatabaseLike",
+    "PgPoolLike",
+    "Address",
+    "Hex",
+    "Caveat",
+    "DataScopeGrant",
+    "Delegation",
+    "EnforcerAddressMap",
+    "JtiStore",
+    "ToolClassification"
   ],
   "forbiddenTerms": [
     { "term": "passkey", "reason": "Auth method internals belong in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] },
