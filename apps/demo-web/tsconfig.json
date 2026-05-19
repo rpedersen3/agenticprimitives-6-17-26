@@ -4,7 +4,12 @@
     "outDir": "./dist",
     "jsx": "react-jsx",
     "types": ["vite/client"],
-    "noEmit": true
+    "noEmit": true,
+    // Demo apps consume BUILT packages via package.json:exports — node_modules
+    // symlinks point at dist/. Override the source path-mappings inherited
+    // from tsconfig.base.json so TS doesn't try to typecheck workspace src/
+    // (which references Node-only globals not present in the browser env).
+    "paths": {}
   },
   "include": ["src/**/*"]
 }

@@ -66,10 +66,15 @@ export default defineConfig({
     },
     // demo-a2a — env injected here so identity-auth + key-custody find what
     // they need without touching the developer's shell env.
+    //
+    // reuseExistingServer: false even locally. A previous test run's a2a
+    // server may be running from before a code change; reusing it serves
+    // stale routes (e.g., /deployments missing after we added it). Cost
+    // is ~3s per test run; correctness wins.
     {
       command: 'pnpm --filter @agenticprimitives-demo/a2a dev',
       url: 'http://127.0.0.1:8787/health',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 60_000,
       env: E2E_ENV,
       cwd: REPO_ROOT,
@@ -78,7 +83,7 @@ export default defineConfig({
     {
       command: 'pnpm --filter @agenticprimitives-demo/mcp dev',
       url: 'http://127.0.0.1:8788/health',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 60_000,
       env: {
         NODE_ENV: 'test',
@@ -87,7 +92,7 @@ export default defineConfig({
       },
       cwd: REPO_ROOT,
     },
-    // demo-web (Vite)
+    // demo-web (Vite) — Vite supports HMR so reuse is safer here.
     {
       command: 'pnpm --filter @agenticprimitives-demo/web dev',
       url: 'http://127.0.0.1:5173',

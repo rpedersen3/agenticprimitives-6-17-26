@@ -1,19 +1,32 @@
 import { useEffect, useState } from 'react';
 import { loadOrCreateDemoUser, resetDemoUser, type DemoUser } from './test-user';
 import { signInWithSiwe } from './siwe-flow';
+import { authorizeAgent as authorizeAgentFlow } from './authorize-flow';
+import type { Address } from '@agenticprimitives/types';
 
 const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID ?? 31337);
 
-// Step 1 (SIWE login) is wired. Steps 2 + 3 remain stubs until
-// @agenticprimitives/delegation + mcp-runtime ship their implementations.
+// Step 1 (SIWE login) + Step 2 (Authorize agent) wired. Step 3 (Read profile)
+// remains a stub until @agenticprimitives/mcp-runtime ships.
+
+interface Deployments {
+  chainId: number;
+  delegationManager: Address;
+  agentAccountFactory: Address;
+  timestampEnforcer: Address;
+  allowedTargetsEnforcer: Address;
+  allowedMethodsEnforcer: Address;
+  valueEnforcer: Address;
+}
 
 interface DemoState {
   user: DemoUser;
-  smartAccountAddress: string | null;
+  smartAccountAddress: Address | null;
   sessionId: string | null;
   delegationHash: string | null;
   profile: unknown;
   log: string[];
+  deployments: Deployments | null;
 }
 
 export function App() {
@@ -28,7 +41,15 @@ export function App() {
       delegationHash: null,
       profile: null,
       log: [`Loaded demo EOA: ${user.address}`],
+      deployments: null,
     });
+    // Fetch deployment addresses once. Demo-only — not authenticated.
+    fetch('/a2a/deployments')
+      .then((r) => r.json())
+      .then((d: Deployments) => setState((s) => (s ? { ...s, deployments: d } : s)))
+      .catch(() => {
+        // Demo-a2a not running yet — fine; Step 2 won't be reachable until it is.
+      });
   }, []);
 
   const append = (line: string) =>
@@ -49,7 +70,27 @@ export function App() {
 
   // STEP 2: a2a init session → web builds + signs Delegation → a2a packages it
   const authorizeAgent = async () => {
-    append('[2] Authorize agent: a2a /session/init → user signs delegation → /session/package (TODO: implement once delegation is real)');
+    if (!state || !state.smartAccountAddress || !state.deployments) {
+      append('[2] not ready (need smart account + deployments)');
+      return;
+    }
+    append('[2] /session/init → sign Delegation (EIP-712) → /session/package…');
+    const res = await authorizeAgentFlow(state.user, {
+      smartAccountAddress: state.smartAccountAddress,
+      delegationManager: state.deployments.delegationManager,
+      timestampEnforcer: state.deployments.timestampEnforcer,
+      chainId: state.deployments.chainId,
+    });
+    if (!res.ok) {
+      append(`[2] FAILED: ${res.error}${res.reason ? ` (${res.reason})` : ''}`);
+      return;
+    }
+    append(
+      `[2] ✓ Session packaged. sessionId=${res.sessionId} delegationHash=${res.delegationHash} erc1271Verified=${res.erc1271Verified}`,
+    );
+    setState((s) =>
+      s ? { ...s, sessionId: res.sessionId, delegationHash: res.delegationHash } : s,
+    );
   };
 
   // STEP 3: web calls a2a tool proxy → a2a → mcp → returns PII
