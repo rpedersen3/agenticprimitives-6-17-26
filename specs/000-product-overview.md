@@ -169,7 +169,7 @@ A Claude session starting in this repo loads, in order:
 
 1. Root `CLAUDE.md` (≤ 600 words) — repo principles, dependency direction, where to find specs.
 2. `specs/000-product-overview.md` — this file.
-3. (Generated, post-CI-script-implementation) `docs/architecture/capability-index.md` — package name → path → one-line summary.
+3. `docs/architecture/capability-index.md` — package routing table (auto-generated; re-run `pnpm generate:capability-index` after manifest edits).
 4. When narrowed to a package: that package's `CLAUDE.md` + `capability.manifest.json` + `src/index.ts`.
 
 Total context overhead before meaningful work in a single package: **~3-5k tokens.** This is the explicit product goal — each package is a sized agent-loadable unit, not a slice of a larger maze.

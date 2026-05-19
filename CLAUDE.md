@@ -24,9 +24,10 @@ No back-edges. CI enforcement via `scripts/check-package-boundaries.ts` (stub no
 ## Where to start
 
 1. `specs/000-product-overview.md` — product story
-2. `specs/100-package-boundary-doctrine.md` — boundary principles + competitive signals
-3. `specs/101-v0-package-proposal.md` — per-package justifications
-4. When narrowed to a package: `packages/<name>/CLAUDE.md` + `capability.manifest.json` + `src/index.ts`
+2. `docs/architecture/capability-index.md` — routing table for all 7 packages (auto-generated; re-run `pnpm generate:capability-index` after manifest edits)
+3. `specs/100-package-boundary-doctrine.md` — boundary principles + competitive signals
+4. `specs/101-v0-package-proposal.md` — per-package justifications
+5. When narrowed to a package: `packages/<name>/CLAUDE.md` + `capability.manifest.json` + `src/index.ts`
 
 ## Per-package context budget
 

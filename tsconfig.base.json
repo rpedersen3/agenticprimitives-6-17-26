@@ -15,6 +15,16 @@
     "sourceMap": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "useUnknownInCatchVariables": true
+    "useUnknownInCatchVariables": true,
+    "baseUrl": ".",
+    "paths": {
+      "@agenticprimitives/types": ["packages/types/src/index.ts"],
+      "@agenticprimitives/identity-auth": ["packages/identity-auth/src/index.ts"],
+      "@agenticprimitives/agent-account": ["packages/agent-account/src/index.ts"],
+      "@agenticprimitives/delegation": ["packages/delegation/src/index.ts"],
+      "@agenticprimitives/key-custody": ["packages/key-custody/src/index.ts"],
+      "@agenticprimitives/tool-policy": ["packages/tool-policy/src/index.ts"],
+      "@agenticprimitives/mcp-runtime": ["packages/mcp-runtime/src/index.ts"]
+    }
   }
 }
