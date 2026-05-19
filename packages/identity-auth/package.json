@@ -29,7 +29,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run test/unit",
-    "test:integration": "vitest run test/integration",
+    "test:integration": "vitest run test/integration --passWithNoTests",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },

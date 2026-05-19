@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch: {}
+
+# Cancel older runs on the same branch when a new push lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Doctrine + typecheck + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Doctrine checks (capability manifests, boundaries, exports, vocabulary firewall)
+        run: pnpm check:all
+
+      - name: Typecheck all packages + apps
+        run: pnpm -r typecheck
+
+      - name: Build packages (required so cross-package imports resolve)
+        run: pnpm -r --filter './packages/*' build
+
+      - name: Unit tests (vitest)
+        run: pnpm test:unit
+
+      - name: Integration tests (per-package vitest)
+        run: pnpm test:integration:packages
