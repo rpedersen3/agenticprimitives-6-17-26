@@ -31,7 +31,8 @@
     "check:public-exports": "tsx scripts/check-public-exports.ts",
     "check:claude-context-budget": "tsx scripts/check-claude-context-budget.ts",
     "check:forbidden-terms": "tsx scripts/check-forbidden-terms.ts",
-    "check:all": "pnpm check:capability-manifests && pnpm check:package-docs && pnpm check:package-boundaries && pnpm check:public-exports && pnpm check:claude-context-budget && pnpm check:forbidden-terms",
+    "check:no-app-private-keys": "tsx scripts/check-no-app-private-keys.ts",
+    "check:all": "pnpm check:capability-manifests && pnpm check:package-docs && pnpm check:package-boundaries && pnpm check:public-exports && pnpm check:claude-context-budget && pnpm check:forbidden-terms && pnpm check:no-app-private-keys",
     "generate:capability-index": "tsx scripts/generate-capability-index.ts"
   },
   "devDependencies": {

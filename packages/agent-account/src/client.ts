@@ -77,27 +77,45 @@ export class AgentAccountClient {
   }
 
   /**
-   * Deploy via factory using a raw bootstrap private key. This is the
-   * relayer-pattern path: a separate funded EOA (NOT the user's master
-   * signer, NOT the KMS-backed agent identity) calls factory.createAccount
-   * to materialize a smart account whose owner is the user's wallet.
+   * Deploy via factory using a raw bootstrap private key.
    *
-   * Use this for lazy-deploy flows where the backend deploys accounts
-   * on-demand before issuing delegations. The user keeps the smart account
-   * (it's owned by `owner`); the bootstrap key only pays gas.
+   * Lower-level primitive: most callers should prefer
+   * `createAccountFromAccount` with a KMS-backed viem account
+   * (`createKmsViemAccount` from `@agenticprimitives/key-custody/kms-viem`)
+   * so no private-key material lives in env vars or process memory.
    *
-   * Idempotent: if the account is already deployed, returns its address
-   * without a transaction.
+   * Idempotent: skips the tx if the account is already deployed.
    */
   async createAccountFromPrivateKey(
     owner: Address,
     salt: bigint,
     bootstrapPrivateKey: Hex,
   ): Promise<Address> {
+    const account = privateKeyToAccount(bootstrapPrivateKey);
+    return this.createAccountFromAccount(owner, salt, account);
+  }
+
+  /**
+   * Deploy via factory using any viem-compatible account. The intended
+   * production caller is the KMS-backed viem account from
+   * `@agenticprimitives/key-custody/kms-viem` — that way the relayer
+   * signs the deploy tx via Cloud KMS instead of holding a private key.
+   *
+   * The address backing `account` must hold ETH on the target chain to
+   * pay gas. The deployed smart account is owned by `owner`, not by the
+   * relayer — the relayer is a gas payer, not an authority.
+   *
+   * Idempotent: skips the tx if the account is already deployed.
+   */
+  async createAccountFromAccount(
+    owner: Address,
+    salt: bigint,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    account: any,
+  ): Promise<Address> {
     const predicted = await this.getAddress(owner, salt);
     if (await this.isDeployed(predicted)) return predicted;
 
-    const account = privateKeyToAccount(bootstrapPrivateKey);
     const wallet = createWalletClient({
       account,
       transport: http(this.opts.rpcUrl),

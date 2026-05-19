@@ -25,6 +25,10 @@
     "./mac": {
       "types": "./dist/mac.d.ts",
       "import": "./dist/mac.js"
+    },
+    "./kms-viem": {
+      "types": "./dist/kms-viem-account.d.ts",
+      "import": "./dist/kms-viem-account.js"
     }
   },
   "files": ["dist", "spec.md", "README.md"],
