@@ -19,6 +19,13 @@ export interface McpResourceVerifyConfig {
   enforcerMap: EnforcerAddressMap;
   jtiStore: JtiStore;
   acceptLegacyCrossDelegations?: boolean;
+  /**
+   * Whether to require the delegator's smart account to be on-chain.
+   * Default: `true` (fail-closed). When the account isn't deployed, ERC-1271
+   * can't be verified. Demos using counterfactual addresses without
+   * deploying may set `false` explicitly.
+   */
+  requireDeployed?: boolean;
 }
 
 export interface ResourceDefinition {

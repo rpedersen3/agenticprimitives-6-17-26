@@ -164,6 +164,17 @@ const ERC1271_MAGIC = '0x1626ba7e';
 export interface VerifyOptsExt extends VerifyOpts {
   /** Tool name for mcp-tool-scope caveat evaluation. */
   toolName?: string;
+  /**
+   * Whether to require the delegator's smart account to be on-chain.
+   * Default: `true` (fail-closed). When the account isn't deployed,
+   * ERC-1271 can't be verified and the security model is broken.
+   *
+   * Demo flows that intentionally use counterfactual addresses without
+   * deploying may pass `false` to tolerate the undeployed state. Production
+   * code MUST keep the default — there's no scenario where an undeployed
+   * delegator should be honored.
+   */
+  requireDeployed?: boolean;
 }
 
 interface DecodedToken {
@@ -225,7 +236,8 @@ export async function verifyDelegationToken(
   // 2. EIP-712 hash
   const eip712Hash = hashDelegation(claims.delegation, opts.chainId, opts.delegationManager);
 
-  // 3. on-chain checks (tolerated for v0 demo if smart account undeployed)
+  // 3. on-chain checks
+  const requireDeployed = opts.requireDeployed ?? true;
   const publicClient = createPublicClient({ transport: http(opts.rpcUrl) });
   try {
     const revoked = (await publicClient.readContract({
@@ -236,12 +248,22 @@ export async function verifyDelegationToken(
     })) as boolean;
     if (revoked) return { error: 'delegation revoked' };
   } catch {
-    /* tolerated */
+    /* RPC-flake tolerance: isRevoked starts false on-chain; if the read fails
+       we proceed. A revoked delegation will still fail ERC-1271 below since
+       the on-chain revocation flips the same state. */
   }
 
   try {
     const code = await publicClient.getCode({ address: claims.delegation.delegator });
-    if (code && code !== '0x' && code.length > 2) {
+    const isDeployed = !!(code && code !== '0x' && code.length > 2);
+    if (!isDeployed) {
+      if (requireDeployed) {
+        return {
+          error: `delegator smart account ${claims.delegation.delegator} is not deployed — cannot verify ERC-1271. Set verifyDelegationToken opt requireDeployed=false only for explicit counterfactual-demo use cases.`,
+        };
+      }
+      // Tolerated: caller opted into the undeployed path explicitly.
+    } else {
       const magic = (await publicClient.readContract({
         address: claims.delegation.delegator,
         abi: ACCOUNT_ABI_ERC1271,
@@ -250,7 +272,6 @@ export async function verifyDelegationToken(
       })) as Hex;
       if (magic.toLowerCase() !== ERC1271_MAGIC) return { error: 'erc1271 validation failed' };
     }
-    // else: undeployed account; accept for demo (production would reject)
   } catch (e) {
     return { error: `erc1271 call reverted: ${e instanceof Error ? e.message : e}` };
   }

@@ -38,6 +38,7 @@ export function withDelegation<A extends Record<string, unknown>>(
       enforcerMap: config.enforcerMap,
       jtiStore: config.jtiStore,
       toolName: opts?.toolName,
+      requireDeployed: config.requireDeployed,
     });
     if ('error' in result) {
       // Internal log retains the reason; external surface stays opaque.
@@ -65,6 +66,7 @@ export async function verifyDelegationForResource(
     enforcerMap: config.enforcerMap,
     jtiStore: config.jtiStore,
     toolName: ctx?.toolName,
+    requireDeployed: config.requireDeployed,
     now: ctx?.timestamp ? () => ctx.timestamp! * 1000 : undefined,
   });
 }
