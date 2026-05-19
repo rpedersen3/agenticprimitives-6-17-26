@@ -1,9 +1,17 @@
 # Spec 120 — Deploy (all-Cloudflare)
 
-**Status:** v0 draft · 2026-05-19
+**Status:** v0.2 · 2026-05-19 (automated via `pnpm deploy:cloudflare`)
 **Purpose:** how to take the demo from local Anvil to a public Cloudflare deploy.
 
 The demo runs on **Cloudflare end-to-end**: Pages for `demo-web`, Workers for `demo-a2a` and `demo-mcp`, Durable Object for sessions, D1 for PII + JTI tracking. Contracts deploy to **Base Sepolia** (or any L2 you prefer).
+
+After one-time setup (§2), every subsequent deploy is one command:
+
+```bash
+pnpm deploy:cloudflare
+```
+
+This drives the rest of the document: §3 deploys contracts, §4 sets secrets, §5–6 are automated.
 
 ---
 
@@ -35,13 +43,15 @@ No Cloudflare account needed for any of this. `wrangler dev` runs Workers locall
 # Create a Cloudflare account, then:
 wrangler login    # browser-based OAuth; stores creds in ~/.config/.wrangler/
 
-# Create the D1 database for demo-mcp.
+# Create the production D1 database for demo-mcp.
 cd apps/demo-mcp
 wrangler d1 create demo-mcp
-# Copy the printed database_id into wrangler.toml under [[d1_databases]].
-wrangler d1 migrations apply demo-mcp --remote
+# Copy the printed database_id into wrangler.toml under
+#   [[env.production.d1_databases]]  (replace REPLACE_WITH_PROD_D1_ID).
 cd ../..
 ```
+
+Migrations are applied on every deploy by `pnpm deploy:cloudflare` (idempotent), so no separate step is needed.
 
 The DO for `demo-a2a` is created automatically on first `wrangler deploy` (per the `new_sqlite_classes` migration in wrangler.toml).
 
@@ -67,74 +77,65 @@ Bridge ETH to Base Sepolia: https://bridge.base.org/
 
 ---
 
-## 4. Set Worker secrets + vars
+## 4. Set Worker secrets (one-time per environment)
+
+Secrets are non-inheritable per Cloudflare env, so each call needs `--env production`:
 
 ```bash
 cd apps/demo-a2a
-
-# Secrets (set once per environment)
-echo -n "prodkid:$(openssl rand -hex 32)" | wrangler secret put SESSION_JWT_SECRETS
-echo -n "0x$(openssl rand -hex 32)"        | wrangler secret put CSRF_SECRET
-echo -n "0x$(openssl rand -hex 32)"        | wrangler secret put A2A_SESSION_SECRET
-# Master signing key for the demo (generate a dedicated EOA for this)
-echo -n "0x..."                            | wrangler secret put A2A_MASTER_PRIVATE_KEY
-
-# Contract addresses + RPC override (vars, not secrets — they're not sensitive)
-# Edit wrangler.toml under [env.production]:
-#   [env.production.vars]
-#   RPC_URL = "https://sepolia.base.org"
-#   CHAIN_ID = "84532"
-#   ENTRY_POINT = "0x..."
-#   DELEGATION_MANAGER = "0x..."
-#   ... etc from deployments-base-sepolia.json
-```
-
-Same for `demo-mcp`: only the contract addresses + RPC override + CHAIN_ID.
-
----
-
-## 5. Deploy the Workers
-
-```bash
-cd apps/demo-a2a && wrangler deploy --env production
-cd ../demo-mcp && wrangler deploy --env production
+echo -n "prodkid:$(openssl rand -hex 32)" | wrangler secret put SESSION_JWT_SECRETS    --env production
+echo -n "0x$(openssl rand -hex 32)"        | wrangler secret put CSRF_SECRET            --env production
+echo -n "0x$(openssl rand -hex 32)"        | wrangler secret put A2A_SESSION_SECRET     --env production
+# Master signing key for the demo (generate a dedicated EOA for this — never the deployer EOA)
+echo -n "0x..."                            | wrangler secret put A2A_MASTER_PRIVATE_KEY --env production
 cd ../..
 ```
 
-Each prints a `workers.dev` URL (e.g., `https://demo-a2a.<sub>.workers.dev`). Note both — you'll wire them into the Pages config.
+Contract addresses + RPC overrides + dynamic URLs (`MCP_URL`, `ALLOWED_ORIGINS`) are **not** secrets — `pnpm deploy:cloudflare` passes them per deploy via `--var` (read from `deployments-base-sepolia.json` and captured Worker URLs). Static prod defaults like `RPC_URL` / `CHAIN_ID` live in `wrangler.toml` under `[env.production.vars]`.
 
 ---
 
-## 6. Update Pages routing + deploy demo-web
+## 5. One-command deploy
 
-Edit `apps/demo-web/public/_redirects`:
-```
-/a2a/*    https://demo-a2a.<your-subdomain>.workers.dev/:splat    200
-```
-
-Build + deploy:
 ```bash
-cd apps/demo-web
-pnpm build
-wrangler pages deploy dist --project-name=agenticprimitives-demo
+pnpm deploy:cloudflare
 ```
 
-First deploy creates the project; subsequent deploys push new versions. Each deploy gets a preview URL; the latest becomes production.
+`scripts/deploy-cloudflare.ts` runs:
+1. Pre-flight (`wrangler whoami`, deployments file exists).
+2. `wrangler d1 migrations apply demo-mcp --remote --env production`.
+3. `wrangler deploy --env production` for `demo-mcp` — captures its URL.
+4. `wrangler deploy --env production` for `demo-a2a` — injects `MCP_URL` + `ALLOWED_ORIGINS` via `--var`, captures its URL.
+5. Writes `cloudflare-urls.json` (gitignored deploy state).
+6. `pnpm --filter @agenticprimitives-demo/web build`; ensures the Pages project exists; pipes the demo-a2a URL into `wrangler pages secret put DEMO_A2A_URL` (read by the `functions/a2a/[[path]].ts` proxy at runtime).
+7. `wrangler pages deploy dist --project-name=agenticprimitives-demo --branch=master`.
+
+**Why a Pages Function, not `_redirects`?** Cloudflare Pages silently drops `_redirects` 200-rewrites that target an external origin (e.g. `*.workers.dev`). Only same-origin rewrites work there. So `/a2a/*` proxying lives in a Pages Function (`apps/demo-web/functions/a2a/[[path]].ts`) that reads `env.DEMO_A2A_URL` and forwards the request.
+
+Override defaults via env:
+```bash
+DEPLOY_NETWORK=base-sepolia \
+PAGES_PROJECT=agenticprimitives-demo \
+DEMO_WEB_URL=https://custom.example.com \
+  pnpm deploy:cloudflare
+```
+
+If anything fails mid-deploy, fix it and re-run — every step is idempotent. The previous deploy stays live until the new one succeeds.
 
 ---
 
-## 7. Custom domains (optional)
+## 6. Custom domains (optional)
 
 In Cloudflare dashboard:
 - Pages → demo project → Custom domains → add `demo.yourdomain.com`.
 - Workers → demo-a2a → Triggers → add `a2a.yourdomain.com`.
 - Workers → demo-mcp → Triggers → add `mcp.yourdomain.com`.
 
-Then update `apps/demo-web/public/_redirects` to use the custom domain.
+Then re-deploy with `DEMO_WEB_URL=https://demo.yourdomain.com pnpm deploy:cloudflare` so `ALLOWED_ORIGINS` (set on the demo-a2a Worker via `--var`) matches the new Pages hostname. The `_redirects` injection will still point at the demo-a2a workers.dev URL; if you want it to point at `a2a.yourdomain.com` instead, edit `scripts/deploy-cloudflare.ts` to pass the custom domain to `inject-redirects` (or change the marker in `public/_redirects`).
 
 ---
 
-## 8. CI (GitHub Actions)
+## 7. CI (GitHub Actions)
 
 Add `.github/workflows/ci.yml` (deferred — not part of v0 commit). Recommended steps:
 
@@ -158,7 +159,7 @@ For deploys triggered by CI, add a job that calls `wrangler deploy` with `CLOUDF
 
 ---
 
-## 9. Cost model
+## 8. Cost model
 
 | Item | Free tier | Demo idle |
 | --- | --- | --- |
@@ -172,7 +173,7 @@ Total demo cost: **$0–5/mo**. Production traffic scales linearly into Workers 
 
 ---
 
-## 10. Rollback
+## 9. Rollback
 
 Pages keeps every deploy as an addressable preview URL. To rollback:
 - Pages dashboard → Deployments → click an older successful deploy → "Rollback to this deployment".

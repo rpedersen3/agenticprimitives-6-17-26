@@ -1,12 +1,12 @@
 # Cloudflare Pages routing.
 #
-# Forward /a2a/<path> to the demo-a2a Worker. The exact hostname is set at
-# deploy time — use a workers.dev URL during early testing, then a custom
-# domain when wired through Cloudflare DNS.
+# /a2a/* is proxied to the demo-a2a Worker by the Pages Function at
+# functions/a2a/[[path]].ts (which reads env.DEMO_A2A_URL — set by
+# scripts/deploy-cloudflare.ts via `wrangler pages secret put`).
 #
-# In local dev, vite.config.ts's proxy handles /a2a/* (no _redirects needed).
+# Pages `_redirects` with status 200 to an external origin is silently
+# ignored — that's why the proxy lives in a Function instead of here.
 #
-# Replace DEMO_A2A_HOST with your demo-a2a Worker hostname before deploy:
-#   /a2a/*    https://demo-a2a.<your-subdomain>.workers.dev/:splat   200
-
-/a2a/*    https://demo-a2a.workers.dev/:splat    200
+# This file is intentionally rule-free; kept as a marker that routing
+# has been considered, and as a place for future SPA-fallback or
+# host-internal redirects.

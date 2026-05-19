@@ -10,6 +10,7 @@
     "dev:mcp": "pnpm --filter @agenticprimitives-demo/mcp dev",
     "dev:contracts": "cd apps/contracts && pnpm deploy:anvil",
     "setup:contracts": "cd apps/contracts && bash setup.sh && pnpm build",
+    "deploy:cloudflare": "tsx scripts/deploy-cloudflare.ts",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "test:unit": "pnpm -r --parallel --no-bail --filter './packages/*' run test:unit",

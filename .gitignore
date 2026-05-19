@@ -27,6 +27,9 @@ cache/
 # Wrangler local state (DO storage, D1 SQLite)
 .wrangler/
 
+# Cloudflare deploy-state file written by scripts/deploy-cloudflare.ts
+cloudflare-urls.json
+
 # Logs
 *.log
 npm-debug.log*
