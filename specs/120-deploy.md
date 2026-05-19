@@ -106,8 +106,8 @@ The local-aes signer bypasses its own `NODE_ENV=production` guard via a shim in 
 ### One-time GCP setup
 
 1. Enable Cloud KMS API in your GCP project.
-2. Create a keyring + key:
-  ```bash
+2. Create a keyring + the secp256k1 signing key:
+   ```bash
    gcloud kms keyrings create agenticprimitives-demo --location=us-central1
    gcloud kms keys create agent-master \
      --keyring=agenticprimitives-demo \
@@ -115,9 +115,18 @@ The local-aes signer bypasses its own `NODE_ENV=production` guard via a shim in 
      --purpose=asymmetric-signing \
      --default-algorithm=ec-sign-secp256k1-sha256 \
      --protection-level=software   # or `hsm` for HSM-backed (~$1/mo)
-  ```
-3. Create a service account, grant it `roles/cloudkms.signer` + `roles/cloudkms.publicKeyViewer` scoped to this key only, download a JSON key.
-4. Save the JSON at `.gcp-service-account.local.json` at the repo root (already gitignored).
+   ```
+3. **(Optional)** Create a SECOND key for envelope encryption (replaces `LocalAesProvider` on the signer side; the demo's per-session AES-GCM payload encryption is still done in-Worker — Cloud KMS only wraps the session data key):
+   ```bash
+   gcloud kms keys create agent-envelope \
+     --keyring=agenticprimitives-demo \
+     --location=us-central1 \
+     --purpose=encryption \
+     --protection-level=software
+   ```
+   GCP picks the active version internally — the env var (`GCP_KMS_ENCRYPT_KEY_NAME`) points at the **key**, not a specific version.
+4. Create a service account, grant it `roles/cloudkms.signer` + `roles/cloudkms.publicKeyViewer` on `agent-master`. If you also created `agent-envelope`, grant `roles/cloudkms.cryptoKeyEncrypterDecrypter` on that key. Download a JSON key.
+5. Save the JSON at `.gcp-service-account.local.json` at the repo root (already gitignored).
 
 ### Deploy with GCP KMS
 

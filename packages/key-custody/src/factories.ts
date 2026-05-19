@@ -14,7 +14,10 @@ export function buildKeyProvider(opts: BuildOpts): A2AKeyProvider {
     case 'aws-kms':
       return new AwsKmsProvider();
     case 'gcp-kms':
-      return new GcpKmsProvider();
+      return new GcpKmsProvider({
+        cryptoKeyName: opts.config?.cryptoKeyName,
+        serviceAccountJson: opts.config?.serviceAccountJson,
+      });
   }
 }
 

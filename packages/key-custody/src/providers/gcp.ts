@@ -29,6 +29,7 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import { keccak_256 } from '@noble/hashes/sha3';
 import { bytesToHex, type Address } from 'viem';
 import type { A2AKeyProvider, KmsAccountBackend } from '../types';
+import { canonicalContextBytes } from '../aad';
 
 // ─────────────────────────────────────────────────────────────────────
 // Constants
@@ -395,21 +396,131 @@ export class GcpKmsSigner implements KmsAccountBackend {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// GcpKmsProvider — envelope encryption via GCP KMS Encrypt/Decrypt.
-// Stub for now; v0.2 follow-up. The signer covers the production path
-// for the master-key requirement, which is the more urgent gap.
+// GcpKmsProvider — envelope encryption via Cloud KMS Encrypt/Decrypt.
+//
+// Generates a 32-byte session data key locally (Web Crypto random), wraps
+// it with Cloud KMS :encrypt under the AAD-bound EncryptionContext, returns
+// the ciphertext as encryptedDataKey. Decrypt unwraps with the SAME AAD —
+// any tampering surfaces as a Cloud KMS error.
+//
+// Symmetric encrypt-decrypt key (purpose=ENCRYPT_DECRYPT,
+// algorithm=GOOGLE_SYMMETRIC_ENCRYPTION). Note this is a DIFFERENT KMS key
+// from the secp256k1 signing key — they have different purposes and
+// algorithms in GCP. Configure via GCP_KMS_ENCRYPT_KEY_NAME.
+//
+// Service-account credentials reused from the signer config (same SA needs
+// roles/cloudkms.cryptoKeyEncrypterDecrypter on this key).
 // ─────────────────────────────────────────────────────────────────────
 
-const NOT_IMPLEMENTED_PROVIDER =
-  'GcpKmsProvider (envelope encryption via Cloud KMS Encrypt/Decrypt) is not implemented yet. ' +
-  'Use LocalAesProvider for envelope encryption; GcpKmsSigner handles signing.';
+export interface GcpKmsProviderOpts {
+  /**
+   * Full Cloud KMS resource name of the symmetric encrypt-decrypt key, e.g.
+   * `projects/<P>/locations/<L>/keyRings/<R>/cryptoKeys/<K>`. Note: NO
+   * `/cryptoKeyVersions/N` suffix — GCP picks the active version.
+   */
+  cryptoKeyName: string;
+  /** Raw JSON string of the service-account key file. */
+  serviceAccountJson: string;
+}
+
+interface EncryptResponse {
+  ciphertext: string;
+  name: string;
+}
+
+interface DecryptResponse {
+  plaintext: string;
+}
 
 export class GcpKmsProvider implements A2AKeyProvider {
-  readonly keyVersion = 'gcp-kms:not-implemented';
-  async generateSessionDataKey(): Promise<never> {
-    throw new Error(NOT_IMPLEMENTED_PROVIDER);
+  readonly keyVersion = 'gcp-kms:v1';
+  private readonly keyName: string;
+  private readonly serviceAccount: ServiceAccount;
+  private cachedToken?: CachedToken;
+
+  constructor(opts?: Partial<GcpKmsProviderOpts>) {
+    const keyName = opts?.cryptoKeyName ?? process.env.GCP_KMS_ENCRYPT_KEY_NAME;
+    const jsonStr = opts?.serviceAccountJson ?? process.env.GCP_SERVICE_ACCOUNT_JSON;
+    if (!keyName) {
+      throw new Error(
+        'GcpKmsProvider: GCP_KMS_ENCRYPT_KEY_NAME (projects/<P>/locations/<L>/keyRings/<R>/cryptoKeys/<K>) is required.',
+      );
+    }
+    if (!jsonStr) {
+      throw new Error('GcpKmsProvider: GCP_SERVICE_ACCOUNT_JSON (service-account JSON string) is required.');
+    }
+    let parsed: ServiceAccount;
+    try {
+      parsed = JSON.parse(jsonStr) as ServiceAccount;
+    } catch {
+      throw new Error('GcpKmsProvider: GCP_SERVICE_ACCOUNT_JSON is not valid JSON.');
+    }
+    if (!parsed.client_email || !parsed.private_key) {
+      throw new Error('GcpKmsProvider: service-account JSON missing client_email or private_key.');
+    }
+    this.keyName = keyName;
+    this.serviceAccount = parsed;
   }
-  async decryptSessionDataKey(): Promise<never> {
-    throw new Error(NOT_IMPLEMENTED_PROVIDER);
+
+  private async getAccessToken(): Promise<string> {
+    const now = Math.floor(Date.now() / 1000);
+    if (this.cachedToken && this.cachedToken.expiresAt > now) {
+      return this.cachedToken.accessToken;
+    }
+    this.cachedToken = await fetchAccessToken(this.serviceAccount);
+    return this.cachedToken.accessToken;
+  }
+
+  async generateSessionDataKey(input: {
+    aadContext: Record<string, string>;
+  }): Promise<{
+    plaintextDataKey: Uint8Array;
+    encryptedDataKey: Uint8Array;
+    keyId: string;
+    keyVersion: string;
+  }> {
+    const plaintextDataKey = new Uint8Array(32);
+    globalThis.crypto.getRandomValues(plaintextDataKey);
+    const aadBytes = canonicalContextBytes(input.aadContext);
+
+    const token = await this.getAccessToken();
+    const res = await callKms<EncryptResponse>(token, `${this.keyName}:encrypt`, {
+      method: 'POST',
+      body: {
+        plaintext: base64Encode(plaintextDataKey),
+        additionalAuthenticatedData: base64Encode(aadBytes),
+      },
+    });
+    const encryptedDataKey = base64Decode(res.ciphertext);
+
+    return {
+      plaintextDataKey,
+      encryptedDataKey,
+      keyId: this.keyName,
+      keyVersion: this.keyVersion,
+    };
+  }
+
+  async decryptSessionDataKey(input: {
+    encryptedDataKey: Uint8Array;
+    aadContext: Record<string, string>;
+    keyId: string;
+    keyVersion: string;
+  }): Promise<Uint8Array> {
+    if (input.keyVersion !== this.keyVersion) {
+      throw new Error(
+        `GcpKmsProvider: keyVersion mismatch (got "${input.keyVersion}", expected "${this.keyVersion}").`,
+      );
+    }
+    const aadBytes = canonicalContextBytes(input.aadContext);
+    const token = await this.getAccessToken();
+    const res = await callKms<DecryptResponse>(token, `${this.keyName}:decrypt`, {
+      method: 'POST',
+      body: {
+        ciphertext: base64Encode(input.encryptedDataKey),
+        additionalAuthenticatedData: base64Encode(aadBytes),
+      },
+    });
+    return base64Decode(res.plaintext);
   }
 }
