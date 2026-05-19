@@ -1,7 +1,7 @@
 {
-  "name": "@agenticprimitives/delegation",
+  "name": "@agenticprimitives/agent-account",
   "version": "0.0.1",
-  "description": "EIP-712 smart-account delegations with caveats; web→agent→MCP token flow; session lifecycle.",
+  "description": "ERC-4337 smart-account substrate: deterministic addressing, factory deployment, ERC-1271 signing, UserOp building.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -18,12 +18,10 @@
     "test": "echo 'no tests yet' && exit 0",
     "clean": "rm -rf dist"
   },
-  "keywords": ["delegation", "eip-712", "erc-7710", "erc-1271", "caveat", "session", "agentic"],
+  "keywords": ["erc-4337", "smart-account", "account-abstraction", "erc-1271", "agentic"],
   "license": "UNLICENSED",
   "peerDependencies": {
-    "@agenticprimitives/agent-account": "workspace:*",
     "@agenticprimitives/identity-auth": "workspace:*",
-    "@agenticprimitives/key-custody": "workspace:*",
     "@agenticprimitives/types": "workspace:*"
   }
 }

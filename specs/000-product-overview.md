@@ -1,150 +1,177 @@
 # agenticprimitives — Product Overview & Architecture
 
-**Status:** v0 draft · 2026-05-19
+**Status:** v0 draft · 2026-05-19 (rev 2: post-competitive-research package restructure)
 **Source of capabilities:** `smart-agent` monorepo, branch `003-intent-marketplace-proposal` (extracted, not forked).
+
+> **Rev 2 note:** The original 4-package cut (auth / delegation / kms / mcp-resources) was restructured into 6 capability + 1 shared = 7 packages, justified by competitive-landscape research. See [`100-package-boundary-doctrine.md`](./100-package-boundary-doctrine.md) for principles and [`101-v0-package-proposal.md`](./101-v0-package-proposal.md) for per-package justification. The original four specs are preserved at [`_archive/00X-*.md`](./_archive/).
 
 ---
 
 ## 1. Product thesis
 
-Modern agentic web apps repeatedly re-implement the same four scaffolding capabilities:
+Modern agentic web apps repeatedly re-implement the same scaffolding around four capability areas: **authenticate a user and bind them to a programmable account**, **delegate scoped authority** from that account to one or more agents/tools, **manage cryptographic keys** for those agents safely, and **enforce delegation at MCP resource boundaries**.
 
-1. **Authenticate a user**, then bind them to a programmable on-chain account.
-2. **Issue delegations** from that account to one or more agents/tools, with bounded scope.
-3. **Manage cryptographic keys** for those agents safely (no plaintext private keys lying around).
-4. **Enforce delegation at MCP resource boundaries**, so an agent can only do what it was actually authorized to do.
+`smart-agent` has built mature, production-grade versions of all four — but they're embedded inside one application monorepo. `agenticprimitives` re-shapes them into 7 independently consumable npm packages that any agentic web app can adopt without inheriting smart-agent's product surface.
 
-`smart-agent` has built mature, production-grade versions of all four — but they're embedded inside a single application monorepo. `agenticprimitives` re-shapes them into four independently consumable npm packages that any agentic web app can adopt without inheriting smart-agent's product surface.
-
-The product model mirrors **[1clawAI](https://github.com/1clawAI)**: each capability is its own clearly-named package, usable on its own, with consistent naming and one job per package. We deliver as a **monorepo** (pnpm workspaces) rather than polyrepo because the four packages co-evolve.
+Each package is a **product boundary**: a separately publishable, independently consumable unit with its own `CLAUDE.md` and `capability.manifest.json` so Claude (and other agents) can route work efficiently to one or two packages instead of one giant repo context.
 
 ---
 
-## 2. The four packages
+## 2. The seven packages
 
-| # | Package | Capability | Spec |
+| # | Package | Capability area | Spec |
 | --- | --- | --- | --- |
-| 1 | `@agenticprimitives/auth` | User auth (passkey + SIWE + OAuth) → JWT session → deterministic ERC-4337 smart account | [`001-auth.md`](./001-auth.md) |
-| 2 | `@agenticprimitives/delegation` | EIP-712 delegations with caveats; web→agent→MCP token flow; on-chain validation via DelegationManager | [`002-delegation.md`](./002-delegation.md) |
-| 3 | `@agenticprimitives/kms` | Pluggable envelope-encryption + signer abstraction (local-AES / AWS KMS / GCP KMS); session-key lifecycle bound to a delegation | [`003-kms.md`](./003-kms.md) |
-| 4 | `@agenticprimitives/mcp-resources` | Reusable `withDelegation()` wrapper, caveat→resource-scope mapping, classification metadata, JTI replay protection for MCP servers | [`004-mcp-resources.md`](./004-mcp-resources.md) |
+| 1 | [`@agenticprimitives/identity-auth`](../packages/identity-auth) | Auth + smart account (1 of 2) | [`200`](./200-identity-auth.md) |
+| 2 | [`@agenticprimitives/agent-account`](../packages/agent-account) | Auth + smart account (2 of 2) | [`201`](./201-agent-account.md) |
+| 3 | [`@agenticprimitives/delegation`](../packages/delegation) | Delegation + session lifecycle | [`202`](./202-delegation.md) |
+| 4 | [`@agenticprimitives/key-custody`](../packages/key-custody) | KMS abstraction (narrower than v1) | [`203`](./203-key-custody.md) |
+| 5 | [`@agenticprimitives/tool-policy`](../packages/tool-policy) | Classification + risk-tier + exact-call (protocol-agnostic) | [`204`](./204-tool-policy.md) |
+| 6 | [`@agenticprimitives/mcp-runtime`](../packages/mcp-runtime) | MCP delegation-aware middleware | [`205`](./205-mcp-runtime.md) |
+| 7 | [`@agenticprimitives/types`](../packages/types) | Cross-cutting branded types | n/a (in 101) |
 
 ---
 
-## 3. The runtime story (how the four packages compose)
+## 3. Runtime composition
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                          BROWSER (web app)                             │
-│                                                                        │
-│   @agenticprimitives/auth                                              │
-│   ─ user signs in (passkey / SIWE / Google)                            │
-│   ─ JWT session minted; deterministic smart account address resolved   │
-│                                                                        │
-│   @agenticprimitives/delegation                                        │
-│   ─ user signs an EIP-712 Delegation { delegator, delegate=sessionKey, │
-│       caveats: [TimeWindow, McpToolScope, DataScope, …] }              │
-│                                                                        │
-└───────────────────────────────┬────────────────────────────────────────┘
-                                │  POST /session/init + /session/package
-                                ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                          A2A AGENT (node)                              │
-│                                                                        │
-│   @agenticprimitives/kms                                               │
-│   ─ generates session keypair                                          │
-│   ─ envelope-encrypts {sessionPrivateKey, delegation} via KMS provider │
-│   ─ stores ciphertext in DB; plaintext never persisted                 │
-│                                                                        │
-│   @agenticprimitives/delegation                                        │
-│   ─ on tool call: decrypts session, mints DelegationToken              │
-│       { iss:a2a, aud:urn:mcp:server:person, sessionKey-signed }        │
-│                                                                        │
-└───────────────────────────────┬────────────────────────────────────────┘
-                                │  HMAC-signed envelope + token
-                                ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                          MCP SERVER (node)                             │
-│                                                                        │
-│   @agenticprimitives/mcp-resources                                     │
-│   ─ withDelegation() wraps tool handler                                │
-│   ─ verifies token: session-sig → EIP-712 hash → on-chain isRevoked    │
-│       → ERC-1271 isValidSignature → caveat eval (fail-closed) → JTI    │
-│   ─ exposes verified principal + DataScopeGrant[] to handler           │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          BROWSER (web app)                              │
+│                                                                         │
+│   identity-auth                                                         │
+│   ─ user signs in (passkey / SIWE / Google) → JWT session               │
+│   ─ exposes Signer (passkey/EOA/KMS)                                    │
+│                                                                         │
+│   agent-account                                                         │
+│   ─ deterministic smart-account address; lazy deploy on first action    │
+│                                                                         │
+│   delegation                                                            │
+│   ─ user signs EIP-712 Delegation { delegator, delegate=sessionKey,     │
+│       caveats: [TimeWindow, McpToolScope, DataScope, …] }               │
+│                                                                         │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │  POST /session/init + /session/package
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          A2A AGENT (node)                               │
+│                                                                         │
+│   key-custody                                                           │
+│   ─ raw envelope encryption + signing primitives (AWS/GCP/local-AES)    │
+│                                                                         │
+│   delegation                                                            │
+│   ─ SessionManager: encrypts {sessionPrivateKey, delegation} via        │
+│       key-custody, persists via SessionStore                            │
+│   ─ on tool call: decrypts session, mints DelegationToken               │
+│                                                                         │
+│   tool-policy (consulted at issue time for risk-tier TTL clamps)        │
+│                                                                         │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │  HMAC-signed envelope (key-custody/mac) + token
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          MCP SERVER (node)                              │
+│                                                                         │
+│   mcp-runtime                                                           │
+│   ─ withDelegation() wraps each tool handler:                           │
+│       HMAC verify → session-sig → EIP-712 hash → on-chain isRevoked     │
+│       → ERC-1271 → caveat eval (fail-closed) → JTI replay               │
+│       → tool-policy.evaluatePolicy → run handler                        │
+│                                                                         │
+│   delegation, tool-policy (consumed by mcp-runtime)                     │
+│   @modelcontextprotocol/sdk (peer dep — transports, registration)       │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 4. Dependency direction
-
-Strictly one-way. No cycles. Cross-package contracts live in each package's exported types — there is no shared `types` package in v0 (avoid premature abstraction).
+## 4. Dependency direction (strict, no cycles)
 
 ```
-auth          (no @agenticprimitives/* deps)
-   ↑ types only
-delegation    (no runtime dep on auth; consumes addresses + signers from caller)
-   ↑
-kms           (depends on delegation for the SessionPackage shape; otherwise standalone)
-   ↑
-mcp-resources (depends on delegation; optional dep on kms only if MCP is also a KMS consumer)
+types        (leaf; no @ap/* deps)
+  ↑
+identity-auth (uses types)
+  ↑
+agent-account (uses identity-auth, types)
+  ↑
+key-custody   (uses identity-auth, types) ──┐
+                                            │
+delegation    (uses agent-account, key-custody, identity-auth, types)
+  ↑
+tool-policy   (uses types only; protocol-agnostic)
+  ↑
+mcp-runtime   (uses delegation, key-custody, tool-policy, types; peer-dep @modelcontextprotocol/sdk)
 ```
 
-A consumer adopting just `@agenticprimitives/auth` should not pull `delegation`, `kms`, or `mcp-resources`. This shapes how we organize exports — each package has a small public API surface and no transitive bloat.
+Hard rules:
+- No back-edges. CI guards via `scripts/check-package-boundaries.ts` (stub now; implements alongside first real code).
+- `tool-policy` MUST stay transport-free (no MCP SDK, no LangChain) so it remains consumable by any future runtime.
+- `apps/*` never appears under `packages/`.
 
 ---
 
 ## 5. Non-goals (v0)
 
-- **No fork of smart-agent.** We pull patterns, not the codebase. Smart-agent stays the application; we are the libraries.
-- **No multi-language SDKs yet.** TypeScript only. Go/Python SDKs can come later, modeled after `1claw-go-sdk` / `1claw-langchain-demo`.
-- **No on-chain contract authoring.** Contracts (`AgentAccount`, `DelegationManager`, enforcers) are referenced by address; we publish ABIs only when needed. Contract source stays in smart-agent.
-- **No UI components.** Each package ships logic + types + hooks where applicable, not styled components. A consumer brings their own design system.
-- **No CLI.** v0 is library-only. If a CLI emerges, it's a fifth package (`@agenticprimitives/cli`), modeled after `1claw-cli`.
+- **No A2A runtime.** `a2aproject/a2a-js` exists; add adapters when content earns it.
+- **No framework adapters yet** (LangChain / Vercel AI / Anthropic Computer Use). Strong Coinbase precedent for separate `adapter-*` packages — defer until consumer demand surfaces.
+- **No fork of smart-agent contracts.** Contracts referenced by address; ABIs ride with smart-agent until a `@agenticprimitives/contracts-abis` package earns its existence.
+- **No multi-language SDKs.** TypeScript only. Go/Python later if needed.
+- **No UI components.** Logic + types + hooks; consumers bring their design system.
+- **No domain packages.** Treasury, wallet-actions, agentic-payments etc. are smart-agent's product surface, not agenticprimitives'.
+- **No `@agenticprimitives/sdk` facade.** Wait until ≥3 consumers ask for one.
 
 ---
 
-## 6. Versioning and release
-
-- All packages versioned independently (semver).
-- Breaking changes to one package bump that package only; consumers can upgrade in isolation.
-- A repo-level `CHANGELOG.md` summarizes per-release groupings.
-- Pre-1.0: liberal breaking changes are fine; bump minor on break, patch on additive.
-
----
-
-## 7. Repository layout
+## 6. Repository layout
 
 ```
 agenticprimitives/
 ├── packages/
-│   ├── auth/
-│   │   ├── src/
-│   │   ├── spec.md       → mirrors specs/001-auth.md
-│   │   ├── package.json
-│   │   ├── tsconfig.json
-│   │   └── README.md
-│   ├── delegation/
-│   ├── kms/
-│   └── mcp-resources/
+│   ├── identity-auth/         (Privy-style auth + Signer interfaces)
+│   ├── agent-account/         (ERC-4337 substrate)
+│   ├── delegation/            (delegations + session lifecycle)
+│   ├── key-custody/           (KMS primitives, narrower)
+│   ├── tool-policy/           (protocol-agnostic policy)
+│   ├── mcp-runtime/           (MCP middleware)
+│   └── types/                 (cross-cutting branded types)
 ├── specs/
-│   ├── 000-product-overview.md   (this file)
-│   ├── 001-auth.md
-│   ├── 002-delegation.md
-│   ├── 003-kms.md
-│   └── 004-mcp-resources.md
-├── docs/                          (usage guides, ADRs)
-├── scripts/                       (repo tooling)
+│   ├── 000-product-overview.md            (this file)
+│   ├── 100-package-boundary-doctrine.md   (principles)
+│   ├── 101-v0-package-proposal.md         (per-package justifications)
+│   ├── 102-manifest-and-claude-md-template.md   (agent-context contract)
+│   ├── 103-spec-reorganization-map.md     (current → new mapping)
+│   ├── 200-identity-auth.md
+│   ├── 201-agent-account.md
+│   ├── 202-delegation.md
+│   ├── 203-key-custody.md
+│   ├── 204-tool-policy.md
+│   ├── 205-mcp-runtime.md
+│   └── _archive/              (preserved v1 specs 001-004)
+├── docs/                      (usage guides, ADRs — empty in v0)
+├── scripts/                   (CI guardrail stubs)
 ├── package.json
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
-├── CLAUDE.md                      (Claude Code working-with-this-repo guide)
+├── CLAUDE.md
 └── README.md
 ```
 
 ---
 
-## 8. Provenance traceability
+## 7. Provenance traceability
 
-Every spec section that maps to existing smart-agent code cites the source file with a line range (`apps/web/src/lib/auth/native-session.ts:29-78`). This lets implementers cross-reference the reference implementation when porting. Citations decay over time as smart-agent evolves; treat them as "as of the 003-intent-marketplace-proposal branch on 2026-05-19" pointers, not live links.
+Every per-package spec carries a smart-agent file index with line ranges (`apps/web/src/lib/auth/native-session.ts:29-78`). These pointers reflect smart-agent at branch `003-intent-marketplace-proposal` as of 2026-05-19. They decay over time; treat them as snapshot citations.
+
+---
+
+## 8. How Claude routes work
+
+A Claude session starting in this repo loads, in order:
+
+1. Root `CLAUDE.md` (≤ 600 words) — repo principles, dependency direction, where to find specs.
+2. `specs/000-product-overview.md` — this file.
+3. (Generated, post-CI-script-implementation) `docs/architecture/capability-index.md` — package name → path → one-line summary.
+4. When narrowed to a package: that package's `CLAUDE.md` + `capability.manifest.json` + `src/index.ts`.
+
+Total context overhead before meaningful work in a single package: **~3-5k tokens.** This is the explicit product goal — each package is a sized agent-loadable unit, not a slice of a larger maze.
+
+If a task requires reading >3 implementation files in a single package to understand its scope, treat that as a doctrine violation and refactor the package shape, not the docs.

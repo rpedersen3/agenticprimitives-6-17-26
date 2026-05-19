@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticprimitives.dev/schemas/capability.manifest.schema.json",
+  "title": "agenticprimitives capability.manifest.json",
+  "type": "object",
+  "required": [
+    "name",
+    "kind",
+    "stability",
+    "agentEntry",
+    "publicEntry",
+    "specEntry",
+    "summary",
+    "owns",
+    "imports",
+    "allowedImports",
+    "forbiddenImports",
+    "publicExports",
+    "ignoreForAgentContext",
+    "contextBudget"
+  ],
+  "properties": {
+    "name": { "type": "string", "pattern": "^@agenticprimitives/[a-z][a-z0-9-]*$" },
+    "kind": { "enum": ["capability", "shared", "adapter"] },
+    "stability": { "enum": ["experimental", "beta", "stable"] },
+    "agentEntry": { "const": "CLAUDE.md" },
+    "publicEntry": { "type": "string" },
+    "specEntry": { "type": "string" },
+    "summary": { "type": "string", "maxLength": 200 },
+    "owns": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "array", "items": { "type": "string" } },
+        "tests": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "imports": { "type": "array", "items": { "type": "string" } },
+    "allowedImports": { "type": "array", "items": { "type": "string" } },
+    "forbiddenImports": { "type": "array", "items": { "type": "string" } },
+    "publicExports": { "type": "array", "items": { "type": "string" } },
+    "ignoreForAgentContext": { "type": "array", "items": { "type": "string" } },
+    "contextBudget": {
+      "type": "object",
+      "properties": {
+        "claudeMdMaxWords": { "type": "integer", "minimum": 100 },
+        "readmeMaxWords": { "type": "integer", "minimum": 100 },
+        "architectureMaxWords": { "type": "integer", "minimum": 100 }
+      },
+      "required": ["claudeMdMaxWords", "readmeMaxWords", "architectureMaxWords"]
+    }
+  }
+}

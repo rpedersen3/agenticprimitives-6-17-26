@@ -1,32 +1,43 @@
 # agenticprimitives — Claude Code guide
 
-This is a pnpm-workspace monorepo packaging four standalone capabilities extracted from `smart-agent` (branch `003-intent-marketplace-proposal`, located at `/home/barb/smart-agent`).
+This is a pnpm-workspace monorepo packaging seven standalone capabilities extracted from `smart-agent` (branch `003-intent-marketplace-proposal`, at `/home/barb/smart-agent`). Package boundaries are earned from competitive-landscape research, not chosen by convenience.
 
 ## Repo principles
 
-- **Each package is independently usable.** A consumer should be able to `pnpm add @agenticprimitives/auth` alone and get value, without pulling delegation/KMS/MCP. Cross-package dependencies are explicit and one-directional (see below).
-- **Specs precede code.** Every package owns a `spec.md`. Implementation must keep the spec in sync — if behaviour changes, the spec changes in the same PR.
-- **TypeScript-first.** All packages are TS, ESM, target Node ≥ 20.
-- **Don't fork smart-agent.** Pull the *patterns*, not the full code. We re-shape for reusability; keep package surfaces small and runtime-agnostic where possible.
+- **Each package is a product boundary.** A consumer should be able to `pnpm add @agenticprimitives/<one>` and get value without pulling the others. Cross-package deps are explicit and one-directional.
+- **Specs precede code.** Every package's contract lives at `specs/200-205-*.md`; per-package `spec.md` is a pointer. Behaviour changes update the spec in the same PR.
+- **TypeScript-first.** All packages TS, ESM, target Node ≥ 20.
+- **`tool-policy` and `types` stay transport-agnostic.** Importing MCP / A2A / LangChain / Vercel from those packages is a doctrine violation.
+- **No fork of smart-agent.** Pull patterns, not code. Cross-reference smart-agent at `/home/barb/smart-agent` while implementing; don't depend on its layout.
 
-## Dependency direction
+## Dependency direction (strict)
 
 ```
-auth          (no deps on other ap/* packages)
-   ↑
-delegation    (depends on auth's types only)
-   ↑
-kms           (depends on delegation for session→delegation binding)
-   ↑
-mcp-resources (depends on delegation; optionally kms)
+types ← identity-auth ← agent-account ← delegation ← mcp-runtime
+                            ↑              ↑              ↑
+                       key-custody ────────┘              │
+                                                  tool-policy ─┘
 ```
 
-Never introduce a cycle. If you need something the other direction, raise a type into a shared `types` package rather than adding a back-edge.
+No back-edges. CI enforcement via `scripts/check-package-boundaries.ts` (stub now; implements with first real code).
 
-## Source-of-truth for behaviour
+## Where to start
 
-When implementing or modifying a package, the corresponding `specs/00X-*.md` is the contract. The `smart-agent` repo at `/home/barb/smart-agent` is the *reference implementation* — useful to read for context, but its layout, naming, and assumptions don't bind us.
+1. `specs/000-product-overview.md` — product story
+2. `specs/100-package-boundary-doctrine.md` — boundary principles + competitive signals
+3. `specs/101-v0-package-proposal.md` — per-package justifications
+4. When narrowed to a package: `packages/<name>/CLAUDE.md` + `capability.manifest.json` + `src/index.ts`
+
+## Per-package context budget
+
+Each `CLAUDE.md` ≤ 900 words, `README.md` ≤ 1800, `docs/architecture.md` ≤ 3000 (when it exists). If you're tempted to bloat a CLAUDE.md, fix the package shape instead — a Claude session should reach meaningful work in any one package within ~3-5k tokens of context overhead.
+
+## Implementation status
+
+Pre-alpha. Public APIs are declared in `src/index.ts` of each package; **no implementations are written yet**. The first implementation pass typically follows: `delegation` (the keystone) → `key-custody` + `identity-auth` + `agent-account` (parallel) → `tool-policy` → `mcp-runtime`.
 
 ## Modeled after
 
-The product/repo structure draws from [1clawAI](https://github.com/1clawAI): each capability is a clearly-named, clearly-bounded, separately-publishable package. We use a single monorepo instead of polyrepo to keep development friction low.
+- **Capability-boundary doctrine:** MetaMask Delegation Toolkit (bundle smart-account with delegation when account-specific, split when account-agnostic), Alchemy Account Kit / ZeroDev / Pimlico (signer-decoupled-from-account universal pattern), Lit Protocol / Turnkey / Privy (session lifecycle lives with authority, not with KMS).
+- **Per-package agent-context model:** smart-agent's `capability.manifest.json` + `CLAUDE.md` pattern, slimmed for our smaller package set.
+- **One-job-per-package philosophy:** [1clawAI](https://github.com/1clawAI) — clearly named, narrow-scoped, separately publishable units.

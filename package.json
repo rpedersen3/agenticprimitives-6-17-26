@@ -10,7 +10,14 @@
     "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\" --ignore-path .gitignore",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\" --ignore-path .gitignore",
-    "clean": "pnpm -r clean && rm -rf node_modules"
+    "clean": "pnpm -r clean && rm -rf node_modules",
+    "check:capability-manifests": "tsx scripts/check-capability-manifests.ts",
+    "check:package-docs": "tsx scripts/check-package-docs.ts",
+    "check:package-boundaries": "tsx scripts/check-package-boundaries.ts",
+    "check:public-exports": "tsx scripts/check-public-exports.ts",
+    "check:claude-context-budget": "tsx scripts/check-claude-context-budget.ts",
+    "check:all": "pnpm check:capability-manifests && pnpm check:package-docs && pnpm check:package-boundaries && pnpm check:public-exports && pnpm check:claude-context-budget",
+    "generate:capability-index": "tsx scripts/generate-capability-index.ts"
   },
   "devDependencies": {
     "prettier": "^3.3.0",

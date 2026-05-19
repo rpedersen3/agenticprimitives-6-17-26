@@ -1,0 +1,60 @@
+{
+  "name": "@agenticprimitives/mcp-runtime",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/205-mcp-runtime.md",
+  "summary": "Delegation-aware authorization middleware around the official MCP SDK. withDelegation/withCrossDelegation wrappers, JTI replay protection, classification routing.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/tool-policy"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/tool-policy",
+    "@modelcontextprotocol/sdk",
+    "better-sqlite3",
+    "pg",
+    "viem"
+  ],
+  "forbiddenImports": [
+    "apps/*"
+  ],
+  "publicExports": [
+    "withDelegation",
+    "withCrossDelegation",
+    "declareResource",
+    "createSqliteJtiStore",
+    "createPostgresJtiStore",
+    "createMemoryJtiStore",
+    "verifyDelegationForResource",
+    "verifyCrossDelegationForResource",
+    "McpResourceVerifyConfig",
+    "ResourceDefinition",
+    "MockDelegationSigner",
+    "createTestConfig",
+    "withMockedDelegationContext",
+    "lintMcpClassification"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo",
+    "test/fixtures/golden/**"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

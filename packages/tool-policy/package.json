@@ -1,7 +1,7 @@
 {
-  "name": "@agenticprimitives/delegation",
+  "name": "@agenticprimitives/tool-policy",
   "version": "0.0.1",
-  "description": "EIP-712 smart-account delegations with caveats; web→agent→MCP token flow; session lifecycle.",
+  "description": "Protocol-agnostic classification, risk tiers, and exact-call policy. Consumable by MCP, A2A, LangGraph, and Vercel AI tool runtimes.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./lint": {
+      "types": "./dist/lint.d.ts",
+      "import": "./dist/lint.js"
     }
   },
   "files": ["dist", "spec.md", "README.md"],
@@ -18,12 +22,9 @@
     "test": "echo 'no tests yet' && exit 0",
     "clean": "rm -rf dist"
   },
-  "keywords": ["delegation", "eip-712", "erc-7710", "erc-1271", "caveat", "session", "agentic"],
+  "keywords": ["policy", "classification", "risk-tier", "exact-call", "agentic", "tool-policy"],
   "license": "UNLICENSED",
   "peerDependencies": {
-    "@agenticprimitives/agent-account": "workspace:*",
-    "@agenticprimitives/identity-auth": "workspace:*",
-    "@agenticprimitives/key-custody": "workspace:*",
     "@agenticprimitives/types": "workspace:*"
   }
 }

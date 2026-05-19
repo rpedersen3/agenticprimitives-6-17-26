@@ -1,0 +1,38 @@
+{
+  "name": "@agenticprimitives/identity-auth",
+  "version": "0.0.1",
+  "description": "User authentication (passkey + SIWE + Google OAuth), JWT sessions, and pluggable signer interfaces.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./passkey": {
+      "types": "./dist/methods/passkey.d.ts",
+      "import": "./dist/methods/passkey.js"
+    },
+    "./siwe": {
+      "types": "./dist/methods/siwe.d.ts",
+      "import": "./dist/methods/siwe.js"
+    },
+    "./google": {
+      "types": "./dist/methods/google.d.ts",
+      "import": "./dist/methods/google.js"
+    }
+  },
+  "files": ["dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo 'no tests yet' && exit 0",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["auth", "passkey", "siwe", "oauth", "session", "agentic"],
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "@agenticprimitives/types": "workspace:*"
+  }
+}

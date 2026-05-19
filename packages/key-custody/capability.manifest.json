@@ -1,0 +1,62 @@
+{
+  "name": "@agenticprimitives/key-custody",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/203-key-custody.md",
+  "summary": "Envelope encryption + signers + HMAC providers. local-AES/AWS-KMS/GCP-KMS backends behind one A2AKeyProvider interface. No session lifecycle (that's delegation's).",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/identity-auth"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/identity-auth",
+    "viem",
+    "@noble/curves",
+    "@noble/hashes",
+    "@aws-sdk/client-kms",
+    "@google-cloud/kms"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/mcp-runtime"
+  ],
+  "publicExports": [
+    "A2AKeyProvider",
+    "KmsAccountBackend",
+    "BuildOpts",
+    "buildKeyProvider",
+    "buildSignerBackend",
+    "buildToolExecutorBackend",
+    "buildMacProvider",
+    "getRelayOnlySigner",
+    "createKmsAccount",
+    "canonicalContextBytes",
+    "LocalAesProvider",
+    "LocalSecp256k1Signer",
+    "AwsKmsProvider",
+    "AwsKmsSigner",
+    "GcpKmsProvider",
+    "GcpKmsSigner"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

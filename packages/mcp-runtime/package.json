@@ -1,0 +1,38 @@
+{
+  "name": "@agenticprimitives/mcp-runtime",
+  "version": "0.0.1",
+  "description": "Delegation-aware authorization middleware around the official MCP TypeScript SDK. The decision layer, not the SDK.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    },
+    "./lint": {
+      "types": "./dist/lint.d.ts",
+      "import": "./dist/lint.js"
+    }
+  },
+  "files": ["dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo 'no tests yet' && exit 0",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["mcp", "model-context-protocol", "delegation", "authorization", "agentic"],
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "@agenticprimitives/delegation": "workspace:*",
+    "@agenticprimitives/key-custody": "workspace:*",
+    "@agenticprimitives/tool-policy": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
+    "@modelcontextprotocol/sdk": "*"
+  }
+}

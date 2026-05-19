@@ -1,0 +1,57 @@
+{
+  "name": "@agenticprimitives/tool-policy",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/204-tool-policy.md",
+  "summary": "Protocol-agnostic classification taxonomy + risk tiers + exact-call DSL + decision engine. Consumable by any tool runtime.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/mcp-runtime",
+    "@modelcontextprotocol/sdk",
+    "@a2aproject/a2a-js",
+    "langchain",
+    "@langchain/core",
+    "ai",
+    "@vercel/ai"
+  ],
+  "publicExports": [
+    "RiskTier",
+    "ToolClassification",
+    "ExactCallPolicy",
+    "PolicyContext",
+    "PolicyDecision",
+    "declareTool",
+    "exactCall",
+    "matchesExactCall",
+    "evaluatePolicy",
+    "clampTtlForRiskTier",
+    "requiredCaveatsForRiskTier",
+    "lintClassification"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

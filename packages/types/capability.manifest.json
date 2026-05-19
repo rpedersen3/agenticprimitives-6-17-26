@@ -1,0 +1,36 @@
+{
+  "name": "@agenticprimitives/types",
+  "kind": "shared",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/101-v0-package-proposal.md",
+  "summary": "Cross-cutting branded types: Address, Hex, ChainId, BrandedId. Types-only; no runtime code.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [],
+  "allowedImports": [],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/*"
+  ],
+  "publicExports": [
+    "Address",
+    "Hex",
+    "ChainId",
+    "BrandedId"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

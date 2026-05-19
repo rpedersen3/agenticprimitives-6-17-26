@@ -1,0 +1,44 @@
+{
+  "name": "@agenticprimitives/agent-account",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/201-agent-account.md",
+  "summary": "ERC-4337 smart-account substrate. Deterministic addressing, factory deployment, ERC-1271 signing, UserOp building. Account-agnostic of which signer signs.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/identity-auth"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/identity-auth",
+    "viem"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/mcp-runtime"
+  ],
+  "publicExports": [
+    "AgentAccountClient",
+    "UserOperation"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

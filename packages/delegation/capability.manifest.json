@@ -1,0 +1,79 @@
+{
+  "name": "@agenticprimitives/delegation",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/202-delegation.md",
+  "summary": "EIP-712 delegations spanning web app → agent → MCP. Caveats, token envelope, validation, session lifecycle.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/key-custody"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/key-custody",
+    "viem",
+    "@noble/curves",
+    "@noble/hashes"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/mcp-runtime"
+  ],
+  "publicExports": [
+    "ROOT_AUTHORITY",
+    "DelegationClient",
+    "SessionManager",
+    "SessionStore",
+    "buildCaveat",
+    "buildMcpToolScopeCaveat",
+    "buildDataScopeCaveat",
+    "buildDelegateBindingCaveat",
+    "encodeTimestampTerms",
+    "encodeValueTerms",
+    "encodeAllowedTargetsTerms",
+    "encodeAllowedMethodsTerms",
+    "hashDelegation",
+    "hashCaveats",
+    "evaluateCaveats",
+    "mintDelegationToken",
+    "verifyDelegationToken",
+    "verifyCrossDelegation",
+    "isRevoked",
+    "revokeDelegation",
+    "Delegation",
+    "Caveat",
+    "DataScopeGrant",
+    "DelegationTokenClaims",
+    "EnforcerAddressMap",
+    "JtiStore",
+    "CaveatContext",
+    "VerifyOpts",
+    "VerifyError",
+    "SessionRow",
+    "SessionPackage",
+    "SessionMeta"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo",
+    "test/fixtures/golden/**"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}
