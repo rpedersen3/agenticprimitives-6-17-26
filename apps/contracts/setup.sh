@@ -20,9 +20,11 @@ if [ ! -d lib/forge-std ]; then
   git clone --depth 1 https://github.com/foundry-rs/forge-std.git lib/forge-std
 fi
 
-echo "Installing ERC-4337 account-abstraction v0.8..."
+echo "Installing ERC-4337 account-abstraction v0.9 (main branch)..."
 if [ ! -d lib/account-abstraction ]; then
-  git clone --depth 1 --branch v0.8.0 https://github.com/eth-infinitism/account-abstraction.git lib/account-abstraction
+  # Smart-agent's vendored contracts target v0.9 of BaseAccount. Track main
+  # for now; pin to a tag once eth-infinitism cuts a 0.9.x release.
+  git clone --depth 1 https://github.com/eth-infinitism/account-abstraction.git lib/account-abstraction
 fi
 
 echo "Done. Run 'forge build' to compile."

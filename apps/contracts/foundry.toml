@@ -13,5 +13,12 @@ remappings = [
     "forge-std/=lib/forge-std/src/",
 ]
 
+# Deploy script writes deployments-<network>.json into this directory.
+fs_permissions = [
+    { access = "write", path = "./deployments-anvil.json" },
+    { access = "write", path = "./deployments-base-sepolia.json" },
+    { access = "read",  path = "./test/fixtures" },
+]
+
 [fuzz]
 runs = 256
