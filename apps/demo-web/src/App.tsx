@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { loadOrCreateDemoUser, resetDemoUser, type DemoUser } from './test-user';
 import { signInWithSiwe } from './siwe-flow';
 import { authorizeAgent as authorizeAgentFlow } from './authorize-flow';
+import { readProfile } from './read-profile-flow';
 import type { Address } from '@agenticprimitives/types';
 
 const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID ?? 31337);
@@ -93,9 +94,20 @@ export function App() {
     );
   };
 
-  // STEP 3: web calls a2a tool proxy → a2a → mcp → returns PII
+  // STEP 3: web calls a2a tool proxy → a2a mints token + forwards to mcp → returns PII
   const readMyProfile = async () => {
-    append('[3] Read my profile via a2a → mcp (TODO: implement once mcp-runtime is real)');
+    if (!state || !state.sessionId) {
+      append('[3] not ready (need session)');
+      return;
+    }
+    append('[3] POST /a2a/tools/get_profile → a2a mints token → mcp verifies + returns…');
+    const res = await readProfile(state.sessionId);
+    if (!res.ok) {
+      append(`[3] FAILED: ${res.error}`);
+      return;
+    }
+    append(`[3] ✓ Profile received. owner=${res.profile.owner_address} email=${res.profile.email}`);
+    setState((s) => (s ? { ...s, profile: res.profile } : s));
   };
 
   const reset = () => {

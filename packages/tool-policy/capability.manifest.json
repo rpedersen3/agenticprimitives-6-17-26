@@ -14,7 +14,8 @@
     "@agenticprimitives/types"
   ],
   "allowedImports": [
-    "@agenticprimitives/types"
+    "@agenticprimitives/types",
+    "@noble/hashes"
   ],
   "forbiddenImports": [
     "apps/*",

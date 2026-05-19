@@ -23,7 +23,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo 'no tests yet' && exit 0",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration",
+    "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
   "keywords": ["mcp", "model-context-protocol", "delegation", "authorization", "agentic"],
@@ -33,6 +36,11 @@
     "@agenticprimitives/key-custody": "workspace:*",
     "@agenticprimitives/tool-policy": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
-    "@modelcontextprotocol/sdk": "*"
+    "@modelcontextprotocol/sdk": "*",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "vitest": "^2.1.0"
   }
 }

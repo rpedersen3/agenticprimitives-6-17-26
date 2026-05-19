@@ -19,12 +19,22 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo 'no tests yet' && exit 0",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration",
+    "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
   "keywords": ["policy", "classification", "risk-tier", "exact-call", "agentic", "tool-policy"],
   "license": "UNLICENSED",
+  "dependencies": {
+    "@noble/hashes": "^1.5.0"
+  },
   "peerDependencies": {
     "@agenticprimitives/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "vitest": "^2.1.0"
   }
 }

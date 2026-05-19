@@ -49,7 +49,8 @@
     "Delegation",
     "EnforcerAddressMap",
     "JtiStore",
-    "ToolClassification"
+    "ToolClassification",
+    "McpAuthError"
   ],
   "forbiddenTerms": [
     { "term": "passkey", "reason": "Auth method internals belong in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] },
