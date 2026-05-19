@@ -15,6 +15,7 @@ import {
   type PublicClient,
   type WalletClient,
 } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import type { Signer } from '@agenticprimitives/identity-auth';
 import { agentAccountFactoryAbi, agentAccountAbi, ERC1271_MAGIC_VALUE } from './abis';
 import type { UserOperation } from './types';
@@ -73,6 +74,44 @@ export class AgentAccountClient {
     // Wait for receipt; on success the deployed address is also derivable.
     await this.publicClient.waitForTransactionReceipt({ hash });
     return this.getAddress(params.owner, params.salt);
+  }
+
+  /**
+   * Deploy via factory using a raw bootstrap private key. This is the
+   * relayer-pattern path: a separate funded EOA (NOT the user's master
+   * signer, NOT the KMS-backed agent identity) calls factory.createAccount
+   * to materialize a smart account whose owner is the user's wallet.
+   *
+   * Use this for lazy-deploy flows where the backend deploys accounts
+   * on-demand before issuing delegations. The user keeps the smart account
+   * (it's owned by `owner`); the bootstrap key only pays gas.
+   *
+   * Idempotent: if the account is already deployed, returns its address
+   * without a transaction.
+   */
+  async createAccountFromPrivateKey(
+    owner: Address,
+    salt: bigint,
+    bootstrapPrivateKey: Hex,
+  ): Promise<Address> {
+    const predicted = await this.getAddress(owner, salt);
+    if (await this.isDeployed(predicted)) return predicted;
+
+    const account = privateKeyToAccount(bootstrapPrivateKey);
+    const wallet = createWalletClient({
+      account,
+      transport: http(this.opts.rpcUrl),
+    });
+    const hash = await wallet.writeContract({
+      address: this.opts.factory,
+      abi: agentAccountFactoryAbi,
+      functionName: 'createAccount',
+      args: [owner, salt],
+      account,
+      chain: null,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return predicted;
   }
 
   async isOwner(account: Address, address: Address): Promise<boolean> {

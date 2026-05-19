@@ -160,6 +160,33 @@ curl https://demo-a2a-production.<sub>.workers.dev/agent/identity
 
 Demo idle: **<$0.10/mo software** or **<$1.10/mo HSM**.
 
+### Lazy smart-account deploy (optional)
+
+By default the demo uses **counterfactual** smart-account addresses — they're computed deterministically via CREATE2 but never deployed on-chain. That's why `apps/demo-mcp/src/index.ts` sets `requireDeployed: false` on the verifier config: there's nothing on-chain to run ERC-1271 against.
+
+To remove that shim, enable **lazy deploy**:
+
+1. Generate a dedicated bootstrap EOA (separate from the agent's master signer, which lives in KMS):
+   ```bash
+   cast wallet new
+   # Prints address + private key. Save both somewhere safe.
+   ```
+2. **Fund it** with a small amount of Base Sepolia ETH (~0.01 ETH covers ~50 account deploys):
+   ```
+   https://www.alchemy.com/faucets/base-sepolia
+   ```
+3. Set it as a Cloudflare secret on demo-a2a:
+   ```bash
+   echo -n "0xYOUR_BOOTSTRAP_PRIVATE_KEY" | \
+     (cd apps/demo-a2a && wrangler secret put A2A_BOOTSTRAP_PRIVATE_KEY --env production)
+   ```
+4. Redeploy: `A2A_KMS_BACKEND=gcp-kms GCP_KMS_KEY_NAME=... pnpm deploy:cloudflare`
+5. Once the bootstrap key is funded + set, demo-a2a will deploy each user's smart account on their first SIWE login.
+
+When lazy deploy is working end-to-end you can then drop `requireDeployed: false` from `apps/demo-mcp/src/index.ts` (`baseConfig`) and redeploy. ERC-1271 will now be checked on every delegation against the live on-chain account.
+
+The bootstrap key is *only* a relayer: it pays gas for `factory.createAccount(owner, salt)` but the deployed smart account is owned by the user's wallet (`owner` is the SIWE-authenticated walletAddress). The bootstrap key never has owner authority over any agent account.
+
 ### Why REST, not the @google-cloud/kms SDK?
 
 The official Node SDK uses gRPC, which won't run on Cloudflare Workers even with `nodejs_compat`. `GcpKmsSigner` drives the REST API via `fetch` and signs the auth JWT with `crypto.subtle` (Web Crypto), so the entire path is Workers-native. See `packages/key-custody/src/providers/gcp.ts`.
