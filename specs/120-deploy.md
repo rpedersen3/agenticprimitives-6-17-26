@@ -26,6 +26,7 @@ pnpm dev   # starts anvil + deploys contracts + 3 workers + vite web
 ```
 
 `pnpm dev` orchestrates:
+
 1. `anvil --port 8545` (local chain).
 2. `forge script Deploy.s.sol` → writes `apps/contracts/deployments-anvil.json`.
 3. `tsx scripts/gen-dev-vars.ts` → writes `apps/demo-{a2a,mcp}/.dev.vars` with contract addresses + dev secrets.
@@ -42,7 +43,6 @@ No Cloudflare account needed for any of this. `wrangler dev` runs Workers locall
 ```bash
 # Create a Cloudflare account, then:
 wrangler login    # browser-based OAuth; stores creds in ~/.config/.wrangler/
-
 # Create the production D1 database for demo-mcp.
 cd apps/demo-mcp
 wrangler d1 create demo-mcp
@@ -73,25 +73,87 @@ forge script script/Deploy.s.sol \
 # Writes deployments-base-sepolia.json
 ```
 
-Bridge ETH to Base Sepolia: https://bridge.base.org/
+Bridge ETH to Base Sepolia: [https://bridge.base.org/](https://bridge.base.org/)
 
 ---
 
 ## 4. Set Worker secrets (one-time per environment)
 
-Secrets are non-inheritable per Cloudflare env, so each call needs `--env production`:
+Secrets are non-inheritable per Cloudflare env, so each call needs `--env production`. Run the helper script:
 
 ```bash
-cd apps/demo-a2a
-echo -n "prodkid:$(openssl rand -hex 32)" | wrangler secret put SESSION_JWT_SECRETS    --env production
-echo -n "0x$(openssl rand -hex 32)"        | wrangler secret put CSRF_SECRET            --env production
-echo -n "0x$(openssl rand -hex 32)"        | wrangler secret put A2A_SESSION_SECRET     --env production
-# Master signing key for the demo (generate a dedicated EOA for this — never the deployer EOA)
-echo -n "0x..."                            | wrangler secret put A2A_MASTER_PRIVATE_KEY --env production
-cd ../..
+bash scripts/set-cloudflare-secrets.sh           # local-aes backend (default; generates a fresh EOA)
+A2A_KMS_BACKEND=gcp-kms bash scripts/set-cloudflare-secrets.sh   # GCP KMS backend (see §4.5)
 ```
 
+For local-aes, this generates and sets:
+
+- `SESSION_JWT_SECRETS` — `kid:hex` HS256 signing secrets
+- `CSRF_SECRET` — HMAC for CSRF tokens
+- `A2A_SESSION_SECRET` — envelope-encryption master for session-key wrapping
+- `A2A_MASTER_PRIVATE_KEY` — fresh secp256k1 EOA (the agent's master identity in the local-dev signer)
+
+For GCP KMS, the first three are the same; `A2A_MASTER_PRIVATE_KEY` is replaced by `GCP_SERVICE_ACCOUNT_JSON` (the service-account credentials for the KMS API). See §4.5 for setup.
+
 Contract addresses + RPC overrides + dynamic URLs (`MCP_URL`, `ALLOWED_ORIGINS`) are **not** secrets — `pnpm deploy:cloudflare` passes them per deploy via `--var` (read from `deployments-base-sepolia.json` and captured Worker URLs). Static prod defaults like `RPC_URL` / `CHAIN_ID` live in `wrangler.toml` under `[env.production.vars]`.
+
+---
+
+## 4.5 Production signer: GCP KMS (optional, recommended for production)
+
+The local-aes signer bypasses its own `NODE_ENV=production` guard via a shim in `apps/demo-a2a/src/index.ts`. That's fine for a demo, not for production. To use Cloud KMS instead:
+
+### One-time GCP setup
+
+1. Enable Cloud KMS API in your GCP project.
+2. Create a keyring + key:
+  ```bash
+   gcloud kms keyrings create agenticprimitives-demo --location=us-central1
+   gcloud kms keys create agent-master \
+     --keyring=agenticprimitives-demo \
+     --location=us-central1 \
+     --purpose=asymmetric-signing \
+     --default-algorithm=ec-sign-secp256k1-sha256 \
+     --protection-level=software   # or `hsm` for HSM-backed (~$1/mo)
+  ```
+3. Create a service account, grant it `roles/cloudkms.signer` + `roles/cloudkms.publicKeyViewer` scoped to this key only, download a JSON key.
+4. Save the JSON at `.gcp-service-account.local.json` at the repo root (already gitignored).
+
+### Deploy with GCP KMS
+
+```bash
+A2A_KMS_BACKEND=gcp-kms bash scripts/set-cloudflare-secrets.sh
+
+A2A_KMS_BACKEND=gcp-kms \
+GCP_KMS_KEY_NAME=projects/<P>/locations/<L>/keyRings/agenticprimitives-demo/cryptoKeys/agent-master/cryptoKeyVersions/1 \
+  pnpm deploy:cloudflare
+
+shred -u .gcp-service-account.local.json   # optional cleanup
+```
+
+### Validate
+
+```bash
+curl https://demo-a2a-production.<sub>.workers.dev/agent/identity
+# → { "backend": "gcp-kms", "address": "0x..." }
+```
+
+`/agent/identity` exercises the full GCP code path: service-account JWT → OAuth token exchange → Cloud KMS `cryptoKeyVersions/.../publicKey` → SPKI parse → keccak256 → Ethereum address. If you see an address back, the migration is working. The private key never leaves KMS (no `:export` capability is granted to the service account).
+
+### Cost
+
+
+| Protection | Storage      | Signing         |
+| ---------- | ------------ | --------------- |
+| Software   | $0.06/key/mo | $0.03 / 10k ops |
+| HSM        | $1.00/key/mo | $0.30 / 10k ops |
+
+
+Demo idle: **<$0.10/mo software** or **<$1.10/mo HSM**.
+
+### Why REST, not the @google-cloud/kms SDK?
+
+The official Node SDK uses gRPC, which won't run on Cloudflare Workers even with `nodejs_compat`. `GcpKmsSigner` drives the REST API via `fetch` and signs the auth JWT with `crypto.subtle` (Web Crypto), so the entire path is Workers-native. See `packages/key-custody/src/providers/gcp.ts`.
 
 ---
 
@@ -102,7 +164,8 @@ pnpm deploy:cloudflare
 ```
 
 `scripts/deploy-cloudflare.ts` runs:
-1. Pre-flight (`wrangler whoami`, deployments file exists).
+
+1. Pre-flight (`wrangler whoami`, deployments file exists) + `pnpm -r --filter './packages/*' build` so Workers bundle the latest `dist/`.
 2. `wrangler d1 migrations apply demo-mcp --remote --env production`.
 3. `wrangler deploy --env production` for `demo-mcp` — captures its URL.
 4. `wrangler deploy --env production` for `demo-a2a` — injects `MCP_URL` + `ALLOWED_ORIGINS` via `--var`, captures its URL.
@@ -110,9 +173,10 @@ pnpm deploy:cloudflare
 6. `pnpm --filter @agenticprimitives-demo/web build`; ensures the Pages project exists; pipes the demo-a2a URL into `wrangler pages secret put DEMO_A2A_URL` (read by the `functions/a2a/[[path]].ts` proxy at runtime).
 7. `wrangler pages deploy dist --project-name=agenticprimitives-demo --branch=master`.
 
-**Why a Pages Function, not `_redirects`?** Cloudflare Pages silently drops `_redirects` 200-rewrites that target an external origin (e.g. `*.workers.dev`). Only same-origin rewrites work there. So `/a2a/*` proxying lives in a Pages Function (`apps/demo-web/functions/a2a/[[path]].ts`) that reads `env.DEMO_A2A_URL` and forwards the request.
+**Why a Pages Function, not `_redirects`?** Cloudflare Pages silently drops `_redirects` 200-rewrites that target an external origin (e.g. `*.workers.dev`). Only same-origin rewrites work there. So `/a2a/`* proxying lives in a Pages Function (`apps/demo-web/functions/a2a/[[path]].ts`) that reads `env.DEMO_A2A_URL` and forwards the request.
 
 Override defaults via env:
+
 ```bash
 DEPLOY_NETWORK=base-sepolia \
 PAGES_PROJECT=agenticprimitives-demo \
@@ -127,6 +191,7 @@ If anything fails mid-deploy, fix it and re-run — every step is idempotent. Th
 ## 6. Custom domains (optional)
 
 In Cloudflare dashboard:
+
 - Pages → demo project → Custom domains → add `demo.yourdomain.com`.
 - Workers → demo-a2a → Triggers → add `a2a.yourdomain.com`.
 - Workers → demo-mcp → Triggers → add `mcp.yourdomain.com`.
@@ -161,13 +226,15 @@ For deploys triggered by CI, add a job that calls `wrangler deploy` with `CLOUDF
 
 ## 8. Cost model
 
-| Item | Free tier | Demo idle |
-| --- | --- | --- |
-| Cloudflare Pages | unlimited deploys, 500 builds/mo | $0 |
-| Cloudflare Workers (free) | 100k requests/day | $0 |
-| Cloudflare Workers (paid) | $5/mo for 10M requests + Durable Objects | $5/mo if using DO |
-| D1 | 5GB storage, 100k reads/day, 1k writes/day | $0 |
-| Base Sepolia | free (testnet) | $0 |
+
+| Item                      | Free tier                                  | Demo idle         |
+| ------------------------- | ------------------------------------------ | ----------------- |
+| Cloudflare Pages          | unlimited deploys, 500 builds/mo           | $0                |
+| Cloudflare Workers (free) | 100k requests/day                          | $0                |
+| Cloudflare Workers (paid) | $5/mo for 10M requests + Durable Objects   | $5/mo if using DO |
+| D1                        | 5GB storage, 100k reads/day, 1k writes/day | $0                |
+| Base Sepolia              | free (testnet)                             | $0                |
+
 
 Total demo cost: **$0–5/mo**. Production traffic scales linearly into Workers Paid.
 
@@ -176,6 +243,7 @@ Total demo cost: **$0–5/mo**. Production traffic scales linearly into Workers 
 ## 9. Rollback
 
 Pages keeps every deploy as an addressable preview URL. To rollback:
+
 - Pages dashboard → Deployments → click an older successful deploy → "Rollback to this deployment".
 - Workers: `wrangler deployments list` → `wrangler rollback <deployment-id>`.
 

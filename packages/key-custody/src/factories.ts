@@ -25,7 +25,10 @@ export function buildSignerBackend(opts: BuildOpts): KmsAccountBackend {
     case 'aws-kms':
       return new AwsKmsSigner();
     case 'gcp-kms':
-      return new GcpKmsSigner();
+      return new GcpKmsSigner({
+        cryptoKeyVersionName: opts.config?.cryptoKeyVersionName,
+        serviceAccountJson: opts.config?.serviceAccountJson,
+      });
   }
 }
 

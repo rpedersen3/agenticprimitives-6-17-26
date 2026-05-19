@@ -103,6 +103,12 @@ console.log(`  factory: ${d.agentAccountFactory}`);
 console.log(`  delegationManager: ${d.delegationManager}`);
 console.log(`  predicted Pages URL: ${DEMO_WEB_URL}`);
 
+// 1.5 Build all packages so the Workers pick up the latest dist/.
+//    Without this, wrangler bundles each Worker against whatever stale
+//    JS is in packages/*/dist/ — a silent footgun.
+step(1, 'Building @agenticprimitives/* packages so Workers see latest code…');
+run("pnpm -r --filter './packages/*' build");
+
 // 2. D1 migrations
 step(2, 'Applying D1 migrations to remote production DB…');
 process.env.CI = '1';
@@ -143,14 +149,32 @@ const demoMcpUrl = extractWorkerUrl(mcpOut);
 if (!demoMcpUrl) fail('failed to extract demo-mcp Worker URL from wrangler deploy output.');
 console.log(`  → ${demoMcpUrl}`);
 
-// 4. Deploy demo-a2a Worker with MCP_URL + ALLOWED_ORIGINS injected
+// 4. Deploy demo-a2a Worker with MCP_URL + ALLOWED_ORIGINS injected.
+//    When A2A_KMS_BACKEND=gcp-kms is set in the deploy env, also propagate
+//    A2A_KMS_BACKEND + GCP_KMS_KEY_NAME to the Worker via --var.
+//    (GCP_SERVICE_ACCOUNT_JSON is set separately via wrangler secret put —
+//    see scripts/set-cloudflare-secrets.sh.)
 step(4, 'Deploying demo-a2a Worker…');
+const a2aVars: Record<string, string> = {
+  ...contractVars,
+  MCP_URL: demoMcpUrl,
+  ALLOWED_ORIGINS: DEMO_WEB_URL,
+};
+const a2aBackend = process.env.A2A_KMS_BACKEND;
+if (a2aBackend === 'gcp-kms') {
+  const keyName = process.env.GCP_KMS_KEY_NAME;
+  if (!keyName) {
+    fail(
+      'A2A_KMS_BACKEND=gcp-kms but GCP_KMS_KEY_NAME is not set.\n' +
+        '  Format: projects/<P>/locations/<L>/keyRings/<R>/cryptoKeys/<K>/cryptoKeyVersions/<V>',
+    );
+  }
+  a2aVars.A2A_KMS_BACKEND = 'gcp-kms';
+  a2aVars.GCP_KMS_KEY_NAME = keyName;
+  console.log(`  using A2A_KMS_BACKEND=gcp-kms with key ${keyName}`);
+}
 const a2aOut = runCapture(
-  `wrangler deploy --env production ${buildVarFlags({
-    ...contractVars,
-    MCP_URL: demoMcpUrl,
-    ALLOWED_ORIGINS: DEMO_WEB_URL,
-  })}`,
+  `wrangler deploy --env production ${buildVarFlags(a2aVars)}`,
   { cwd: join(REPO_ROOT, 'apps', 'demo-a2a') },
 );
 process.stdout.write(a2aOut);

@@ -30,6 +30,11 @@ cache/
 # Cloudflare deploy-state file written by scripts/deploy-cloudflare.ts
 cloudflare-urls.json
 
+# GCP service-account JSON used by scripts/set-cloudflare-secrets.sh
+# (piped to `wrangler secret put GCP_SERVICE_ACCOUNT_JSON --env production`
+# and then shredded). Never commit.
+.gcp-service-account.local.json
+
 # Logs
 *.log
 npm-debug.log*
@@ -38,6 +43,8 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+# Windows NTFS alternative data stream sidecars (created by browser downloads via WSL)
+*:Zone.Identifier
 
 # Editor
 .vscode/
