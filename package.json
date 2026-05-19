@@ -12,6 +12,9 @@
     "setup:contracts": "cd apps/contracts && bash setup.sh && pnpm build",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "test:unit": "pnpm -r --parallel --no-bail run test:unit",
+    "test:integration:packages": "pnpm -r --parallel --no-bail run test:integration",
+    "test:contracts": "cd apps/contracts && forge test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\" --ignore-path .gitignore",
@@ -27,9 +30,11 @@
     "generate:capability-index": "tsx scripts/generate-capability-index.ts"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^2.1.0",
     "prettier": "^3.3.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
   },
   "engines": {
     "node": ">=20",

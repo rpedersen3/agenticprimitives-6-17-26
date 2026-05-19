@@ -31,13 +31,24 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo 'no tests yet' && exit 0",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration",
+    "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
   "keywords": ["kms", "aws-kms", "gcp-kms", "envelope-encryption", "secp256k1", "hmac", "agentic"],
   "license": "UNLICENSED",
+  "dependencies": {
+    "@noble/curves": "^1.6.0",
+    "@noble/hashes": "^1.5.0"
+  },
   "peerDependencies": {
     "@agenticprimitives/identity-auth": "workspace:*",
-    "@agenticprimitives/types": "workspace:*"
+    "@agenticprimitives/types": "workspace:*",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
   }
 }
