@@ -47,3 +47,16 @@ jobs:
 
       - name: Integration tests (per-package vitest)
         run: pnpm test:integration:packages
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Build contract dependencies (forge-std + account-abstraction + OZ)
+        working-directory: apps/contracts
+        run: bash setup.sh
+
+      - name: Forge contract tests (test pyramid Layer 4)
+        working-directory: apps/contracts
+        run: forge test -vv
