@@ -10,6 +10,10 @@
 - Domain vocabulary (`Person`, `Org`, etc.).
 - Anything used by only one other package.
 
+## Vocabulary
+**Owns:** `Address`, `Hex`, `ChainId`, `BrandedId`.
+**Does not use:** any concept named in any other package. See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-map.md).
+
 ## Read these first (in order)
 1. `capability.manifest.json`
 2. `src/index.ts`
@@ -20,11 +24,24 @@
 - `BrandedId<T>` — generic opaque-ID helper.
 
 ## Allowed imports
-None. This package has zero deps.
+None. Zero deps.
 
 ## Forbidden imports
 - `apps/*`
-- Any other `@agenticprimitives/*` package (this is a leaf).
+- Any other `@agenticprimitives/*` package.
+
+## Drift triggers — STOP and route
+- "Add a domain type (User, Org, Profile, Session, etc.)" — **STOP.** Domain types live in the package that owns the concept.
+- "Add a runtime function or const" — **STOP.** Types-only.
+- "Add a type used in only one package" — **STOP.** Move it to that package; only promote here when ≥2 packages need it.
+
+## Before you write code
+- [ ] Is this type used by ≥2 packages today (not "might be useful someday")?
+- [ ] Is it a primitive (chain, address, ID), not domain vocabulary?
+- [ ] Does the change preserve "no runtime code; no side effects"?
+- [ ] Did I check [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-map.md) to make sure the name doesn't clash with a neighbor's concept?
+
+If any answer is "no", the change probably belongs elsewhere.
 
 ## Security invariants (DO NOT BREAK)
 - Types-only. No side effects. No runtime code.
@@ -33,11 +50,12 @@ None. This package has zero deps.
 ## Validate the package
 ```bash
 pnpm --filter @agenticprimitives/types typecheck
+pnpm check:forbidden-terms
 ```
 
 ## Common task routing
-- Adding a new branded primitive → `src/index.ts`, then verify ≥2 packages will consume it before adding.
-- Anything else → does not belong in this package.
+- Adding a new branded primitive → `src/index.ts`, after verifying ≥2 consumers.
+- Anything else → does not belong here.
 
 ## Generated files (ignore)
 `dist/`, `node_modules/`, `coverage/`, `*.tsbuildinfo`.

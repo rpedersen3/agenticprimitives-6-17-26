@@ -3,36 +3,54 @@
 ## What this package owns
 - Auth method modules: `./passkey`, `./siwe`, `./google` (tree-shakable subpaths).
 - JWT session minting/verification with key rotation; CSRF helpers.
-- **Signer interfaces** (`Signer`, `PasskeySigner`, `EOASigner`, `KMSSigner`) that `agent-account` and `delegation` consume.
-- Salt-derivation helpers (label → CREATE2 salt, email → CREATE2 salt with rotation).
+- **`Signer` interfaces** (`Signer`, `PasskeySigner`, `EOASigner`, `KMSSigner`) — the architectural contract `agent-account` and `delegation` consume.
+- Salt-derivation helpers (label → CREATE2 salt, email → CREATE2 salt).
 
 ## What this package does NOT own
 - The smart account itself → `@agenticprimitives/agent-account`.
-- Concrete KMS-backed signers → `@agenticprimitives/key-custody` (provides backends; this package defines the interface).
+- Concrete KMS-backed signers → `@agenticprimitives/key-custody` (we define the interface; they provide backends).
 - HTTP route wiring, cookie I/O, database adapters, OAuth client secrets (consumer-app territory).
 - The delegation primitive → `@agenticprimitives/delegation`.
+
+## Vocabulary
+**Owns:** `Signer`, `PasskeySigner`, `EOASigner`, `KMSSigner` (interfaces only), `JwtClaims`, `AuthenticatedUser`, `AuthMethod`, `SESSION_COOKIE`. **"Session" here = JWT-cookie session bound to user identity.**
+**Disambiguation:** see [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-map.md). The word "session" means a **different thing** in `@agenticprimitives/delegation` (a `SessionRow` binding a delegation to a session-signing keypair). If your change touches "session lifecycle" / "session encryption" / "session key", you are working in the wrong package — route to `delegation`.
+**Does not use:** `Delegation`, `Caveat`, `Enforcer`, `SessionManager`, `SessionRow`, `A2AKeyProvider`, envelope encryption, JTI, MCP. See `capability.manifest.json:forbiddenTerms`.
 
 ## Read these first (in order)
 1. `capability.manifest.json` — boundary
 2. `src/index.ts` — public API
 3. `../../specs/200-identity-auth.md` — the contract
-4. `src/sessions.ts` (when implementing JWT logic)
-5. `src/methods/passkey.ts` (canonical implementation pattern for the other methods)
+4. `../../docs/architecture/vocabulary-map.md` — only if your change touches a term that lives in two packages
 
 ## Stable public exports
-- **Session:** `mintSession`, `verifySession`, `SESSION_COOKIE`, `SESSION_TTL_SECONDS`
-- **CSRF:** `csrfTokenFor`, `verifyCsrf`
-- **Signer interfaces:** `Signer`, `PasskeySigner`, `EOASigner`, `KMSSigner` (types, no implementations)
-- **Salt:** `deriveSaltFromLabel`, `deriveSaltFromEmail`
-- **Method subpaths:** `@agenticprimitives/identity-auth/{passkey,siwe,google}`
-- **Types:** `JwtClaims`, `AuthenticatedUser`, `AuthMethod`
+**Session:** `mintSession`, `verifySession`, `SESSION_COOKIE`, `SESSION_TTL_SECONDS`
+**CSRF:** `csrfTokenFor`, `verifyCsrf`
+**Signer interfaces:** `Signer`, `PasskeySigner`, `EOASigner`, `KMSSigner`
+**Salt:** `deriveSaltFromLabel`, `deriveSaltFromEmail`
+**Subpaths:** `@agenticprimitives/identity-auth/{passkey,siwe,google}`
+**Types:** `JwtClaims`, `AuthenticatedUser`, `AuthMethod`
 
 ## Allowed imports
 `@agenticprimitives/types`, `viem`, `@noble/curves`, `@noble/hashes`.
 
 ## Forbidden imports
 - `apps/*`
-- Any other `@agenticprimitives/*` package (this is a base — others depend on it).
+- Any other `@agenticprimitives/*` package (this is a base; others depend on us).
+
+## Drift triggers — STOP and route
+- "Add session **encryption**, an envelope, or AAD" — **STOP.** Our session is a signed JWT, not an encrypted payload. Envelope encryption belongs in [`key-custody`](../key-custody). Session lifecycle belongs in [`delegation`](../delegation). See [ADR-0002](../../docs/architecture/decisions/0002-session-lifecycle-in-delegation.md).
+- "Add a Delegation, Caveat, or Enforcer builder" — **STOP.** Belongs in [`delegation`](../delegation).
+- "Implement a KMS backend or persist signing material" — **STOP.** Belongs in [`key-custody`](../key-custody). Define needs via `KMSSigner` interface here.
+- "Read from / write to a database" — **STOP.** Framework-agnostic and stateless. Consumers wire DB.
+- "Add MCP tool registration or HMAC envelope" — **STOP.** Belongs in [`mcp-runtime`](../mcp-runtime).
+
+## Before you write code
+- [ ] Does the change stay inside auth methods, JWT sessions, CSRF, salt derivation, or `Signer` interfaces?
+- [ ] If "session" appears in my change, am I sure I mean **JWT-cookie session** (this package) and not the `delegation` `SessionRow`?
+- [ ] Am I producing or consuming `Signer`? (Producing concrete signers = wrong package; that's `key-custody`. Defining the interface = right place.)
+- [ ] Did I update `specs/200-identity-auth.md` if the public API changed?
+- [ ] Are JWT secrets, OAuth client secrets, and any sensitive material kept out of logs and error messages?
 
 ## Security invariants (DO NOT BREAK)
 - JWT secrets MUST never be logged. Use redaction in error paths.
@@ -45,12 +63,13 @@
 ```bash
 pnpm --filter @agenticprimitives/identity-auth typecheck
 pnpm --filter @agenticprimitives/identity-auth test
+pnpm check:forbidden-terms
 ```
 
 ## Common task routing
-- Adding a new auth method → `src/methods/<name>.ts`, conform to existing module shape; export via package.json `exports`.
-- Adding a new signer interface specialization → `src/signers.ts`; add type-only.
-- Changing JWT claim shape → coordinate with `@agenticprimitives/delegation` (token verification reads claims).
+- Adding a new auth method → `src/methods/<name>.ts`, conform to module shape; export via `package.json:exports`.
+- Adding a new `Signer` specialization → `src/signers.ts`; type-only addition.
+- Changing JWT claim shape → coordinate with [`delegation`](../delegation) (it reads claims).
 
 ## Generated files (ignore)
 `dist/`, `node_modules/`, `coverage/`, `*.tsbuildinfo`.

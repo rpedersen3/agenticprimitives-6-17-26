@@ -48,6 +48,22 @@
     "GcpKmsProvider",
     "GcpKmsSigner"
   ],
+  "forbiddenTerms": [
+    { "term": "Delegation", "reason": "Authority concept; key-custody only encrypts opaque bytes. Even if the bytes happen to be a serialized delegation, this package doesn't know that.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "Caveat", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "Enforcer", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "SessionManager", "reason": "Lifecycle owned by delegation; key-custody only provides primitives the SessionManager calls.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "SessionRow", "reason": "Row shape is delegation's vocabulary.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "SessionPackage", "reason": "Payload shape is delegation's vocabulary; key-custody encrypts opaque bytes.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "JTI", "reason": "Belongs in delegation/mcp-runtime.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "RiskTier", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
+    { "term": "evaluatePolicy", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
+    { "term": "withDelegation", "reason": "Belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "@modelcontextprotocol", "reason": "MCP transport is not key-custody's concern.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "passkey", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] },
+    { "term": "OAuth", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] },
+    { "term": "SIWE", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] }
+  ],
   "ignoreForAgentContext": [
     "dist/**",
     "node_modules/**",
@@ -55,7 +71,7 @@
     "*.tsbuildinfo"
   ],
   "contextBudget": {
-    "claudeMdMaxWords": 900,
+    "claudeMdMaxWords": 1200,
     "readmeMaxWords": 1800,
     "architectureMaxWords": 3000
   }

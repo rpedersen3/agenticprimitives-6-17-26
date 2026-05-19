@@ -59,7 +59,9 @@ export declare function createKmsAccount(
   opts?: { sessionId?: string; chainId?: number },
 ): Promise<KMSSigner>;
 
-// AAD helpers (consumed by delegation.SessionManager)
+// AAD helpers. Callers compose their own context dict and pass it through to
+// generateSessionDataKey / decryptSessionDataKey; we canonicalize and bind it
+// in AES-GCM AAD + KMS EncryptionContext identically.
 export declare function canonicalContextBytes(ctx: Record<string, string>): Uint8Array;
 
 // Built-in provider class re-exports (also via subpaths)

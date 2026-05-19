@@ -30,6 +30,19 @@
     "AgentAccountClient",
     "UserOperation"
   ],
+  "forbiddenTerms": [
+    { "term": "Caveat", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "Enforcer", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "SessionManager", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "DelegationToken", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "A2AKeyProvider", "reason": "Belongs in key-custody. agent-account consumes signers via identity-auth's Signer interface only.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "envelope encryption", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "RiskTier", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
+    { "term": "withDelegation", "reason": "Belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "MCP", "reason": "Transport-specific; this package is transport-free.", "owningPackage": "@agenticprimitives/mcp-runtime", "allowInPaths": ["spec.md", "README.md"] },
+    { "term": "passkey", "reason": "Auth method internals belong in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"] },
+    { "term": "OAuth", "reason": "Auth method internals belong in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] }
+  ],
   "ignoreForAgentContext": [
     "dist/**",
     "node_modules/**",
@@ -37,7 +50,7 @@
     "*.tsbuildinfo"
   ],
   "contextBudget": {
-    "claudeMdMaxWords": 900,
+    "claudeMdMaxWords": 1100,
     "readmeMaxWords": 1800,
     "architectureMaxWords": 3000
   }

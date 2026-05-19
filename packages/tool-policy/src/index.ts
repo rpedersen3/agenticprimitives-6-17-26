@@ -2,8 +2,10 @@
 //
 // See ../../specs/204-tool-policy.md for the full contract.
 //
-// CRITICAL: This package is protocol-agnostic. It MUST NOT import from
-// MCP, A2A, LangChain, or Vercel AI. Doing so violates the boundary.
+// CRITICAL: This package is protocol-agnostic. It MUST NOT import from any
+// transport SDK (see capability.manifest.json:forbiddenImports for the full
+// list and docs/architecture/decisions/0003-tool-policy-protocol-agnostic.md
+// for why).
 
 import type { Address, Hex } from '@agenticprimitives/types';
 

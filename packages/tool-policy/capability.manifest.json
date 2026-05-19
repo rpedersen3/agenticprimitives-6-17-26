@@ -43,6 +43,22 @@
     "requiredCaveatsForRiskTier",
     "lintClassification"
   ],
+  "forbiddenTerms": [
+    { "term": "@modelcontextprotocol", "reason": "Protocol-agnostic. Importing MCP SDK violates ADR-0003.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "a2a-js", "reason": "Protocol-agnostic. ADR-0003.", "owningPackage": "future @agenticprimitives/a2a-runtime" },
+    { "term": "langchain", "reason": "Protocol-agnostic. ADR-0003." },
+    { "term": "@langchain", "reason": "Protocol-agnostic. ADR-0003." },
+    { "term": "@vercel/ai", "reason": "Protocol-agnostic. ADR-0003." },
+    { "term": "withDelegation", "reason": "MCP wrapper belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "DelegationClient", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "SessionManager", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "A2AKeyProvider", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "envelope encryption", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "JTI", "reason": "Belongs in delegation/mcp-runtime.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "passkey", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth" },
+    { "term": "JWT", "reason": "Session mechanism; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] },
+    { "term": "OAuth", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth" }
+  ],
   "ignoreForAgentContext": [
     "dist/**",
     "node_modules/**",
@@ -50,7 +66,7 @@
     "*.tsbuildinfo"
   ],
   "contextBudget": {
-    "claudeMdMaxWords": 900,
+    "claudeMdMaxWords": 1200,
     "readmeMaxWords": 1800,
     "architectureMaxWords": 3000
   }

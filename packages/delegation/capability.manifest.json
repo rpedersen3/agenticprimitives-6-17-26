@@ -64,6 +64,19 @@
     "SessionPackage",
     "SessionMeta"
   ],
+  "forbiddenTerms": [
+    { "term": "LocalAesProvider", "reason": "Concrete KMS backend belongs in key-custody. Use the A2AKeyProvider interface here.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "AwsKmsProvider", "reason": "Concrete KMS backend belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "GcpKmsProvider", "reason": "Concrete KMS backend belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "AES-GCM", "reason": "Encryption algorithm specifics belong in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "AAD", "reason": "AAD shape is delegation's choice but AAD encoding is key-custody's. Don't reimplement here.", "owningPackage": "@agenticprimitives/key-custody", "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"] },
+    { "term": "RiskTier", "reason": "Policy taxonomy belongs in tool-policy. Consume requiredCaveatsForRiskTier from there; don't redefine levels.", "owningPackage": "@agenticprimitives/tool-policy", "allowInPaths": ["spec.md", "README.md"] },
+    { "term": "evaluatePolicy", "reason": "Decision engine belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
+    { "term": "withDelegation", "reason": "MCP wrapper belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "@modelcontextprotocol", "reason": "MCP transport is mcp-runtime's concern.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "passkey", "reason": "Auth method internals belong in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"] },
+    { "term": "SIWE", "reason": "Auth method belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] }
+  ],
   "ignoreForAgentContext": [
     "dist/**",
     "node_modules/**",
@@ -72,7 +85,7 @@
     "test/fixtures/golden/**"
   ],
   "contextBudget": {
-    "claudeMdMaxWords": 900,
+    "claudeMdMaxWords": 1500,
     "readmeMaxWords": 1800,
     "architectureMaxWords": 3000
   }

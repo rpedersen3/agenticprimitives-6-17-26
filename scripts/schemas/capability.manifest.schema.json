@@ -38,6 +38,24 @@
     "allowedImports": { "type": "array", "items": { "type": "string" } },
     "forbiddenImports": { "type": "array", "items": { "type": "string" } },
     "publicExports": { "type": "array", "items": { "type": "string" } },
+    "forbiddenTerms": {
+      "description": "Case-insensitive terms that MUST NOT appear in this package's src/ or docs/. Used by scripts/check-forbidden-terms.ts to catch vocabulary drift across package boundaries.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["term", "reason"],
+        "properties": {
+          "term": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "owningPackage": { "type": "string" },
+          "allowInPaths": {
+            "description": "Glob paths (relative to package root) where the term is permitted (e.g., spec.md may legitimately reference neighbor terms).",
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
     "ignoreForAgentContext": { "type": "array", "items": { "type": "string" } },
     "contextBudget": {
       "type": "object",
