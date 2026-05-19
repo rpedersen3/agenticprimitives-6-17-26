@@ -1,0 +1,12 @@
+# Cloudflare Pages config for demo-web.
+#
+# Local dev: `pnpm dev:web` runs Vite (proxy forwards /a2a/* to demo-a2a Worker)
+# Deploy:    `pnpm --filter @agenticprimitives-demo/web build` then
+#            `wrangler pages deploy dist`
+#
+# The _redirects file in public/ is copied to dist/ by Vite and tells Pages
+# how to proxy /a2a/* to the demo-a2a Worker hostname in production.
+
+name = "demo-web"
+compatibility_date = "2026-05-19"
+pages_build_output_dir = "dist"

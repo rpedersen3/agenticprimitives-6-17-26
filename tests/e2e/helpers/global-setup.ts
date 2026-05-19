@@ -2,28 +2,26 @@
  * Playwright global setup. Runs ONCE before any spec.
  *
  * Responsibilities:
- *   1. Wait briefly for Anvil to be reachable (Playwright's webServer.url
- *      check happens BEFORE we get here, so Anvil is already up).
- *   2. Deploy the demo contracts via forge script and write
- *      apps/contracts/deployments-anvil.json — which demo-a2a then reads
- *      on startup.
+ *   1. Deploy demo contracts to Anvil (one-shot per test session).
+ *   2. Generate .dev.vars files for demo-a2a + demo-mcp from
+ *      deployments-anvil.json so wrangler dev picks up the right
+ *      contract addresses + secrets.
+ *   3. Apply D1 migrations locally so demo-mcp's Worker can read/write
+ *      profiles + token_usage.
  *
- * Deploy is one-shot, idempotent on Anvil's deterministic addresses: as
- * long as Anvil's state is fresh, redeploying produces the same addresses.
+ * Order matters: deploy → dev-vars → d1 migrate → webServer starts wrangler dev.
  */
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const REPO_ROOT = new URL('../../..', import.meta.url).pathname;
 const CONTRACTS_DIR = join(REPO_ROOT, 'apps', 'contracts');
+const DEMO_MCP_DIR = join(REPO_ROOT, 'apps', 'demo-mcp');
 const DEPLOYMENTS_FILE = join(CONTRACTS_DIR, 'deployments-anvil.json');
 
 export default async function globalSetup() {
-  // ALWAYS redeploy. The webServer config may reuse an existing Anvil
-  // instance, but if Anvil was restarted between test runs the addresses
-  // in deployments-anvil.json from a previous session are stale — calling
-  // them reverts. Cheap to redeploy (<5s on Anvil) and avoids the trap.
+  // 1. Deploy contracts.
   console.log('[e2e] deploying contracts to anvil…');
   execSync(
     [
@@ -46,5 +44,23 @@ export default async function globalSetup() {
   if (!existsSync(DEPLOYMENTS_FILE)) {
     throw new Error('[e2e] deploy completed but deployments-anvil.json missing');
   }
-  console.log('[e2e] contracts deployed');
+
+  // 2. Generate .dev.vars files for the Workers.
+  console.log('[e2e] generating .dev.vars for demo Workers…');
+  execSync('pnpm tsx scripts/gen-dev-vars.ts', {
+    cwd: REPO_ROOT,
+    stdio: 'inherit',
+    env: { ...process.env, DEPLOY_NETWORK: 'anvil' },
+  });
+
+  // 3. Apply D1 migrations to the local SQLite that wrangler dev will use.
+  //    In non-TTY mode wrangler skips the confirmation prompt automatically.
+  console.log('[e2e] applying D1 migrations to local demo-mcp database…');
+  execSync('pnpm d1:migrate:local', {
+    cwd: DEMO_MCP_DIR,
+    stdio: 'inherit',
+    env: { ...process.env, CI: '1' }, // hint non-interactive
+  });
+
+  console.log('[e2e] setup complete');
 }

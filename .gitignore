@@ -20,8 +20,12 @@ cache/
 .env
 .env.local
 .env.*.local
+.dev.vars
 *.key
 *.pem
+
+# Wrangler local state (DO storage, D1 SQLite)
+.wrangler/
 
 # Logs
 *.log
