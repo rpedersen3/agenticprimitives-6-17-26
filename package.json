@@ -4,6 +4,12 @@
   "private": true,
   "description": "Composable primitives for agentic web apps: auth + smart accounts, delegation, KMS, and MCP resource access.",
   "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "dev:web": "pnpm --filter @agenticprimitives-demo/web dev",
+    "dev:a2a": "pnpm --filter @agenticprimitives-demo/a2a dev",
+    "dev:mcp": "pnpm --filter @agenticprimitives-demo/mcp dev",
+    "dev:contracts": "cd apps/contracts && pnpm deploy:anvil",
+    "setup:contracts": "cd apps/contracts && bash setup.sh && pnpm build",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",

@@ -19,10 +19,27 @@ See [`specs/`](./specs) for the full design. Start with [`000-product-overview.m
 ```
 agenticprimitives/
 ├── packages/         # The seven @agenticprimitives/* packages
+├── apps/             # Demo apps (web + a2a + mcp + contracts)
 ├── specs/            # Doctrine, per-package contracts, archive
 ├── docs/             # Usage guides, ADRs
-└── scripts/          # CI guardrails (stubs in v0)
+└── scripts/          # CI guardrails + dev orchestration
 ```
+
+## Demo
+
+A small end-to-end demo exercises all 7 packages: EOA user (mnemonic in localStorage) signs in via SIWE → smart account provisioned → user delegates to an a2a session key → a2a calls an MCP tool that returns the user's PII, verified by the full delegation chain.
+
+```bash
+# First time only:
+cd apps/contracts && bash setup.sh && cd ..
+
+# Run the demo (Anvil + deploy + 3 apps in parallel):
+pnpm dev
+```
+
+Then open http://127.0.0.1:5173. The UI currently has the three demo steps as stubs that throw `not implemented`; they wire up as the `@agenticprimitives/*` packages are implemented. See [`apps/demo-web/`](./apps/demo-web), [`apps/demo-a2a/`](./apps/demo-a2a), [`apps/demo-mcp/`](./apps/demo-mcp).
+
+Live deploy targets: Vercel (web) + Fly.io (a2a + mcp) + Base Sepolia (contracts). Config for those lands as the demo matures.
 
 ## Status
 
