@@ -19,6 +19,7 @@ import type { Address, Hex } from '@agenticprimitives/types';
 import type { DemoUser } from './test-user';
 import type { DemoPasskey } from './passkey-flow';
 import { signWithPasskey } from './passkey-flow';
+import { csrfHeaders } from './csrf';
 
 export interface DeployUserOpResponse {
   ok: true;
@@ -105,7 +106,7 @@ async function deployWithSigner(args: DeployArgs): Promise<DeployResult | Deploy
   const buildRes = await fetch('/a2a/session/deploy', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify(args.body),
   });
   if (buildRes.status === 409) {
@@ -136,7 +137,7 @@ async function deployWithSigner(args: DeployArgs): Promise<DeployResult | Deploy
   const submitRes = await fetch('/a2a/session/deploy/submit', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
   });
   const submitBody = (await submitRes.json()) as Record<string, unknown>;

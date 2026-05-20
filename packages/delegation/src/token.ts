@@ -175,6 +175,21 @@ export interface VerifyOptsExt extends VerifyOpts {
    * delegator should be honored.
    */
   requireDeployed?: boolean;
+  /**
+   * Revocation read failure behavior. Audit finding H3.
+   *
+   * - `'closed'` (default in production via NODE_ENV check below):
+   *   if `isRevoked()` RPC read throws, the whole verification fails
+   *   with `revocation check unavailable`. Safe under RPC outage:
+   *   a revoked delegation cannot be silently accepted.
+   * - `'open'`: tolerate the RPC failure and continue. This was the
+   *   pre-2026-05-20 behavior and is appropriate for explicit
+   *   demo/dev paths where RPC flakiness is expected.
+   *
+   * When omitted, defaults to `'closed'` if `process.env.NODE_ENV === 'production'`,
+   * `'open'` otherwise.
+   */
+  revocationFailMode?: 'closed' | 'open';
 }
 
 interface DecodedToken {
@@ -238,6 +253,17 @@ export async function verifyDelegationToken(
 
   // 3. on-chain checks
   const requireDeployed = opts.requireDeployed ?? true;
+  // Audit H3 (fail-closed revocation in production):
+  // Default to 'closed' in production, 'open' elsewhere. The 'closed'
+  // path refuses to verify when the RPC isRevoked read fails — a
+  // revoked delegation cannot be silently accepted during RPC outages.
+  // Callers may explicitly opt into 'open' for demo/dev paths where
+  // RPC flakiness is expected.
+  const revocationFailMode =
+    opts.revocationFailMode ??
+    (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production'
+      ? 'closed'
+      : 'open');
   const publicClient = createPublicClient({ transport: http(opts.rpcUrl) });
   try {
     const revoked = (await publicClient.readContract({
@@ -247,10 +273,17 @@ export async function verifyDelegationToken(
       args: [eip712Hash],
     })) as boolean;
     if (revoked) return { error: 'delegation revoked' };
-  } catch {
-    /* RPC-flake tolerance: isRevoked starts false on-chain; if the read fails
-       we proceed. A revoked delegation will still fail ERC-1271 below since
-       the on-chain revocation flips the same state. */
+  } catch (e) {
+    if (revocationFailMode === 'closed') {
+      return {
+        error:
+          'revocation check unavailable; refusing to verify (set revocationFailMode=open only for explicit dev/demo paths)',
+      };
+    }
+    /* RPC-flake tolerance ('open' mode): isRevoked starts false on-chain;
+       if the read fails we proceed. A revoked delegation will still fail
+       ERC-1271 below since the on-chain revocation flips the same state. */
+    void e;
   }
 
   try {

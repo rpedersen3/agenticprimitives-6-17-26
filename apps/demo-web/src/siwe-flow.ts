@@ -7,6 +7,7 @@
 import { buildMessage } from '@agenticprimitives/identity-auth/siwe';
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { DemoUser } from './test-user';
+import { csrfHeaders } from './csrf';
 
 export interface SiweLoginResponse {
   ok: true;
@@ -50,7 +51,7 @@ export async function signInWithSiwe(user: DemoUser, chainId: number): Promise<S
   const res = await fetch('/a2a/auth/siwe-verify', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({ message, signature }),
   });
   const body = (await res.json()) as Record<string, unknown>;

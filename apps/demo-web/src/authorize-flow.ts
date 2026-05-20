@@ -14,6 +14,7 @@ import {
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { DemoUser } from './test-user';
 import type { PasskeySigner } from './passkey-signer';
+import { csrfHeaders } from './csrf';
 
 export interface AuthorizeFlowOk {
   ok: true;
@@ -102,7 +103,7 @@ async function authorizeWithSigner(
   const initRes = await fetch('/a2a/session/init', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({ accountAddress: config.smartAccountAddress }),
   });
   const initBody = (await initRes.json()) as Record<string, unknown>;
@@ -140,7 +141,7 @@ async function authorizeWithSigner(
   const packageRes = await fetch('/a2a/session/package', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({
       sessionId,
       delegation: { ...delegation, salt: delegation.salt.toString() },

@@ -2,6 +2,7 @@
 // Round trip: POST /a2a/tools/get_profile { sessionId } → mcp returns PII.
 
 import type { Address } from '@agenticprimitives/types';
+import { csrfHeaders } from './csrf';
 
 export interface ReadProfileOk {
   ok: true;
@@ -24,7 +25,7 @@ export async function readProfile(sessionId: string): Promise<ReadProfileOk | Re
   const res = await fetch('/a2a/tools/get_profile', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({ sessionId }),
   });
   const body = (await res.json()) as Record<string, unknown>;

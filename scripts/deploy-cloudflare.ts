@@ -92,6 +92,19 @@ function extractWorkerUrl(out: string): string | null {
 
 // 1. Pre-flight
 step(1, 'Pre-flight checks…');
+
+// Production preflight (audit finding C4) — hard-fails on demo
+// shortcuts: unguarded /_dev/* routes, missing UNIVERSAL_SIGNATURE_VALIDATOR
+// propagation, private keys in vars, missing deployments JSON fields.
+try {
+  execSync('pnpm check:production-deploy', { stdio: 'inherit' });
+} catch {
+  fail(
+    'production preflight failed. Fix the findings above. ' +
+      'Do NOT bypass with AGENTICPRIMITIVES_SKIP_PREFLIGHT=1 unless you have audit sign-off.',
+  );
+}
+
 try {
   execSync('wrangler whoami', { stdio: 'pipe' });
 } catch {

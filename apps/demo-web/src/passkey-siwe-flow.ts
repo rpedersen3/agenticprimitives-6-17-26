@@ -27,6 +27,7 @@ import {
   type DemoPasskey,
 } from './passkey-flow';
 import { wrap6492ForPasskey } from './erc6492-wrap';
+import { csrfHeaders } from './csrf';
 
 export interface PasskeySiweLoginResponse {
   ok: true;
@@ -67,7 +68,7 @@ export async function getPasskeySmartAccountAddress(
   const res = await fetch('/a2a/account/derive-address', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({
       initMethod: 'passkey',
       credentialIdDigest: input.passkey.credentialIdDigest,
@@ -142,7 +143,7 @@ export async function signInWithPasskey(
   const res = await fetch('/a2a/auth/siwe-verify', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({
       message,
       signature,

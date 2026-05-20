@@ -15,6 +15,7 @@ import {
 } from './passkey-flow';
 import { signInWithPasskey } from './passkey-siwe-flow';
 import { createPasskeySigner } from './passkey-signer';
+import { ensureCsrfToken, clearCsrfToken } from './csrf';
 import type { Address } from '@agenticprimitives/types';
 
 // chainId + rpcUrl come from /a2a/deployments (set by the demo-a2a Worker's
@@ -76,6 +77,13 @@ export function App() {
           : 'No passkey registered yet.',
       ],
       deployments: null,
+    });
+    // Bootstrap CSRF token (audit H1) + fetch deployments in parallel.
+    // Every mutating /a2a/* request from the flow modules calls
+    // csrfHeaders() which reads the cookie set by /a2a/auth/csrf.
+    ensureCsrfToken().catch((e) => {
+      // Non-fatal in dev — surface in the log so it's not silent.
+      console.warn('[csrf] bootstrap failed:', e);
     });
     fetch('/a2a/deployments')
       .then((r) => r.json())
@@ -256,6 +264,7 @@ export function App() {
   const reset = () => {
     resetDemoUser();
     clearPasskey();
+    clearCsrfToken();
     localStorage.removeItem(SIGNER_PREF_KEY);
     location.reload();
   };
