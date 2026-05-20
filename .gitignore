@@ -7,6 +7,14 @@ dist/
 build/
 *.tsbuildinfo
 
+# Stray compile outputs inside test/ — some toolchains emit .js/.d.ts
+# next to .ts when a package's tsconfig has emit enabled and the
+# runner ignores --noEmit. Never commit these.
+packages/*/test/**/*.js
+packages/*/test/**/*.js.map
+packages/*/test/**/*.d.ts
+packages/*/test/**/*.d.ts.map
+
 # Playwright
 playwright-report/
 test-results/
