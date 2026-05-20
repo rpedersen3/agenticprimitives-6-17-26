@@ -316,9 +316,16 @@ export class AgentAccountClient {
     });
     const initCode = (this.opts.factory + factoryCalldata.slice(2)) as Hex;
 
-    // Same gas profile as the EOA path — the factory call is ~the same
-    // cost (proxy deploy dominates; storage init differs by one slot).
-    const verificationGasLimit = opts.verificationGasLimit ?? 350_000n;
+    // Higher verification budget than the EOA path: validateUserOp runs
+    // `_verifyWebAuthn` which calls P256Verifier. On chains with the
+    // RIP-7212 precompile (Base mainnet, recent L2s) the verification
+    // is ~3k gas; on chains without (anvil, older testnets) the Daimo
+    // Solidity fallback uses ~350-400k. The verificationGasLimit also
+    // covers _createSenderIfNeeded (factory deploys ERC1967Proxy ~250k
+    // + initializeWithPasskey storage writes ~50k). 1.2M is a comfortable
+    // ceiling for both paths; the user only pays the gas actually used
+    // (paymaster reimburses, no client cost on Base mainnet/Sepolia).
+    const verificationGasLimit = opts.verificationGasLimit ?? 1_200_000n;
     const callGasLimit = 0n;
     const accountGasLimits = packGasLimits(verificationGasLimit, callGasLimit);
     const preVerificationGas = opts.preVerificationGas ?? 60_000n;

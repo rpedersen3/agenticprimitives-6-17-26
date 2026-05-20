@@ -134,4 +134,24 @@ export const entryPointAbi = [
     ],
     outputs: [{ name: 'nonce', type: 'uint256' }],
   },
+  // EntryPoint custom errors — declaring them lets viem decode the
+  // revert (e.g. "AA24 signature error", "AA13 initCode failed or OOG")
+  // when handleOps reverts during simulation or execution.
+  {
+    type: 'error',
+    name: 'FailedOp',
+    inputs: [
+      { name: 'opIndex', type: 'uint256' },
+      { name: 'reason', type: 'string' },
+    ],
+  },
+  {
+    type: 'error',
+    name: 'FailedOpWithRevert',
+    inputs: [
+      { name: 'opIndex', type: 'uint256' },
+      { name: 'reason', type: 'string' },
+      { name: 'inner', type: 'bytes' },
+    ],
+  },
 ] as const;

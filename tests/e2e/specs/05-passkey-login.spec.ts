@@ -110,6 +110,66 @@ test.describe('Passkey login', () => {
     }
   });
 
+  test('full passkey flow E2E: Step 1 → Step 1.5 → Step 2 → Step 3 (read profile)', async ({ page }) => {
+    // Phase 4b validation: passkey signs deploy UserOp + EIP-712 delegation
+    // + every downstream signature. demo-mcp ultimately returns the profile,
+    // proving the passkey-owned smart account passed ERC-1271 verification
+    // (which routes to _verifyWebAuthn) end-to-end through the full chain.
+    page.on('console', (msg) => console.log(`[browser ${msg.type()}]`, msg.text()));
+    page.on('pageerror', (err) => console.log(`[pageerror]`, err.message));
+    page.on('response', async (res) => {
+      if (res.url().includes('/a2a/')) {
+        const body = await res.text().catch(() => '<unreadable>');
+        console.log(`[response] ${res.status()} ${res.url()} :: ${body.slice(0, 600)}`);
+      }
+    });
+
+    const auth = await attachVirtualAuthenticator(page);
+    try {
+      await page.goto('/');
+      const step0 = page.locator('.step', { hasText: 'Step 0 — Choose signer' });
+      await step0.locator('label', { hasText: 'Passkey (WebAuthn / P-256)' }).click();
+      await step0.locator('button', { hasText: 'Register passkey' }).click();
+      const log = page.locator('.step', { hasText: 'Log' }).locator('pre');
+      await expect(log).toContainText('Passkey registered.', { timeout: 15_000 });
+
+      // Step 1
+      const step1 = page.locator('.step').filter({
+        has: page.locator('h3', { hasText: /^Step 1 — Sign in/ }),
+      });
+      await step1.locator('button', { hasText: 'Sign in with passkey' }).click();
+      await expect(step1).toContainText('Signed in.', { timeout: 30_000 });
+
+      // Step 1.5 — passkey-driven paymaster deploy
+      const step15 = page.locator('.step').filter({
+        has: page.locator('h3', { hasText: /^Step 1\.5 — Deploy smart account/ }),
+      });
+      await step15.locator('button', { hasText: 'Deploy smart account' }).click();
+      await expect(step15).toContainText('Smart account deployed on-chain.', {
+        timeout: 60_000,
+      });
+
+      // Step 2 — passkey-signed EIP-712 delegation
+      const step2 = page.locator('.step').filter({
+        has: page.locator('h3', { hasText: /^Step 2 — Authorize agent/ }),
+      });
+      const authBtn = step2.locator('button', { hasText: 'Authorize agent' });
+      await expect(authBtn).toBeEnabled();
+      await authBtn.click();
+      await expect(step2).toContainText('Session active:', { timeout: 15_000 });
+
+      // Step 3 — read profile through the full delegation chain
+      const step3 = page.locator('.step').filter({
+        has: page.locator('h3', { hasText: /^Step 3 — Read profile/ }),
+      });
+      await step3.locator('button', { hasText: 'Read my profile' }).click();
+      await expect(step3.locator('pre')).toContainText('owner_address', { timeout: 15_000 });
+      await expect(log).toContainText('[3] ✓ Profile received.');
+    } finally {
+      await auth.tearDown();
+    }
+  });
+
   test('a2a sets the agentic-session cookie after passkey verify', async ({ page, context }) => {
     const auth = await attachVirtualAuthenticator(page);
     try {

@@ -13,6 +13,7 @@ import {
 } from '@agenticprimitives/delegation';
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { DemoUser } from './test-user';
+import type { PasskeySigner } from './passkey-signer';
 
 export interface AuthorizeFlowOk {
   ok: true;
@@ -42,6 +43,61 @@ export async function authorizeAgent(
   user: DemoUser,
   config: AuthorizeFlowConfig,
 ): Promise<AuthorizeFlowOk | AuthorizeFlowError> {
+  // EOA path: the delegator is the user's EOA, smart account is derived.
+  return authorizeWithSigner(
+    {
+      address: user.address as Address,
+      signTypedData: async (args) =>
+        (await user.account.signTypedData({
+          domain: args.domain,
+          types: args.types as Record<string, Array<{ name: string; type: string }>>,
+          primaryType: args.primaryType,
+          message: args.message,
+        })) as Hex,
+    },
+    config,
+  );
+}
+
+export async function authorizeAgentWithPasskey(
+  passkey: PasskeySigner,
+  config: AuthorizeFlowConfig,
+): Promise<AuthorizeFlowOk | AuthorizeFlowError> {
+  // Passkey path: the delegator IS the smart-account address (no EOA in
+  // the trust chain). The PasskeySigner produces 0x01-prefixed WebAuthn
+  // blobs that AgentAccount's ERC-1271 routes through `_verifyWebAuthn`.
+  return authorizeWithSigner(
+    {
+      address: passkey.address,
+      signTypedData: async (args) =>
+        passkey.signTypedData({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          domain: args.domain as any,
+          types: args.types as Record<string, Array<{ name: string; type: string }>>,
+          primaryType: args.primaryType,
+          message: args.message,
+        }),
+    },
+    config,
+  );
+}
+
+// ─── Shared authorize machinery ──────────────────────────────────────
+
+interface AbstractSigner {
+  address: Address;
+  signTypedData(args: {
+    domain: Record<string, unknown>;
+    types: unknown;
+    primaryType: string;
+    message: Record<string, unknown>;
+  }): Promise<Hex>;
+}
+
+async function authorizeWithSigner(
+  signer: AbstractSigner,
+  config: AuthorizeFlowConfig,
+): Promise<AuthorizeFlowOk | AuthorizeFlowError> {
   // 1. session/init
   const initRes = await fetch('/a2a/session/init', {
     method: 'POST',
@@ -56,9 +112,10 @@ export async function authorizeAgent(
   const sessionId = String(initBody.sessionId);
   const sessionKeyAddress = String(initBody.sessionKeyAddress) as Address;
 
-  // 2. Build the Delegation, sign via the user's EOA (viem account).
-  // The user's EOA is the owner of the smart account; signing the EIP-712
-  // hash here produces a signature the smart account's ERC-1271 accepts.
+  // 2. Build the Delegation, sign the EIP-712 hash via the supplied signer.
+  //    DelegationClient produces the digest; the signer wire-formats the
+  //    signature (raw ECDSA for EOA, 0x01-prefixed WebAuthn assertion for
+  //    passkey). AgentAccount's ERC-1271 dispatches on the leading byte.
   const now = Math.floor(Date.now() / 1000);
   const caveats = [
     buildCaveat(config.timestampEnforcer, encodeTimestampTerms(now, now + DELEGATION_TTL_SECONDS)),
@@ -66,15 +123,7 @@ export async function authorizeAgent(
   ];
 
   const client = new DelegationClient({
-    signer: {
-      address: user.address as Address,
-      signTypedData: async (args) => (await user.account.signTypedData({
-        domain: args.domain,
-        types: args.types as Record<string, Array<{ name: string; type: string }>>,
-        primaryType: args.primaryType,
-        message: args.message,
-      })) as Hex,
-    },
+    signer,
     smartAccount: config.smartAccountAddress,
     chainId: config.chainId,
     delegationManager: config.delegationManager,

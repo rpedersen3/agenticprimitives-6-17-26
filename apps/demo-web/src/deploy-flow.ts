@@ -17,6 +17,8 @@
 
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { DemoUser } from './test-user';
+import type { DemoPasskey } from './passkey-flow';
+import { signWithPasskey } from './passkey-flow';
 
 export interface DeployUserOpResponse {
   ok: true;
@@ -50,19 +52,61 @@ export interface DeployFlowError {
 }
 
 /**
- * Build → sign → submit. Returns deployedAddress on success, or a clean
- * error envelope. Caller chooses what to render.
+ * Build → sign → submit (EOA path).
+ *
+ * Calls /session/deploy with the user's EOA as `owner`. The factory
+ * embeds `createAccount(owner, salt)` in initCode. The user's EOA
+ * signs the userOpHash with a raw 65-byte ECDSA signature, which
+ * AgentAccount._validateSig routes through `_verifyEcdsa`.
  */
 export async function deploySmartAccount(
   user: DemoUser,
   owner: Address,
 ): Promise<DeployResult | DeployFlowError> {
+  return deployWithSigner({
+    body: { owner },
+    signUserOpHash: async (hash) => (await user.account.sign({ hash })) as Hex,
+  });
+}
+
+/**
+ * Build → sign → submit (passkey path — spec 130).
+ *
+ * Calls /session/deploy with `initMethod: 'passkey'` so the factory
+ * embeds `createAccountWithPasskey(credentialIdDigest, x, y, salt)` in
+ * initCode. The user signs the userOpHash via WebAuthn; the resulting
+ * 0x01-prefixed blob is dispatched by AgentAccount._validateSig to
+ * `_verifyWebAuthn`, which reads the freshly-initialized (x, y) from
+ * PasskeyStorage and verifies the P-256 signature.
+ */
+export async function deploySmartAccountWithPasskey(
+  passkey: DemoPasskey,
+): Promise<DeployResult | DeployFlowError> {
+  return deployWithSigner({
+    body: {
+      initMethod: 'passkey',
+      credentialIdDigest: passkey.credentialIdDigest,
+      pubKeyX: passkey.pubKeyX.toString(),
+      pubKeyY: passkey.pubKeyY.toString(),
+    },
+    signUserOpHash: (hash) => signWithPasskey(hash),
+  });
+}
+
+// ─── Shared deploy machinery ─────────────────────────────────────────
+
+interface DeployArgs {
+  body: Record<string, string | undefined>;
+  signUserOpHash: (hash: Hex) => Promise<Hex>;
+}
+
+async function deployWithSigner(args: DeployArgs): Promise<DeployResult | DeployFlowError> {
   // 1. Ask backend for the unsigned UserOp + hash to sign.
   const buildRes = await fetch('/a2a/session/deploy', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ owner }),
+    body: JSON.stringify(args.body),
   });
   if (buildRes.status === 409) {
     return { ok: false, error: 'paymaster_unavailable', paymasterUnavailable: true };
@@ -77,10 +121,13 @@ export async function deploySmartAccount(
   }
   const built = buildBody as unknown as DeployUserOpResponse;
 
-  // 2. Sign the userOpHash with the user's owner EOA.
+  // 2. Sign the userOpHash. Signature wire format is signer-dependent
+  //    (raw 65-byte ECDSA for EOA, 0x01-prefixed WebAuthn assertion
+  //    for passkey) — the caller's signUserOpHash returns whatever the
+  //    AgentAccount on-chain validation path expects.
   let signature: Hex;
   try {
-    signature = (await user.account.sign({ hash: built.userOpHash })) as Hex;
+    signature = await args.signUserOpHash(built.userOpHash);
   } catch (e) {
     return { ok: false, error: 'sign_failed', reason: e instanceof Error ? e.message : String(e) };
   }

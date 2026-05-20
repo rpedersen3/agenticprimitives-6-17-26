@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { loadOrCreateDemoUser, resetDemoUser, type DemoUser } from './test-user';
 import { signInWithSiwe } from './siwe-flow';
-import { authorizeAgent as authorizeAgentFlow } from './authorize-flow';
+import {
+  authorizeAgent as authorizeAgentFlow,
+  authorizeAgentWithPasskey,
+} from './authorize-flow';
 import { readProfile } from './read-profile-flow';
-import { deploySmartAccount } from './deploy-flow';
+import { deploySmartAccount, deploySmartAccountWithPasskey } from './deploy-flow';
 import {
   registerPasskey,
   loadPasskey,
@@ -11,10 +14,12 @@ import {
   type DemoPasskey,
 } from './passkey-flow';
 import { signInWithPasskey } from './passkey-siwe-flow';
+import { createPasskeySigner } from './passkey-signer';
 import type { Address } from '@agenticprimitives/types';
 
-const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID ?? 31337);
-const RPC_URL = String(import.meta.env.VITE_RPC_URL ?? 'http://127.0.0.1:8545');
+// chainId + rpcUrl come from /a2a/deployments (set by the demo-a2a Worker's
+// env) so the same demo-web bundle works against any deploy (anvil /
+// Base Sepolia / etc.) without a build-time env var.
 
 type SignerKind = 'eoa' | 'passkey';
 const SIGNER_PREF_KEY = 'agenticprimitives:demo:signer';
@@ -110,8 +115,12 @@ export function App() {
   const signIn = async () => {
     if (!state) return;
     if (state.signerKind === 'eoa') {
+      if (!state.deployments) {
+        append('[1] deployments not loaded yet — try again.');
+        return;
+      }
       append('[1] EOA SIWE: building message + signing with EOA…');
-      const res = await signInWithSiwe(state.user, CHAIN_ID);
+      const res = await signInWithSiwe(state.user, state.deployments.chainId);
       if (!res.ok) {
         append(`[1] FAILED: ${res.error}${res.reason ? ` (${res.reason})` : ''}`);
         return;
@@ -143,8 +152,7 @@ export function App() {
     const res = await signInWithPasskey({
       passkey: state.passkey,
       agentAccountFactory: state.deployments.agentAccountFactory,
-      rpcUrl: RPC_URL,
-      chainId: CHAIN_ID,
+      chainId: state.deployments.chainId,
     });
     if (!res.ok) {
       append(`[1] FAILED: ${res.error}${res.reason ? ` (${res.reason})` : ''}`);
@@ -164,18 +172,25 @@ export function App() {
     );
   };
 
-  // STEP 1.5: deploy smart account via paymaster-sponsored UserOp
-  // (EOA path only for now; passkey deploy is Phase 4b — see spec 130.)
+  // STEP 1.5: deploy smart account via paymaster-sponsored UserOp.
+  // EOA path uses createAccount(owner, salt); passkey path uses
+  // createAccountWithPasskey(credIdDigest, x, y, salt). Both produce a
+  // userOpHash the user signs in their respective ceremony.
   const deployAccount = async () => {
     if (!state || !state.smartAccountAddress) return;
-    if (state.signerKind === 'passkey') {
-      append(
-        '[1.5] passkey-driven deploy is Phase 4b (PasskeySigner adapter). For now the demo signs in counterfactually — your account is deployed lazily by the universal validator during sign-in if needed.',
-      );
-      return;
-    }
     append('[1.5] /session/deploy → sign userOpHash → /session/deploy/submit…');
-    const res = await deploySmartAccount(state.user, state.user.address);
+
+    let res: Awaited<ReturnType<typeof deploySmartAccount>>;
+    if (state.signerKind === 'passkey') {
+      if (!state.passkey) {
+        append('[1.5] passkey path requires a registered passkey.');
+        return;
+      }
+      res = await deploySmartAccountWithPasskey(state.passkey);
+    } else {
+      res = await deploySmartAccount(state.user, state.user.address);
+    }
+
     if (!res.ok) {
       if (res.paymasterUnavailable) {
         append('[1.5] paymaster not configured — falling back to counterfactual mode');
@@ -194,19 +209,23 @@ export function App() {
       append('[2] not ready (need smart account + deployments)');
       return;
     }
-    if (state.signerKind === 'passkey') {
-      append(
-        '[2] passkey-driven delegation signing is Phase 4b — passkey signers for EIP-712 delegations will land in a follow-up.',
-      );
-      return;
-    }
     append('[2] /session/init → sign Delegation (EIP-712) → /session/package…');
-    const res = await authorizeAgentFlow(state.user, {
+    const cfg = {
       smartAccountAddress: state.smartAccountAddress,
       delegationManager: state.deployments.delegationManager,
       timestampEnforcer: state.deployments.timestampEnforcer,
       chainId: state.deployments.chainId,
-    });
+    };
+    const res =
+      state.signerKind === 'passkey' && state.passkey
+        ? await authorizeAgentWithPasskey(
+            createPasskeySigner({
+              passkey: state.passkey,
+              smartAccountAddress: state.smartAccountAddress,
+            }),
+            cfg,
+          )
+        : await authorizeAgentFlow(state.user, cfg);
     if (!res.ok) {
       append(`[2] FAILED: ${res.error}${res.reason ? ` (${res.reason})` : ''}`);
       return;
@@ -334,16 +353,15 @@ export function App() {
             {state.isDeployed
               ? <span className="ok">✓ Smart account deployed on-chain. ERC-1271 verification is live.</span>
               : <span className="muted">
-                  {isPasskey
-                    ? 'Passkey accounts deploy lazily via the universal validator during sign-in.'
-                    : 'Smart account not yet deployed (counterfactual address). Deploy via paymaster-sponsored UserOp — you sign the userOpHash; the demo paymaster pays gas.'}
+                  Smart account not yet deployed (counterfactual address). Deploy via
+                  paymaster-sponsored UserOp — you sign the userOpHash
+                  {isPasskey ? ' via WebAuthn' : ' with your EOA'}; the demo paymaster
+                  pays gas.
                 </span>}
           </p>
-          {!isPasskey && (
-            <button onClick={deployAccount} disabled={state.isDeployed}>
-              {state.isDeployed ? 'Deployed' : 'Deploy smart account'}
-            </button>
-          )}
+          <button onClick={deployAccount} disabled={state.isDeployed}>
+            {state.isDeployed ? 'Deployed' : 'Deploy smart account'}
+          </button>
         </div>
       )}
 
@@ -354,19 +372,12 @@ export function App() {
             ? <span className="ok">✓ Session active: <code>{state.sessionId}</code></span>
             : <span className="muted">No session yet.</span>}
         </p>
-        {isPasskey && !state.sessionId && (
-          <p className="muted" style={{ fontSize: '0.9em' }}>
-            Note: passkey-driven delegation signing (EIP-712 via WebAuthn) is Phase 4b.
-            This button is disabled for the passkey path until the PasskeySigner adapter lands.
-          </p>
-        )}
         <button
           onClick={authorizeAgent}
           disabled={
             !state.smartAccountAddress ||
             !!state.sessionId ||
-            (state.paymasterAvailable && !state.isDeployed && !isPasskey) ||
-            isPasskey
+            (state.paymasterAvailable && !state.isDeployed)
           }
         >
           Authorize agent
