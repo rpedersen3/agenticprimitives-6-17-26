@@ -19,7 +19,7 @@
 // world.
 
 import type { Address, Hex } from '@agenticprimitives/types';
-import type { TypedDataDomain } from 'viem';
+import type { TypedDataDomain, WalletClient } from 'viem';
 import type { DemoUser } from './test-user';
 
 export type SessionWalletKind = 'test-eoa' | 'injected' | 'walletconnect';
@@ -55,6 +55,54 @@ export function demoUserSessionWallet(user: DemoUser): SessionWallet {
       (await user.account.signTypedData({
         domain: args.domain,
         types: args.types,
+        primaryType: args.primaryType,
+        message: args.message,
+      })) as Hex,
+  };
+}
+
+/**
+ * Wrap a wagmi-connected viem WalletClient as a SessionWallet.
+ *
+ * Routes signHash through `signMessage({ raw })` so MetaMask /
+ * Rainbow / Coinbase / etc. produce an EIP-191-wrapped signature.
+ * AgentAccount._verifyEcdsa tries raw recovery first, then falls back
+ * to EIP-191 — both formats validate (apps/contracts/src/AgentAccount.sol
+ * around line 956), so userOp signing works without any contract
+ * changes when the user switches between the test wallet and an
+ * injected wallet.
+ *
+ * Connector kind is supplied by the caller (we don't introspect
+ * wagmi's connector.uid here; the App-level useMemo knows whether
+ * the active connector is `injected` vs `walletConnect`).
+ */
+export function wagmiSessionWallet(
+  walletClient: WalletClient,
+  address: Address,
+  kind: 'injected' | 'walletconnect',
+): SessionWallet {
+  return {
+    address,
+    kind,
+    signMessage: async ({ message }) =>
+      (await walletClient.signMessage({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        account: address as any,
+        message,
+      })) as Hex,
+    signHash: async ({ hash }) =>
+      (await walletClient.signMessage({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        account: address as any,
+        message: { raw: hash },
+      })) as Hex,
+    signTypedData: async (args) =>
+      (await walletClient.signTypedData({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        account: address as any,
+        domain: args.domain,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        types: args.types as any,
         primaryType: args.primaryType,
         message: args.message,
       })) as Hex,

@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useAccount, useWalletClient } from 'wagmi';
 import { loadOrCreateDemoUser, resetDemoUser, type DemoUser } from './test-user';
-import { demoUserSessionWallet } from './session-wallet';
+import {
+  demoUserSessionWallet,
+  wagmiSessionWallet,
+  type SessionWallet,
+} from './session-wallet';
+import { ConnectButton } from './connect-button';
 import { signInWithSiwe } from './siwe-flow';
 import {
   authorizeAgent as authorizeAgentFlow,
@@ -56,6 +62,11 @@ interface DemoState {
 
 export function App() {
   const [state, setState] = useState<DemoState | null>(null);
+  // wagmi connection — when present, takes precedence over the demo
+  // test wallet. The activeWallet useMemo below picks the right
+  // SessionWallet for each user action.
+  const { address: connectedAddress, isConnected, connector } = useAccount();
+  const { data: walletClient } = useWalletClient();
 
   useEffect(() => {
     const user = loadOrCreateDemoUser();
@@ -95,6 +106,26 @@ export function App() {
   const append = (line: string) =>
     setState((s) => (s ? { ...s, log: [...s.log, line] } : s));
 
+  /**
+   * The active SessionWallet for EOA-path operations. Prefers the
+   * wagmi-connected wallet (MetaMask et al.) when connected;
+   * otherwise falls back to the local test EOA. Memoized on identity
+   * inputs only — wagmi's walletClient instance is stable across
+   * re-renders for a given connector + chain.
+   */
+  const activeWallet: SessionWallet | null = useMemo(() => {
+    if (isConnected && connectedAddress && walletClient) {
+      const kind = (connector?.id ?? '').toLowerCase().includes('walletconnect')
+        ? 'walletconnect'
+        : 'injected';
+      return wagmiSessionWallet(walletClient, connectedAddress, kind);
+    }
+    if (state?.user) {
+      return demoUserSessionWallet(state.user);
+    }
+    return null;
+  }, [isConnected, connectedAddress, walletClient, connector?.id, state?.user]);
+
   const selectSigner = (kind: SignerKind) => {
     localStorage.setItem(SIGNER_PREF_KEY, kind);
     setState((s) => (s ? { ...s, signerKind: kind } : s));
@@ -129,7 +160,11 @@ export function App() {
         return;
       }
       append('[1] EOA SIWE: building message + signing with EOA…');
-      const res = await signInWithSiwe(demoUserSessionWallet(state.user), state.deployments.chainId);
+      if (!activeWallet) {
+        append('[1] no wallet available — connect one or use the test wallet.');
+        return;
+      }
+      const res = await signInWithSiwe(activeWallet, state.deployments.chainId);
       if (!res.ok) {
         append(`[1] FAILED: ${res.error}${res.reason ? ` (${res.reason})` : ''}`);
         return;
@@ -197,7 +232,11 @@ export function App() {
       }
       res = await deploySmartAccountWithPasskey(state.passkey);
     } else {
-      res = await deploySmartAccount(demoUserSessionWallet(state.user), state.user.address);
+      if (!activeWallet) {
+        append('[1.5] no wallet available — connect one or use the test wallet.');
+        return;
+      }
+      res = await deploySmartAccount(activeWallet, activeWallet.address);
     }
 
     if (!res.ok) {
@@ -218,6 +257,10 @@ export function App() {
       append('[2] not ready (need smart account + deployments)');
       return;
     }
+    if (state.signerKind === 'eoa' && !activeWallet) {
+      append('[2] no wallet available — connect one or use the test wallet.');
+      return;
+    }
     append('[2] /session/init → sign Delegation (EIP-712) → /session/package…');
     const cfg = {
       smartAccountAddress: state.smartAccountAddress,
@@ -234,7 +277,7 @@ export function App() {
             }),
             cfg,
           )
-        : await authorizeAgentFlow(demoUserSessionWallet(state.user), cfg);
+        : await authorizeAgentFlow(activeWallet as SessionWallet, cfg);
     if (!res.ok) {
       append(`[2] FAILED: ${res.error}${res.reason ? ` (${res.reason})` : ''}`);
       return;
@@ -333,10 +376,14 @@ export function App() {
           </div>
         )}
         {!isPasskey && (
-          <p>
-            <code>{state.user.address}</code>
-            <span className="muted"> (mnemonic in localStorage — demo only)</span>
-          </p>
+          <div style={{ marginTop: 8 }}>
+            <ConnectButton disabled={!!state.smartAccountAddress} />
+            <p className="muted" style={{ marginTop: 8, marginBottom: 4 }}>
+              {isConnected && connectedAddress
+                ? <>Connected wallet will sign SIWE + deploy + delegation.</>
+                : <>Or sign in with the demo test wallet: <code>{state.user.address}</code> <span className="muted">(mnemonic in localStorage — demo only)</span></>}
+            </p>
+          </div>
         )}
         <button onClick={reset} style={{ marginTop: 8 }}>Reset all state</button>
       </div>
