@@ -280,6 +280,181 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         _factory = factory_;
     }
 
+    /**
+     * @notice Threshold-policy initializer. Replaces the per-mode
+     *         per-initializer fan-out (`initialize`,
+     *         `initializeWithCoOwner`, `initializeWithPasskey`) with a
+     *         single entry point that handles all four account modes
+     *         from spec 207 § 4 — `single` / `hybrid` / `threshold` /
+     *         `org`.
+     *
+     *         Installs:
+     *           - owners (≥ 1 if no initial passkey; ≥ 0 if passkey
+     *             included).
+     *           - optional initial passkey.
+     *           - guardians (recovery-role signers per spec § 3).
+     *           - mode flag in `_thresholdPolicyStorage`.
+     *           - **spec § 5.1 default threshold matrix** based on
+     *             N = owners.length.
+     *           - default timelocks: T4 = 1h, T5 = 24h, T6 = 48h
+     *             (per spec § 5 — T5/T6 MUST be non-zero per the
+     *             `TimelockRequiredForTier` invariant from 6c.2-c).
+     *           - recovery threshold = ceil(guardianCount / 2) + 1
+     *             (per spec § 8 default).
+     *           - T3 high-value ceiling = 0.01 ETH (per spec § 6).
+     *
+     *         All defaults are mutable post-deploy via T4 (threshold,
+     *         T3 ceiling, recovery threshold) and T5 (timelocks)
+     *         admin flows.
+     *
+     *         The factory enforces per-mode guardian-count minima
+     *         BEFORE calling this initializer (see
+     *         `AgentAccountFactory.createAccountWithMode`). The
+     *         initializer itself does not re-validate those because
+     *         the factory is the only legitimate caller (the impl's
+     *         constructor calls `_disableInitializers`).
+     */
+    function initializeWithThresholdPolicy(
+        AgentAccountInitParams calldata params,
+        address dm,
+        address factory_
+    ) external initializer {
+        // 1. Owners
+        uint256 nOwners = params.owners.length;
+        for (uint256 i; i < nOwners; i++) {
+            address o = params.owners[i];
+            if (o == address(0)) revert ZeroAddress();
+            if (!_owners[o]) {
+                _owners[o] = true;
+                _ownerCount += 1;
+                emit OwnerAdded(o);
+            }
+        }
+
+        // 2. Optional initial passkey
+        if (params.initialPasskeyCredentialIdDigest != bytes32(0)) {
+            if (params.initialPasskeyX == 0 || params.initialPasskeyY == 0) {
+                revert InvalidPasskeyPublicKey();
+            }
+            PasskeyStorage storage ps = _passkeyStorage();
+            ps.keys[params.initialPasskeyCredentialIdDigest] = PasskeyEntry({
+                x: params.initialPasskeyX,
+                y: params.initialPasskeyY
+            });
+            ps.registered[params.initialPasskeyCredentialIdDigest] = true;
+            ps.count = 1;
+            emit PasskeyAdded(
+                params.initialPasskeyCredentialIdDigest,
+                params.initialPasskeyX,
+                params.initialPasskeyY
+            );
+        }
+
+        // 3. Guardians
+        ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
+        uint256 nGuardians = params.guardians.length;
+        for (uint256 i; i < nGuardians; i++) {
+            address g = params.guardians[i];
+            if (g == address(0)) revert ZeroAddress();
+            if (!$.guardians[g]) {
+                $.guardians[g] = true;
+                $.guardianCount += 1;
+                emit GuardianAdded(g);
+            }
+        }
+
+        // 4. Mode
+        if (params.mode > 3) revert InvalidMode(params.mode);
+        $.mode = params.mode;
+        emit ModeChanged(0, params.mode);
+
+        // 5. Spec § 5.1 default threshold matrix.
+        // N is the count of *primary* signers — owners + (passkey
+        // counts as 1 if present). For single mode (N=1) all
+        // thresholds default to 1 (the trivial case).
+        uint256 nPrimary = nOwners
+            + (params.initialPasskeyCredentialIdDigest != bytes32(0) ? 1 : 0);
+        uint8 nForMatrix = nPrimary > type(uint8).max ? type(uint8).max : uint8(nPrimary);
+        $.thresholdByTier[1] = _defaultThreshold(nForMatrix, 1);
+        $.thresholdByTier[2] = _defaultThreshold(nForMatrix, 2);
+        $.thresholdByTier[3] = _defaultThreshold(nForMatrix, 3);
+        $.thresholdByTier[4] = _defaultThreshold(nForMatrix, 4);
+        $.thresholdByTier[5] = _defaultThreshold(nForMatrix, 5);
+        // T6 threshold is implicit via recoveryThreshold below.
+
+        // 6. Default timelocks: T4=1h, T5=24h, T6=48h.
+        // T1/T2/T3 stay 0 (routine actions are immediate). Single mode
+        // also gets the trust-root timelocks — the spec doesn't
+        // exempt single mode from the timelock invariant, and a 1-of-1
+        // owner benefits from the "you can change your mind" window
+        // (same shape as the legacy `_upgradeTimelock` slot).
+        $.timelockByTier[4] = 1 hours;
+        $.timelockByTier[5] = 24 hours;
+        $.timelockByTier[6] = 48 hours;
+
+        // 7. Recovery threshold default (per spec § 8).
+        if (nGuardians > 0) {
+            // ceil(nGuardians / 2) + 1, clamped to nGuardians.
+            uint8 recThr = uint8((nGuardians / 2) + 1);
+            if (recThr > nGuardians) recThr = uint8(nGuardians);
+            $.recoveryThreshold = recThr;
+        }
+
+        // 8. T3 high-value ceiling default (per spec § 6).
+        $.t3HighValueCeiling = 0.01 ether;
+
+        _delegationManager = dm;
+        _factory = factory_;
+    }
+
+    /**
+     * @dev Spec § 5.1 default threshold matrix. Pure lookup — no
+     *      storage access. Used by the initializer to seed defaults +
+     *      available as a view for callers that want to know what the
+     *      factory would install for a given N.
+     *
+     *      For N=1: all tiers = 1 (the trivial single-signer case).
+     *      For N ≥ 2: T1 = 1, T2/T3 = majority, T4/T5 = unanimous for
+     *      N ≤ 3 / near-unanimous for N ≥ 5.
+     *      T6 (recovery) is governed by `recoveryThreshold`, not this
+     *      matrix; returns 0 for tier == 6.
+     */
+    function _defaultThreshold(uint8 nOwners, uint8 tier) internal pure returns (uint8) {
+        if (nOwners == 0) return 0;
+        if (tier == 1) return 1;
+        // T2 / T3: majority of N (ceil(N/2) for odd, N/2+1 for even ≥ 2).
+        if (tier == 2 || tier == 3) {
+            if (nOwners == 1) return 1;
+            return uint8((nOwners / 2) + 1);
+        }
+        // T4 — Admin. Spec § 5.1 calibration:
+        //   N ≤ 3: unanimous (T4 = N)
+        //   N ∈ {4..6}: near-unanimous (T4 = N − 1)
+        //   N ≥ 7: T4 = N − 2 (loosens further so a coordination
+        //          stall is less likely with larger sets).
+        if (tier == 4) {
+            if (nOwners <= 3) return nOwners;
+            if (nOwners <= 6) return nOwners - 1;
+            return nOwners - 2;
+        }
+        // T5 — Critical. Spec § 5.1 calibration:
+        //   N ≤ 5: unanimous (T5 = N)
+        //   N ≥ 6: near-unanimous (T5 = N − 1)
+        // Tighter than T4 — trust-root changes get an extra signer.
+        if (tier == 5) {
+            if (nOwners <= 5) return nOwners;
+            return nOwners - 1;
+        }
+        return 0; // T6 (governed by recoveryThreshold) + invalid tiers
+    }
+
+    /// @notice Pure view exposing the spec § 5.1 default threshold
+    ///         matrix so off-chain tooling can preview what the
+    ///         factory would install for an N-owner deploy.
+    function defaultThreshold(uint8 nOwners, uint8 tier) external pure returns (uint8) {
+        return _defaultThreshold(nOwners, tier);
+    }
+
     // ─── UUPS Upgrade ──────────────────────────────────────────────
 
     /**

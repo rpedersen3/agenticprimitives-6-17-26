@@ -4,6 +4,29 @@ pragma solidity ^0.8.28;
 import "account-abstraction/interfaces/IAccount.sol";
 
 /**
+ * @notice Parameters bundled into one struct so the factory entry point
+ *         + the matching `initializeWithThresholdPolicy` initializer
+ *         share an exact shape. Captures everything the spec 207
+ *         threshold-policy surface needs at account birth — mode,
+ *         owners, guardians, optional initial passkey. The factory
+ *         installs the spec § 5.1 default threshold matrix + default
+ *         T4/T5/T6 timelocks automatically; callers tune them
+ *         post-deploy via T4/T5 admin flows.
+ *
+ * `mode`: 0=single, 1=hybrid, 2=threshold, 3=org. Factory enforces
+ *         per-mode guardian-count minima per spec § 8 (single: 0,
+ *         hybrid: 0+, threshold: ≥ 2, org: ≥ 3).
+ */
+struct AgentAccountInitParams {
+    uint8 mode;
+    address[] owners;
+    address[] guardians;
+    bytes32 initialPasskeyCredentialIdDigest; // 0x0 to skip the passkey
+    uint256 initialPasskeyX;
+    uint256 initialPasskeyY;
+}
+
+/**
  * @title IAgentAccount
  * @notice Interface for an agent-native ERC-4337 smart account.
  */

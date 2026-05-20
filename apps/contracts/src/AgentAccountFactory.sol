@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./AgentAccount.sol";
+import {AgentAccountInitParams} from "./IAgentAccount.sol";
 import "./governance/GovernanceManaged.sol";
 
 /**
@@ -224,6 +225,143 @@ contract AgentAccountFactory is GovernanceManaged {
         account = AgentAccount(payable(address(proxy)));
         emit AgentAccountCreatedWithPasskey(address(account), credentialIdDigest, salt);
     }
+
+    // ─── Threshold-policy deployment (spec 207) ───────────────────────
+
+    error InvalidMode(uint8 mode);
+    error NoPrimarySigner();
+    error InsufficientGuardiansForMode(uint8 mode, uint256 actual, uint256 required);
+
+    /// @notice Emitted when an AgentAccount is deployed via the
+    ///         threshold-policy factory entry. Carries the mode + N
+    ///         owners + N guardians for off-chain indexers.
+    event AgentAccountCreatedWithMode(
+        address indexed account,
+        uint8 indexed mode,
+        uint256 nOwners,
+        uint256 nGuardians,
+        uint256 salt
+    );
+
+    /**
+     * @notice Deploy an `AgentAccount` configured per spec 207's
+     *         threshold-policy surface. Replaces the per-mode entry
+     *         points (`createAccount` / `createAccountWithPasskey`)
+     *         with a single API that handles all four modes — `single`
+     *         / `hybrid` / `threshold` / `org`.
+     *
+     *         Per spec § 8, the factory refuses to deploy accounts in
+     *         the higher-coordination modes without enough guardians
+     *         to make recovery meaningful:
+     *           - `single` (0): no guardian requirement.
+     *           - `hybrid` (1): no factory-level requirement. Frontend
+     *             SHOULD prompt for ≥ 1 backup passkey or EOA; this
+     *             contract doesn't enforce that because the backup
+     *             can be any signer kind.
+     *           - `threshold` (2): ≥ 2 guardians required.
+     *           - `org` (3): ≥ 3 guardians required.
+     *
+     *         At least one primary signer (owner OR initial passkey)
+     *         MUST be supplied. The `initializeWithThresholdPolicy`
+     *         initializer on the impl installs the spec § 5.1 default
+     *         threshold matrix + default timelocks (T4=1h, T5=24h,
+     *         T6=48h) + recovery threshold + T3 ceiling automatically.
+     *
+     * @param params  See `AgentAccountInitParams` in `IAgentAccount.sol`.
+     * @param salt    CREATE2 deployment salt.
+     */
+    function createAccountWithMode(
+        AgentAccountInitParams calldata params,
+        uint256 salt
+    ) external returns (AgentAccount account) {
+        _validateInitParams(params);
+
+        address addr = getAddressForMode(params, salt);
+        if (addr.code.length > 0) {
+            return AgentAccount(payable(addr));
+        }
+
+        bytes memory initData = abi.encodeCall(
+            AgentAccount.initializeWithThresholdPolicy,
+            (params, delegationManager, address(this))
+        );
+
+        ERC1967Proxy proxy = new ERC1967Proxy{salt: bytes32(salt)}(
+            address(accountImplementation),
+            initData
+        );
+
+        account = AgentAccount(payable(address(proxy)));
+        emit AgentAccountCreatedWithMode(
+            address(account),
+            params.mode,
+            params.owners.length,
+            params.guardians.length,
+            salt
+        );
+    }
+
+    /**
+     * @notice Counterfactual address for a threshold-policy account.
+     * @dev Pure CREATE2 derivation; runs the same validation as
+     *      `createAccountWithMode` so off-chain callers see the same
+     *      reverts whether they preflight or deploy.
+     */
+    function getAddressForMode(
+        AgentAccountInitParams calldata params,
+        uint256 salt
+    ) public view returns (address) {
+        _validateInitParams(params);
+
+        bytes memory initData = abi.encodeCall(
+            AgentAccount.initializeWithThresholdPolicy,
+            (params, delegationManager, address(this))
+        );
+
+        bytes memory proxyBytecode = abi.encodePacked(
+            type(ERC1967Proxy).creationCode,
+            abi.encode(address(accountImplementation), initData)
+        );
+
+        bytes32 bytecodeHash = keccak256(proxyBytecode);
+
+        return address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            bytes1(0xff),
+                            address(this),
+                            bytes32(salt),
+                            bytecodeHash
+                        )
+                    )
+                )
+            )
+        );
+    }
+
+    /// @dev Internal validation shared by deploy + counterfactual paths
+    ///      so a preflight reverts identically to the real deploy.
+    function _validateInitParams(AgentAccountInitParams calldata params) internal pure {
+        if (params.mode > 3) revert InvalidMode(params.mode);
+
+        // At least one primary signer required.
+        bool hasOwner = params.owners.length > 0;
+        bool hasInitialPasskey = params.initialPasskeyCredentialIdDigest != bytes32(0);
+        if (!hasOwner && !hasInitialPasskey) revert NoPrimarySigner();
+
+        // Per-mode guardian-count minima (spec § 8).
+        uint256 nGuardians = params.guardians.length;
+        if (params.mode == 2 /* threshold */ && nGuardians < 2) {
+            revert InsufficientGuardiansForMode(params.mode, nGuardians, 2);
+        }
+        if (params.mode == 3 /* org */ && nGuardians < 3) {
+            revert InsufficientGuardiansForMode(params.mode, nGuardians, 3);
+        }
+    }
+
+    // ─── Counterfactual derivation for legacy entry points ────────────
 
     /**
      * @notice Counterfactual address for a passkey-owned account.
