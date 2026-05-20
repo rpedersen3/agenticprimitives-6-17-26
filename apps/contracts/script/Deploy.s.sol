@@ -11,6 +11,7 @@ import {TimestampEnforcer} from "../src/enforcers/TimestampEnforcer.sol";
 import {AllowedTargetsEnforcer} from "../src/enforcers/AllowedTargetsEnforcer.sol";
 import {AllowedMethodsEnforcer} from "../src/enforcers/AllowedMethodsEnforcer.sol";
 import {ValueEnforcer} from "../src/enforcers/ValueEnforcer.sol";
+import {SmartAgentPaymaster} from "../src/SmartAgentPaymaster.sol";
 
 /**
  * Deploys the minimum on-chain surface the demo needs:
@@ -79,6 +80,31 @@ contract Deploy is Script {
         ValueEnforcer valueEnforcer = new ValueEnforcer();
         console2.log("ValueEnforcer:        %s", address(valueEnforcer));
 
+        // 5. SmartAgentPaymaster — sponsors gas for user-op-based account deploys.
+        //    Constructor takes entryPoint, initialOwner (for stake/deposit in this
+        //    broadcast), and governance (for setDevMode + setAccepted later).
+        //    For the demo, deployer plays both roles. Production would split.
+        SmartAgentPaymaster paymaster = new SmartAgentPaymaster(
+            IEntryPoint(address(entryPoint)),
+            deployer,    // initialOwner (transient; can transferOwnership to governance later)
+            deployer     // governance
+        );
+        console2.log("SmartAgentPaymaster:  %s", address(paymaster));
+
+        // Stake + deposit so the paymaster can sponsor UserOps immediately.
+        // - addStake locks ETH for the unstake-delay window (anti-DoS for bundlers
+        //   that want to know the paymaster has skin in the game).
+        // - deposit goes to the EntryPoint's per-paymaster balance, charged for
+        //   sponsored userOp gas reimbursement. Refilled by sending ETH to the
+        //   paymaster + calling deposit() again, or by direct EntryPoint.depositTo.
+        uint256 stakeAmount = vm.envOr("PAYMASTER_STAKE_WEI", uint256(0.0005 ether));
+        uint256 depositAmount = vm.envOr("PAYMASTER_DEPOSIT_WEI", uint256(0.001 ether));
+        uint32 unstakeDelaySec = uint32(vm.envOr("PAYMASTER_UNSTAKE_DELAY", uint256(1 days)));
+        paymaster.addStake{value: stakeAmount}(unstakeDelaySec);
+        paymaster.deposit{value: depositAmount}();
+        console2.log("  stake:   %s wei", stakeAmount);
+        console2.log("  deposit: %s wei", depositAmount);
+
         vm.stopBroadcast();
 
         // Write deployments-<network>.json so the TS demo apps can read addresses on startup.
@@ -92,7 +118,8 @@ contract Deploy is Script {
         vm.serializeAddress(key, "timestampEnforcer", address(timestamp));
         vm.serializeAddress(key, "allowedTargetsEnforcer", address(allowedTargets));
         vm.serializeAddress(key, "allowedMethodsEnforcer", address(allowedMethods));
-        string memory out = vm.serializeAddress(key, "valueEnforcer", address(valueEnforcer));
+        vm.serializeAddress(key, "valueEnforcer", address(valueEnforcer));
+        string memory out = vm.serializeAddress(key, "smartAgentPaymaster", address(paymaster));
 
         string memory path = string.concat("deployments-", network, ".json");
         vm.writeFile(path, out);
