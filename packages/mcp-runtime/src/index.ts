@@ -15,6 +15,16 @@ export {
   createSqliteJtiStore,
   createPostgresJtiStore,
 } from './jti-stores';
+export {
+  generateServiceMac,
+  verifyServiceMac,
+  bodyDigestHex,
+} from './service-mac';
+export type {
+  MacProviderLike,
+  ServiceMacContext,
+  ServiceMacHeaders,
+} from './service-mac';
 
 export type {
   Address,
