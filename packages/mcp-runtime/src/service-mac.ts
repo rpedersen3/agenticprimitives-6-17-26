@@ -24,6 +24,7 @@
 import { sha256, toHex } from 'viem';
 import type { Hex } from '@agenticprimitives/types';
 import type { JtiStore } from '@agenticprimitives/delegation';
+import { buildEvent, type AuditSink } from '@agenticprimitives/audit';
 
 // Minimal interface so we don't take a hard dep on the whole
 // `A2AKeyProvider` type — only `generateMac` is needed here.
@@ -160,19 +161,59 @@ export async function verifyServiceMac(args: {
   /** Default 60_000ms. */
   maxClockSkewMs?: number;
   now?: () => number;
+  /**
+   * Audit sink (audit C3). When provided, every rejection emits a
+   * `mcp-runtime.service-mac.reject` event so forensics can reconstruct
+   * who attempted what. Successful verifies are typically left to the
+   * downstream `withDelegation` event to avoid double-emission per
+   * request; emitters wanting per-MAC accept events can wire a
+   * separate emit themselves.
+   */
+  auditSink?: AuditSink;
+  /** Correlation ID threaded into emitted events. */
+  correlationId?: string;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const emitReject = async (reason: string) => {
+    if (!args.auditSink) return;
+    try {
+      await args.auditSink.write(
+        buildEvent({
+          action: 'mcp-runtime.service-mac.reject',
+          outcome: 'denied',
+          correlationId: args.correlationId,
+          actor: { type: 'service', id: args.ctx.service },
+          subject: { type: 'tool', id: args.ctx.route },
+          audience: args.ctx.audience,
+          reason,
+          context: {
+            keyId: args.headers.keyId,
+            // Hash of the nonce so the raw value (which is one-shot
+            // and tied to a specific request) isn't surfaced in logs
+            // beyond what's already required for the rejection trail.
+            nonceHash: nonceHashShort(args.headers.nonce),
+          },
+        }),
+      );
+    } catch {
+      /* fail-soft */
+    }
+  };
+  const reject = async (reason: string): Promise<{ ok: false; reason: string }> => {
+    await emitReject(reason);
+    return { ok: false, reason };
+  };
   if (!args.provider.generateMac) {
-    return { ok: false, reason: 'verifier provider lacks generateMac' };
+    return reject('verifier provider lacks generateMac');
   }
   // Clock-skew gate.
   const ts = Number(args.headers.timestamp);
   if (!Number.isFinite(ts) || ts <= 0) {
-    return { ok: false, reason: 'malformed timestamp' };
+    return reject('malformed timestamp');
   }
   const now = (args.now ?? Date.now)();
   const skew = args.maxClockSkewMs ?? DEFAULT_CLOCK_SKEW_MS;
   if (Math.abs(now - ts) > skew) {
-    return { ok: false, reason: `clock skew ${Math.abs(now - ts)}ms exceeds ${skew}ms` };
+    return reject(`clock skew ${Math.abs(now - ts)}ms exceeds ${skew}ms`);
   }
   // MAC recompute + constant-time compare.
   const canonical = canonicalMessage(args.ctx, args.headers.nonce, args.headers.timestamp);
@@ -185,16 +226,16 @@ export async function verifyServiceMac(args: {
     });
     expected = got.mac;
   } catch (e) {
-    return { ok: false, reason: `mac recompute failed: ${e instanceof Error ? e.message : e}` };
+    return reject(`mac recompute failed: ${e instanceof Error ? e.message : e}`);
   }
   let received: Uint8Array;
   try {
     received = base64urlDecode(args.headers.mac);
   } catch (e) {
-    return { ok: false, reason: `malformed mac base64url: ${e instanceof Error ? e.message : e}` };
+    return reject(`malformed mac base64url: ${e instanceof Error ? e.message : e}`);
   }
   if (!constantTimeEqual(expected, received)) {
-    return { ok: false, reason: 'mac mismatch' };
+    return reject('mac mismatch');
   }
   // Replay: track the nonce via JTI store. limit=1 means single-use:
   // first call succeeds (usage=1, allowed=true); second sees usage=2,
@@ -203,13 +244,20 @@ export async function verifyServiceMac(args: {
   const jti = `mac:${args.ctx.audience}:${args.ctx.service}:${args.headers.nonce}`;
   const tracked = await args.jtiStore.trackUsage(jti, 1);
   if (!tracked.allowed) {
-    return { ok: false, reason: 'mac nonce already consumed (replay)' };
+    return reject('mac nonce already consumed (replay)');
   }
   void ts; // ts is bounded by clock-skew gate above; no further use here.
   return { ok: true };
 }
 
 // ─── Internals ────────────────────────────────────────────────────────
+
+function nonceHashShort(nonce: string): string {
+  // 8-byte prefix of sha256(nonce) — enough to correlate events
+  // without surfacing the raw one-shot nonce in logs.
+  const digest = sha256(toHex(nonce));
+  return digest.slice(0, 18); // '0x' + 16 hex chars
+}
 
 function cryptoRandomBytes(n: number): Uint8Array {
   const out = new Uint8Array(n);

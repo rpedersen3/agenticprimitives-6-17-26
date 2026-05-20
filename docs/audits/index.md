@@ -18,6 +18,7 @@ The agenticprimitives audit lives in two layers:
 | Package | Risk | Audit | Spec |
 | --- | --- | --- | --- |
 | `@agenticprimitives/types` | low | [packages/types/AUDIT.md](../../packages/types/AUDIT.md) | — |
+| `@agenticprimitives/audit` | medium (cross-cutting forensics) | [packages/audit/AUDIT.md](../../packages/audit/AUDIT.md) | [specs/206-audit.md](../../specs/206-audit.md) (TODO) |
 | `@agenticprimitives/identity-auth` | high | [packages/identity-auth/AUDIT.md](../../packages/identity-auth/AUDIT.md) | [specs/200-identity-auth.md](../../specs/200-identity-auth.md) |
 | `@agenticprimitives/agent-account` | high | [packages/agent-account/AUDIT.md](../../packages/agent-account/AUDIT.md) | [specs/201-agent-account.md](../../specs/201-agent-account.md) |
 | `@agenticprimitives/delegation` | **critical** (keystone) | [packages/delegation/AUDIT.md](../../packages/delegation/AUDIT.md) | [specs/202-delegation.md](../../specs/202-delegation.md) |

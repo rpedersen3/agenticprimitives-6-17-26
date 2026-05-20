@@ -32,6 +32,7 @@
   "keywords": ["mcp", "model-context-protocol", "delegation", "authorization", "agentic"],
   "license": "UNLICENSED",
   "peerDependencies": {
+    "@agenticprimitives/audit": "workspace:*",
     "@agenticprimitives/delegation": "workspace:*",
     "@agenticprimitives/key-custody": "workspace:*",
     "@agenticprimitives/tool-policy": "workspace:*",

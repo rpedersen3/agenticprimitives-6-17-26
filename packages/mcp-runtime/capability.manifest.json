@@ -18,6 +18,7 @@
   ],
   "allowedImports": [
     "@agenticprimitives/types",
+    "@agenticprimitives/audit",
     "@agenticprimitives/delegation",
     "@agenticprimitives/key-custody",
     "@agenticprimitives/tool-policy",

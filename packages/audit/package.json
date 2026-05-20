@@ -1,0 +1,32 @@
+{
+  "name": "@agenticprimitives/audit",
+  "version": "0.0.1",
+  "description": "Append-only audit event schema + sink interface. Transport-agnostic; consumers wire concrete sinks (console / D1 / Cloud Logging / etc.).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["audit", "forensics", "observability", "agentic"],
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "@agenticprimitives/types": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  }
+}

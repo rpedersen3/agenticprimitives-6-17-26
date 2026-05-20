@@ -16,6 +16,7 @@ import type { Address, Hex } from '@agenticprimitives/types';
 import { verifyDelegationToken } from '@agenticprimitives/delegation';
 import { evaluatePolicy } from '@agenticprimitives/tool-policy';
 import type { ToolClassification } from '@agenticprimitives/tool-policy';
+import { buildEvent, type AuditSink } from '@agenticprimitives/audit';
 import type { DataScopeGrant, McpResourceVerifyConfig } from './types';
 
 export class McpAuthError extends Error {
@@ -40,11 +41,53 @@ export function withDelegation<A extends Record<string, unknown>>(
      * enforce this.
      */
     classification?: ToolClassification;
+    /**
+     * Audit sink (audit C3). When provided, the wrapper emits
+     * `mcp-runtime.with-delegation.{accept,reject}` events on every
+     * call. Omit only for tests / paths that explicitly opt out of
+     * forensics; production code MUST pass a sink and the preflight
+     * will eventually enforce.
+     */
+    auditSink?: AuditSink;
+    /** Correlation ID threaded into emitted events. */
+    correlationId?: string;
   },
 ): (args: A & { token: string }) => Promise<unknown> {
   return async (args) => {
     const { token, ...rest } = args;
+    const toolName = opts?.toolName ?? 'unknown';
+    const correlationId = opts?.correlationId;
+
+    const emit = async (
+      outcome: 'success' | 'denied' | 'error',
+      reason: string | undefined,
+      principal: Address | undefined,
+    ) => {
+      if (!opts?.auditSink) return;
+      try {
+        await opts.auditSink.write(
+          buildEvent({
+            action:
+              outcome === 'success'
+                ? 'mcp-runtime.with-delegation.accept'
+                : 'mcp-runtime.with-delegation.reject',
+            outcome,
+            correlationId,
+            actor: principal ? { type: 'user', id: principal } : { type: 'unknown' },
+            subject: { type: 'tool', id: toolName },
+            audience: config.audience,
+            chainId: config.chainId,
+            reason,
+          }),
+        );
+      } catch {
+        // Fail-soft: audit emission must never break the auth flow.
+        // composeSinks should be doing this for us, but belt-and-braces.
+      }
+    };
+
     if (typeof token !== 'string' || token.length === 0) {
+      await emit('denied', 'missing token', undefined);
       throw new McpAuthError('missing token');
     }
     const result = await verifyDelegationToken(token, {
@@ -60,27 +103,18 @@ export function withDelegation<A extends Record<string, unknown>>(
     if ('error' in result) {
       // Internal log retains the reason; external surface stays opaque.
       console.error('[mcp-runtime] auth failed:', result.error);
+      await emit('denied', result.error, undefined);
       throw new McpAuthError(result.error);
     }
 
     // Policy enforcement (audit H2). Fail-closed on deny + requires-consent.
-    // requires-consent is treated as deny here because this runtime does
-    // not host a consent loop — consumers needing consent UX should
-    // build their own wrapper that pauses, surfaces the prompt, and
-    // re-enters the pipeline with the consent token.
     if (opts?.classification) {
       const decision = evaluatePolicy({
-        toolName: opts.toolName ?? 'unknown',
+        toolName,
         classification: opts.classification,
-        // The delegation already proved the principal; callerKind is
-        // therefore 'user-session' here (the user signed the delegation).
-        // Future runtimes (a2a-runtime) can construct a different ctx.
         callerKind: 'user-session',
         delegation: {
           delegator: result.principal,
-          // The delegate/caveats aren't surfaced from verify; for v0 we
-          // pass an empty caveat list because evaluatePolicy's current
-          // rules only need `classification` and `callerKind`.
           delegate: result.principal,
           caveats: [],
         },
@@ -91,6 +125,7 @@ export function withDelegation<A extends Record<string, unknown>>(
             ? `policy deny: ${decision.reason}`
             : `policy requires-consent (${decision.promptId}); runtime does not host consent loop`;
         console.error('[mcp-runtime] auth failed:', detail);
+        await emit('denied', detail, result.principal);
         throw new McpAuthError(detail);
       }
     } else {
@@ -100,6 +135,7 @@ export function withDelegation<A extends Record<string, unknown>>(
       );
     }
 
+    await emit('success', undefined, result.principal);
     return handler({ ...(rest as unknown as A), principal: result.principal, grants: result.grants });
   };
 }

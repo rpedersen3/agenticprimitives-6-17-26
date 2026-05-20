@@ -1,0 +1,61 @@
+{
+  "name": "@agenticprimitives/audit",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/206-audit.md",
+  "summary": "Append-only audit event schema + sink interface. Transport-agnostic; consumers wire concrete sinks (console / D1 / Cloud Logging / etc.). Closes system audit C3.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/mcp-runtime"
+  ],
+  "publicExports": [
+    "AuditEvent",
+    "AuditSink",
+    "MemoryAuditSink",
+    "createConsoleAuditSink",
+    "createMemoryAuditSink",
+    "composeSinks",
+    "generateEventId",
+    "nowIso",
+    "buildEvent"
+  ],
+  "forbiddenTerms": [
+    { "term": "Delegation", "reason": "Domain concept; audit package is structural only.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "Caveat", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "Enforcer", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "RiskTier", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
+    { "term": "evaluatePolicy", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
+    { "term": "withDelegation", "reason": "Belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "passkey", "reason": "Belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md", "AUDIT.md", "CLAUDE.md"] },
+    { "term": "AccountClient", "reason": "Belongs in agent-account.", "owningPackage": "@agenticprimitives/agent-account" },
+    { "term": "envelope encryption", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" }
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

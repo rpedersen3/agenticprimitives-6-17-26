@@ -19,6 +19,7 @@
     "baseUrl": ".",
     "paths": {
       "@agenticprimitives/types": ["packages/types/src/index.ts"],
+      "@agenticprimitives/audit": ["packages/audit/src/index.ts"],
       "@agenticprimitives/identity-auth": ["packages/identity-auth/src/index.ts"],
       "@agenticprimitives/identity-auth/passkey": ["packages/identity-auth/src/methods/passkey.ts"],
       "@agenticprimitives/identity-auth/siwe": ["packages/identity-auth/src/methods/siwe.ts"],
