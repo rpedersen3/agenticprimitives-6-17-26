@@ -14,7 +14,7 @@
 
 import type { Address, Hex } from '@agenticprimitives/types';
 import { verifyDelegationToken } from '@agenticprimitives/delegation';
-import { evaluatePolicy } from '@agenticprimitives/tool-policy';
+import { evaluatePolicy, evaluateThresholdPolicy } from '@agenticprimitives/tool-policy';
 import type { ToolClassification } from '@agenticprimitives/tool-policy';
 import { buildEvent, type AuditSink } from '@agenticprimitives/audit';
 import type { DataScopeGrant, McpResourceVerifyConfig } from './types';
@@ -90,6 +90,40 @@ export function withDelegation<A extends Record<string, unknown>>(
       await emit('denied', 'missing token', undefined);
       throw new McpAuthError('missing token');
     }
+    // Spec 207 threshold-policy: when a classification is provided,
+    // derive the threshold-policy decision via tool-policy +
+    // translate into delegation's verify opts. Pre-verify check so a
+    // missing quorum caveat or absent on-chain blessing fails closed
+    // before any chain reads.
+    let requireQuorumCaveat: { enforcer: Address } | undefined;
+    let requireAcceptedOnChain: boolean | undefined;
+    if (opts?.classification) {
+      const thrDecision = evaluateThresholdPolicy(opts.classification);
+      if (thrDecision.requiresQuorum) {
+        if (!config.quorumEnforcer) {
+          // Fail closed at the boundary — a T3+ tool that needs
+          // quorum can't be verified if the runtime doesn't know
+          // where to find the QuorumEnforcer. Consumer apps must
+          // wire `config.quorumEnforcer` from their deployments JSON.
+          const detail =
+            'tool requires quorum caveat but mcp-runtime has no quorumEnforcer configured';
+          console.error('[mcp-runtime] auth misconfigured:', detail);
+          await emit('denied', detail, undefined);
+          throw new McpAuthError(detail);
+        }
+        requireQuorumCaveat = { enforcer: config.quorumEnforcer };
+      }
+      if (thrDecision.requiresAcceptedOnChain) {
+        requireAcceptedOnChain = true;
+      }
+      // `requiresUv` from the threshold-policy decision is verified
+      // at the SIGNER layer (the wallet sets the WebAuthn UV flag when
+      // producing the delegation signature). delegation's verify path
+      // doesn't re-check UV because it would need to parse the
+      // passkey signature blob; that's the consumer app's
+      // responsibility at signing time.
+    }
+
     const result = await verifyDelegationToken(token, {
       audience: config.audience,
       chainId: config.chainId,
@@ -104,6 +138,11 @@ export function withDelegation<A extends Record<string, unknown>>(
       // same sink as `mcp-runtime.with-delegation.*`. Pass 3b.
       auditSink: opts?.auditSink,
       correlationId,
+      // Spec 207 threshold-policy gates (6c.4). Both undefined for T1
+      // tools; either or both set for T2+ depending on the tool's
+      // `@sa-risk-tier` classification.
+      requireQuorumCaveat,
+      requireAcceptedOnChain,
     });
     if ('error' in result) {
       // Internal log retains the reason; external surface stays opaque.
@@ -125,13 +164,26 @@ export function withDelegation<A extends Record<string, unknown>>(
         },
       });
       if (decision.decision !== 'allow') {
-        const detail =
-          decision.decision === 'deny'
-            ? `policy deny: ${decision.reason}`
-            : `policy requires-consent (${decision.promptId}); runtime does not host consent loop`;
-        console.error('[mcp-runtime] auth failed:', detail);
-        await emit('denied', detail, result.principal);
-        throw new McpAuthError(detail);
+        // Spec 207 reconciliation: critical-risk tools have historically
+        // returned `requires-consent` from evaluatePolicy + the wrapper
+        // failed closed because the runtime doesn't host a consent loop
+        // (audit H2). The threshold-policy `requiresAcceptedOnChain`
+        // gate IS the consent loop for that path — the user committed
+        // an `acceptSessionDelegation(hash)` transaction in advance.
+        // When that gate is in force AND it passed (verify didn't
+        // reject), the requires-consent outcome is satisfied.
+        const thrDec = evaluateThresholdPolicy(opts.classification);
+        const satisfiedByOnChainBlessing =
+          decision.decision === 'requires-consent' && thrDec.requiresAcceptedOnChain;
+        if (!satisfiedByOnChainBlessing) {
+          const detail =
+            decision.decision === 'deny'
+              ? `policy deny: ${decision.reason}`
+              : `policy requires-consent (${decision.promptId}); runtime does not host consent loop`;
+          console.error('[mcp-runtime] auth failed:', detail);
+          await emit('denied', detail, result.principal);
+          throw new McpAuthError(detail);
+        }
       }
     } else {
       console.warn(

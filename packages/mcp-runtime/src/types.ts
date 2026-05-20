@@ -26,6 +26,21 @@ export interface McpResourceVerifyConfig {
    * deploying may set `false` explicitly.
    */
   requireDeployed?: boolean;
+  /**
+   * Spec 207: `QuorumEnforcer` contract address for this chain. When a
+   * tool's classification produces a `requiresQuorum: true` decision
+   * from `tool-policy.evaluateThresholdPolicy(...)`, `withDelegation`
+   * threads this address into `delegation.verifyDelegationToken`'s
+   * `requireQuorumCaveat` opt so the delegation MUST carry a quorum
+   * caveat with this enforcer or verify fails closed.
+   *
+   * Consumer apps SHOULD configure this from their deployments JSON
+   * (apps/contracts/deployments-<network>.json's `quorumEnforcer`
+   * field). When unset, T3+ tools that require quorum will fail
+   * closed at the boundary — apps that don't ship multi-sig can
+   * either omit T3+ tools or leave this unset and stick to T1/T2.
+   */
+  quorumEnforcer?: Address;
 }
 
 export interface ResourceDefinition {
