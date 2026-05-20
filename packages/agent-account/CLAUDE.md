@@ -67,5 +67,9 @@ pnpm check:forbidden-terms
 - Adding a paymaster integration → DON'T (defer; paymaster is one layer above).
 - Upgrading EntryPoint version → coordinate with the migration spec (open question §8.1 in spec).
 
+## Capabilities this package participates in
+- **Multi-sig + threshold policy** — see [spec 207](../../specs/207-smart-account-threshold-policy.md) + [demo guide](../../apps/demo-web-pro/docs/multi-sig/guide.md). This package owns: `_owners` / `_passkeys` / `_guardians` state, `_modeFlags`, `threshold(tier)` + `recoveryThreshold()` getters, `propose/execute/cancel` admin machinery, the `AdminAction` enum, recovery flow, and the `AgentAccountClient` SDK helpers (`proposeAdmin`, `executeAdmin`, `cancelAdmin`, `preApproveHash`, `packSafeSignatures`).
+- Index of cross-cutting capabilities: [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md).
+
 ## Generated files (ignore)
 `dist/`, `node_modules/`, `coverage/`, `*.tsbuildinfo`.

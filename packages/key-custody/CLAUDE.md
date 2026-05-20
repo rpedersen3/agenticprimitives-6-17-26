@@ -80,5 +80,9 @@ pnpm check:forbidden-terms
 - Adding a new audit field → `src/audit.ts`; coordinate with `delegation` (it consumes the audit context shape).
 - Crypto changes → security review required; AAD invariants in particular.
 
+## Capabilities this package participates in
+- **Audit / forensics trail** — see [spec 206](../../specs/206-audit.md) + [demo guide](../../apps/demo-mcp/docs/audit/guide.md). This package emits: `key-custody.sign` from both `LocalSecp256k1Signer.signA2AAction` and `GcpKmsSigner.signA2AAction`. Per the CLAUDE.md security invariant, raw `sessionId` is hashed (`keccak256(sessionId).slice(0, 18)`) — never logged in raw form. Envelope encrypt/decrypt emission (`LocalAesProvider`, `GcpKmsProvider`) is a remaining slice tracked in [audit AUDIT.md](./AUDIT.md).
+- Index of cross-cutting capabilities: [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md).
+
 ## Generated files (ignore)
 `dist/`, `node_modules/`, `coverage/`, `*.tsbuildinfo`.

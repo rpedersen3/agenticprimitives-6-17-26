@@ -73,5 +73,9 @@ pnpm check:forbidden-terms
 - Adding a classification tag → `src/classification.ts` (type) + lint rules in `src/lint.ts`.
 - Adding a decision rule → `src/decision.ts`; must include a golden test row.
 
+## Capabilities this package participates in
+- **Multi-sig + threshold policy** — see [spec 207](../../specs/207-smart-account-threshold-policy.md) + [demo guide](../../apps/demo-web-pro/docs/multi-sig/guide.md). This package owns the risk-tier taxonomy (T1 Read / T2 Write / T3 Value / T4 Admin / T5 Critical / T6 Recovery) as first-class exports + `evaluatePolicy(classification)` returning a `{ tier, requiresQuorum, requiresUv, requiresAcceptedOnChain }` decision that callers compose with `delegation.verifyDelegationToken`.
+- Index of cross-cutting capabilities: [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md).
+
 ## Generated files (ignore)
 `dist/`, `node_modules/`, `coverage/`, `*.tsbuildinfo`.

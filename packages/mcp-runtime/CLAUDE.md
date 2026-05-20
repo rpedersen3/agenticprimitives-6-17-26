@@ -80,5 +80,10 @@ pnpm check:forbidden-terms
 - Adding a new JTI store backend → `src/stores/<backend>.ts`; conform to `JtiStore` interface from `delegation`.
 - Bridging to a new MCP SDK version → `src/sdk-adapter.ts`; update peer-dep range.
 
+## Capabilities this package participates in
+- **Multi-sig + threshold policy** — see [spec 207](../../specs/207-smart-account-threshold-policy.md) + [demo guide](../../apps/demo-web-pro/docs/multi-sig/guide.md). This package's role: `withDelegation` already calls `tool-policy.evaluatePolicy(classification)` (closed H2 in pass 2). Once 6c.3 lands, the wrapper threads the decision's `requiresQuorum` / `requiresAcceptedOnChain` into `verifyDelegationToken` opts. No new public exports — n-of-m is transparent at the wrapper level.
+- **Audit / forensics trail** — see [spec 206](../../specs/206-audit.md) + [demo guide](../../apps/demo-mcp/docs/audit/guide.md). This package emits: `mcp-runtime.with-delegation.{accept,reject}` (in `withDelegation`) and `mcp-runtime.service-mac.{accept,reject}` (in `verifyServiceMac`). Both correlation-stitched via the caller-supplied `correlationId` opt.
+- Index of cross-cutting capabilities: [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md).
+
 ## Generated files (ignore)
 `dist/`, `node_modules/`, `coverage/`, `*.tsbuildinfo`, `test/fixtures/golden/`.

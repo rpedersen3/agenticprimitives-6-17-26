@@ -64,5 +64,10 @@ pnpm check:forbidden-terms
 - Adding a JSON-Schema or Zod schema for `AuditEvent` → optional `src/schema.ts`; export only if a runtime validator becomes useful.
 - Adding `correlationId` propagation helpers (e.g. AsyncLocalStorage on Node, Workers) → consider it only if a real consumer asks for it; otherwise it's premature abstraction.
 
+## Capabilities this package participates in
+- **Audit / forensics trail** — see [spec 206](../../specs/206-audit.md) + [demo guide](../../apps/demo-mcp/docs/audit/guide.md). **This package is the canonical home** for the capability: it owns the `AuditEvent` schema, the `AuditSink` interface, the in-band sinks (`createConsoleAuditSink`, `createMemoryAuditSink`, `composeSinks`), the helpers (`buildEvent`, `generateEventId`, `nowIso`), and the defensive `createPiiGuardrailSink`. Concrete persistent sinks (D1, Cloud Logging, etc.) live in consumer apps, not here.
+- **Multi-sig + threshold policy** — see [spec 207](../../specs/207-smart-account-threshold-policy.md) + [demo guide](../../apps/demo-web-pro/docs/multi-sig/guide.md). This package's role: receive emissions from `agent-account.admin.{propose,execute,cancel}` + `delegation.quorum.{accept,reject}` once those wire in (6c.3+). Action vocabulary stays per spec 206's table.
+- Index of cross-cutting capabilities: [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md).
+
 ## Generated files (ignore)
 `dist/`, `node_modules/`, `coverage/`, `*.tsbuildinfo`.

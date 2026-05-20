@@ -34,7 +34,8 @@
     "check:no-app-private-keys": "tsx scripts/check-no-app-private-keys.ts",
     "check:production-deploy": "tsx scripts/check-production-deploy.ts",
     "check:supply-chain": "tsx scripts/audit-supply-chain.ts",
-    "check:all": "pnpm check:capability-manifests && pnpm check:package-docs && pnpm check:package-boundaries && pnpm check:public-exports && pnpm check:claude-context-budget && pnpm check:forbidden-terms && pnpm check:no-app-private-keys && pnpm check:supply-chain",
+    "check:cross-cutting-capabilities": "tsx scripts/check-cross-cutting-capabilities.ts",
+    "check:all": "pnpm check:capability-manifests && pnpm check:package-docs && pnpm check:package-boundaries && pnpm check:public-exports && pnpm check:claude-context-budget && pnpm check:forbidden-terms && pnpm check:no-app-private-keys && pnpm check:cross-cutting-capabilities && pnpm check:supply-chain",
     "generate:capability-index": "tsx scripts/generate-capability-index.ts"
   },
   "devDependencies": {
