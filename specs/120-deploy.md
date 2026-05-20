@@ -188,31 +188,50 @@ The KMS signer plays two roles operationally:
 
 In a production deployment you'd typically split these into two IAM-scoped Cloud KMS keys (master signer + deploy relayer) so role compromise is bounded. For the demo, the same key serves both — both roles only ever sign digests via the same `signA2AAction` API.
 
-### Known gap: envelope encryption still uses LocalAesProvider in the live demo
+### Envelope encryption via Cloud KMS (symmetric encrypt/decrypt)
 
-`demo-a2a` constructs `SessionManager` with `buildKeyProvider({ backend: 'local-aes' })` for session-data-key envelope encryption. `LocalAesProvider` has a `NODE_ENV=production` guard (per [`packages/key-custody/CLAUDE.md`](../packages/key-custody/CLAUDE.md) — "production MUST throw at boot when NODE_ENV=production"). Cloudflare Workers' bundler sets `NODE_ENV=production` at build time, so `/session/init` returns a 500 in the live deploy.
+When `A2A_KMS_BACKEND=gcp-kms` is set, `demo-a2a`'s `SessionManager` uses `GcpKmsProvider` for session-data-key envelope encryption. This avoids `LocalAesProvider`'s production guard (which fails at `NODE_ENV=production`, the default for Cloudflare Workers builds) and routes all key material through Cloud KMS.
 
-**Fix path (do this before relying on the full session lifecycle in production):**
+Required setup (in addition to the secp256k1 signing key in §4.5):
 
-1. Create a symmetric Cloud KMS encryption key:
+1. Create a SECOND Cloud KMS key — symmetric encrypt/decrypt:
    ```bash
    gcloud kms keys create agent-envelope \
      --keyring=agenticprimitives-demo \
      --location=us-central1 \
      --purpose=encryption \
-     --protection-level=software   # symmetric encryption doesn't require HSM
+     --protection-level=software
    ```
-2. Grant the service account `roles/cloudkms.cryptoKeyEncrypterDecrypter` on that key.
-3. Set `GCP_KMS_ENCRYPT_KEY_NAME` as a wrangler var (or `--var` injection in `scripts/deploy-cloudflare.ts`) pointing at the new key.
-4. Update `apps/demo-a2a/src/index.ts` `sessionManagerFor` to use `buildKeyProvider({ backend: 'gcp-kms', config: { cryptoKeyName: env.GCP_KMS_ENCRYPT_KEY_NAME, serviceAccountJson: env.GCP_SERVICE_ACCOUNT_JSON } })` when `A2A_KMS_BACKEND=gcp-kms`.
+   Software protection is fine for symmetric encrypt/decrypt (only secp256k1 signing is HSM-gated).
+2. Grant the existing service account `roles/cloudkms.cryptoKeyEncrypterDecrypter` on this key:
+   ```bash
+   gcloud kms keys add-iam-policy-binding agent-envelope \
+     --keyring=agenticprimitives-demo --location=us-central1 \
+     --member="serviceAccount:agenticprimitives-signer@<project>.iam.gserviceaccount.com" \
+     --role=roles/cloudkms.cryptoKeyEncrypterDecrypter
+   ```
+3. Set `GCP_KMS_ENCRYPT_KEY_NAME` when invoking deploy:
+   ```bash
+   A2A_KMS_BACKEND=gcp-kms \
+   GCP_KMS_KEY_NAME=projects/.../cryptoKeys/<signing-key>/cryptoKeyVersions/1 \
+   GCP_KMS_ENCRYPT_KEY_NAME=projects/.../cryptoKeys/agent-envelope \
+     pnpm deploy:cloudflare
+   ```
+   Note: encrypt/decrypt key reference has NO `/cryptoKeyVersions/N` suffix — GCP picks the active version.
 
-`GcpKmsProvider` is already implemented (commit `ca4c6ca`) with 6 unit tests covering encrypt/decrypt round-trip and AAD trip-wire. Just needs the live wiring.
+The deploy script auto-injects both env vars into demo-a2a via `--var`. `sessionManagerFor` then switches from `LocalAesProvider` to `GcpKmsProvider` automatically when both are present.
 
-Until the fix lands, `/session/init` requires either:
-- Running locally via `wrangler dev` (development mode — guard doesn't fire), or
-- Re-enabling the `NODE_ENV=development` shim in `demo-a2a/src/index.ts` (doctrine-inconsistent but functional for demo).
+### Worker-to-Worker calls via service binding
 
-This gap doesn't affect the `/agent/identity`, `/session/deploy`, or `/session/deploy/submit` paths (which don't use envelope encryption) — those work end-to-end on the live deploy.
+demo-a2a calls demo-mcp for tool execution (`/tools/:name` proxies to `${MCP_URL}/tools/...`). Cloudflare blocks direct `fetch(*.workers.dev)` between sibling Workers on the same account with error 1042 (recursion/loop protection). The canonical fix is a **service binding** declared in `apps/demo-a2a/wrangler.toml`:
+
+```toml
+[[env.production.services]]
+binding = "MCP"
+service = "demo-mcp-production"
+```
+
+In code, `env.MCP.fetch(request)` routes via Cloudflare's internal worker-to-worker channel (no public-edge round-trip). For local dev, the binding isn't present, so the code falls back to `fetch(MCP_URL/...)` against a locally-running demo-mcp.
 
 ### Why REST, not the @google-cloud/kms SDK?
 
