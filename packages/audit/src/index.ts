@@ -200,6 +200,216 @@ export function composeSinks(...sinks: AuditSink[]): AuditSink {
   };
 }
 
+// ─── PII guardrail (defense-in-depth) ────────────────────────────────
+
+/**
+ * One detected probable-leak. Reported to `onDetect` and embedded in
+ * the redacted event's `_pii` context field so reviewers can trace
+ * where the leak came from without seeing the value.
+ */
+export interface PiiFinding {
+  /** Dotted path within the event (e.g. `context.token`, `subject.id`, `reason`). */
+  path: string;
+  /** Why we flagged it (`long-hex`, `jwt-shape`, `pem-block`, `secret-substring`). */
+  reason: string;
+  /** Safe descriptor of the original value (e.g. `hex-130`, `jwt-3-seg`). */
+  preview: string;
+}
+
+export interface PiiGuardrailOpts {
+  /**
+   * What to do on detection.
+   * - `'redact'` (default): replace the offending value in-place with a
+   *   safe descriptor (`<redacted:<reason>:<preview>>`); forward the
+   *   sanitized event to the inner sink. Preserves forensics minus the
+   *   leaked field.
+   * - `'drop'`: do NOT forward the event at all. Strictest setting;
+   *   loses the row from the trail entirely.
+   * - `'warn'`: forward unchanged, just notify via `onDetect`. Useful
+   *   during initial roll-out so reviewers see what would be flagged
+   *   before enforcement kicks in.
+   */
+  mode?: 'redact' | 'drop' | 'warn';
+  /**
+   * Maximum hex string length (chars, including any `0x` prefix) tolerated
+   * in non-allowlisted positions. Default 80 — leaves Ethereum addresses
+   * (42), keccak/sha256 digests (66), and tx hashes (66) all comfortably
+   * below the threshold while catching raw private keys (130) and longer
+   * session secrets.
+   */
+  maxHexLength?: number;
+  /**
+   * `context` keys (and well-known top-level fields) where long hex is
+   * legitimately expected. Merged with the built-in safe set
+   * (`signerAddress`, `address`, `paymaster`, `entryPoint`, `keyId`,
+   * `nonceHash`, `sessionHash`, `digest`, `txHash`, `blockHash`, `jti`,
+   * `eventId`).
+   */
+  allowKeys?: string[];
+  /**
+   * `subject.type` values whose `subject.id` is allowed to be any length
+   * of hex (e.g. `sign-digest` carries a 32-byte digest). Merged with
+   * the built-in safe set (`jti`, `sign-digest`, `tx-hash`, `address`,
+   * `event-id`).
+   */
+  allowSubjectTypes?: string[];
+  /**
+   * Callback invoked on every detection, regardless of `mode`. The
+   * sanitized event (or original, in `warn` mode) is passed alongside
+   * the findings. Useful for routing a "guardrail caught a leak" signal
+   * to a separate alerting channel.
+   */
+  onDetect?: (info: { event: AuditEvent; findings: PiiFinding[] }) => void;
+}
+
+const DEFAULT_ALLOW_KEYS = new Set([
+  'signerAddress',
+  'address',
+  'paymaster',
+  'entryPoint',
+  'keyId',
+  'nonceHash',
+  'sessionHash',
+  'digest',
+  'txHash',
+  'blockHash',
+  'jti',
+  'eventId',
+]);
+const DEFAULT_ALLOW_SUBJECT_TYPES = new Set([
+  'jti',
+  'sign-digest',
+  'tx-hash',
+  'address',
+  'event-id',
+]);
+
+const JWT_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const PEM_BLOCK = /-----BEGIN /;
+const SECRET_SUBSTRING = /(private[_-]?key|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token)/i;
+
+/**
+ * Wrapper sink that scans event payloads for likely-secret material and
+ * either redacts / drops / warns before forwarding to `inner`. **This is
+ * defense-in-depth**, not a substitute for the emitter discipline rule
+ * "MUST hash or omit raw secrets" (per the audit package CLAUDE.md
+ * invariant). It catches accidental leaks at the sink boundary.
+ *
+ * Production wiring example:
+ * ```ts
+ * const sink = composeSinks(
+ *   createConsoleAuditSink({ prefix: '[AUDIT]' }),
+ *   createPiiGuardrailSink(createD1AuditSink(env.DB), { mode: 'redact' }),
+ * );
+ * ```
+ *
+ * The guardrail's own decisions are not themselves audit events — they
+ * surface through `onDetect`. Use that to wire alerts ("found a leak in
+ * action=X") if you want them in your own metrics pipeline.
+ */
+export function createPiiGuardrailSink(inner: AuditSink, opts?: PiiGuardrailOpts): AuditSink {
+  const mode = opts?.mode ?? 'redact';
+  const maxHexLength = opts?.maxHexLength ?? 80;
+  const allowKeys = new Set([...DEFAULT_ALLOW_KEYS, ...(opts?.allowKeys ?? [])]);
+  const allowSubjectTypes = new Set([
+    ...DEFAULT_ALLOW_SUBJECT_TYPES,
+    ...(opts?.allowSubjectTypes ?? []),
+  ]);
+  const longHex = new RegExp(`^0x[0-9a-fA-F]{${maxHexLength - 2},}$`);
+
+  function classify(value: string): { reason: string; preview: string } | null {
+    if (longHex.test(value)) {
+      return { reason: 'long-hex', preview: `hex-${value.length}` };
+    }
+    if (value.length > 100 && JWT_SHAPE.test(value)) {
+      const segs = value.split('.').length;
+      return { reason: 'jwt-shape', preview: `jwt-${segs}-seg-len-${value.length}` };
+    }
+    if (PEM_BLOCK.test(value)) {
+      return { reason: 'pem-block', preview: 'pem' };
+    }
+    if (SECRET_SUBSTRING.test(value)) {
+      return { reason: 'secret-substring', preview: `match-len-${value.length}` };
+    }
+    return null;
+  }
+
+  function redactToken(reason: string, preview: string): string {
+    return `<redacted:${reason}:${preview}>`;
+  }
+
+  return {
+    async write(event: AuditEvent) {
+      const findings: PiiFinding[] = [];
+      // Deep-ish copy of the event so we can mutate fields without
+      // affecting the caller's reference.
+      const sanitized: AuditEvent = {
+        ...event,
+        context: event.context ? { ...event.context } : undefined,
+        subject: event.subject ? { ...event.subject } : undefined,
+        actor: event.actor ? { ...event.actor } : undefined,
+      };
+
+      const scan = (path: string, value: unknown, redactInPlace: (token: string) => void): void => {
+        if (typeof value !== 'string') return;
+        const hit = classify(value);
+        if (!hit) return;
+        findings.push({ path, reason: hit.reason, preview: hit.preview });
+        if (mode === 'redact') redactInPlace(redactToken(hit.reason, hit.preview));
+      };
+
+      // context.* — skip allowlisted keys (legitimate hex carriers).
+      if (sanitized.context) {
+        for (const [k, v] of Object.entries(sanitized.context)) {
+          if (allowKeys.has(k)) continue;
+          scan(`context.${k}`, v, (token) => {
+            sanitized.context![k] = token;
+          });
+        }
+      }
+      // subject.id — skip when subject.type is a known hex-carrier.
+      if (sanitized.subject && !allowSubjectTypes.has(sanitized.subject.type)) {
+        scan('subject.id', sanitized.subject.id, (token) => {
+          sanitized.subject!.id = token;
+        });
+      }
+      // actor.id — same rules; addresses + service names are typically short.
+      if (sanitized.actor?.id) {
+        scan('actor.id', sanitized.actor.id, (token) => {
+          sanitized.actor!.id = token;
+        });
+      }
+      // reason / audience — free-string fields that could carry stack traces.
+      if (sanitized.reason) {
+        scan('reason', sanitized.reason, (token) => {
+          sanitized.reason = token;
+        });
+      }
+      if (sanitized.audience) {
+        scan('audience', sanitized.audience, (token) => {
+          sanitized.audience = token;
+        });
+      }
+
+      if (findings.length > 0) {
+        opts?.onDetect?.({ event: sanitized, findings });
+      }
+
+      if (findings.length > 0 && mode === 'drop') {
+        // Don't forward at all. The onDetect callback above is the
+        // only signal that a row was dropped.
+        return;
+      }
+      if (findings.length > 0 && mode === 'warn') {
+        // Forward unchanged.
+        await inner.write(event);
+        return;
+      }
+      await inner.write(sanitized);
+    },
+  };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────
 
 /**

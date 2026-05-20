@@ -1,7 +1,7 @@
 # `@agenticprimitives/audit` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20 (pass 5b — delegation.mint + key-custody.sign emitters added)
+**Last refreshed:** 2026-05-20 (pass 5g — createPiiGuardrailSink shipped, AUD-1 closed)
 **Owners:** audit package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
 
@@ -78,19 +78,23 @@ What this package does NOT own:
 
 | ID | Severity | Finding | Status | Notes |
 | --- | --- | --- | --- | --- |
-| **AUD-1** | P2 | No automated PII / secret-leak detector for emitted events. | Open | Could ship a runtime sink that scans events for hex strings of length 64+ and `0x[a-f0-9]{40}` patterns, logs warnings. Not load-bearing, but useful guardrail. |
+| **AUD-1** | P2 | No automated PII / secret-leak detector for emitted events. | **CLOSED 2026-05-20 (pass 5g)** | `createPiiGuardrailSink(inner, opts?)` shipped with three modes (`redact` / `drop` / `warn`), pattern detectors (long hex above configurable threshold, JWT shape, PEM blocks, secret-key substrings), built-in allowlists for known-safe positions (signerAddress, digest, keyId, nonceHash, sessionHash, jti; subject types sign-digest, tx-hash, jti, address, event-id), and an `onDetect` callback for alerting. demo-mcp wires the guardrail around its D1 sink in `redact` mode; console intentionally bypasses (ops debugging benefits from raw, logs roll off). 12 unit tests cover clean pass-through + redaction + allowlists + drop + warn + composition. **Defense-in-depth — emitter discipline (hash/omit raw secrets) is still the primary control.** |
 | **AUD-2** | P3 | Console sink does not pre-truncate over-1KB events. | Open | Cloudflare logs clip at 1KB; emitters should keep `context` flat (documented). A built-in `createConsoleAuditSink({maxBytes})` option would belt-and-braces. |
 | **AUD-3** | P3 | No spec at `specs/206-audit.md` yet. | **CLOSED 2026-05-20** | Spec drafted as part of pass 5b — see [`specs/206-audit.md`](../../specs/206-audit.md). |
 | **system C3** | P0 | Append-only audit trail. | **MOSTLY CLOSED 2026-05-20**: schema + sinks + mcp-runtime emission (pass 3a) + delegation.verifyDelegationToken (pass 3a) + D1 sink in demo-mcp (pass 3b) + delegation.mintDelegationToken + key-custody.signA2AAction (pass 5b). Remaining slice: envelope encrypt/decrypt emit (LocalAesProvider, GcpKmsProvider) and identity-auth emission — both are non-blocking follow-ups tracked in this AUDIT.md. |
 
 ## 6. Test posture
 
-- **Unit:** 1 file, 16 tests as of 2026-05-20:
+- **Unit:** 1 file, 28 tests as of 2026-05-20:
   `audit.test.ts` — generateEventId uniqueness, nowIso shape,
   buildEvent defaults + pass-through, memory sink ordering + FIFO
   eviction + reset, console sink JSON shape + custom prefix,
   composeSinks fan-out + partial-failure resilience + empty list,
-  AuditEvent schema smoke (type-level).
+  AuditEvent schema smoke (type-level), and 12 createPiiGuardrailSink
+  tests (clean pass-through, long-hex redaction, allowKeys +
+  allowSubjectTypes, JWT-shape + secret-substring + PEM detection,
+  mode=drop, mode=warn, composeSinks layering, immutability of the
+  caller-supplied event, address + keccak-digest under-threshold pass).
 - **Consumer tests:** the mcp-runtime tests indirectly exercise the
   sink interface by passing `createMemoryAuditSink` and asserting
   events accumulate — see `mcp-runtime/test/unit/`.
@@ -101,7 +105,7 @@ What this package does NOT own:
 
 ## 7. Hardening backlog
 
-- [ ] **(AUD-1)** Implement `createPiiGuardrailSink(inner)` that flags long hex strings + addresses + JWT-shaped tokens in events. Open task #80.
+- [x] **(AUD-1)** ~~Implement `createPiiGuardrailSink`~~ — landed 2026-05-20 (pass 5g). Wired into demo-mcp's D1 sink in `redact` mode.
 - [ ] **(AUD-2)** Add `maxBytes` option to `createConsoleAuditSink` so we never overflow Cloudflare log lines silently.
 - [x] **(AUD-3)** ~~Write `specs/206-audit.md`~~ — done 2026-05-20.
 - [x] **(C3 emit)** ~~Emit from `delegation.verifyDelegationToken`~~ — done in pass 3a.

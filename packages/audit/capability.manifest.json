@@ -29,9 +29,12 @@
     "AuditEvent",
     "AuditSink",
     "MemoryAuditSink",
+    "PiiFinding",
+    "PiiGuardrailOpts",
     "createConsoleAuditSink",
     "createMemoryAuditSink",
     "composeSinks",
+    "createPiiGuardrailSink",
     "generateEventId",
     "nowIso",
     "buildEvent"

@@ -24,7 +24,7 @@ The motivating finding (C3 in the product-readiness audit) was that the platform
   - `createConsoleAuditSink({ prefix? })` — line-JSON to stderr (default) / stdout. Safe everywhere.
   - `createMemoryAuditSink({ capacity? })` — fixed-size ring buffer for tests + ephemeral inspection.
 - `composeSinks(...sinks)` — fan-out wrapper that catches per-sink failures so a downstream outage never blackholes the trail.
-- *(deferred to v0.1)* `createPiiGuardrailSink(inner)` — defensive wrapper that drops/redacts events whose `context` carries high-entropy strings, hex blobs longer than known-safe widths, or values matching common secret shapes. Tracked as task #80.
+- `createPiiGuardrailSink(inner, opts?)` — defensive wrapper that scans events for likely-secret material (long hex above a configurable threshold, JWT-shaped strings, PEM blocks, `private_key` / `client_secret` / `api_key` / `*_token` substrings) and either redacts the offending field in-place (default), drops the event entirely, or warns via an `onDetect` callback. Built-in allowlists cover known-safe positions (`signerAddress`, `digest`, `keyId`, `sessionHash`, `nonceHash`, `jti`; subject types `sign-digest`, `tx-hash`, `jti`, `address`, `event-id`). **Defense in depth, not a substitute for emitter discipline.**
 
 ## 3. What this package does NOT own
 

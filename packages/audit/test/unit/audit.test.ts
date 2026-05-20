@@ -4,10 +4,12 @@ import {
   composeSinks,
   createConsoleAuditSink,
   createMemoryAuditSink,
+  createPiiGuardrailSink,
   generateEventId,
   nowIso,
   type AuditEvent,
   type AuditSink,
+  type PiiFinding,
 } from '../../src';
 
 describe('generateEventId', () => {
@@ -188,5 +190,188 @@ describe('AuditEvent schema (type-level smoke)', () => {
     // Type-only assertion: this just compiles or it doesn't.
     const outcomes: Array<AuditEvent['outcome']> = ['success', 'denied', 'error'];
     expect(outcomes).toHaveLength(3);
+  });
+});
+
+// ─── createPiiGuardrailSink (pass 5g, AUD-1) ─────────────────────────
+
+describe('createPiiGuardrailSink', () => {
+  // 130-char hex (32-byte private key with 0x prefix) — strictly above
+  // the default 80-char threshold and outside any allowlisted key.
+  const PRIVATE_KEY = '0x' + 'ab'.repeat(64);
+  // 42-char Ethereum address — must NEVER be flagged.
+  const ADDRESS = '0x' + 'cd'.repeat(20);
+  // 66-char keccak digest — under threshold; allowed unconditionally.
+  const DIGEST = '0x' + 'ef'.repeat(32);
+
+  function clean(): AuditEvent {
+    return buildEvent({
+      action: 'mcp-runtime.with-delegation.accept',
+      outcome: 'success',
+      actor: { type: 'user', id: ADDRESS },
+      subject: { type: 'tool', id: 'get_profile' },
+      audience: 'urn:mcp:server:person',
+      context: { signerAddress: ADDRESS, digest: DIGEST, keyId: 'local-master' },
+    });
+  }
+
+  it('passes a clean event through unmodified', async () => {
+    const inner = createMemoryAuditSink();
+    const sink = createPiiGuardrailSink(inner);
+    await sink.write(clean());
+    expect(inner.events()).toHaveLength(1);
+    expect(inner.events()[0]!.context).toEqual({
+      signerAddress: ADDRESS,
+      digest: DIGEST,
+      keyId: 'local-master',
+    });
+  });
+
+  it('redacts a private-key-shaped hex in an unknown context field', async () => {
+    const inner = createMemoryAuditSink();
+    let captured: PiiFinding[] | undefined;
+    const sink = createPiiGuardrailSink(inner, {
+      onDetect: ({ findings }) => {
+        captured = findings;
+      },
+    });
+    const evt = clean();
+    evt.context = { ...evt.context, token: PRIVATE_KEY };
+    await sink.write(evt);
+
+    const written = inner.events()[0]!;
+    expect(written.context!.token).toMatch(/^<redacted:long-hex:hex-130>$/);
+    // Original PRIVATE_KEY value must not have leaked through.
+    expect(JSON.stringify(written)).not.toContain(PRIVATE_KEY);
+    expect(captured).toHaveLength(1);
+    expect(captured![0]).toMatchObject({ path: 'context.token', reason: 'long-hex' });
+  });
+
+  it('respects the allowKeys allowlist for legitimate long hex', async () => {
+    const inner = createMemoryAuditSink();
+    const sink = createPiiGuardrailSink(inner);
+    const evt = clean();
+    // signerAddress is allowlisted by default; even with a long value
+    // it must NOT be flagged.
+    evt.context = { ...evt.context, signerAddress: PRIVATE_KEY };
+    await sink.write(evt);
+    expect(inner.events()[0]!.context!.signerAddress).toBe(PRIVATE_KEY);
+  });
+
+  it('respects allowSubjectTypes — subject.id for sign-digest passes through', async () => {
+    const inner = createMemoryAuditSink();
+    const sink = createPiiGuardrailSink(inner);
+    const evt = buildEvent({
+      action: 'key-custody.sign',
+      outcome: 'success',
+      subject: { type: 'sign-digest', id: PRIVATE_KEY }, // legitimately long
+    });
+    await sink.write(evt);
+    expect(inner.events()[0]!.subject!.id).toBe(PRIVATE_KEY);
+  });
+
+  it('detects JWT-shaped strings', async () => {
+    const inner = createMemoryAuditSink();
+    const sink = createPiiGuardrailSink(inner);
+    const evt = clean();
+    // 3 base64url segments, >100 chars total.
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9' + '.' + 'a'.repeat(60) + '.' + 'b'.repeat(40);
+    evt.context = { ...evt.context, token: jwt };
+    await sink.write(evt);
+    expect(inner.events()[0]!.context!.token).toMatch(/^<redacted:jwt-shape:jwt-3-seg-/);
+  });
+
+  it('detects secret-key substring in reason', async () => {
+    const inner = createMemoryAuditSink();
+    const sink = createPiiGuardrailSink(inner);
+    const evt = clean();
+    evt.reason = 'Decryption failed: private_key was nil';
+    await sink.write(evt);
+    expect(inner.events()[0]!.reason).toMatch(/^<redacted:secret-substring:/);
+  });
+
+  it('mode=drop suppresses forwarding entirely', async () => {
+    const inner = createMemoryAuditSink();
+    let detected = false;
+    const sink = createPiiGuardrailSink(inner, {
+      mode: 'drop',
+      onDetect: () => {
+        detected = true;
+      },
+    });
+    const evt = clean();
+    evt.context = { ...evt.context, token: PRIVATE_KEY };
+    await sink.write(evt);
+    expect(detected).toBe(true);
+    expect(inner.events()).toHaveLength(0); // dropped
+    // A clean event in drop mode still passes through.
+    await sink.write(clean());
+    expect(inner.events()).toHaveLength(1);
+  });
+
+  it('mode=warn forwards the ORIGINAL event but still calls onDetect', async () => {
+    const inner = createMemoryAuditSink();
+    let captured: PiiFinding[] | undefined;
+    const sink = createPiiGuardrailSink(inner, {
+      mode: 'warn',
+      onDetect: ({ findings }) => {
+        captured = findings;
+      },
+    });
+    const evt = clean();
+    evt.context = { ...evt.context, token: PRIVATE_KEY };
+    await sink.write(evt);
+    expect(captured).toHaveLength(1);
+    // warn mode forwards UNMODIFIED — the original leak is in inner.
+    expect(inner.events()[0]!.context!.token).toBe(PRIVATE_KEY);
+  });
+
+  it('does not mutate the caller-supplied event object', async () => {
+    const inner = createMemoryAuditSink();
+    const sink = createPiiGuardrailSink(inner);
+    const evt = clean();
+    evt.context = { ...evt.context, token: PRIVATE_KEY };
+    const callerRef = evt.context.token;
+    await sink.write(evt);
+    expect(evt.context.token).toBe(callerRef); // original untouched
+    expect(inner.events()[0]!.context!.token).not.toBe(callerRef); // sink got sanitized copy
+  });
+
+  it('addresses (42 chars) are below threshold even outside allowlist', async () => {
+    const inner = createMemoryAuditSink();
+    const sink = createPiiGuardrailSink(inner);
+    const evt = clean();
+    // Drop into an unknown key; should still pass because it's under 80 chars.
+    evt.context = { someAddress: ADDRESS };
+    await sink.write(evt);
+    expect(inner.events()[0]!.context!.someAddress).toBe(ADDRESS);
+  });
+
+  it('keccak digests (66 chars) under default threshold even outside allowlist', async () => {
+    const inner = createMemoryAuditSink();
+    const sink = createPiiGuardrailSink(inner);
+    const evt = clean();
+    evt.context = { otherDigest: DIGEST };
+    await sink.write(evt);
+    expect(inner.events()[0]!.context!.otherDigest).toBe(DIGEST);
+  });
+
+  it('composes with composeSinks — guardrail sanitizes for D1, console gets raw', async () => {
+    // Pattern in spec 206: console for ops + guardrail-wrapped persistent
+    // sink. The guardrail is one layer; placement in the composition
+    // determines what reaches each destination.
+    const persistent = createMemoryAuditSink();
+    const console = createMemoryAuditSink();
+    const sink = composeSinks(
+      console,
+      createPiiGuardrailSink(persistent),
+    );
+    const evt = clean();
+    evt.context = { ...evt.context, token: PRIVATE_KEY };
+    await sink.write(evt);
+    // Console sees the raw event (it's first in the chain, not wrapped).
+    expect(console.events()[0]!.context!.token).toBe(PRIVATE_KEY);
+    // Persistent destination only sees the sanitized event.
+    expect(persistent.events()[0]!.context!.token).toMatch(/^<redacted:/);
   });
 });
