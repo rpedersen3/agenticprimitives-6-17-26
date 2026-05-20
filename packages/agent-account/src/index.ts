@@ -8,3 +8,14 @@ export type { UserOperation, Address, Hex } from './types';
 export { BundlerClient, packGasLimits, unpackGasLimits } from './bundler-client';
 export type { BundlerClientOpts, PackedUserOperation } from './bundler-client';
 export { entryPointAbi } from './abis';
+
+// WebAuthn on-chain signature wire format (spec 130).
+// The structured `WebAuthnAssertion` struct + WebAuthn ceremony live in
+// the identity-auth package — agent-account only ships the on-chain
+// encoder that turns the assertion into the byte layout
+// `AgentAccount._validateSig` consumes.
+export {
+  SIG_TYPE_WEBAUTHN,
+  encodeAssertion,
+  encodeWebAuthnSignature,
+} from './webauthn-signature';

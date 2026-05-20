@@ -17,6 +17,7 @@
   "allowedImports": [
     "@agenticprimitives/types",
     "@agenticprimitives/identity-auth",
+    "@agenticprimitives/identity-auth/passkey",
     "viem"
   ],
   "forbiddenImports": [
@@ -50,7 +51,7 @@
     { "term": "RiskTier", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
     { "term": "withDelegation", "reason": "Belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
     { "term": "MCP", "reason": "Transport-specific; this package is transport-free.", "owningPackage": "@agenticprimitives/mcp-runtime", "allowInPaths": ["spec.md", "README.md"] },
-    { "term": "passkey", "reason": "Auth method internals belong in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"] },
+    { "term": "passkey", "reason": "Auth method internals belong in identity-auth. The on-chain factory methods (createAccountWithPasskey / getAddressForPasskey) and the signature dispatch ABI are agent-account's contract surface; the WebAuthn signature encoder may reference identity-auth's subpath URL.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md", "CLAUDE.md", "src/webauthn-signature.ts", "src/abis.ts", "src/client.ts", "test/unit/webauthn-signature.test.ts"] },
     { "term": "OAuth", "reason": "Auth method internals belong in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] }
   ],
   "ignoreForAgentContext": [

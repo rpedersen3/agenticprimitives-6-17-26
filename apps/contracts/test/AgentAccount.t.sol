@@ -109,4 +109,77 @@ contract AgentAccountTest is Test {
         vm.expectRevert();
         acct.initialize(owner, address(dm), address(factory));
     }
+
+    // ─── Passkey-only initializer (spec 130) ─────────────────────────
+
+    bytes32 internal constant TEST_CRED_DIGEST = keccak256("test-cred");
+    uint256 internal constant TEST_X = uint256(keccak256("test-x"));
+    uint256 internal constant TEST_Y = uint256(keccak256("test-y"));
+
+    function _deployPasskey(uint256 salt) internal returns (AgentAccount) {
+        return factory.createAccountWithPasskey(TEST_CRED_DIGEST, TEST_X, TEST_Y, salt);
+    }
+
+    function test_initializeWithPasskey_registers_credential() public {
+        AgentAccount pk = _deployPasskey(100);
+        assertTrue(pk.hasPasskey(TEST_CRED_DIGEST));
+        (uint256 x, uint256 y) = pk.getPasskey(TEST_CRED_DIGEST);
+        assertEq(x, TEST_X);
+        assertEq(y, TEST_Y);
+        assertEq(pk.passkeyCount(), 1);
+    }
+
+    function test_initializeWithPasskey_leaves_zero_eoa_owners() public {
+        AgentAccount pk = _deployPasskey(101);
+        assertEq(pk.ownerCount(), 0);
+        assertFalse(pk.isOwner(address(0xBEEF)));
+    }
+
+    function test_initializeWithPasskey_cannot_be_called_twice() public {
+        AgentAccount pk = _deployPasskey(102);
+        vm.expectRevert();
+        pk.initializeWithPasskey(
+            TEST_CRED_DIGEST, TEST_X, TEST_Y, address(dm), address(factory)
+        );
+    }
+
+    function test_passkey_account_emits_PasskeyAdded_at_init() public {
+        // Compute predicted address; bind expectEmit to it before the
+        // CREATE2 happens. The factory will subsequently call the
+        // initializer which emits PasskeyAdded from the proxy.
+        address predicted = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_X, TEST_Y, 103);
+        vm.expectEmit(true, false, false, true, predicted);
+        emit AgentAccount.PasskeyAdded(TEST_CRED_DIGEST, TEST_X, TEST_Y);
+        factory.createAccountWithPasskey(TEST_CRED_DIGEST, TEST_X, TEST_Y, 103);
+    }
+
+    function test_passkey_account_ecdsa_signature_rejected() public {
+        // No EOA owner means ECDSA-recovered signatures from any address
+        // must fail isValidSignature. (No owner to recover to.)
+        AgentAccount pk = _deployPasskey(104);
+        bytes32 hash = keccak256("hello");
+        bytes memory sig = _signRaw(OWNER_PK, hash);
+        assertEq(pk.isValidSignature(hash, sig), ERC1271_INVALID);
+    }
+
+    function test_passkey_account_cannot_remove_only_passkey_via_self_call() public {
+        // The CannotRemoveLastSigner invariant must protect a passkey-only
+        // account from being bricked. removePasskey is onlySelf, so we
+        // simulate the userOp by pranking the account itself.
+        AgentAccount pk = _deployPasskey(105);
+        vm.prank(address(pk));
+        vm.expectRevert(AgentAccount.CannotRemoveLastSigner.selector);
+        pk.removePasskey(TEST_CRED_DIGEST);
+    }
+
+    function test_passkey_account_can_add_eoa_owner_via_self_call() public {
+        // Verify the passkey-only account can be upgraded to multi-sig
+        // by adding an EOA owner via a self-call (post-init UserOp path).
+        AgentAccount pk = _deployPasskey(106);
+        vm.prank(address(pk));
+        pk.addOwner(address(0xCAFE));
+        assertTrue(pk.isOwner(address(0xCAFE)));
+        assertEq(pk.ownerCount(), 1);
+        assertEq(pk.passkeyCount(), 1);
+    }
 }

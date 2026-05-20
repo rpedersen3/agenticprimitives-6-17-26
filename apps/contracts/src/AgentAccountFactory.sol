@@ -51,6 +51,16 @@ contract AgentAccountFactory is GovernanceManaged {
     ///      they are factory-scoped, not per-account.
     event AgentAccountCreated(address indexed account, address indexed owner, uint256 salt);
 
+    /// @notice Emitted when a passkey-owned agent account is deployed.
+    ///         `account` is the proxy address; `credentialIdDigest` is
+    ///         keccak256(credentialId) of the sole WebAuthn signer.
+    /// @dev Spec 130 — passkey-only account creation path.
+    event AgentAccountCreatedWithPasskey(
+        address indexed account,
+        bytes32 indexed credentialIdDigest,
+        uint256 salt
+    );
+
     /// @notice Emitted when governance rotates the bundler signer EOA.
     event BundlerSignerChanged(address indexed oldVal, address indexed newVal);
 
@@ -145,6 +155,89 @@ contract AgentAccountFactory is GovernanceManaged {
         bytes memory initData = abi.encodeCall(
             AgentAccount.initialize,
             (owner, delegationManager, address(this))
+        );
+
+        bytes memory proxyBytecode = abi.encodePacked(
+            type(ERC1967Proxy).creationCode,
+            abi.encode(address(accountImplementation), initData)
+        );
+
+        bytes32 bytecodeHash = keccak256(proxyBytecode);
+
+        return address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            bytes1(0xff),
+                            address(this),
+                            bytes32(salt),
+                            bytecodeHash
+                        )
+                    )
+                )
+            )
+        );
+    }
+
+    // ─── Passkey-owned accounts (spec 130) ───────────────────────────
+
+    /**
+     * @notice Deploy a passkey-owned AgentAccount, or return the existing one.
+     *
+     *         The account has NO EOA owner — the WebAuthn credential at
+     *         `(credentialIdDigest, x, y)` is the sole signer.
+     *
+     *         Counterfactual address binds (credentialIdDigest, x, y,
+     *         salt): the same passkey at the same salt always lands at
+     *         the same address; a different passkey lands at a different
+     *         address because the init calldata (and therefore the
+     *         proxy creation bytecode) differs.
+     *
+     * @param credentialIdDigest keccak256 of the WebAuthn credentialId.
+     * @param x P-256 public key X.
+     * @param y P-256 public key Y.
+     * @param salt User-chosen salt (default 0 for one-account-per-passkey).
+     */
+    function createAccountWithPasskey(
+        bytes32 credentialIdDigest,
+        uint256 x,
+        uint256 y,
+        uint256 salt
+    ) external returns (AgentAccount account) {
+        address addr = getAddressForPasskey(credentialIdDigest, x, y, salt);
+
+        if (addr.code.length > 0) {
+            return AgentAccount(payable(addr));
+        }
+
+        bytes memory initData = abi.encodeCall(
+            AgentAccount.initializeWithPasskey,
+            (credentialIdDigest, x, y, delegationManager, address(this))
+        );
+
+        ERC1967Proxy proxy = new ERC1967Proxy{salt: bytes32(salt)}(
+            address(accountImplementation),
+            initData
+        );
+
+        account = AgentAccount(payable(address(proxy)));
+        emit AgentAccountCreatedWithPasskey(address(account), credentialIdDigest, salt);
+    }
+
+    /**
+     * @notice Counterfactual address for a passkey-owned account.
+     * @dev Pure CREATE2 derivation — does NOT touch chain state.
+     */
+    function getAddressForPasskey(
+        bytes32 credentialIdDigest,
+        uint256 x,
+        uint256 y,
+        uint256 salt
+    ) public view returns (address) {
+        bytes memory initData = abi.encodeCall(
+            AgentAccount.initializeWithPasskey,
+            (credentialIdDigest, x, y, delegationManager, address(this))
         );
 
         bytes memory proxyBytecode = abi.encodePacked(

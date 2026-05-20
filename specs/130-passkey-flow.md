@@ -379,8 +379,33 @@ The simpler/cleaner path is the dedicated passkey challenge endpoint. v1 impleme
 ## 11. Total effort estimate
 
 - Phase 2 (contracts): 1.5 hrs
-- Phase 3 (browser): 2.5 hrs (CBOR + COSE parsing is fiddly)
+- Phase 3 (browser): **0.5 hrs** (port `passkey.ts` + `cose-parse.ts` from smart-agent — see below)
 - Phase 4 (wiring): 2 hrs
 - Phase 5 (live + tests): 1.5 hrs
 
-**~7.5 hours** of focused work. Implementation roadmap is concrete; no further design discovery needed once Phase 2 starts.
+**~5.5 hours** of focused work.
+
+## 12. Reference: smart-agent patterns to port (not reinvent)
+
+Per `CLAUDE.md` principle "Pull patterns, not code. Cross-reference smart-agent at `/home/barb/smart-agent`":
+
+| smart-agent file | What it gives us | Where it lands in agenticprimitives |
+| --- | --- | --- |
+| `packages/sdk/src/passkey.ts` (181 LOC) | DER signature parsing, low-s normalization, `buildPasskeyAssertion`, ABI encoding, base64url challenge encoding | `packages/agent-account/src/passkey.ts` |
+| `packages/sdk/src/cose-parse.ts` (157 LOC) | COSE CBOR → P-256 (x, y) extraction from WebAuthn attestation | `packages/agent-account/src/cose-parse.ts` |
+| `apps/web/src/app/passkey-enroll/PasskeyEnrollClient.tsx` | Registration UI pattern (challenge → create → store credential) | reference for `apps/demo-web/src/passkey-flow.ts` + App.tsx |
+| `apps/web/src/hooks/use-a2a-session.ts` | Passkey-driven session shape | reference for our flow |
+| `apps/web/src/lib/sign-wallet-action-client.ts` | Signing-via-passkey pattern | reference for delegation + UserOp signing |
+| `packages/contracts/src/AgentAccount.sol` (in particular `_verifyWebAuthn`, `PasskeyStorage`, `addPasskey`) | Already imported during the contract vendoring step | already present in `apps/contracts/src/AgentAccount.sol` |
+
+Doctrine: we adapt the smart-agent patterns to **agenticprimitives package boundaries** — passkey helpers live in `agent-account` (where ERC-4337 substrate already lives) rather than smart-agent's monolithic SDK. The contract surface is identical.
+
+### 12.1 Deliberate divergence from smart-agent
+
+| Concern | smart-agent | agenticprimitives (this spec) | Why |
+| --- | --- | --- | --- |
+| Account creation with a passkey | Deploy EOA-owned account via `createAccount(owner, salt)`, then run a userOp that calls `addPasskey` | New `createAccountWithPasskey(credentialIdDigest, x, y, salt)` that deploys an account with **zero EOA owners** | Spec 130 §3.2 calls for "passkey IS the smart-account owner" — no EOA in the trust chain. smart-agent's two-step path requires an EOA at bootstrap which contradicts the goal. |
+| Storage shape | `PasskeyStorage` keyed by `credentialIdDigest` → `(x, y)` | Identical (vendored from smart-agent in earlier port) | Compatible — same wire format, same ERC-7201 slot. |
+| Signature wire format | `0x01 || abi.encode(WebAuthnLib.Assertion)` | Identical | Compatible — uses the `SIG_TYPE_WEBAUTHN = 0x01` dispatch already in `_validateSig`. |
+
+The divergence is contained at the factory layer; the on-chain verification path (`_verifyWebAuthn` → `WebAuthnLib.verify` → P256Verifier) is unchanged and shared with smart-agent.

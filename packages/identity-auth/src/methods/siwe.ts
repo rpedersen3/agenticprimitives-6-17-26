@@ -140,11 +140,19 @@ export interface SiweVerifyError {
   reason: string;
 }
 
-export function verify(
+/**
+ * Pure parse-and-validate — checks version, domain, nonce, expiration,
+ * and computes the EIP-191 digest. Does NOT verify the signature.
+ *
+ * Used by `verify` (ECDSA path) and `verifyOnchain` (ERC-1271/6492 path).
+ * Splitting this out lets callers verify signatures against a contract
+ * (e.g. `UniversalSignatureValidator`) without re-implementing the SIWE
+ * field validation.
+ */
+export function parseAndValidate(
   message: string,
-  signature: Hex,
   opts?: { now?: () => number; allowedDomains?: string[]; expectedNonce?: string },
-): SiweVerifyResult | SiweVerifyError {
+): { ok: true; parsed: SiweParsed; digest: Uint8Array } | SiweVerifyError {
   let parsed: SiweParsed;
   try {
     parsed = parseMessage(message);
@@ -153,7 +161,6 @@ export function verify(
   }
   if (parsed.version !== '1') return { ok: false, reason: 'SIWE version not 1' };
 
-  // Optional domain allowlist
   if (opts?.allowedDomains && !opts.allowedDomains.includes(parsed.domain)) {
     return { ok: false, reason: `domain "${parsed.domain}" not allowed` };
   }
@@ -161,7 +168,6 @@ export function verify(
     return { ok: false, reason: 'nonce mismatch' };
   }
 
-  // Expiration
   const nowMs = (opts?.now ?? Date.now)();
   if (parsed.expirationTime) {
     const exp = Date.parse(parsed.expirationTime);
@@ -173,15 +179,78 @@ export function verify(
   if (Number.isNaN(issued)) return { ok: false, reason: 'issuedAt unparseable' };
   if (issued > nowMs + 60_000) return { ok: false, reason: 'issuedAt is in the future' };
 
-  // Signature recovery
+  return { ok: true, parsed, digest: eip191Digest(message) };
+}
+
+/**
+ * Verify a SIWE message via a caller-supplied async signature verifier
+ * (typically `verifyUserSignature` from `./verify-signature`, which calls
+ * the on-chain `UniversalSignatureValidator`).
+ *
+ * Per spec 130 and the `demo-a2a is signer-agnostic` doctrine: when the
+ * SIWE `address` is a smart account, this is how we verify — the
+ * validator dispatches between ECDSA / ERC-1271 / ERC-6492 on-chain,
+ * supporting EOA-owned, passkey-owned, and counterfactual accounts
+ * without the caller branching on signer type.
+ */
+export async function verifyOnchain(
+  message: string,
+  signature: Hex,
+  signatureVerifier: (args: {
+    signer: Address;
+    hash: Hex;
+    signature: Hex;
+  }) => Promise<boolean>,
+  opts?: { now?: () => number; allowedDomains?: string[]; expectedNonce?: string },
+): Promise<SiweVerifyResult | SiweVerifyError> {
+  const pre = parseAndValidate(message, opts);
+  if (!pre.ok) return pre;
+
+  // Render digest as 0x-hex for the verifier API.
+  let hexDigest = '0x';
+  for (const b of pre.digest) hexDigest += b.toString(16).padStart(2, '0');
+
+  let valid: boolean;
+  try {
+    valid = await signatureVerifier({
+      signer: pre.parsed.address,
+      hash: hexDigest as Hex,
+      signature,
+    });
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : 'verifier threw' };
+  }
+  if (!valid) {
+    return { ok: false, reason: 'on-chain signature verification rejected' };
+  }
+  return { ok: true, address: pre.parsed.address, parsed: pre.parsed };
+}
+
+/**
+ * Legacy ECDSA-only SIWE verifier. Recovers the signer address from the
+ * 65-byte signature and compares against the message's `address` field.
+ *
+ * Prefer `verifyOnchain` for new code — it goes through the universal
+ * validator and works for both EOA-owned and smart-account-owned
+ * (passkey, multisig, etc.) signers. Kept here for backward compat with
+ * the existing `verify` tests and the EOA-only siwe verifier path.
+ */
+export function verify(
+  message: string,
+  signature: Hex,
+  opts?: { now?: () => number; allowedDomains?: string[]; expectedNonce?: string },
+): SiweVerifyResult | SiweVerifyError {
+  const pre = parseAndValidate(message, opts);
+  if (!pre.ok) return pre;
+
   let recovered: Address;
   try {
-    recovered = recoverAddress(eip191Digest(message), signature);
+    recovered = recoverAddress(pre.digest, signature);
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : 'signature recovery failed' };
   }
-  if (recovered.toLowerCase() !== parsed.address.toLowerCase()) {
+  if (recovered.toLowerCase() !== pre.parsed.address.toLowerCase()) {
     return { ok: false, reason: 'recovered signer does not match message address' };
   }
-  return { ok: true, address: parsed.address, parsed };
+  return { ok: true, address: pre.parsed.address, parsed: pre.parsed };
 }

@@ -29,6 +29,31 @@ export const agentAccountFactoryAbi = [
     inputs: [],
     outputs: [{ name: '', type: 'address' }],
   },
+  // Passkey-owned accounts (spec 130) — analogous shape to createAccount.
+  {
+    type: 'function',
+    name: 'getAddressForPasskey',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'credentialIdDigest', type: 'bytes32' },
+      { name: 'x', type: 'uint256' },
+      { name: 'y', type: 'uint256' },
+      { name: 'salt', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'createAccountWithPasskey',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'credentialIdDigest', type: 'bytes32' },
+      { name: 'x', type: 'uint256' },
+      { name: 'y', type: 'uint256' },
+      { name: 'salt', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'address' }],
+  },
 ] as const;
 
 export const agentAccountAbi = [

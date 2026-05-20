@@ -229,6 +229,53 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         _factory = factory_;
     }
 
+    /**
+     * @notice Passkey-only initializer. The account is deployed with NO
+     *         EOA owner; the WebAuthn credential identified by
+     *         `credentialIdDigest = keccak256(credentialId)` is the sole
+     *         signer. All UserOps must carry a `SIG_TYPE_WEBAUTHN`
+     *         signature payload that recovers to (x, y).
+     *
+     *         Used by `AgentAccountFactory.createAccountWithPasskey`,
+     *         which routes per spec 130 (passkey-flow) when the user
+     *         enrolls a credential before any EOA is connected.
+     *
+     *         Additional signers (EOA owners or extra passkeys) can be
+     *         added post-deploy via `addOwner` / `addPasskey` userOps
+     *         signed by the passkey. The `removePasskey` invariant
+     *         (`_ownerCount + count == 1`) keeps the account from being
+     *         rendered unsignable.
+     *
+     * @param credentialIdDigest keccak256(credentialId) — same wire form
+     *                           used by `addPasskey` and the WebAuthn
+     *                           verification path.
+     * @param x WebAuthn P-256 public key X coordinate (uint256).
+     * @param y WebAuthn P-256 public key Y coordinate (uint256).
+     * @param dm DelegationManager address. address(0) to skip.
+     * @param factory_ The factory that deployed this account.
+     */
+    function initializeWithPasskey(
+        bytes32 credentialIdDigest,
+        uint256 x,
+        uint256 y,
+        address dm,
+        address factory_
+    ) external initializer {
+        if (x == 0 || y == 0) revert InvalidPasskeyPublicKey();
+        PasskeyStorage storage $ = _passkeyStorage();
+        $.keys[credentialIdDigest] = PasskeyEntry(x, y);
+        $.registered[credentialIdDigest] = true;
+        $.count = 1;
+        emit PasskeyAdded(credentialIdDigest, x, y);
+
+        // _ownerCount stays at 0 — passkey is the only signer. The
+        // CannotRemoveLastSigner invariant in removePasskey
+        // (`_ownerCount + count == 1`) prevents bricking.
+
+        _delegationManager = dm;
+        _factory = factory_;
+    }
+
     // ─── UUPS Upgrade ──────────────────────────────────────────────
 
     /**

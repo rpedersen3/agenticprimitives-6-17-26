@@ -281,6 +281,107 @@ export class AgentAccountClient {
   }
 
   /**
+   * Passkey variant of `buildDeployUserOp`: builds a paymaster-sponsored
+   * UserOp whose initCode calls `AgentAccountFactory.createAccountWithPasskey(
+   * credentialIdDigest, x, y, salt)`. The deployed smart account has NO
+   * EOA owner — the WebAuthn credential at (x, y) is the sole signer.
+   *
+   * The userOpHash returned here must be signed by the passkey
+   * (`navigator.credentials.get` over the hash → `0x01 ||
+   * abi.encode(Assertion)` blob). demo-a2a's `/session/deploy` dispatches
+   * to this variant when `initMethod=passkey`; the server itself never
+   * inspects the signature shape.
+   */
+  async buildDeployUserOpWithPasskey(opts: {
+    credentialIdDigest: Hex;
+    pubKeyX: bigint;
+    pubKeyY: bigint;
+    salt: bigint;
+    paymaster: Address;
+    verificationGasLimit?: bigint;
+    preVerificationGas?: bigint;
+    paymasterVerificationGasLimit?: bigint;
+  }): Promise<{ userOp: PackedUserOperation; userOpHash: Hex; sender: Address }> {
+    const sender = await this.getAddressForPasskey(
+      opts.credentialIdDigest,
+      opts.pubKeyX,
+      opts.pubKeyY,
+      opts.salt,
+    );
+
+    const factoryCalldata = encodeFunctionData({
+      abi: agentAccountFactoryAbi,
+      functionName: 'createAccountWithPasskey',
+      args: [opts.credentialIdDigest, opts.pubKeyX, opts.pubKeyY, opts.salt],
+    });
+    const initCode = (this.opts.factory + factoryCalldata.slice(2)) as Hex;
+
+    // Same gas profile as the EOA path — the factory call is ~the same
+    // cost (proxy deploy dominates; storage init differs by one slot).
+    const verificationGasLimit = opts.verificationGasLimit ?? 350_000n;
+    const callGasLimit = 0n;
+    const accountGasLimits = packGasLimits(verificationGasLimit, callGasLimit);
+    const preVerificationGas = opts.preVerificationGas ?? 60_000n;
+
+    const block = await this.publicClient.getBlock();
+    const baseFeePerGas = block.baseFeePerGas ?? 100_000_000n;
+    const maxPriorityFeePerGas = 100_000_000n;
+    const maxFeePerGas = baseFeePerGas + maxPriorityFeePerGas * 2n;
+    const gasFees = packGasLimits(maxPriorityFeePerGas, maxFeePerGas);
+
+    const pmVerifGas = opts.paymasterVerificationGasLimit ?? 50_000n;
+    const pmPostOpGas = 0n;
+    const paymasterAndData = (
+      opts.paymaster +
+      pmVerifGas.toString(16).padStart(32, '0') +
+      pmPostOpGas.toString(16).padStart(32, '0')
+    ) as Hex;
+
+    const userOp: PackedUserOperation = {
+      sender,
+      nonce: 0n,
+      initCode,
+      callData: '0x',
+      accountGasLimits,
+      preVerificationGas,
+      gasFees,
+      paymasterAndData,
+      signature: '0x',
+    };
+
+    const bundler = new BundlerClient({
+      rpcUrl: this.opts.rpcUrl,
+      entryPoint: this.opts.entryPoint,
+    });
+    const userOpHash = await bundler.getUserOpHash(userOp);
+
+    return { userOp, userOpHash, sender };
+  }
+
+  /**
+   * Counterfactual address for a passkey-owned account. Mirrors
+   * `getAddress` but for the passkey factory path.
+   */
+  async getAddressForPasskey(
+    credentialIdDigest: Hex,
+    x: bigint,
+    y: bigint,
+    salt: bigint,
+  ): Promise<Address> {
+    const factory = getContract({
+      address: this.opts.factory,
+      abi: agentAccountFactoryAbi,
+      client: this.publicClient,
+    });
+    return (await factory.read.getAddressForPasskey([
+      credentialIdDigest,
+      x,
+      y,
+      salt,
+    ])) as Address;
+  }
+
+  /**
    * Submit a (now-signed) deploy UserOp via EntryPoint.handleOps. The
    * `bundlerAccount` pays gas (will be reimbursed by the paymaster) and
    * broadcasts the tx. In production this is `createKmsViemAccount(kms)`

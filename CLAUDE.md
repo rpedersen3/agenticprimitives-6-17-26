@@ -9,6 +9,7 @@ This is a pnpm-workspace monorepo packaging seven standalone capabilities extrac
 - **TypeScript-first.** All packages TS, ESM, target Node ≥ 20.
 - **`tool-policy` and `types` stay transport-agnostic.** Importing MCP / A2A / LangChain / Vercel from those packages is a doctrine violation.
 - **No fork of smart-agent.** Pull patterns, not code. Cross-reference smart-agent at `/home/barb/smart-agent` while implementing; don't depend on its layout.
+- **Always check smart-agent first.** Before designing or implementing any non-trivial capability here, look at the corresponding code/spec in smart-agent (branch `003-intent-marketplace-proposal`, upstream `https://github.com/agentictrustlabs/smart-agent/tree/003-intent-marketplace-proposal`, local `/home/barb/smart-agent`). The reference has likely solved the same problem already — adapt its patterns to agenticprimitives' package boundaries rather than reinventing. New `specs/*` docs MUST include a "Reference: smart-agent patterns to port" section that names the source files we are mirroring. If we deliberately diverge from smart-agent, the spec must say why.
 
 ## Dependency direction (strict)
 
