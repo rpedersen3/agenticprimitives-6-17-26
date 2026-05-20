@@ -99,6 +99,11 @@ export function withDelegation<A extends Record<string, unknown>>(
       jtiStore: config.jtiStore,
       toolName: opts?.toolName,
       requireDeployed: config.requireDeployed,
+      // Thread the audit sink + correlation id down so delegation
+      // emits `delegation.verify.{accept,reject}` events through the
+      // same sink as `mcp-runtime.with-delegation.*`. Pass 3b.
+      auditSink: opts?.auditSink,
+      correlationId,
     });
     if ('error' in result) {
       // Internal log retains the reason; external surface stays opaque.

@@ -183,6 +183,9 @@ importers:
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../agent-account
+      '@agenticprimitives/audit':
+        specifier: workspace:*
+        version: link:../audit
       '@agenticprimitives/identity-auth':
         specifier: workspace:*
         version: link:../identity-auth

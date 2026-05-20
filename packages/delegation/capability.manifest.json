@@ -18,6 +18,7 @@
   ],
   "allowedImports": [
     "@agenticprimitives/types",
+    "@agenticprimitives/audit",
     "@agenticprimitives/identity-auth",
     "@agenticprimitives/agent-account",
     "@agenticprimitives/key-custody",

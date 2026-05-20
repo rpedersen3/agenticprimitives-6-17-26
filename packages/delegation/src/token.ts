@@ -23,6 +23,7 @@ import type {
 } from './types';
 import { hashDelegation } from './hash';
 import { evaluateCaveats } from './evaluator';
+import { buildEvent, type AuditSink } from '@agenticprimitives/audit';
 
 // ─── base64url + canonical JSON helpers ──────────────────────────────────
 
@@ -190,6 +191,19 @@ export interface VerifyOptsExt extends VerifyOpts {
    * `'open'` otherwise.
    */
   revocationFailMode?: 'closed' | 'open';
+  /**
+   * Audit sink (audit C3 pass 3b). When provided, every verify outcome
+   * emits a `delegation.verify.{accept,reject}` event. The principal
+   * goes in `actor`, the delegation hash in `subject`. The token JTI
+   * (claims.jti) is hashed before logging to avoid surfacing the
+   * one-shot identifier in the forensics trail beyond the minimum
+   * needed for correlation.
+   *
+   * Fail-soft: emit failures never break the verify flow.
+   */
+  auditSink?: AuditSink;
+  /** Correlation ID threaded into emitted events. */
+  correlationId?: string;
 }
 
 interface DecodedToken {
@@ -229,23 +243,65 @@ export async function verifyDelegationToken(
   token: string,
   opts: VerifyOptsExt,
 ): Promise<{ principal: Address; grants?: DataScopeGrant[] } | VerifyError> {
+  // Audit emit helper (audit C3 pass 3b). Fail-soft: an emit failure
+  // never breaks the verify flow.
+  const emit = async (
+    outcome: 'success' | 'denied',
+    reason: string | undefined,
+    principal: Address | undefined,
+    delegationDigest: Hex | undefined,
+  ) => {
+    if (!opts.auditSink) return;
+    try {
+      await opts.auditSink.write(
+        buildEvent({
+          action:
+            outcome === 'success'
+              ? 'delegation.verify.accept'
+              : 'delegation.verify.reject',
+          outcome,
+          correlationId: opts.correlationId,
+          actor: principal ? { type: 'user', id: principal } : { type: 'unknown' },
+          subject: delegationDigest
+            ? { type: 'delegation', id: delegationDigest }
+            : undefined,
+          audience: opts.audience,
+          chainId: opts.chainId,
+          digest: delegationDigest,
+          reason,
+          context: opts.toolName ? { tool: opts.toolName } : undefined,
+        }),
+      );
+    } catch {
+      /* fail-soft */
+    }
+  };
+  const rejectWith = async (
+    reason: string,
+    principal?: Address,
+    delegationDigest?: Hex,
+  ): Promise<VerifyError> => {
+    await emit('denied', reason, principal, delegationDigest);
+    return { error: reason };
+  };
+
   const decoded = decodeToken(token);
-  if (!decoded) return { error: 'malformed token' };
+  if (!decoded) return rejectWith('malformed token');
   const { claims, canonical, signature } = decoded;
 
-  if (claims.aud !== opts.audience) return { error: 'audience mismatch' };
+  if (claims.aud !== opts.audience) return rejectWith('audience mismatch');
   const now = Math.floor((opts.now ?? Date.now)() / 1000);
-  if (typeof claims.exp !== 'number' || claims.exp < now) return { error: 'token expired' };
+  if (typeof claims.exp !== 'number' || claims.exp < now) return rejectWith('token expired');
 
   // 1. recover session key
   let recovered: Address;
   try {
     recovered = recoverEoaFromEip191Sig(canonical, signature);
   } catch (e) {
-    return { error: `signature recovery failed: ${e instanceof Error ? e.message : e}` };
+    return rejectWith(`signature recovery failed: ${e instanceof Error ? e.message : e}`);
   }
   if (recovered.toLowerCase() !== claims.sessionKeyAddress.toLowerCase()) {
-    return { error: 'session-key signature mismatch' };
+    return rejectWith('session-key signature mismatch');
   }
 
   // 2. EIP-712 hash
@@ -253,12 +309,6 @@ export async function verifyDelegationToken(
 
   // 3. on-chain checks
   const requireDeployed = opts.requireDeployed ?? true;
-  // Audit H3 (fail-closed revocation in production):
-  // Default to 'closed' in production, 'open' elsewhere. The 'closed'
-  // path refuses to verify when the RPC isRevoked read fails — a
-  // revoked delegation cannot be silently accepted during RPC outages.
-  // Callers may explicitly opt into 'open' for demo/dev paths where
-  // RPC flakiness is expected.
   const revocationFailMode =
     opts.revocationFailMode ??
     (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production'
@@ -272,17 +322,17 @@ export async function verifyDelegationToken(
       functionName: 'isRevoked',
       args: [eip712Hash],
     })) as boolean;
-    if (revoked) return { error: 'delegation revoked' };
+    if (revoked) {
+      return rejectWith('delegation revoked', claims.delegation.delegator, eip712Hash);
+    }
   } catch (e) {
     if (revocationFailMode === 'closed') {
-      return {
-        error:
-          'revocation check unavailable; refusing to verify (set revocationFailMode=open only for explicit dev/demo paths)',
-      };
+      return rejectWith(
+        'revocation check unavailable; refusing to verify (set revocationFailMode=open only for explicit dev/demo paths)',
+        claims.delegation.delegator,
+        eip712Hash,
+      );
     }
-    /* RPC-flake tolerance ('open' mode): isRevoked starts false on-chain;
-       if the read fails we proceed. A revoked delegation will still fail
-       ERC-1271 below since the on-chain revocation flips the same state. */
     void e;
   }
 
@@ -291,9 +341,11 @@ export async function verifyDelegationToken(
     const isDeployed = !!(code && code !== '0x' && code.length > 2);
     if (!isDeployed) {
       if (requireDeployed) {
-        return {
-          error: `delegator smart account ${claims.delegation.delegator} is not deployed — cannot verify ERC-1271. Set verifyDelegationToken opt requireDeployed=false only for explicit counterfactual-demo use cases.`,
-        };
+        return rejectWith(
+          `delegator smart account ${claims.delegation.delegator} is not deployed — cannot verify ERC-1271. Set verifyDelegationToken opt requireDeployed=false only for explicit counterfactual-demo use cases.`,
+          claims.delegation.delegator,
+          eip712Hash,
+        );
       }
       // Tolerated: caller opted into the undeployed path explicitly.
     } else {
@@ -303,10 +355,16 @@ export async function verifyDelegationToken(
         functionName: 'isValidSignature',
         args: [eip712Hash, claims.delegation.signature],
       })) as Hex;
-      if (magic.toLowerCase() !== ERC1271_MAGIC) return { error: 'erc1271 validation failed' };
+      if (magic.toLowerCase() !== ERC1271_MAGIC) {
+        return rejectWith('erc1271 validation failed', claims.delegation.delegator, eip712Hash);
+      }
     }
   } catch (e) {
-    return { error: `erc1271 call reverted: ${e instanceof Error ? e.message : e}` };
+    return rejectWith(
+      `erc1271 call reverted: ${e instanceof Error ? e.message : e}`,
+      claims.delegation.delegator,
+      eip712Hash,
+    );
   }
 
   // 4. caveat evaluation
@@ -316,14 +374,19 @@ export async function verifyDelegationToken(
     opts.enforcerMap,
   );
   for (const v of verdicts) {
-    if (!v.allowed) return { error: `caveat denied (${v.reason})` };
+    if (!v.allowed) {
+      return rejectWith(`caveat denied (${v.reason})`, claims.delegation.delegator, eip712Hash);
+    }
   }
 
   // 5. JTI replay
   const limit = claims.usageLimit ?? 10;
   const usage = await opts.jtiStore.trackUsage(claims.jti, limit);
-  if (!usage.allowed) return { error: 'token usage limit exceeded' };
+  if (!usage.allowed) {
+    return rejectWith('token usage limit exceeded', claims.delegation.delegator, eip712Hash);
+  }
 
+  await emit('success', undefined, claims.delegation.delegator, eip712Hash);
   return { principal: claims.delegation.delegator };
 }
 
