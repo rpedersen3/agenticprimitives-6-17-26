@@ -54,8 +54,11 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     address private _delegationManager;
 
     /// @dev Owner set
-    mapping(address => bool) private _owners;
-    uint256 private _ownerCount;
+    /// @dev internal (not private) so test harnesses can subclass + seed
+    ///      owner state for the threshold-policy tests. Storage layout
+    ///      is unaffected by visibility.
+    mapping(address => bool) internal _owners;
+    uint256 internal _ownerCount;
 
     /// @dev Spec 007 Phase A — the factory that deployed this account.
     ///      `bundlerSigner()` and `sessionIssuer()` are read off this
@@ -1158,10 +1161,16 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         // Admin-proposal queue.
         uint256 nextProposalId;
         mapping(uint256 => AdminProposal) pending;
+        // Org-mode separation-of-duties tracking: per-proposal set of
+        // signers that participated in `proposeAdmin`. On
+        // `executeAdmin` in org mode the executing signer set must be
+        // disjoint from this set ("two-person rule" — anyone who
+        // proposed cannot also execute).
+        mapping(uint256 => mapping(address => bool)) proposerSigners;
         // Optional ApprovedHashRegistry for the v=1 admin-sig path.
         // 0 disables v=1 entirely (admin sigs must be ECDSA or
         // ERC-1271 only). Configurable via a T5 admin action
-        // (deferred to 6c.2-c).
+        // (deferred to a follow-up).
         address approvedHashRegistry;
     }
 
@@ -1184,6 +1193,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     event RecoveryThresholdChanged(uint8 oldValue, uint8 newValue);
     event OwnersRotated(uint256 newOwnerCount);
     event ApprovedHashRegistryChanged(address indexed oldAddr, address indexed newAddr);
+    event DelegationManagerChanged(address indexed oldDm, address indexed newDm);
 
     error InvalidAdminAction(uint8 action);
     error InvalidTier(uint8 tier);
@@ -1202,6 +1212,13 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     error EmptyOwnerSet();
     error AdminActionNotYetImplemented(uint8 action);
     error CannotDowngradeWithGuardians();
+    /// @notice T5 / T6 actions require a non-zero timelock to be configured
+    ///         on the account. Set via factory init or a SetTimelock admin
+    ///         flow (6c.2-d / follow-up).
+    error TimelockRequiredForTier(uint8 tier);
+    /// @notice In `org` mode, a signer who participated in `proposeAdmin`
+    ///         cannot also participate in `executeAdmin` (two-person rule).
+    error SeparationOfDutiesViolation(address signer);
 
     // ─── Public propose / execute / cancel ──────────────────────────
 
@@ -1228,11 +1245,20 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
         uint8 tier = _tierFor(action);
         uint8 reqThreshold = _thresholdValue(tier);
-        uint64 eta = uint64(block.timestamp + _timelockValue(tier));
+        uint32 timelock = _timelockValue(tier);
 
+        // T5 (Critical) and T6 (Recovery) MUST be timelocked per spec
+        // 207 § 5. Fail closed at propose time so a misconfigured
+        // account can't push through a trust-root change with no
+        // cancel window.
+        if ((tier == 5 || tier == 6) && timelock == 0) {
+            revert TimelockRequiredForTier(tier);
+        }
+
+        uint64 eta = uint64(block.timestamp + timelock);
         proposalId = ++$.nextProposalId;
         bytes32 payloadHash = _adminPayloadHash(ADMIN_VERB_PROPOSE, proposalId, action, args, eta);
-        _verifyOwnerQuorum(payloadHash, quorumSigs, reqThreshold);
+        address[] memory propSigners = _verifyOwnerQuorum(payloadHash, quorumSigs, reqThreshold);
 
         $.pending[proposalId] = AdminProposal({
             action: action,
@@ -1242,6 +1268,15 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
             executed: false,
             cancelled: false
         });
+
+        // Record proposer signers for the org-mode separation-of-duties
+        // check in executeAdmin. Recorded in non-org mode too so the
+        // storage shape is uniform; the check itself only fires when
+        // mode == 3.
+        for (uint256 i; i < propSigners.length; i++) {
+            $.proposerSigners[proposalId][propSigners[i]] = true;
+        }
+
         emit AdminProposed(proposalId, action, eta, msg.sender);
     }
 
@@ -1251,8 +1286,9 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      *         queued proposal's ETA has elapsed. Idempotency-guarded
      *         via the proposal's `executed` flag.
      *
-     *         Enterprise-mode separation-of-duties (signers in propose
-     *         ≠ signers in execute) is enforced in 6c.2-c.
+     *         In `org` mode, enforces separation of duties: any signer
+     *         that participated in `proposeAdmin` for this proposal is
+     *         disqualified from `executeAdmin` (two-person rule).
      */
     function executeAdmin(uint256 proposalId, bytes calldata quorumSigs) external {
         ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
@@ -1265,7 +1301,18 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         uint8 tier = _tierFor(p.action);
         uint8 reqThreshold = _thresholdValue(tier);
         bytes32 payloadHash = _adminPayloadHash(ADMIN_VERB_EXECUTE, proposalId, p.action, p.args, p.eta);
-        _verifyOwnerQuorum(payloadHash, quorumSigs, reqThreshold);
+        address[] memory execSigners = _verifyOwnerQuorum(payloadHash, quorumSigs, reqThreshold);
+
+        // Org-mode separation of duties. Spec § 5.1 "two-person rule"
+        // interpretation: zero-overlap. Any signer that participated
+        // in propose is disqualified from execute.
+        if ($.mode == 3) {
+            for (uint256 i; i < execSigners.length; i++) {
+                if ($.proposerSigners[proposalId][execSigners[i]]) {
+                    revert SeparationOfDutiesViolation(execSigners[i]);
+                }
+            }
+        }
 
         p.executed = true;
         emit AdminExecuted(proposalId);
@@ -1410,17 +1457,22 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      *      same 4-path logic that QuorumEnforcer applies (ECDSA, eth_sign,
      *      v=1 pre-approved, v=0 ERC-1271) governs admin authorization.
      *      Sorted-ascending enforcement is the anti-duplicate scheme.
+     *
+     *      Returns the recovered signer set so callers (proposeAdmin,
+     *      executeAdmin) can record proposer signers for the org-mode
+     *      separation-of-duties check.
      */
     function _verifyOwnerQuorum(
         bytes32 payloadHash,
         bytes calldata signatures,
         uint8 reqThreshold
-    ) internal view {
+    ) internal view returns (address[] memory signers) {
         if (signatures.length < uint256(reqThreshold) * 65) {
             revert AdminInsufficientQuorum(signatures.length / 65, reqThreshold);
         }
         bytes memory sigsMem = signatures;
         address approvedHashReg = _thresholdPolicyStorage().approvedHashRegistry;
+        signers = new address[](reqThreshold);
         address prev;
         for (uint256 i; i < reqThreshold; i++) {
             address signer = SignatureSlotRecovery.recoverFromSlot(
@@ -1429,6 +1481,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
             if (signer <= prev) revert AdminDuplicateOrUnsortedSigner(signer);
             prev = signer;
             if (!_owners[signer]) revert AdminUnauthorizedSigner(signer);
+            signers[i] = signer;
         }
     }
 
@@ -1465,15 +1518,23 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         } else if (action == AdminAction.SetRecoveryThreshold) {
             (uint8 newThreshold) = abi.decode(args, (uint8));
             _applySetRecoveryThreshold(newThreshold);
+        } else if (action == AdminAction.UpgradeImpl) {
+            (address newImpl) = abi.decode(args, (address));
+            _applyUpgradeImpl(newImpl);
+        } else if (action == AdminAction.ChangeDelegationManager) {
+            (address newDm) = abi.decode(args, (address));
+            _applyChangeDelegationManager(newDm);
         } else if (
-            action == AdminAction.UpgradeImpl ||
-            action == AdminAction.ChangeDelegationManager ||
             action == AdminAction.ChangePaymaster ||
             action == AdminAction.ChangeSessionIssuer
         ) {
-            // T5 actions wire to the existing upgrade timelock /
-            // setDelegationManager flows in 6c.2-c. Stub-revert until
-            // then so callers fail noisily instead of silently no-op'ing.
+            // Both refer to factory-level state today
+            // (IFactoryLike.bundlerSigner / sessionIssuer + per-deploy
+            // paymaster choice in userOps). There is no per-account
+            // override slot yet — adding one is a separate design
+            // decision (does the account override the factory, or do
+            // we route the admin flow into a Factory.proposeAdmin?).
+            // Stub-revert until that design lands.
             revert AdminActionNotYetImplemented(uint8(action));
         } else {
             revert InvalidAdminAction(uint8(action));
@@ -1599,6 +1660,44 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         uint8 oldThreshold = $.recoveryThreshold;
         $.recoveryThreshold = newThreshold;
         emit RecoveryThresholdChanged(oldThreshold, newThreshold);
+    }
+
+    // ─── Internal: action handlers (T5) ─────────────────────────────
+
+    /**
+     * @dev T5 UpgradeImpl. Wires into the UUPS upgrade machinery via the
+     *      account's `upgradeToAndCall` (the same path used by
+     *      `executePendingUpgrade`). The threshold-policy timelock is
+     *      what gates this — the existing `_upgradeTimelock` /
+     *      `_pendingUpgrade` flow is bypassed because the admin queue
+     *      already enforces the same wait via `executeAdmin`'s `eta`
+     *      check. Both flows coexist: single-mode accounts can keep
+     *      using `upgradeToWithAuthorization`; threshold/org accounts
+     *      use this admin path.
+     */
+    function _applyUpgradeImpl(address newImpl) internal {
+        if (newImpl == address(0)) revert ZeroAddress();
+        emit UpgradeAuthorized(newImpl);
+        // Self-call into UUPS's standard path so `_authorizeUpgrade`'s
+        // `onlySelf` gate is satisfied (the call originates from
+        // `executeAdmin`, which runs at `address(this)` after the
+        // quorum check).
+        this.upgradeToAndCall(newImpl, "");
+    }
+
+    /**
+     * @dev T5 ChangeDelegationManager. Directly updates the account's
+     *      `_delegationManager` slot. Coexists with the existing
+     *      `setDelegationManager` external function (which stays for
+     *      backwards-compat with `single` mode); threshold/org accounts
+     *      route through this admin path so the change is gated by
+     *      quorum + timelock.
+     */
+    function _applyChangeDelegationManager(address newDm) internal {
+        if (newDm == address(0)) revert ZeroAddress();
+        address oldDm = _delegationManager;
+        _delegationManager = newDm;
+        emit DelegationManagerChanged(oldDm, newDm);
     }
 
     // ─── Receive ETH ────────────────────────────────────────────────
