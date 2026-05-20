@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { loadOrCreateDemoUser, resetDemoUser, type DemoUser } from './test-user';
+import { demoUserSessionWallet } from './session-wallet';
 import { signInWithSiwe } from './siwe-flow';
 import {
   authorizeAgent as authorizeAgentFlow,
@@ -128,7 +129,7 @@ export function App() {
         return;
       }
       append('[1] EOA SIWE: building message + signing with EOA…');
-      const res = await signInWithSiwe(state.user, state.deployments.chainId);
+      const res = await signInWithSiwe(demoUserSessionWallet(state.user), state.deployments.chainId);
       if (!res.ok) {
         append(`[1] FAILED: ${res.error}${res.reason ? ` (${res.reason})` : ''}`);
         return;
@@ -196,7 +197,7 @@ export function App() {
       }
       res = await deploySmartAccountWithPasskey(state.passkey);
     } else {
-      res = await deploySmartAccount(state.user, state.user.address);
+      res = await deploySmartAccount(demoUserSessionWallet(state.user), state.user.address);
     }
 
     if (!res.ok) {
@@ -233,7 +234,7 @@ export function App() {
             }),
             cfg,
           )
-        : await authorizeAgentFlow(state.user, cfg);
+        : await authorizeAgentFlow(demoUserSessionWallet(state.user), cfg);
     if (!res.ok) {
       append(`[2] FAILED: ${res.error}${res.reason ? ` (${res.reason})` : ''}`);
       return;

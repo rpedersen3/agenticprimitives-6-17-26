@@ -12,7 +12,7 @@ import {
   type Delegation,
 } from '@agenticprimitives/delegation';
 import type { Address, Hex } from '@agenticprimitives/types';
-import type { DemoUser } from './test-user';
+import type { SessionWallet } from './session-wallet';
 import type { PasskeySigner } from './passkey-signer';
 import { csrfHeaders } from './csrf';
 
@@ -41,20 +41,22 @@ const DELEGATION_TTL_SECONDS = 86400; // 24h
 const ALLOWED_TOOLS = ['get_profile', 'update_profile'];
 
 export async function authorizeAgent(
-  user: DemoUser,
+  wallet: SessionWallet,
   config: AuthorizeFlowConfig,
 ): Promise<AuthorizeFlowOk | AuthorizeFlowError> {
-  // EOA path: the delegator is the user's EOA, smart account is derived.
+  // EOA path: the delegator is the wallet's address (whether test mnemonic
+  // or external connected wallet), smart account is derived.
   return authorizeWithSigner(
     {
-      address: user.address as Address,
-      signTypedData: async (args) =>
-        (await user.account.signTypedData({
-          domain: args.domain,
+      address: wallet.address,
+      signTypedData: (args) =>
+        wallet.signTypedData({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          domain: args.domain as any,
           types: args.types as Record<string, Array<{ name: string; type: string }>>,
           primaryType: args.primaryType,
           message: args.message,
-        })) as Hex,
+        }),
     },
     config,
   );

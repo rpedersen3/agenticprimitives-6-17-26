@@ -1,12 +1,12 @@
 // SIWE login flow for the demo web app. Composes:
 //   - @agenticprimitives/identity-auth/siwe.buildMessage
-//   - viem.signMessage from the user's EOA (mnemonic-derived in browser)
+//   - SessionWallet.signMessage (mnemonic test wallet or external connected wallet)
 //   - POST to /a2a/auth/siwe-verify
 // On success: smart account address is rendered.
 
 import { buildMessage } from '@agenticprimitives/identity-auth/siwe';
 import type { Address, Hex } from '@agenticprimitives/types';
-import type { DemoUser } from './test-user';
+import type { SessionWallet } from './session-wallet';
 import { csrfHeaders } from './csrf';
 
 export interface SiweLoginResponse {
@@ -30,10 +30,13 @@ function randomNonce(): string {
   return s;
 }
 
-export async function signInWithSiwe(user: DemoUser, chainId: number): Promise<SiweLoginResponse | SiweLoginError> {
+export async function signInWithSiwe(
+  wallet: SessionWallet,
+  chainId: number,
+): Promise<SiweLoginResponse | SiweLoginError> {
   const message = buildMessage({
     domain: window.location.hostname,
-    address: user.address as Address,
+    address: wallet.address,
     statement: 'Sign in to the agenticprimitives demo.',
     uri: window.location.origin,
     chainId,
@@ -43,7 +46,7 @@ export async function signInWithSiwe(user: DemoUser, chainId: number): Promise<S
 
   let signature: Hex;
   try {
-    signature = (await user.account.signMessage({ message })) as Hex;
+    signature = await wallet.signMessage({ message });
   } catch (e) {
     return { ok: false, error: 'sign failed', reason: e instanceof Error ? e.message : String(e) };
   }

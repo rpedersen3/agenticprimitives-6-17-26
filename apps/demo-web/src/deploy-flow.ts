@@ -16,7 +16,7 @@
 // in this deploy. The frontend falls back to counterfactual mode.
 
 import type { Address, Hex } from '@agenticprimitives/types';
-import type { DemoUser } from './test-user';
+import type { SessionWallet } from './session-wallet';
 import type { DemoPasskey } from './passkey-flow';
 import { signWithPasskey } from './passkey-flow';
 import { csrfHeaders } from './csrf';
@@ -55,18 +55,21 @@ export interface DeployFlowError {
 /**
  * Build → sign → submit (EOA path).
  *
- * Calls /session/deploy with the user's EOA as `owner`. The factory
- * embeds `createAccount(owner, salt)` in initCode. The user's EOA
- * signs the userOpHash with a raw 65-byte ECDSA signature, which
- * AgentAccount._validateSig routes through `_verifyEcdsa`.
+ * Calls /session/deploy with the wallet's address as `owner`. The factory
+ * embeds `createAccount(owner, salt)` in initCode. The wallet signs the
+ * userOpHash via its SessionWallet adapter:
+ *   - test wallet → raw 65-byte ECDSA (no EIP-191 prefix)
+ *   - injected / walletconnect → personal_sign EIP-191-wrapped signature
+ * Either format validates: AgentAccount._verifyEcdsa tries raw then
+ * EIP-191 recovery (apps/contracts/src/AgentAccount.sol around line 956).
  */
 export async function deploySmartAccount(
-  user: DemoUser,
+  wallet: SessionWallet,
   owner: Address,
 ): Promise<DeployResult | DeployFlowError> {
   return deployWithSigner({
     body: { owner },
-    signUserOpHash: async (hash) => (await user.account.sign({ hash })) as Hex,
+    signUserOpHash: async (hash) => wallet.signHash({ hash }),
   });
 }
 
