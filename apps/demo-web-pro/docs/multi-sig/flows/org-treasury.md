@@ -14,13 +14,15 @@ This walkthrough will cover:
 
 1. Deploying an `org`-mode account with 3 owners + 3 guardians.
 2. Threshold defaults (2-of-3 routine, 3-of-3 trust-root, 2-of-3
-   recovery via guardians).
+  recovery via guardians).
 3. Proposing a treasury withdraw → other admins approve → agent
-   executes.
+  executes.
 4. Separation-of-duties enforcement on T5 admin actions (the same
-   admin can't both propose and execute).
+  admin can't both propose and execute).
 5. The audit trail: every propose / approve / execute / cancel
-   visible by correlation ID.
+  visible by correlation ID.
 
 Code: `apps/demo-web-pro/src/flows/org-treasury/` (lands with 6c.5
-+ 6e).
+
+- 6e).
+

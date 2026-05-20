@@ -10,8 +10,15 @@
 export { declareTool } from './classification';
 export { exactCall, matchesExactCall } from './exact-call';
 export { evaluatePolicy } from './decision';
-export { clampTtlForRiskTier, requiredCaveatsForRiskTier } from './risk-tier';
+export {
+  clampTtlForRiskTier,
+  requiredCaveatsForRiskTier,
+  evaluateThresholdPolicy,
+  RISK_TIER_REQUIREMENTS,
+} from './risk-tier';
 export { lintClassification } from './lint';
+// ThresholdTier is an enum (value export, not type-only).
+export { ThresholdTier } from './types';
 
 export type {
   Address,
@@ -24,5 +31,6 @@ export type {
   CaveatContext,
   PolicyContext,
   PolicyDecision,
+  ThresholdPolicyDecision,
   LintResult,
 } from './types';

@@ -48,7 +48,11 @@
     "lintClassification",
     "LintResult",
     "Address",
-    "Hex"
+    "Hex",
+    "ThresholdTier",
+    "ThresholdPolicyDecision",
+    "evaluateThresholdPolicy",
+    "RISK_TIER_REQUIREMENTS"
   ],
   "forbiddenTerms": [
     { "term": "@modelcontextprotocol", "reason": "Protocol-agnostic. Importing MCP SDK violates ADR-0003.", "owningPackage": "@agenticprimitives/mcp-runtime" },
@@ -56,13 +60,13 @@
     { "term": "langchain", "reason": "Protocol-agnostic. ADR-0003." },
     { "term": "@langchain", "reason": "Protocol-agnostic. ADR-0003." },
     { "term": "@vercel/ai", "reason": "Protocol-agnostic. ADR-0003." },
-    { "term": "withDelegation", "reason": "MCP wrapper belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "withDelegation", "reason": "MCP wrapper belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime", "allowInPaths": ["src/types.ts", "src/risk-tier.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"] },
     { "term": "DelegationClient", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
     { "term": "SessionManager", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
     { "term": "A2AKeyProvider", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
     { "term": "envelope encryption", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
     { "term": "JTI", "reason": "Belongs in delegation/mcp-runtime.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "passkey", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth" },
+    { "term": "passkey", "reason": "Auth method; belongs in identity-auth. tool-policy may reference the term in cross-cutting-capability docs for spec 207 mappings (UV gate, multi-passkey recovery).", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["src/types.ts", "src/risk-tier.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"] },
     { "term": "JWT", "reason": "Session mechanism; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] },
     { "term": "OAuth", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth" }
   ],
