@@ -26,6 +26,12 @@ The agenticprimitives audit lives in two layers:
 | `@agenticprimitives/tool-policy` | medium | [packages/tool-policy/AUDIT.md](../../packages/tool-policy/AUDIT.md) | [specs/204-tool-policy.md](../../specs/204-tool-policy.md) |
 | `@agenticprimitives/mcp-runtime` | high | [packages/mcp-runtime/AUDIT.md](../../packages/mcp-runtime/AUDIT.md) | [specs/205-mcp-runtime.md](../../specs/205-mcp-runtime.md) |
 
+## Cross-cutting audits
+
+| Topic | Doc |
+| --- | --- |
+| Supply chain (M7) | [supply-chain.md](./supply-chain.md) — CodeQL SAST + `pnpm audit` + gitleaks + SBOM; CI workflow + local mirror |
+
 ## Template + process
 
 - [`_template.md`](./_template.md) — the canonical structure every package audit follows.

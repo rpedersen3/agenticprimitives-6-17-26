@@ -1,7 +1,7 @@
 # Product Readiness Architecture Audit
 
 **Status:** living document — refreshed at the end of each hardening pass
-**Last refreshed:** 2026-05-20 (Phase 4b + live deploy + RPC secret cleanup)
+**Last refreshed:** 2026-05-20 (hardening pass 3c + MAC/local-provider review)
 **Original draft:** 2026-05-19
 **Scope:** all `@agenticprimitives/*` packages, demo apps, contracts, deploy path, CI, architecture docs, live production deployment
 **Verdict:** strong pre-alpha architecture with a working vertical slice end-to-end on Base Sepolia; not product-ready until the P0/P1 controls below are closed.
@@ -41,6 +41,7 @@ cross-cutting concerns.
 | (new) | **PasskeySigner adapter (Phase 4b)** — viem-shaped signer that produces `0x01`-prefixed WebAuthn blobs. demo-web's `deploy-flow.ts` + `authorize-flow.ts` accept either an EOA viem account or a PasskeySigner — no branch elsewhere. | Demonstrates the signer-agnostic doctrine at the consumer layer; closes the passkey arc. |
 | (new) | **`/account/derive-address` server-side view-call relay** — browser no longer needs an RPC URL; demo-a2a does the factory view call. Keeps RPC API keys server-side. | Necessary corollary to moving `RPC_URL` to a secret. |
 | (new) | **15-spec Playwright e2e suite** including the full passkey flow (Step 0 → 1 → 1.5 → 2 → 3) using Chrome DevTools Protocol virtual authenticator. | Closes some of M4 (test pyramid). Full strategy from `specs/110-test-strategy.md` still incomplete; layers 5 (Anvil system tests beyond E2E), 6 (deployed smoke), and 7 (type locks + property tests) still missing. |
+| (C1 follow-up) | **Local MAC production posture clarified** — `LocalAesProvider` now refuses production only for session-data-key envelope encryption/decryption. `generateMac()` remains available in production as HMAC-SHA256 over a wrangler-secret-loaded value. `LocalSecp256k1Signer` still refuses production. | Corrects an overbroad guard: service MAC can be production-valid with a shared secret, while session key wrapping still requires managed KMS. Remaining hardening: managed HMAC key support/rotation policy (N13). |
 
 ---
 
@@ -48,13 +49,21 @@ cross-cutting concerns.
 
 | ID | Severity | Finding | Evidence | Why now |
 | --- | --- | --- | --- | --- |
-| **N1** | **P0** | **Leaked deployer key controls live production governance.** The deployer EOA `0x31ed17fb99e82E02085Ab4B3cbdaB05489098b44` has been disclosed multiple times in chat transcripts (and in earlier prior commits) — yet it is currently authorized as `governance`, `bundlerSigner`, and `sessionIssuer` on the live `AgentAccountFactory` (`0x81F3FF...`), and as `owner` + `governance` on the live `SmartAgentPaymaster` (`0xf181cB7...`). Anyone with the leaked private key can: rotate factory roles to a hostile address (no timelock in our factory), withdraw stake from the paymaster after the configured 1-day unstake delay, pause the paymaster, and submit malicious bundler txs from the live bundlerSigner role. | `cloudflare-urls.json` deployer field; chat history; `AgentAccountFactory.setBundlerSigner` is `onlyGovernance`, no timelock in our contract. | A real, exploitable consequence of how we ran the demo. Mitigation requires rotating roles to a clean key OR redeploying contracts with a clean deployer. |
-| **N2** | **P1** | **`/account/derive-address` has no input validation or rate limit.** `BigInt(body.pubKeyX)` throws on non-numeric strings; the endpoint is unauthenticated; no upper bound on `pubKeyX/Y`. A malformed request triggers a 500 (information leak) and an unbounded burst can drain RPC quota. | `apps/demo-a2a/src/index.ts` `/account/derive-address` handler. | New endpoint introduced today (Phase 4b cleanup). Needs a hardening pass. |
+| **N1** | **P0** | **Leaked deployer key controls live demo governance.** The deployer EOA `0x31ed17fb99e82E02085Ab4B3cbdaB05489098b44` has been disclosed multiple times in chat transcripts (and in earlier prior commits) — yet it is currently authorized as `governance`, `bundlerSigner`, and `sessionIssuer` on the live `AgentAccountFactory` (`0x81F3FF...`), and as `owner` + `governance` on the live `SmartAgentPaymaster` (`0xf181cB7...`). Anyone with the leaked private key can: rotate factory roles to a hostile address (no timelock in our factory), withdraw stake from the paymaster after the configured 1-day unstake delay, pause the paymaster, and submit malicious bundler txs from the live bundlerSigner role. | `cloudflare-urls.json` deployer field; chat history; `AgentAccountFactory.setBundlerSigner` is `onlyGovernance`, no timelock in our contract. | Accepted for internal demo only. Production requires rotating roles to a clean key OR redeploying contracts with a clean deployer. |
+| **N2** | **P1** | **`/account/derive-address` had no input validation or rate limit.** | `apps/demo-a2a/src/index.ts` `/account/derive-address` handler. | **CLOSED 2026-05-20.** Validation + simple per-IP rate limit landed. Broader A2A numeric parsing remains open as N11. |
 | **N3** | **P1** | **Paymaster has no balance monitoring or auto-refill.** Production already hit `AA31 paymaster deposit too low` in real users' faces — caught only by manual `cast send EntryPoint.depositTo(paymaster, ...)`. There is no alert, no scheduled top-up, no per-user rate cap, no UI hint to retry. | Live incident on 2026-05-20 (logged in this conversation); `apps/demo-a2a/src/index.ts` `/session/deploy/submit` returns 500 with raw revert. | Trivial to drain by a hostile actor given the accept-all paymaster (intersects C2). |
 | **N4** | **P2** | **Verification gas ceiling is wasteful on RIP-7212 chains.** Default `verificationGasLimit = 1_200_000n` for passkey deploys covers anvil's pure-Solidity P-256 fallback (~350k) but is ~4× the actual gas used on Base Sepolia (with RIP-7212 precompile). EntryPoint pre-funds against the ceiling, so paymaster deposit drains 4× faster than necessary. | `packages/agent-account/src/client.ts:374` (`buildDeployUserOpWithPasskey`). | Direct cost amplifier on N3. Easy fix: per-chain config. |
 | **N5** | **P2** | **No live canary / deployed smoke test.** Live deploy state is only verified by the user manually trying the demo. Silent failures (RPC quota burned, paymaster drained, GCP KMS quota exhausted, certificate expiry) only surface when a real user hits them. | Absence of post-deploy hook in `scripts/deploy-cloudflare.ts`. | Intersects M4 (test pyramid). Should run after every deploy + on a schedule. |
 | **N6** | **P2** | **Old orphaned contracts on Base Sepolia.** Previous deploy at `0x4879fCAe.../0x06fc483b65...` (factory / paymaster) is unused but still exists. The old paymaster has stake. Same `0x31ed` deployer controls both old and new — see N1. | `cloudflare-urls.json` (current) vs prior commit messages noting old addresses. | Funds recoverable via `withdrawStake` after the unstake delay. |
 | **N7** | **P3** | **No documented account recovery for passkey-only smart accounts.** If a user loses their only registered passkey, the account is bricked. The contract supports `addPasskey` / `removePasskey` (both `onlySelf`) and a single passkey-only account can be promoted to multi-sig via `addOwner`, but no UI flow exists. | `apps/contracts/src/AgentAccount.sol` `_passkeyStorage`; absence of recovery in `apps/demo-web`. | Will surface on first real-user passkey loss. |
+| **N8** | **P0** | **`tool-policy.evaluatePolicy()` still fails open for unknown or incomplete classification metadata.** `withDelegation()` now calls the policy engine when a classification is provided, but the pure policy engine returns `allow` for empty objects, unknown tags, missing risk tier, or missing auth/tool tags. | `packages/tool-policy/src/decision.ts`; `packages/mcp-runtime/src/with-delegation.ts` makes classification optional for back-compat. | H2 is closed at the runtime integration layer, but policy correctness still needs a fail-closed default. |
+| **N9** | **P1** | **`/session/package` stores delegations even when ERC-1271 verification fails.** The route calculates `isValidSignature()` and returns `erc1271Verified`, but persists the package regardless of false. | `apps/demo-a2a/src/index.ts` `/session/package`. | This can create misleading or invalid session state; production should reject failed signature verification. |
+| **N10** | **P1** | **Production preflight exists but is not yet strict enough.** The script checks several shapes, but does not fully prove production secrets are present, `A2A_KMS_BACKEND=gcp-kms` is enforced at runtime, the paymaster is non-dev/locked down, every production tool has classification + audit sink, or the skip flag is policy-controlled. | `scripts/check-production-deploy.ts`. | C4 moved from "missing" to "partial"; it is still a launch gate, not a completed control. |
+| **N11** | **P1** | **A2A BigInt parsing remains unsafe outside `/account/derive-address`.** `/session/deploy` and `/session/deploy/submit` still parse user-supplied strings with `BigInt(...)` directly. | `apps/demo-a2a/src/index.ts` deploy routes. | N2 is closed for one endpoint; the same validation pattern must cover all browser-facing numeric input. |
+| **N12** | **P1** | **Credentialed CORS still reflects the request origin.** `cors({ origin: (origin) => origin ?? '*', credentials: true })` is too broad for cookie-authenticated APIs. | `apps/demo-a2a/src/index.ts` CORS middleware. | CSRF is now wired, but CORS should still be exact-whitelist when credentials are enabled. |
+| **N13** | **P2** | **Managed production MAC key support is not yet implemented.** Shared-secret HMAC is acceptable for production service auth, but there is no GCP KMS HMAC backend, key rotation story, or key-id verification policy yet. | `key-custody` local MAC implementation; demo apps use `A2A_MAC_SECRET`. | Not a blocker for internal demo, but needed before scale and multi-service key rotation. |
+| **N14** | **P2** | **Passkey ceremonies use user verification as preferred rather than required.** | `identity-auth` passkey flow and demo-web passkey signer path. | Decide whether production requires UV or document the accepted risk. |
+| **N15** | **P2** | **Contracts lack a dedicated audit dossier.** | `apps/contracts` has tests and architecture docs, but no `AUDIT.md` covering invariants, upgrade/governance assumptions, paymaster economics, and `UniversalSignatureValidator`. | Needed before third-party review. |
 
 ---
 
@@ -64,13 +73,13 @@ These are the items the next pass should close. Selected by impact × ease — b
 
 | # | ID | Action | Effort | Owner |
 | --- | --- | --- | --- | --- |
-| **1** | **C4** | **Production preflight script** — `scripts/check-production-deploy.ts` that fails fast on demo flags, dev private keys, `/_dev/*` routes still bundled, accept-all paymaster mode, missing GCP KMS keys, no `UNIVERSAL_SIGNATURE_VALIDATOR`, `requireDeployed=false` in delegation verify config. Run from `pnpm deploy:cloudflare`. | 1-2 h | deploy scripts + apps |
-| **2** | **M3** | **Drop `/_dev/seed` from production demo-mcp** — guard by `NODE_ENV !== 'production'` OR remove entirely from the prod bundle. Test that production deploy fails if the route is reachable. | 30 min | apps/demo-mcp |
-| **3** | **H1** | **CSRF middleware on demo-a2a mutating routes.** `identity-auth/csrf` helpers already exist; wire as Hono middleware that requires `X-CSRF-Token` (paired with a `csrf-token` cookie) on every POST/PUT/DELETE. Pages frontend reads cookie, sends header. | 1-2 h | apps/demo-a2a + demo-web |
-| **4** | **H3** | **Fail-closed revocation in production mode.** Replace the silent `catch` in `delegation/verify.ts:250` with `NODE_ENV === 'production'` → fail; dev/test → tolerate. | 30 min | delegation |
-| **5** | **N2** | **Input validation on `/account/derive-address`.** Validate hex format on `credentialIdDigest`, bounds-check `pubKeyX`/`pubKeyY` as uint256-range decimal strings, length-check fields, return 400 (not 500) on malformed. Add a simple per-IP rate limit (Worker `caches.default` or DO-backed). | 1 h | apps/demo-a2a |
+| **1** | **N8** | **Make `tool-policy.evaluatePolicy()` fail closed.** Deny empty classification, unknown `@sa-tool`, unknown `@sa-auth`, missing/unknown risk tier, and missing delegation for delegation-verified tools. Add negative unit tests. | 1 h | tool-policy |
+| **2** | **N9** | **Reject invalid delegation packages.** `/session/package` must fail when ERC-1271 validation returns false or reverts; do not persist the package. | 30 min | apps/demo-a2a |
+| **3** | **N10/C4** | **Tighten production preflight.** Require GCP signing + envelope keys for production session encryption/signing, `A2A_MAC_SECRET` or managed HMAC config, exact CORS allowlist, non-dev paymaster mode, audit sink wiring, tool classification, and skip-flag approval policy. | 2-3 h | deploy scripts + apps |
+| **4** | **N11** | **Apply input validation to all A2A deploy routes.** Reuse the `/account/derive-address` validators for `/session/deploy` and `/session/deploy/submit`; return 400 instead of throwing. | 1 h | apps/demo-a2a |
+| **5** | **N12** | **Lock CORS to `ALLOWED_ORIGINS` for credentialed requests.** No reflect-origin fallback in production; localhost only in development. | 30 min | apps/demo-a2a |
 
-The next pass after these should pick up **N1 (key rotation)**, **C1 (HMAC service envelope)**, **C3 (audit trail)**, **H2 (tool-policy enforcement)**, and **C2 (paymaster lockdown)**.
+The next pass after these should pick up **N1 (production key rotation)**, **C2 (paymaster lockdown)**, **C3 (identity-auth/key-custody/mint/revoke audit events)**, **H5 (cross-delegation)**, and **N13 (managed MAC key/rotation)**.
 
 ---
 
@@ -81,11 +90,11 @@ The core decomposition is sound. The seven-package split follows the repo doctri
 The implementation is now beyond a stub scaffold: the demo path exercises SIWE, passkey-only smart accounts, counterfactual signatures via ERC-6492, deterministic addressing, paymaster-sponsored deployment, session encryption, delegation packaging, delegation-token minting, MCP verification, D1-backed JTI tracking, and Cloudflare deployment — **all proven end-to-end on Base Sepolia with passkey ownership** as of 2026-05-20. GCP KMS support is materially useful: `agent-master` signs secp256k1 digests through HSM, while `agent-envelope` wraps session data keys through symmetric encrypt/decrypt.
 
 It is not product-ready yet. The highest risks are:
-- **N1**: leaked deployer key still controls production governance.
-- **C1/C2/C3/C4**: service auth, paymaster lockdown, audit, and production preflight remain open.
-- **H1/H2/H3**: CSRF, policy enforcement, fail-closed revocation are not yet wired.
+- **N1/C2**: production governance and paymaster sponsorship are not ready for external exposure.
+- **C3/C4/N10**: audit coverage and production preflight exist, but are not complete enough to be launch gates.
+- **N8/N9/N11/N12**: policy fail-closed behavior, delegation packaging, deploy-route validation, and credentialed CORS need a focused hardening pass.
 
-Board-style launch decision: **Internal demo only.** The repository can support controlled demos and architecture review, but it should not be used for external pilots until the top-5 hardening pass lands AND N1 + C1 + C2 + C3 are closed.
+Board-style launch decision: **Internal demo only.** The repository can support controlled demos and architecture review, but it should not be used for external pilots until the top-5 hardening pass lands AND production key rotation, paymaster lockdown, and full audit coverage are closed.
 
 Severity language used in this audit:
 
@@ -160,14 +169,14 @@ Primary trust boundaries:
 
 | Boundary | Current control | Product-readiness concern |
 | --- | --- | --- |
-| Browser to A2A | SIWE + JWT cookie + CORS reflect-origin | **H1**: no CSRF on mutating routes. |
+| Browser to A2A | SIWE + JWT cookie + CSRF double-submit token | **N12**: credentialed CORS still reflects origin. |
 | A2A SIWE verification | Universal validator on-chain (ECDSA + 1271 + 6492) | Strong direction; depends on validator being audited. |
 | A2A session storage | Durable Object + envelope-encrypted session package | Production requires GCP envelope key; **C3**: no append-only audit. |
 | A2A to KMS | GCP service account with key-scoped IAM | Demo reuses one SA; split for production. |
-| A2A to MCP | Delegation token over service binding | **C1**: no load-bearing HMAC at service boundary. |
-| MCP to chain | ERC-1271 + revocation + caveat checks | **H3**: revocation read tolerates RPC failure. |
+| A2A to MCP | Delegation token + HMAC service envelope + nonce/JTI replay tracking | **N13**: managed MAC key + rotation story still missing. |
+| MCP to chain | ERC-1271 + revocation + caveat checks | H3 closed for production; keep RPC outage tests in CI. |
 | UserOp sponsorship | EntryPoint + accept-all paymaster + KMS relayer | **C2/N3**: paymaster vulnerable to drainage; no monitoring. |
-| Governance | Deployer EOA (0x31ed...) | **N1**: deployer key leaked in transcripts. |
+| Governance | Demo deployer EOA (0x31ed...) | **N1**: accepted for internal demo only; production needs clean governance. |
 | Package boundaries | Manifest checks + forbidden-term checks + import checks | Good baseline; not a substitute for behavioral tests. |
 
 ---
@@ -179,7 +188,7 @@ Primary trust boundaries:
 - **+** `verifyUserSignature` / `verifyUserSignatureView` / `verifyOnchain` (siwe) now ship, calling the universal validator.
 - **+** Passkey methods (`buildWebAuthnAssertion`, `parseAttestationObject`, etc.) fully implemented.
 - **-** Google method still a stub (H4 partial).
-- **-** CSRF helpers still not enforced anywhere (H1).
+- **+** CSRF helpers are now enforced in demo-a2a mutating routes.
 
 ### `@agenticprimitives/agent-account`
 
@@ -189,19 +198,27 @@ Primary trust boundaries:
 
 ### `@agenticprimitives/delegation`
 
-No deltas. H3 still open (verify.ts:250 silent revocation catch).
+- **+** H3 closed: revocation read now defaults to fail-closed when `NODE_ENV=production`, with explicit `revocationFailMode='open'` available for dev/demo.
+- **+** C3 partially closed: `verifyDelegationToken()` can emit `delegation.verify.{accept,reject}` through an `AuditSink`.
+- **-** Mint/revoke audit events still missing.
 
 ### `@agenticprimitives/key-custody`
 
-No deltas. M1, M2, M6 still open.
+- **+** `LocalAesProvider` production guard narrowed to session-data-key encryption/decryption. `generateMac()` now works in production as shared-secret HMAC for service auth.
+- **-** M1, M2 still open.
+- **-** N13 — managed HMAC key / rotation policy still missing.
 
 ### `@agenticprimitives/mcp-runtime`
 
-No deltas. C1, H2 still open.
+- **+** C1 closed at the runtime level: `generateServiceMac()` / `verifyServiceMac()` bind audience, service, route, nonce, timestamp, and body digest.
+- **+** H2 closed at integration level: `withDelegation()` accepts classification and denies policy `deny` / `requires-consent`.
+- **+** C3 partially closed: `withDelegation()` and service-MAC verification emit accept/reject audit events when an `AuditSink` is provided.
+- **-** `classification` and `auditSink` are still optional for back-compat; production preflight should forbid omission.
 
 ### `@agenticprimitives/tool-policy`
 
-No deltas. H2 still open.
+- **+** Runtime integration exists through `mcp-runtime`.
+- **-** N8 — pure policy engine still returns allow for unknown / incomplete classification metadata.
 
 ---
 
@@ -221,14 +238,18 @@ No deltas. H2 still open.
 - **+** `addressIsSmartAccount: true` siwe-verify flag for passkey path.
 - **+** `/session/deploy` `initMethod` enum (eoa / passkey).
 - **+** `/account/derive-address` server-side view-call relay.
+- **+** CSRF middleware on mutating routes.
+- **+** `/account/derive-address` validation + simple per-IP rate limit.
 - **+** `RPC_URL` now a wrangler secret.
-- **-** **N2** — `/account/derive-address` lacks input validation + rate limit.
-- **-** All other open items from 2026-05-19 still open.
+- **-** **N9** — `/session/package` persists even when ERC-1271 verification fails.
+- **-** **N11** — deploy routes still parse untrusted BigInt values directly.
+- **-** **N12** — credentialed CORS still reflects origin.
 
 ### `apps/demo-mcp`
 
-- **-** **M3** — `/_dev/seed` still in the production bundle.
-- All other open items still open.
+- **+** M3 closed: `/_dev/seed` is guarded for production.
+- **+** Service-MAC middleware verifies A2A requests before delegation parsing and emits audit events.
+- **+** D1 audit sink (`audit_events`) wired via `composeSinks(console, d1)`.
 
 ### `apps/contracts`
 
@@ -243,7 +264,8 @@ No deltas. H2 still open.
 
 - **+** Validator address propagated through `gen-dev-vars.ts` + `deploy-cloudflare.ts`.
 - **+** Playwright passkey e2e (`05-passkey-login.spec.ts`) with virtual authenticator.
-- **-** **C4** — no production preflight gate.
+- **+** C4 partially closed: `scripts/check-production-deploy.ts` exists and runs production-shape checks.
+- **-** **N10** — preflight is not yet strict enough for production.
 - **-** **N5** — no post-deploy smoke / scheduled canary.
 
 ---
@@ -252,22 +274,27 @@ No deltas. H2 still open.
 
 | ID | Finding | Impact | Owner | Remediation |
 | --- | --- | --- | --- | --- |
-| ~~**N1**~~ | ~~Leaked deployer key controls live governance.~~ | **Downgraded 2026-05-20 to "accepted demo risk".** The deployer key is documented test-only; production will rotate to a clean key via the same governance setters. The leaked-in-transcript exposure does not affect any production deploy because no production deploy exists yet. | n/a (demo accepted) | When real production keys are introduced: generate a clean deployer, call `setBundlerSigner` / `setSessionIssuer` (factory) + `transferOwnership` (paymaster) via the leaked key one final time, then burn it. Documented runbook in `specs/120-deploy.md`. |
-| ~~**C1**~~ | ~~Service-to-service authentication is not load-bearing.~~ | **CLOSED 2026-05-20.** `mcp-runtime.{generateServiceMac,verifyServiceMac}` shipped + wired into demo-a2a/demo-mcp. MAC binds audience + service + route + nonce + timestamp + body digest. Nonce replay tracked via JTI store. 18 unit tests + e2e proof. Production swaps to GCP HMAC key via the same factory. | — | Done. |
+| **N1** | Leaked demo deployer key controls live demo governance. | **Accepted internal-demo risk only.** This blocks any external or production use of the current deployment. | contracts + ops | For production: generate a clean deployer, rotate `bundlerSigner` / `sessionIssuer` (factory) + paymaster ownership/governance, or redeploy with clean governance. Then burn the leaked key and document the runbook. |
+| ~~**C1**~~ | ~~Service-to-service authentication is not load-bearing.~~ | **CLOSED 2026-05-20.** `mcp-runtime.{generateServiceMac,verifyServiceMac}` shipped + wired into demo-a2a/demo-mcp. MAC binds audience + service + route + nonce + timestamp + body digest. Nonce replay tracked via JTI store. 18 unit tests + e2e proof. Current production-acceptable path is shared-secret HMAC via wrangler secret; managed HMAC rotation remains N13. | — | Done. |
 | **C2** | Paymaster is not production-safe by default. | Accept-all paymaster can be drained when exposed. | apps/contracts | Require `_dev=false`, sender allowlist or verifying-paymaster signatures, deposit monitoring, tests before public deployment. |
-| **C3** | Full product audit/forensics trail is missing. | Security incidents cannot be reconstructed reliably. **PARTIALLY CLOSED 2026-05-20** — Pass 3a: `@agenticprimitives/audit` package shipped (schema + sink interface + console/memory sinks + composeSinks), `mcp-runtime.withDelegation` + `verifyServiceMac` emit accept/reject events, demo-mcp wires console sink. Remaining: emit from `delegation`, `key-custody`, `identity-auth`; ship durable D1 sink. | cross-cutting | Follow-up passes for delegation/key-custody/identity-auth emission + D1 sink. |
-| **C4** | Production deploys do not yet have a single hard-fail demo-shortcut gate. | Demo flags / seed routes / accept-all paymaster can leak into external environments. | deploy scripts, apps, contracts | **Top priority #1.** Add production preflight that rejects demo-mode settings. |
+| **C3** | Full product audit/forensics trail is incomplete. | Security incidents cannot be reconstructed end-to-end yet. **PARTIALLY CLOSED 2026-05-20** — `@agenticprimitives/audit` package, mcp-runtime/service-MAC audit events, delegation verify events, and D1 sink now exist. Remaining: identity-auth, key-custody, mint/revoke, deployment/paymaster events, and PII guardrail sink. | cross-cutting | Continue audit emission coverage and make production preflight require durable sink wiring. |
+| **C4** | Production deploy hard-fail gate is partial, not complete. | Demo shortcuts or missing production secrets can still slip through because checks are shape-based and incomplete. | deploy scripts, apps, contracts | Close N10: stricter checks for KMS, MAC secret/key, non-dev paymaster, exact CORS, audit sink, tool classification, and skip-flag policy. |
+| **N8** | `tool-policy.evaluatePolicy()` fails open for unknown/incomplete classification. | An unclassified or malformed tool can be allowed by default. | tool-policy | **Top priority #1.** Deny missing/unknown classification fields and add negative tests. |
 
 ## Open Findings — High
 
 | ID | Finding | Impact | Owner | Remediation |
 | --- | --- | --- | --- | --- |
-| **H1** | CSRF is not enforced on cookie-authenticated A2A mutations. | Browser-origin attacks if CORS or same-site assumptions fail. | identity-auth, apps/demo-a2a | **Top priority #3.** Require CSRF token issuance + verification middleware. |
+| ~~**H1**~~ | ~~CSRF is not enforced on cookie-authenticated A2A mutations.~~ | **CLOSED 2026-05-20.** demo-a2a now uses a double-submit CSRF token for mutating routes. | — | Keep tests and ensure production preflight rejects disabled CSRF. |
 | ~~**H2**~~ | ~~Policy classification is not enforced in MCP runtime.~~ | **CLOSED 2026-05-20.** `withDelegation` now accepts `opts.classification` and runs `evaluatePolicy()` after delegation verify. Fail-closed on `deny` + `requires-consent`. demo-mcp wires `GET_PROFILE_CLASSIFICATION`. | — | Done. |
-| **H3** | Revocation check tolerates RPC failure. | Revoked delegation may be accepted during RPC outage. | delegation, mcp-runtime | **Top priority #4.** Make revocation read fail closed in production mode. |
-| **N2** | `/account/derive-address` has no input validation or rate limit. | DoS surface via malformed bigints; 500-leaks structure. | apps/demo-a2a | **Top priority #5.** Validate inputs + per-IP rate limit. |
+| ~~**H3**~~ | ~~Revocation check tolerates RPC failure.~~ | **CLOSED 2026-05-20.** `revocationFailMode` defaults closed in production. | — | Keep explicit dev/demo opt-out only. |
+| ~~**N2**~~ | ~~/account/derive-address has no input validation or rate limit.~~ | **CLOSED 2026-05-20** for this endpoint. | — | Broader A2A BigInt validation remains open as N11. |
 | **N3** | Paymaster has no balance monitoring or auto-refill. | Production drains silently to user-facing AA31. | ops + apps/demo-a2a | Add balance check endpoint, scheduled alert (Cloudflare cron), document `cast send depositTo` runbook. |
 | **H5** | Cross-delegation is not implemented. | Steward/data-owner and cross-agent flows cannot be supported. | delegation, mcp-runtime | Implement delegate-binding and data-scope verification with negative tests. |
+| **N9** | `/session/package` stores delegations even when ERC-1271 verification fails. | Invalid sessions can be persisted and later confuse authorization state. | apps/demo-a2a | **Top priority #2.** Reject on false/reverted ERC-1271 result. |
+| **N10** | Production preflight is incomplete. | Deploy can pass while still missing launch-critical guarantees. | deploy scripts + apps | **Top priority #3.** Expand preflight checks and define skip approval policy. |
+| **N11** | Other A2A deploy routes still parse untrusted BigInts directly. | Malformed inputs can produce 500s and possible DoS. | apps/demo-a2a | **Top priority #4.** Reuse strict uint256/hex/address validation across deploy routes. |
+| **N12** | Credentialed CORS reflects origin. | Cookie-authenticated API is exposed more broadly than intended. | apps/demo-a2a | **Top priority #5.** Exact whitelist via `ALLOWED_ORIGINS`; localhost only in dev. |
 
 ## Open Findings — Medium
 
@@ -276,15 +303,18 @@ No deltas. H2 still open.
 | **H4** | Google auth surface is incomplete. | Public API implies Google support; method throws. | identity-auth | Mark experimental in docs OR implement. (Passkey portion of original H4 is now closed.) |
 | **M1** | AWS KMS backend is advertised but not implemented. | Consumers selecting AWS get runtime errors. | key-custody | Hide AWS from stable docs OR implement provider + signer + tests. |
 | **M2** | Per-tool executor keys are not isolated. | Tool compromise has master-key blast radius. | key-custody | Implement per-tool KMS key selection + IAM separation. |
-| **M3** | Dev-only profile seeder exposed in MCP app. | Production deploy could allow unauthenticated data writes. | apps/demo-mcp | **Top priority #2.** Gate behind dev env OR remove from production bundle. |
+| ~~**M3**~~ | ~~Dev-only profile seeder exposed in MCP app.~~ | **CLOSED 2026-05-20.** Route is production-gated and preflight checks for unguarded `/_dev/*` routes. | — | Keep regression check. |
 | **M4** | Test pyramid is incomplete in CI. | Integration regressions across packages, deployed contracts, browser flows may escape. | repo CI | Add cross-package integration, Anvil system tests, E2E, smoke, property tests, type locks. |
-| **M5** | Local fallback and dev secret names remain in production-shaped app code. | Misconfiguration can route production through dev paths. | apps/demo-a2a, key-custody, deploy scripts | Make production deploy require GCP backend + no local-key secret. (C4 partially overlaps.) |
-| **M6** | Documentation drift exists. | Reviewers may trust stale comments. | key-custody | Fix stale `providers/gcp.ts` comments + add doc drift check. |
-| **M7** | Supply-chain + static-analysis gates are minimal. | Vulnerable deps, secret leaks, SAST findings may escape. | repo CI | Add dependency audit, secret scanning, CodeQL/SAST, branch protection. |
+| **M5** | Local fallback and dev secret names remain in production-shaped app code. | Misconfiguration can route production through dev paths. | apps/demo-a2a, key-custody, deploy scripts | Production deploy must require GCP for session encryption/signing. Local MAC via `A2A_MAC_SECRET` is acceptable, but should be explicitly configured and rotated. |
+| **M6** | Documentation drift exists. | Reviewers may trust stale comments. | key-custody | Refresh package docs after the LocalAesProvider MAC guard change + add doc drift check. |
+| ~~**M7**~~ | ~~Supply-chain + static-analysis gates are minimal.~~ | **CLOSED 2026-05-20** (Phase 5a). `.github/workflows/security.yml`: CodeQL (security-extended) SAST + `pnpm audit --audit-level=high` + gitleaks + CycloneDX SBOM artifact. `pnpm check:supply-chain` mirrors locally. Dependabot weekly + security-update-immediate. Runbook + branch-protection setup in `docs/audits/supply-chain.md`. | — | Done. |
 | **M8** | Reliability posture is not yet specified. | RPC outages, KMS errors, D1 failures may produce inconsistent auth. | apps, deploy docs | Define retry policy, timeout budgets, fail-closed paths, alerting, runbooks. |
 | **N4** | Verification gas ceiling wasteful on RIP-7212 chains. | Paymaster deposit drains 4× faster than necessary. | agent-account, deploy config | Per-chain `verificationGasLimit` config (e.g. 400k on Base, 1.2M on anvil). |
 | **N5** | No live canary / deployed smoke test. | Silent breakages only surface on real-user request. | repo CI + deploy scripts | Add post-deploy smoke + scheduled canary. |
 | **N6** | Old orphaned contracts on Base Sepolia. | Funds locked in old paymaster's stake; same leaked key (N1) controls them. | ops | Withdraw stake from old paymaster after unstake delay; document deprecation. |
+| **N13** | Managed production MAC key support is missing. | Shared secret works, but rotation/IAM/key-id story is immature. | key-custody + apps | Add GCP KMS HMAC backend or document shared-secret rotation policy as the production v0 posture. |
+| **N14** | Passkey user verification is not required. | UV-less credentials may be accepted depending on platform behavior. | identity-auth + demo-web | Decide `required` vs `preferred`; encode in spec and tests. |
+| **N15** | Contracts lack dedicated audit dossier. | Third-party reviewer lacks one place for invariants and threat model. | apps/contracts | Add `apps/contracts/AUDIT.md` covering factory, account, paymaster, enforcers, delegation manager, validator. |
 
 ## Open Findings — Low
 
@@ -302,19 +332,26 @@ No deltas. H2 still open.
 Must fix before production:
 
 - [ ] **N1**: Rotate / replace the leaked deployer key controlling factory governance + paymaster ownership.
-- [ ] **C1**: Enforce HMAC service envelopes for A2A-to-MCP.
 - [ ] **C2**: Run paymaster in non-dev mode or replace with verifying paymaster.
-- [ ] **C3**: Implement append-only audit events for KMS, delegation, MCP, and tool execution.
-- [ ] **C4**: Production preflight that fails on demo mode, dev keys, seed routes, accept-all paymaster, etc.
-- [ ] **H1**: Enforce CSRF on browser-cookie mutating routes.
-- [ ] **H2**: Wire `tool-policy.evaluatePolicy()` into `withDelegation()`.
-- [ ] **H3**: Make revocation, ERC-1271, caveat, JTI, and policy checks fail closed in production.
-- [ ] **N2**: Input validation + rate limit on `/account/derive-address` (and other unauthenticated POST endpoints).
-- [ ] **M3**: Remove / hard-gate `/_dev/*` routes.
+- [ ] **C3**: Finish append-only audit events for identity-auth, key-custody, delegation mint/revoke, deploy/paymaster actions.
+- [ ] **C4/N10**: Production preflight that fails on demo mode, dev keys, missing KMS/MAC/audit/classification config, seed routes, accept-all paymaster, and unsafe CORS.
+- [ ] **N8**: Make `tool-policy.evaluatePolicy()` fail closed for missing/unknown classification.
+- [ ] **N9**: Reject `/session/package` when ERC-1271 verification fails.
+- [ ] **N11**: Input validation + rate limits on all browser-facing A2A deploy/package routes.
+- [ ] **N12**: Exact CORS allowlist for credentialed A2A requests.
 - [ ] **M4**: Add system + E2E + smoke CI gates for the full deployed flow.
-- [ ] **M5**: Production deploy hard-fails on local secret presence.
+- [ ] **M5**: Production deploy hard-fails on local session encryption/signing backends.
 - [ ] **M7**: Supply-chain checks (dependency audit, secret scanning, SAST).
 - [ ] Third-party smart-contract audit.
+
+Closed in current hardening passes:
+
+- [x] **C1**: HMAC service envelopes for A2A-to-MCP.
+- [x] **H1**: CSRF on browser-cookie mutating routes.
+- [x] **H2**: `tool-policy.evaluatePolicy()` wired into `withDelegation()`.
+- [x] **H3**: Production revocation check fail-closed.
+- [x] **N2**: `/account/derive-address` input validation + rate limit.
+- [x] **M3**: `/_dev/*` production route guard.
 
 Should fix before beta:
 
@@ -328,6 +365,9 @@ Should fix before beta:
 - [ ] **N4**: Per-chain `verificationGasLimit` config.
 - [ ] **N5**: Live canary smoke test on schedule.
 - [ ] **N7**: Documented passkey recovery / multi-passkey enrollment flow.
+- [ ] **N13**: Managed MAC key or documented shared-secret rotation policy.
+- [ ] **N14**: Passkey UV decision (`required` vs `preferred`) encoded in spec/tests.
+- [ ] **N15**: `apps/contracts/AUDIT.md`.
 - [ ] Property tests for caveat evaluation, AAD binding, policy decisions.
 - [ ] Public API type tests.
 - [ ] Rate limits + abuse controls for browser-facing and MCP-facing routes.
@@ -386,7 +426,10 @@ Reviewer checklist:
 | --- | --- | --- |
 | 2026-05-19 | Initial audit draft | 4 P0, 5 P1, 8 P2, 3 P3 findings catalogued. |
 | 2026-05-20 | Phase 4b refresh | Closed: H4 partial (passkey done), passkey arc, RPC-in-config leak. Added: N1 (leaked deployer key), N2 (`/account/derive-address` validation), N3 (paymaster monitoring), N4 (gas ceiling), N5 (live canary), N6 (orphaned contracts), N7 (passkey recovery). |
-| 2026-05-20 | Hardening pass 1 | Closed: **C4** (production preflight), **M3** (`/_dev/seed` gating), **H1** (CSRF middleware on demo-a2a), **H3** (fail-closed revocation in production), **N2** (input validation + rate limit on `/account/derive-address`). |
-| 2026-05-20 | Hardening pass 2 | Closed: **C1** (HMAC service envelope A2A→MCP, load-bearing with nonce replay-tracking + clock-skew bound), **H2** (`tool-policy.evaluatePolicy()` wired into `withDelegation` with fail-closed deny/requires-consent handling). N1 downgraded to "accepted demo risk" — deployer key is documented test-only; production will rotate to a clean key via the same governance setters. |
+| 2026-05-20 | Hardening pass 1 | Partially closed: **C4** (production preflight exists, stricter launch checks remain N10). Closed: **M3** (`/_dev/seed` gating), **H1** (CSRF middleware on demo-a2a), **H3** (fail-closed revocation in production), **N2** (input validation + rate limit on `/account/derive-address`). |
+| 2026-05-20 | Hardening pass 2 | Closed: **C1** (HMAC service envelope A2A→MCP, load-bearing with nonce replay-tracking + clock-skew bound), **H2** (`tool-policy.evaluatePolicy()` wired into `withDelegation` with deny/requires-consent handling). Added follow-up **N8** for fail-closed policy metadata validation. N1 remains accepted internal-demo risk only; production must rotate to clean governance. |
 | 2026-05-20 | Hardening pass 3a | Partially closed: **C3** (audit/forensics trail) — new `@agenticprimitives/audit` package with `AuditEvent` + `AuditSink` + console/memory/compose sinks, mcp-runtime emits accept/reject events from `withDelegation` + `verifyServiceMac`, demo-mcp wires console sink. Per-package emission across `delegation` / `key-custody` / `identity-auth` is the follow-up. |
 | 2026-05-20 | Hardening pass 3b | C3 extended: `delegation.verifyDelegationToken` emits `delegation.verify.{accept,reject}` per call; sink threaded through from `mcp-runtime.withDelegation`. Durable D1 sink ships as `createD1AuditSink(db)` in demo-mcp alongside the existing JTI store adapter + migration `0002_audit_events.sql` (append-only audit_events table with action/outcome/correlation_id indices). demo-mcp now wires `composeSinks(console, d1)` so a D1 outage never blackholes forensics. Remaining: key-custody + identity-auth emission, mint/revoke events, runtime PII-leak guardrail sink. |
+| 2026-05-20 | Hardening pass 3c | Refreshed after LocalAesProvider MAC guard split. Confirmed shared-secret HMAC is acceptable for service auth while local envelope encryption/signing remain non-production. Added N8-N15 residual findings and reprioritized next hardening pass. |
+| 2026-05-20 | Phase 4 | Closed: **C2** (paymaster lockdown) — SmartAgentPaymaster gains a verifying-paymaster mode (ERC-4337 v0.7 reference pattern); on-chain ECDSA recovery against a designated KMS-backed signer; demo-a2a signs every paymaster envelope via the master KMS account; live paymaster at `0x7778c0F6...` with `verifyingSigner=0x3C7B58...` and dev mode off. **N3** (paymaster monitoring) — new `GET /paymaster/status` endpoint returns deposit + threshold + 503/200 toggle for external monitors. 8 new Forge tests; 103 total Forge tests passing. |
+| 2026-05-20 | Phase 5a | Closed: **M7** (supply-chain CI). `.github/workflows/security.yml`: CodeQL `security-extended` SAST + `pnpm audit --audit-level=high` + gitleaks + CycloneDX SBOM. Dependabot weekly + security-update-immediate. `pnpm check:supply-chain` mirrors the workflow locally. Runbook + branch-protection setup in `docs/audits/supply-chain.md`. Local pre-flight clean (3 moderate deps below threshold; no high/critical). |

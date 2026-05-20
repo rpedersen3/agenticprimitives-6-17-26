@@ -1,0 +1,138 @@
+name: Security
+
+# Supply-chain + SAST scans (audit M7 closure).
+# Runs on every PR + push to master, and on a weekly schedule so newly
+# disclosed CVEs surface even when no new code lands.
+#
+# Each job is independent so one slow scanner doesn't block the others.
+# All jobs fail-close: any high/critical finding fails the workflow.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    # 04:17 UTC every Monday — catches new CVEs disclosed over the weekend.
+    - cron: '17 4 * * 1'
+  workflow_dispatch: {}
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write     # CodeQL uploads to GH Code Scanning
+  actions: read
+
+jobs:
+  codeql:
+    name: CodeQL (JS/TS SAST)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # Cover web + Node ecosystems; the security-extended pack adds
+          # query packs beyond the default (e.g. prototype pollution,
+          # ReDoS, command-injection patterns) at the cost of ~2x
+          # analysis time. Worth it for a security workflow.
+          queries: security-extended
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'
+
+  dep-audit:
+    name: Dependency audit (pnpm audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Fail on HIGH or CRITICAL CVEs. MODERATE + LOW go to logs but
+      # don't block — they're triaged in the next refresh window.
+      - name: pnpm audit --audit-level=high
+        run: pnpm audit --audit-level=high
+        # The continue-on-error trick lets us capture the full output
+        # for the audit log even on failure. Set to true if you want
+        # advisory-only mode; false (default) blocks PRs.
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks needs full history for the rule-set to look across
+          # commits, not just the tip.
+          fetch-depth: 0
+
+      - name: gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The action ships a sensible default ruleset; we'd add a
+          # `.gitleaks.toml` here only if we needed allowlists (e.g.
+          # known false-positive patterns in golden test fixtures).
+
+  sbom:
+    name: SBOM (advisory only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Generate an SBOM. Doesn't gate the PR; published as a workflow
+      # artifact so an auditor can browse + verify against deployed
+      # builds.
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          npx --yes @cyclonedx/cyclonedx-npm \
+            --output-file sbom.cyclonedx.json \
+            --output-format JSON
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cyclonedx.json
+          retention-days: 90

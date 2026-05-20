@@ -1,0 +1,49 @@
+# Dependabot config — automated dependency PRs (audit M7 closure).
+# Weekly cadence so the noise level stays manageable. Security updates
+# fire immediately regardless of schedule.
+#
+# Each ecosystem groups patch + minor updates into one PR per week to
+# keep PR volume sane. Major version bumps land as individual PRs so
+# they get explicit review.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: UTC
+    open-pull-requests-limit: 8
+    groups:
+      # All patch + minor updates into one PR per week.
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+        # Exclude packages we want individual review on (e.g. crypto,
+        # auth, EVM clients). These get standalone PRs.
+        exclude-patterns:
+          - '@noble/*'
+          - 'viem'
+          - 'hono'
+          - 'wrangler'
+          - '@modelcontextprotocol/sdk'
+    labels:
+      - dependencies
+      - automated
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: UTC
+    open-pull-requests-limit: 4
+    labels:
+      - dependencies
+      - github-actions
+      - automated
