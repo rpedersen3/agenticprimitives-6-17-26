@@ -68,3 +68,6 @@ playwright-report/
 # Coverage
 coverage/
 .nyc_output/
+
+# Playwright live-demo recording artifacts
+tests/e2e/recordings/

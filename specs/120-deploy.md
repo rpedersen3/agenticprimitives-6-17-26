@@ -188,6 +188,32 @@ The KMS signer plays two roles operationally:
 
 In a production deployment you'd typically split these into two IAM-scoped Cloud KMS keys (master signer + deploy relayer) so role compromise is bounded. For the demo, the same key serves both — both roles only ever sign digests via the same `signA2AAction` API.
 
+### Known gap: envelope encryption still uses LocalAesProvider in the live demo
+
+`demo-a2a` constructs `SessionManager` with `buildKeyProvider({ backend: 'local-aes' })` for session-data-key envelope encryption. `LocalAesProvider` has a `NODE_ENV=production` guard (per [`packages/key-custody/CLAUDE.md`](../packages/key-custody/CLAUDE.md) — "production MUST throw at boot when NODE_ENV=production"). Cloudflare Workers' bundler sets `NODE_ENV=production` at build time, so `/session/init` returns a 500 in the live deploy.
+
+**Fix path (do this before relying on the full session lifecycle in production):**
+
+1. Create a symmetric Cloud KMS encryption key:
+   ```bash
+   gcloud kms keys create agent-envelope \
+     --keyring=agenticprimitives-demo \
+     --location=us-central1 \
+     --purpose=encryption \
+     --protection-level=software   # symmetric encryption doesn't require HSM
+   ```
+2. Grant the service account `roles/cloudkms.cryptoKeyEncrypterDecrypter` on that key.
+3. Set `GCP_KMS_ENCRYPT_KEY_NAME` as a wrangler var (or `--var` injection in `scripts/deploy-cloudflare.ts`) pointing at the new key.
+4. Update `apps/demo-a2a/src/index.ts` `sessionManagerFor` to use `buildKeyProvider({ backend: 'gcp-kms', config: { cryptoKeyName: env.GCP_KMS_ENCRYPT_KEY_NAME, serviceAccountJson: env.GCP_SERVICE_ACCOUNT_JSON } })` when `A2A_KMS_BACKEND=gcp-kms`.
+
+`GcpKmsProvider` is already implemented (commit `ca4c6ca`) with 6 unit tests covering encrypt/decrypt round-trip and AAD trip-wire. Just needs the live wiring.
+
+Until the fix lands, `/session/init` requires either:
+- Running locally via `wrangler dev` (development mode — guard doesn't fire), or
+- Re-enabling the `NODE_ENV=development` shim in `demo-a2a/src/index.ts` (doctrine-inconsistent but functional for demo).
+
+This gap doesn't affect the `/agent/identity`, `/session/deploy`, or `/session/deploy/submit` paths (which don't use envelope encryption) — those work end-to-end on the live deploy.
+
 ### Why REST, not the @google-cloud/kms SDK?
 
 The official Node SDK uses gRPC, which won't run on Cloudflare Workers even with `nodejs_compat`. `GcpKmsSigner` drives the REST API via `fetch` and signs the auth JWT with `crypto.subtle` (Web Crypto), so the entire path is Workers-native. See `packages/key-custody/src/providers/gcp.ts`.
