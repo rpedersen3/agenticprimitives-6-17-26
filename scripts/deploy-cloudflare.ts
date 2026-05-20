@@ -56,6 +56,8 @@ interface Deployments {
   allowedTargetsEnforcer: string;
   allowedMethodsEnforcer: string;
   valueEnforcer: string;
+  /** Optional — present after running deploy:paymaster:<network> + merge. */
+  smartAgentPaymaster?: string;
 }
 
 function run(cmd: string, opts: { cwd?: string } = {}): void {
@@ -172,6 +174,14 @@ if (a2aBackend === 'gcp-kms') {
   a2aVars.A2A_KMS_BACKEND = 'gcp-kms';
   a2aVars.GCP_KMS_KEY_NAME = keyName;
   console.log(`  using A2A_KMS_BACKEND=gcp-kms with key ${keyName}`);
+}
+// If a paymaster address is present in the deployments file, propagate
+// it so demo-a2a's /session/deploy endpoints become available. Without
+// this var, the endpoints return 409 and demo-web falls back to
+// counterfactual mode.
+if (d.smartAgentPaymaster) {
+  a2aVars.PAYMASTER = d.smartAgentPaymaster;
+  console.log(`  using PAYMASTER ${d.smartAgentPaymaster}`);
 }
 const a2aOut = runCapture(
   `wrangler deploy --env production ${buildVarFlags(a2aVars)}`,
