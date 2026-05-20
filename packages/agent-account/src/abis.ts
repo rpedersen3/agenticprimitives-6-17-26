@@ -46,3 +46,67 @@ export const agentAccountAbi = [
 
 /** ERC-1271 magic value returned by isValidSignature on success. */
 export const ERC1271_MAGIC_VALUE = '0x1626ba7e' as const;
+
+/**
+ * Minimal EntryPoint ABI for our bundler client + UserOp hashing.
+ * Source: account-abstraction/contracts/core/EntryPoint.sol (v0.9).
+ */
+export const entryPointAbi = [
+  {
+    type: 'function',
+    name: 'getUserOpHash',
+    stateMutability: 'view',
+    inputs: [
+      {
+        name: 'userOp',
+        type: 'tuple',
+        components: [
+          { name: 'sender', type: 'address' },
+          { name: 'nonce', type: 'uint256' },
+          { name: 'initCode', type: 'bytes' },
+          { name: 'callData', type: 'bytes' },
+          { name: 'accountGasLimits', type: 'bytes32' },
+          { name: 'preVerificationGas', type: 'uint256' },
+          { name: 'gasFees', type: 'bytes32' },
+          { name: 'paymasterAndData', type: 'bytes' },
+          { name: 'signature', type: 'bytes' },
+        ],
+      },
+    ],
+    outputs: [{ name: '', type: 'bytes32' }],
+  },
+  {
+    type: 'function',
+    name: 'handleOps',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'ops',
+        type: 'tuple[]',
+        components: [
+          { name: 'sender', type: 'address' },
+          { name: 'nonce', type: 'uint256' },
+          { name: 'initCode', type: 'bytes' },
+          { name: 'callData', type: 'bytes' },
+          { name: 'accountGasLimits', type: 'bytes32' },
+          { name: 'preVerificationGas', type: 'uint256' },
+          { name: 'gasFees', type: 'bytes32' },
+          { name: 'paymasterAndData', type: 'bytes' },
+          { name: 'signature', type: 'bytes' },
+        ],
+      },
+      { name: 'beneficiary', type: 'address' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getNonce',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'sender', type: 'address' },
+      { name: 'key', type: 'uint192' },
+    ],
+    outputs: [{ name: 'nonce', type: 'uint256' }],
+  },
+] as const;

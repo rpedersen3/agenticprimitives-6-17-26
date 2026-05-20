@@ -8,16 +8,19 @@
 import {
   createPublicClient,
   createWalletClient,
+  encodeFunctionData,
   http,
   getContract,
   type Address,
   type Hex,
   type PublicClient,
+  type TransactionReceipt,
   type WalletClient,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { Signer } from '@agenticprimitives/identity-auth';
 import { agentAccountFactoryAbi, agentAccountAbi, ERC1271_MAGIC_VALUE } from './abis';
+import { BundlerClient, packGasLimits, type PackedUserOperation } from './bundler-client';
 import type { UserOperation } from './types';
 
 export interface AgentAccountClientOpts {
@@ -189,6 +192,106 @@ export class AgentAccountClient {
     throw new Error(
       'AgentAccountClient.buildUserOp: not implemented in v0 demo (delegation does not require UserOp construction in the v0 demo flow). Land alongside the on-chain delegation redeem path.',
     );
+  }
+
+  /**
+   * Build an UNSIGNED ERC-4337 v0.9 UserOperation that, when submitted,
+   * will deploy the smart account at `getAddress(owner, salt)` via the
+   * factory. The user signs `userOpHash` with their owner EOA; the
+   * caller then passes the signed userOp to `submitDeployUserOp`.
+   *
+   * Paymaster sponsorship: `paymasterAndData` is set to the configured
+   * paymaster (typically our SmartAgentPaymaster). Dev-mode accept-all
+   * means no further data needed beyond gas limits.
+   *
+   * Returns:
+   *   - `userOp`: the unsigned PackedUserOperation (signature = '0x')
+   *   - `userOpHash`: the EIP-712 hash the owner must sign
+   *   - `sender`: the predicted smart-account address (same as
+   *     `getAddress(owner, salt)`)
+   */
+  async buildDeployUserOp(opts: {
+    owner: Address;
+    salt: bigint;
+    paymaster: Address;
+    verificationGasLimit?: bigint;
+    preVerificationGas?: bigint;
+    paymasterVerificationGasLimit?: bigint;
+  }): Promise<{ userOp: PackedUserOperation; userOpHash: Hex; sender: Address }> {
+    const sender = await this.getAddress(opts.owner, opts.salt);
+
+    // initCode = factory address (20 bytes) || createAccount(owner, salt) calldata
+    const factoryCalldata = encodeFunctionData({
+      abi: agentAccountFactoryAbi,
+      functionName: 'createAccount',
+      args: [opts.owner, opts.salt],
+    });
+    const initCode = (this.opts.factory + factoryCalldata.slice(2)) as Hex;
+
+    // Conservative gas defaults. Production should estimate via the EntryPoint
+    // (simulateValidation / simulateHandleOp) but for the demo's first deploy
+    // these are safe upper bounds.
+    const verificationGasLimit = opts.verificationGasLimit ?? 700_000n;
+    const callGasLimit = 0n; // callData is empty — we only want to deploy.
+    const accountGasLimits = packGasLimits(verificationGasLimit, callGasLimit);
+    const preVerificationGas = opts.preVerificationGas ?? 60_000n;
+
+    // Gas fees — pull current base fee from the chain and add a tip.
+    const block = await this.publicClient.getBlock();
+    const baseFeePerGas = block.baseFeePerGas ?? 1_000_000_000n;
+    const maxPriorityFeePerGas = 1_500_000_000n; // 1.5 gwei
+    const maxFeePerGas = baseFeePerGas * 2n + maxPriorityFeePerGas;
+    const gasFees = packGasLimits(maxPriorityFeePerGas, maxFeePerGas);
+
+    // paymasterAndData (v0.7+ layout):
+    //   [20 bytes paymaster addr][16 bytes paymasterVerificationGasLimit]
+    //   [16 bytes paymasterPostOpGasLimit][remaining bytes paymasterData]
+    const pmVerifGas = opts.paymasterVerificationGasLimit ?? 100_000n;
+    const pmPostOpGas = 0n; // our SmartAgentPaymaster._postOp is a no-op
+    const paymasterAndData = (
+      opts.paymaster +
+      pmVerifGas.toString(16).padStart(32, '0') +
+      pmPostOpGas.toString(16).padStart(32, '0')
+    ) as Hex;
+
+    const userOp: PackedUserOperation = {
+      sender,
+      nonce: 0n,
+      initCode,
+      callData: '0x',
+      accountGasLimits,
+      preVerificationGas,
+      gasFees,
+      paymasterAndData,
+      signature: '0x',
+    };
+
+    const bundler = new BundlerClient({
+      rpcUrl: this.opts.rpcUrl,
+      entryPoint: this.opts.entryPoint,
+    });
+    const userOpHash = await bundler.getUserOpHash(userOp);
+
+    return { userOp, userOpHash, sender };
+  }
+
+  /**
+   * Submit a (now-signed) deploy UserOp via EntryPoint.handleOps. The
+   * `bundlerAccount` pays gas (will be reimbursed by the paymaster) and
+   * broadcasts the tx. In production this is `createKmsViemAccount(kms)`
+   * — no private key held locally.
+   */
+  async submitDeployUserOp(
+    userOp: PackedUserOperation,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    bundlerAccount: any,
+  ): Promise<{ deployedAddress: Address; receipt: TransactionReceipt }> {
+    const bundler = new BundlerClient({
+      rpcUrl: this.opts.rpcUrl,
+      entryPoint: this.opts.entryPoint,
+    });
+    const receipt = await bundler.sendUserOps([userOp], bundlerAccount.address, bundlerAccount);
+    return { deployedAddress: userOp.sender, receipt };
   }
 
   private walletFromSigner(signer: Signer): WalletClient {
