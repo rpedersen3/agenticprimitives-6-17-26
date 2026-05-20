@@ -12,6 +12,8 @@
  */
 
 import { useEffect, useState } from 'react';
+import { ConnectButton } from './connect-button';
+import { HybridRecoveryFlow } from './flows/hybrid-recovery/HybridRecoveryFlow';
 
 interface UseCase {
   slug: string;          // hash route, e.g. 'hybrid-recovery'
@@ -26,7 +28,7 @@ const USE_CASES: UseCase[] = [
     slug: 'hybrid-recovery',
     title: 'Individual user, seamless recovery',
     oneLiner: 'Single primary passkey → prompt to add a backup → mode flips single→hybrid.',
-    badge: 'stub',
+    badge: 'in-flight',
     guidePath: 'docs/multi-sig/flows/hybrid-recovery.md',
   },
   {
@@ -89,17 +91,26 @@ export function App() {
       </p>
 
       {activeFlow && (
-        <section style={{ margin: '2rem 0', padding: '1rem', border: '1px solid #f0c87f', background: '#fffbeb', borderRadius: 6 }}>
-          <h2 style={{ marginTop: 0 }}>{activeFlow}</h2>
-          <p>
-            This flow's interactive implementation lands in phase 6c.5 (or later, per the use case's
-            sub-phase gate). Until then, read the walkthrough at{' '}
-            <code>docs/multi-sig/flows/{activeFlow}.md</code>.
-          </p>
-          <p>
+        <>
+          <section style={{ marginTop: '1.5rem' }}>
+            <h2>Wallet</h2>
+            <ConnectButton />
+          </section>
+          {activeFlow === 'hybrid-recovery' ? (
+            <HybridRecoveryFlow />
+          ) : (
+            <section style={{ margin: '2rem 0', padding: '1rem', border: '1px solid #f0c87f', background: '#fffbeb', borderRadius: 6 }}>
+              <h2 style={{ marginTop: 0 }}>{activeFlow}</h2>
+              <p>
+                This flow's interactive implementation lands in a future sub-phase. Until then, read
+                the walkthrough at <code>docs/multi-sig/flows/{activeFlow}.md</code>.
+              </p>
+            </section>
+          )}
+          <p style={{ marginTop: '2rem' }}>
             <a href="#/">← back to gallery</a>
           </p>
-        </section>
+        </>
       )}
 
       {!activeFlow && (
