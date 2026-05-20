@@ -13,10 +13,15 @@ remappings = [
     "forge-std/=lib/forge-std/src/",
 ]
 
-# Deploy script writes deployments-<network>.json into this directory.
+# Deploy scripts write deployments-*.json into this directory. Each script
+# writes its OWN file, so each path is listed individually.
 fs_permissions = [
     { access = "write", path = "./deployments-anvil.json" },
     { access = "write", path = "./deployments-base-sepolia.json" },
+    # DeployPaymaster.s.sol writes a sidecar that scripts/merge-paymaster-deployment.ts
+    # folds into the main deployments-<network>.json.
+    { access = "write", path = "./deployments-paymaster-anvil.json" },
+    { access = "write", path = "./deployments-paymaster-base-sepolia.json" },
     { access = "read",  path = "./test/fixtures" },
 ]
 

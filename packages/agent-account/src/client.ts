@@ -228,25 +228,30 @@ export class AgentAccountClient {
     });
     const initCode = (this.opts.factory + factoryCalldata.slice(2)) as Hex;
 
-    // Conservative gas defaults. Production should estimate via the EntryPoint
-    // (simulateValidation / simulateHandleOp) but for the demo's first deploy
-    // these are safe upper bounds.
-    const verificationGasLimit = opts.verificationGasLimit ?? 700_000n;
+    // Gas defaults sized for the actual factory.createAccount cost on
+    // Base Sepolia (~232k from cast estimate). Account-side validateUserOp
+    // for a fresh account adds ~30-50k, so 350k verificationGasLimit gives
+    // 50%+ headroom without inflating the EntryPoint's prefund requirement.
+    const verificationGasLimit = opts.verificationGasLimit ?? 350_000n;
     const callGasLimit = 0n; // callData is empty — we only want to deploy.
     const accountGasLimits = packGasLimits(verificationGasLimit, callGasLimit);
     const preVerificationGas = opts.preVerificationGas ?? 60_000n;
 
-    // Gas fees — pull current base fee from the chain and add a tip.
+    // Gas fees — pull current base fee from the chain. On L2s (Base, OP,
+    // Arbitrum) baseFee is typically <0.01 gwei and a small priority tip
+    // is plenty. EntryPoint pre-charges totalGas * maxFeePerGas as
+    // "prefund" before the op runs — keeping maxFeePerGas low keeps the
+    // paymaster's deposit going further per op.
     const block = await this.publicClient.getBlock();
-    const baseFeePerGas = block.baseFeePerGas ?? 1_000_000_000n;
-    const maxPriorityFeePerGas = 1_500_000_000n; // 1.5 gwei
-    const maxFeePerGas = baseFeePerGas * 2n + maxPriorityFeePerGas;
+    const baseFeePerGas = block.baseFeePerGas ?? 100_000_000n;
+    const maxPriorityFeePerGas = 100_000_000n; // 0.1 gwei
+    const maxFeePerGas = baseFeePerGas + maxPriorityFeePerGas * 2n;
     const gasFees = packGasLimits(maxPriorityFeePerGas, maxFeePerGas);
 
     // paymasterAndData (v0.7+ layout):
     //   [20 bytes paymaster addr][16 bytes paymasterVerificationGasLimit]
     //   [16 bytes paymasterPostOpGasLimit][remaining bytes paymasterData]
-    const pmVerifGas = opts.paymasterVerificationGasLimit ?? 100_000n;
+    const pmVerifGas = opts.paymasterVerificationGasLimit ?? 50_000n;
     const pmPostOpGas = 0n; // our SmartAgentPaymaster._postOp is a no-op
     const paymasterAndData = (
       opts.paymaster +

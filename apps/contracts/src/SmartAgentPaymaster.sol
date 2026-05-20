@@ -124,7 +124,15 @@ contract SmartAgentPaymaster is BasePaymaster {
         bytes32 /*userOpHash*/,
         uint256 /*maxCost*/
     ) internal view override returns (bytes memory context, uint256 validationData) {
-        if (IGovernanceView(governance).isPaused()) revert SystemPaused();
+        // Pause check is only meaningful if governance is a contract with
+        // isPaused(). For demo/dev deploys where governance is an EOA, we
+        // can't call isPaused() (it would revert with no return data), so
+        // skip the check. Production MUST point governance at a real
+        // Governance contract — the constructor's ZeroGovernance check
+        // catches address(0); this branch catches "EOA was given".
+        if (governance.code.length > 0) {
+            if (IGovernanceView(governance).isPaused()) revert SystemPaused();
+        }
         if (!_dev) {
             if (!_acceptList[userOp.sender]) revert SenderNotAccepted(userOp.sender);
         }

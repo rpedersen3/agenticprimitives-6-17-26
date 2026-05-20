@@ -295,12 +295,29 @@ export function findRecoveryByte(
   const compact = new Uint8Array(64);
   compact.set(rBytes, 0);
   compact.set(sBytes, 32);
+  const attempts: string[] = [];
   for (let recovery = 0; recovery < 2; recovery++) {
-    const sig = secp256k1.Signature.fromCompact(compact).addRecoveryBit(recovery);
-    const recovered = sig.recoverPublicKey(digest).toRawBytes(false);
-    if (bytesEqual(recovered, knownPubKey65)) return recovery + 27;
+    try {
+      const sig = secp256k1.Signature.fromCompact(compact).addRecoveryBit(recovery);
+      const recovered = sig.recoverPublicKey(digest).toRawBytes(false);
+      attempts.push(`v=${recovery + 27} recovered=${bytesToHex(recovered)}`);
+      if (bytesEqual(recovered, knownPubKey65)) return recovery + 27;
+    } catch (e) {
+      attempts.push(`v=${recovery + 27} threw ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
-  throw new Error('Recovery byte search failed: neither v=27 nor v=28 recovers the known public key');
+  // eslint-disable-next-line no-console
+  console.error('[gcp-kms findRecoveryByte] mismatch:', {
+    digest: bytesToHex(digest),
+    r: bytesToHex(rBytes),
+    s: bytesToHex(sBytes),
+    knownPubKey: bytesToHex(knownPubKey65),
+    attempts,
+  });
+  throw new Error(
+    'Recovery byte search failed: neither v=27 nor v=28 recovers the known public key. ' +
+      attempts.join(' | '),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -351,6 +368,17 @@ export class GcpKmsSigner implements KmsAccountBackend {
     if (this.cachedPubKey65) return this.cachedPubKey65;
     const token = await this.getAccessToken();
     const res = await callKms<PublicKeyResponse>(token, `${this.keyName}/publicKey`);
+    // Algorithm guard: signatures from any other curve (e.g. P-256) won't
+    // recover to an Ethereum-compatible pubkey. Catch the mistake at first
+    // pubkey fetch instead of producing nonsense signatures later.
+    if (res.algorithm !== 'EC_SIGN_SECP256K1_SHA256') {
+      throw new Error(
+        `GcpKmsSigner: key ${this.keyName} has algorithm "${res.algorithm}", but ` +
+          `EC_SIGN_SECP256K1_SHA256 is required for Ethereum-compatible signing. ` +
+          `Recreate the key with --default-algorithm=ec-sign-secp256k1-sha256 ` +
+          `(GCP doesn't allow changing the algorithm of an existing key).`,
+      );
+    }
     const spkiDer = pemToDer(res.pem);
     this.cachedPubKey65 = parseSpkiUncompressedSecp256k1PubKey(spkiDer);
     return this.cachedPubKey65;
