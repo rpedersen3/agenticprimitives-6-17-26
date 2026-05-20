@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { keccak_256 } from '@noble/hashes/sha3';
 import { createMemoryAuditSink } from '@agenticprimitives/audit';
@@ -52,8 +52,37 @@ describe('LocalSecp256k1Signer', () => {
 
   it('production guard: refuses to instantiate when NODE_ENV=production', () => {
     process.env.NODE_ENV = 'production';
+    delete process.env.A2A_ALLOW_LOCAL_MASTER_KEY;
     expect(() => new LocalSecp256k1Signer({ privateKeyHex: TEST_PRIV })).toThrow(/refuses to start/);
     process.env.NODE_ENV = 'test';
+  });
+
+  it('production opt-in: A2A_ALLOW_LOCAL_MASTER_KEY=true permits instantiation', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.A2A_ALLOW_LOCAL_MASTER_KEY = 'true';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const s = new LocalSecp256k1Signer({ privateKeyHex: TEST_PRIV });
+      expect(s).toBeInstanceOf(LocalSecp256k1Signer);
+      // Loud boot warning is required so reviewers / operators see it.
+      expect(warn).toHaveBeenCalled();
+      expect(warn.mock.calls[0]![0]).toMatch(/A2A_ALLOW_LOCAL_MASTER_KEY=true/);
+    } finally {
+      warn.mockRestore();
+      delete process.env.A2A_ALLOW_LOCAL_MASTER_KEY;
+      process.env.NODE_ENV = 'test';
+    }
+  });
+
+  it('production opt-in: any value other than "true" still throws', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.A2A_ALLOW_LOCAL_MASTER_KEY = '1'; // truthy but not "true"
+    try {
+      expect(() => new LocalSecp256k1Signer({ privateKeyHex: TEST_PRIV })).toThrow(/refuses to start/);
+    } finally {
+      delete process.env.A2A_ALLOW_LOCAL_MASTER_KEY;
+      process.env.NODE_ENV = 'test';
+    }
   });
 
   // C3 pass 5b: every signing op emits a key-custody.sign audit row.

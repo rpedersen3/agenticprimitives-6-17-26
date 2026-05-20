@@ -34,6 +34,40 @@ function assertNotProduction(label: string): void {
   }
 }
 
+/**
+ * Same fail-closed default as `assertNotProduction`, but lets a deliberate
+ * deployment opt into a local in-memory secp256k1 signer with
+ * `A2A_ALLOW_LOCAL_MASTER_KEY=true`. Use case: demo / staging stacks that
+ * want to run the full A2A flow (including lazy smart-account deploys via
+ * `/session/deploy/submit`) without standing up a real KMS first.
+ *
+ * The override emits a loud one-time warning at boot so reviewers and
+ * operators see it. Production preflight (`scripts/check-production-deploy.ts`)
+ * separately enforces that this opt-in must not coexist with a real key
+ * (system-audit follow-up).
+ */
+let warnedAllowLocalMasterKey = false;
+function assertSignerAllowedInProduction(label: string): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  if (process.env.A2A_ALLOW_LOCAL_MASTER_KEY === 'true') {
+    if (!warnedAllowLocalMasterKey) {
+      warnedAllowLocalMasterKey = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[key-custody] ${label}: running in production via A2A_ALLOW_LOCAL_MASTER_KEY=true. ` +
+          `A managed KMS backend (gcp-kms / aws-kms) MUST replace this before any real-value keys land.`,
+      );
+    }
+    return;
+  }
+  throw new Error(
+    `${label} refuses to start when NODE_ENV=production. ` +
+      `Configure a managed KMS backend (gcp-kms / aws-kms), or set ` +
+      `A2A_ALLOW_LOCAL_MASTER_KEY=true to acknowledge running with a ` +
+      `private key in worker memory (demo / staging only).`,
+  );
+}
+
 function loadMasterSecret(envOverride?: string): Uint8Array {
   const hex = envOverride ?? process.env.A2A_SESSION_SECRET;
   if (!hex) {
@@ -151,7 +185,7 @@ export class LocalSecp256k1Signer implements KmsAccountBackend {
   private readonly auditSink?: AuditSink;
 
   constructor(opts?: { privateKeyHex?: string; auditSink?: AuditSink }) {
-    assertNotProduction('LocalSecp256k1Signer');
+    assertSignerAllowedInProduction('LocalSecp256k1Signer');
     this.priv = loadPrivateKey(opts?.privateKeyHex);
     const pub = secp256k1.getPublicKey(this.priv, false); // uncompressed (65 bytes)
     this.addr = publicKeyToAddress(pub);
