@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { keccak_256 } from '@noble/hashes/sha3';
+import { createMemoryAuditSink } from '@agenticprimitives/audit';
 import { LocalSecp256k1Signer } from '../../src/providers/local';
 
 // Deterministic test key (Anvil's first account's private key).
@@ -53,6 +54,43 @@ describe('LocalSecp256k1Signer', () => {
     process.env.NODE_ENV = 'production';
     expect(() => new LocalSecp256k1Signer({ privateKeyHex: TEST_PRIV })).toThrow(/refuses to start/);
     process.env.NODE_ENV = 'test';
+  });
+
+  // C3 pass 5b: every signing op emits a key-custody.sign audit row.
+  // The invariant we test is hashed (not raw) sessionId in event.context.
+  it('emits a key-custody.sign audit event when auditSink is wired', async () => {
+    const sink = createMemoryAuditSink();
+    const auditedSigner = new LocalSecp256k1Signer({ privateKeyHex: TEST_PRIV, auditSink: sink });
+    const digest = keccak_256(new TextEncoder().encode('audit-emit-test'));
+    const RAW_SESSION = 'session-abc-this-must-never-appear-raw';
+    await auditedSigner.signA2AAction({
+      digest,
+      auditContext: { toolId: 'demo.tool', actionId: 'read_profile', sessionId: RAW_SESSION },
+    });
+
+    const events = sink.events();
+    expect(events).toHaveLength(1);
+    const evt = events[0]!;
+    expect(evt.action).toBe('key-custody.sign');
+    expect(evt.outcome).toBe('success');
+    expect(evt.context?.keyId).toBe('local-master-secp256k1');
+    expect(evt.context?.toolId).toBe('demo.tool');
+    expect(evt.context?.actionId).toBe('read_profile');
+    // Raw sessionId MUST NEVER appear; sessionHash is the only carry.
+    expect(JSON.stringify(evt)).not.toContain(RAW_SESSION);
+    expect(typeof evt.context?.sessionHash).toBe('string');
+    expect((evt.context?.sessionHash as string).length).toBeGreaterThan(0);
+  });
+
+  it('fail-soft: sink throws do not propagate to the caller', async () => {
+    const throwingSink = {
+      async write() {
+        throw new Error('sink unavailable');
+      },
+    };
+    const auditedSigner = new LocalSecp256k1Signer({ privateKeyHex: TEST_PRIV, auditSink: throwingSink });
+    const digest = keccak_256(new TextEncoder().encode('fail-soft-test'));
+    await expect(auditedSigner.signA2AAction({ digest })).resolves.toBeDefined();
   });
 });
 

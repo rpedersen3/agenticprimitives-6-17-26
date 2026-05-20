@@ -1,7 +1,7 @@
 # `@agenticprimitives/audit` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20
+**Last refreshed:** 2026-05-20 (pass 5b — delegation.mint + key-custody.sign emitters added)
 **Owners:** audit package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
 
@@ -80,8 +80,8 @@ What this package does NOT own:
 | --- | --- | --- | --- | --- |
 | **AUD-1** | P2 | No automated PII / secret-leak detector for emitted events. | Open | Could ship a runtime sink that scans events for hex strings of length 64+ and `0x[a-f0-9]{40}` patterns, logs warnings. Not load-bearing, but useful guardrail. |
 | **AUD-2** | P3 | Console sink does not pre-truncate over-1KB events. | Open | Cloudflare logs clip at 1KB; emitters should keep `context` flat (documented). A built-in `createConsoleAuditSink({maxBytes})` option would belt-and-braces. |
-| **AUD-3** | P3 | No spec at `specs/206-audit.md` yet. | Open | Capability manifest references it; create as a follow-up. |
-| **system C3** | P0 | Append-only audit trail. | **PARTIALLY CLOSED 2026-05-20**: schema + sinks + mcp-runtime emission. Follow-up passes will wire emission in `delegation.verifyDelegationToken`, `key-custody.{sign,decrypt}`, `identity-auth.{mintSession,verifySession}`, and ship a durable D1 sink. |
+| **AUD-3** | P3 | No spec at `specs/206-audit.md` yet. | **CLOSED 2026-05-20** | Spec drafted as part of pass 5b — see [`specs/206-audit.md`](../../specs/206-audit.md). |
+| **system C3** | P0 | Append-only audit trail. | **MOSTLY CLOSED 2026-05-20**: schema + sinks + mcp-runtime emission (pass 3a) + delegation.verifyDelegationToken (pass 3a) + D1 sink in demo-mcp (pass 3b) + delegation.mintDelegationToken + key-custody.signA2AAction (pass 5b). Remaining slice: envelope encrypt/decrypt emit (LocalAesProvider, GcpKmsProvider) and identity-auth emission — both are non-blocking follow-ups tracked in this AUDIT.md. |
 
 ## 6. Test posture
 
@@ -101,13 +101,15 @@ What this package does NOT own:
 
 ## 7. Hardening backlog
 
-- [ ] **(AUD-1)** Implement a PII-leak guardrail sink that flags long hex strings + addresses + JWT-shaped tokens in events.
+- [ ] **(AUD-1)** Implement `createPiiGuardrailSink(inner)` that flags long hex strings + addresses + JWT-shaped tokens in events. Open task #80.
 - [ ] **(AUD-2)** Add `maxBytes` option to `createConsoleAuditSink` so we never overflow Cloudflare log lines silently.
-- [ ] **(AUD-3)** Write `specs/206-audit.md` with the schema contract + emit-point conventions.
-- [ ] **(C3 follow-up)** Emit from `delegation.verifyDelegationToken` (accept + reject) and `delegation.mintDelegationToken`.
-- [ ] **(C3 follow-up)** Emit from `key-custody.GcpKmsSigner.signA2AAction` + `GcpKmsProvider.{encrypt,decrypt}` (the `auditContext` is already accepted; just needs a sink wire).
-- [ ] **(C3 follow-up)** Emit from `identity-auth.{mintSession,verifySession}` failures.
-- [ ] **(C3 follow-up)** Ship a `createD1AuditSink(db)` adapter — either in `mcp-runtime` (next to the JTI store adapters) or in a dedicated `audit-sinks` package if more backends accumulate.
+- [x] **(AUD-3)** ~~Write `specs/206-audit.md`~~ — done 2026-05-20.
+- [x] **(C3 emit)** ~~Emit from `delegation.verifyDelegationToken`~~ — done in pass 3a.
+- [x] **(C3 emit)** ~~Emit from `delegation.mintDelegationToken`~~ — done in pass 5b.
+- [x] **(C3 emit)** ~~Emit from `key-custody.{LocalSecp256k1Signer,GcpKmsSigner}.signA2AAction`~~ — done in pass 5b (wired via `BuildOpts.auditSink` + threaded through `buildSignerBackend`).
+- [ ] **(C3 emit)** Emit from `LocalAesProvider.{encrypt,decrypt}` + `GcpKmsProvider.{encrypt,decrypt}` (envelope-encryption side; the `auditContext` is already accepted on the interface). Tracked separately — non-blocking for C3 closure.
+- [ ] **(C3 emit)** Emit from `identity-auth.{mintSession,verifySession}` — caller-emits pattern (identity-auth itself is forbidden from importing audit per dep doctrine; the consuming app emits at the call site with `auditSink.write(buildEvent({...}))`).
+- [x] **(C3 sink)** ~~Ship a `createD1AuditSink(db)` adapter~~ — landed in `apps/demo-mcp/src/db.ts` in pass 3b. Cross-app destination unification (demo-a2a → D1 too) is a future-spec item.
 
 ## 8. External audit readiness
 
@@ -129,7 +131,9 @@ An external auditor evaluating this package needs:
 
 ## 10. Audit events emitted (none — this package only defines the shape)
 
-This package emits no events itself. It defines the schema + sinks. Emitting packages document their event actions in their own `AUDIT.md`. As of 2026-05-20, emitting packages are:
+This package emits no events itself. It defines the schema + sinks. Emitting packages document their event actions in their own `AUDIT.md`. As of 2026-05-20:
 
-- `@agenticprimitives/mcp-runtime` — emits `mcp-runtime.with-delegation.{accept,reject}` and `mcp-runtime.service-mac.reject`.
-- (Follow-up: `@agenticprimitives/delegation`, `@agenticprimitives/key-custody`, `@agenticprimitives/identity-auth`.)
+- `@agenticprimitives/mcp-runtime` — `mcp-runtime.with-delegation.{accept,reject}`, `mcp-runtime.service-mac.{accept,reject}`.
+- `@agenticprimitives/delegation` — `delegation.verify.{accept,reject}`, `delegation.mint` (NEW, pass 5b).
+- `@agenticprimitives/key-custody` — `key-custody.sign` (NEW, pass 5b). Envelope-encryption emit (`key-custody.envelope.{encrypt,decrypt}`) is a remaining slice; the auditContext is already accepted on the interface.
+- (Follow-up: `@agenticprimitives/identity-auth` — caller-emit pattern.)

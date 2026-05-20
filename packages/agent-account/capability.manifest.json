@@ -39,7 +39,10 @@
     "PackedUserOperation",
     "packGasLimits",
     "unpackGasLimits",
-    "entryPointAbi"
+    "entryPointAbi",
+    "SIG_TYPE_WEBAUTHN",
+    "encodeAssertion",
+    "encodeWebAuthnSignature"
   ],
   "forbiddenTerms": [
     { "term": "Caveat", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },

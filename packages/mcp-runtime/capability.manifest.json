@@ -12,6 +12,7 @@
   },
   "imports": [
     "@agenticprimitives/types",
+    "@agenticprimitives/audit",
     "@agenticprimitives/delegation",
     "@agenticprimitives/key-custody",
     "@agenticprimitives/tool-policy"
@@ -51,7 +52,13 @@
     "EnforcerAddressMap",
     "JtiStore",
     "ToolClassification",
-    "McpAuthError"
+    "McpAuthError",
+    "generateServiceMac",
+    "verifyServiceMac",
+    "bodyDigestHex",
+    "MacProviderLike",
+    "ServiceMacContext",
+    "ServiceMacHeaders"
   ],
   "forbiddenTerms": [
     { "term": "passkey", "reason": "Auth method internals belong in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] },

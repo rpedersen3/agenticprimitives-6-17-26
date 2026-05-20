@@ -1,10 +1,17 @@
 import type { Address } from '@agenticprimitives/types';
+import type { AuditSink } from '@agenticprimitives/audit';
 
 export type KmsBackend = 'local-aes' | 'aws-kms' | 'gcp-kms';
 
 export interface BuildOpts {
   backend: KmsBackend;
   config?: Record<string, string>;
+  /**
+   * Optional audit sink threaded into signers so every signing op emits
+   * `key-custody.sign`. Consumers share one sink across all primitives
+   * so rows land in one trail. Fail-soft if the sink throws.
+   */
+  auditSink?: AuditSink;
 }
 
 export interface A2AKeyProvider {

@@ -24,13 +24,17 @@ export function buildKeyProvider(opts: BuildOpts): A2AKeyProvider {
 export function buildSignerBackend(opts: BuildOpts): KmsAccountBackend {
   switch (backendOrEnv(opts)) {
     case 'local-aes':
-      return new LocalSecp256k1Signer({ privateKeyHex: opts.config?.privateKeyHex });
+      return new LocalSecp256k1Signer({
+        privateKeyHex: opts.config?.privateKeyHex,
+        auditSink: opts.auditSink,
+      });
     case 'aws-kms':
       return new AwsKmsSigner();
     case 'gcp-kms':
       return new GcpKmsSigner({
         cryptoKeyVersionName: opts.config?.cryptoKeyVersionName,
         serviceAccountJson: opts.config?.serviceAccountJson,
+        auditSink: opts.auditSink,
       });
   }
 }

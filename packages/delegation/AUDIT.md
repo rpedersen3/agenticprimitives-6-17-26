@@ -1,7 +1,7 @@
 # `@agenticprimitives/delegation` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20
+**Last refreshed:** 2026-05-20 (pass 5b — mintDelegationToken emit added)
 **Owners:** delegation package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
 
@@ -94,7 +94,7 @@ What this package does NOT own (per its `CLAUDE.md`):
 | ID              | Severity | Finding                                                                          | Status     | Notes                                                                                                                             |
 | --------------- | -------- | -------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | **H3** (system) | P1       | Revocation check tolerates RPC failure.                                          | **CLOSED 2026-05-20** | New `revocationFailMode: 'closed' \| 'open'` opt; defaults by `NODE_ENV`. Production hard-fails on RPC outage. |
-| **C3** (system) | P0       | No audit events from delegation verify.                                          | **PARTIALLY CLOSED 2026-05-20** (pass 3b) | `verifyDelegationToken` accepts `auditSink` + `correlationId` opts; emits `delegation.verify.{accept,reject}` per call. `mintDelegationToken` + `revokeDelegation` not yet emitting (deferred to pass 3c). |
+| **C3** (system) | P0       | No audit events from delegation verify.                                          | **MOSTLY CLOSED 2026-05-20** (passes 3b + 5b) | `verifyDelegationToken` emits `delegation.verify.{accept,reject}` per call (pass 3b). `mintDelegationToken` emits `delegation.mint` (pass 5b — `subject: { type: 'jti', id: jti }`, `audience` populated, fail-soft on sink errors, tests in `token.test.ts`). `revokeDelegation` emission remains as a follow-up but is lower-priority since revocation is a one-time admin op. |
 | **H5** (system) | P1       | Cross-delegation is not implemented.                                             | Open       | `verifyCrossDelegation` returns not-implemented; `withCrossDelegation` (in mcp-runtime) similarly stub.                           |
 | **DEL-1**       | P2       | No automated cross-language hash check.                                          | Open       | Need a Forge test or Anvil helper that derives `hashDelegation` from Solidity and compares to a TS golden. Prevents domain drift. |
 | **DEL-2**       | P3       | `verifyDelegationToken` error messages may leak chain state to external callers. | Open       | E.g. `"delegator smart account ... is not deployed"` reveals address state. Consider opaque external error + internal log.        |
@@ -103,10 +103,12 @@ What this package does NOT own (per its `CLAUDE.md`):
 
 ## 6. Test posture
 
-- **Unit:** 7 files, 55 tests passing as of 2026-05-20:
+- **Unit:** 7 files, 57 tests passing as of 2026-05-20:
 `caveats.test.ts` (13), `delegation-client.test.ts` (3), `evaluator.test.ts`
-(14), `hash.test.ts` (8), `token.test.ts` (4), `verify-require-deployed.test.ts`
-(5), `session-manager.test.ts` (8 integration).
+(14), `hash.test.ts` (8), `token.test.ts` (6 — pass 5b adds
+delegation.mint audit-emit + fail-soft sink tests),
+`verify-require-deployed.test.ts` (5), `session-manager.test.ts`
+(8 integration).
 - **Cross-package:** consumed by `mcp-runtime` (`with-delegation.ts`),
 `apps/demo-a2a` (session/init + session/package), `apps/demo-web`
 (signing). Integration coverage via Playwright specs `03-authorize-agent`
@@ -126,7 +128,7 @@ exercises the on-chain side.
 - **(DEL-2)** Audit external error messages from `verifyDelegationToken` for chain-state leakage.
 - **(H5)** Design + implement `verifyCrossDelegation` with negative tests; coordinate with `mcp-runtime/with-cross-delegation.ts`.
 - **(system M4)** Add property tests for `evaluateCaveats` over a random caveat-set generator.
-- **(system C3)** Emit audit events from `mintDelegationToken`, `verifyDelegationToken`, `revokeDelegation` once the audit-event schema is defined.
+- **(system C3)** ~~Emit audit events from `mintDelegationToken`~~ (pass 5b), ~~`verifyDelegationToken`~~ (pass 3b). `revokeDelegation` emission remains — lower priority.
 
 ## 8. External audit readiness
 

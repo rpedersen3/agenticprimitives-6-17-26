@@ -1,7 +1,7 @@
 # `@agenticprimitives/key-custody` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20
+**Last refreshed:** 2026-05-20 (pass 5b — audit emit wired)
 **Owners:** key-custody package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
 
@@ -100,10 +100,11 @@ What this package does NOT own (per its `CLAUDE.md`):
 
 ## 6. Test posture
 
-- **Unit:** 7 files, 52 tests as of 2026-05-20:
+- **Unit:** 7 files, 55 tests as of 2026-05-20:
 `canonical-context.test.ts` (6), `create-kms-account.test.ts` (4),
 `gcp-provider.test.ts` (6), `gcp-signer.test.ts` (20),
-`local-aes-provider.test.ts` (9), `local-secp256k1-signer.test.ts` (5),
+`local-aes-provider.test.ts` (10), `local-secp256k1-signer.test.ts` (7 —
+adds C3 audit-emit + fail-soft sink tests),
 `data-key-round-trip.test.ts` (2 integration).
 - **Integration:** `data-key-round-trip.test.ts` covers
 `LocalAesProvider` + `GcpKmsProvider` end-to-end (mocked GCP REST).
@@ -121,7 +122,7 @@ smoke test — hitting it proves GCP KMS signing works in production.
 - **(M1)** Decide: implement AWS KMS provider+signer OR remove from `src/index.ts` and `package.json` exports.
 - **(M2)** Implement per-tool KMS key selection in `buildToolExecutorBackend(toolId)`.
 - **(KC-1)** Document the "split service accounts" requirement in `specs/203-key-custody.md` + CLAUDE.md.
-- **(C3)** Emit audit events from every sign / encrypt / decrypt path; the existing `audit` parameter accepts the context but no sink is wired.
+- **(C3)** **PARTIAL — 2026-05-20.** `LocalSecp256k1Signer` and `GcpKmsSigner` now accept `auditSink` via `BuildOpts.auditSink` and emit `key-custody.sign` on every `signA2AAction` call. Raw sessionId never logged — emit hashes it (`keccak256(sessionId).slice(0,18)`) and surfaces `toolId` / `actionId` from `auditContext`. Fail-soft: sink errors don't propagate. Envelope encrypt/decrypt emission (`LocalAesProvider`, `GcpKmsProvider`) is the remaining slice — tracked as **C3-leftover**.
 
 ## 8. External audit readiness
 

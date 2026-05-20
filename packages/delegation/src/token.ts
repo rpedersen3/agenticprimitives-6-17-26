@@ -111,6 +111,11 @@ function randomJti(): string {
 export async function mintDelegationToken(
   claims: Omit<DelegationTokenClaims, 'iat' | 'exp' | 'jti'> & { jti?: string; ttlSeconds?: number },
   signMessage: (msg: string) => Promise<Hex>,
+  opts?: {
+    /** Audit sink (C3 pass 3c). Emits `delegation.mint` per call. */
+    auditSink?: AuditSink;
+    correlationId?: string;
+  },
 ): Promise<{ token: string; jti: string }> {
   const jti = claims.jti ?? randomJti();
   const ttl = claims.ttlSeconds ?? 600; // 10 minutes default; tokens are short-lived
@@ -132,6 +137,31 @@ export async function mintDelegationToken(
   const sigHex = sig.startsWith('0x') ? sig.slice(2) : sig;
   const sigBytes = new Uint8Array(Buffer.from(sigHex, 'hex'));
   const token = `${base64urlEncode(canonical)}.${base64urlEncodeBytes(sigBytes)}`;
+  // Audit emit (C3 pass 3c). Fail-soft. JTI is logged because it's the
+  // correlation primitive for downstream verify events — not secret.
+  if (opts?.auditSink) {
+    try {
+      await opts.auditSink.write(
+        buildEvent({
+          action: 'delegation.mint',
+          outcome: 'success',
+          correlationId: opts.correlationId,
+          actor: { type: 'user', id: claims.delegation.delegator },
+          subject: { type: 'jti', id: jti },
+          audience: claims.aud,
+          context: {
+            iss: claims.iss,
+            sub: claims.sub,
+            sessionKeyAddress: claims.sessionKeyAddress,
+            ttlSeconds: ttl,
+            usageLimit: claims.usageLimit ?? null,
+          },
+        }),
+      );
+    } catch {
+      /* fail-soft */
+    }
+  }
   return { token, jti };
 }
 

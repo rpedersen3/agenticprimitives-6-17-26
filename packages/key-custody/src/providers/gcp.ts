@@ -28,6 +28,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { keccak_256 } from '@noble/hashes/sha3';
 import { bytesToHex, type Address } from 'viem';
+import { buildEvent, type AuditSink } from '@agenticprimitives/audit';
 import type { A2AKeyProvider, KmsAccountBackend } from '../types';
 import { canonicalContextBytes } from '../aad';
 
@@ -327,13 +328,15 @@ export function findRecoveryByte(
 export class GcpKmsSigner implements KmsAccountBackend {
   private readonly keyName: string;
   private readonly serviceAccount: ServiceAccount;
+  private readonly auditSink?: AuditSink;
   private cachedToken?: CachedToken;
   private cachedPubKey65?: Uint8Array;
   private cachedAddress?: Address;
 
-  constructor(opts?: Partial<GcpKmsSignerOpts>) {
+  constructor(opts?: Partial<GcpKmsSignerOpts> & { auditSink?: AuditSink }) {
     const keyName = opts?.cryptoKeyVersionName ?? process.env.GCP_KMS_KEY_NAME;
     const jsonStr = opts?.serviceAccountJson ?? process.env.GCP_SERVICE_ACCOUNT_JSON;
+    this.auditSink = opts?.auditSink;
     if (!keyName) {
       throw new Error(
         'GcpKmsSigner: GCP_KMS_KEY_NAME (projects/<P>/locations/<L>/keyRings/<R>/cryptoKeys/<K>/cryptoKeyVersions/<V>) is required.',
@@ -399,7 +402,6 @@ export class GcpKmsSigner implements KmsAccountBackend {
     digest: Uint8Array;
     auditContext?: { toolId?: string; sessionId?: string; actionId?: string };
   }): Promise<{ signature: Uint8Array; keyId: string; signerAddress: Address }> {
-    void input.auditContext;
     if (input.digest.length !== 32) {
       throw new Error(`GcpKmsSigner.signA2AAction expects a 32-byte digest; got ${input.digest.length}.`);
     }
@@ -419,10 +421,38 @@ export class GcpKmsSigner implements KmsAccountBackend {
     sig65.set(bigIntTo32Bytes(s), 32);
     sig65[64] = v;
 
+    const signerAddress = await this.getSignerAddress();
+    // Audit emit. Per key-custody CLAUDE.md invariant:
+    //   raw sessionId MUST NEVER be logged — hash it.
+    if (this.auditSink) {
+      const ctx = input.auditContext ?? {};
+      try {
+        await this.auditSink.write(
+          buildEvent({
+            action: 'key-custody.sign',
+            outcome: 'success',
+            actor: { type: 'system', id: 'gcp-kms-signer' },
+            subject: { type: 'sign-digest', id: bytesToHex(input.digest) },
+            context: {
+              keyId: this.keyName,
+              signerAddress,
+              toolId: ctx.toolId ?? null,
+              actionId: ctx.actionId ?? null,
+              sessionHash: ctx.sessionId
+                ? bytesToHex(keccak_256(new TextEncoder().encode(ctx.sessionId))).slice(0, 18)
+                : null,
+            },
+          }),
+        );
+      } catch {
+        /* fail-soft */
+      }
+    }
+
     return {
       signature: sig65,
       keyId: this.keyName,
-      signerAddress: await this.getSignerAddress(),
+      signerAddress,
     };
   }
 }

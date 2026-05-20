@@ -12,10 +12,12 @@
   },
   "imports": [
     "@agenticprimitives/types",
+    "@agenticprimitives/audit",
     "@agenticprimitives/identity-auth"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
+    "@agenticprimitives/audit",
     "@agenticprimitives/identity-auth",
     "viem",
     "@noble/curves",

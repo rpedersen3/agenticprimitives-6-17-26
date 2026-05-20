@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { keccak_256 } from '@noble/hashes/sha3';
+import { createMemoryAuditSink } from '@agenticprimitives/audit';
 import { mintDelegationToken } from '../../src/token';
 import { ROOT_AUTHORITY } from '../../src/types';
 import { buildCaveat, encodeTimestampTerms } from '../../src/caveats';
@@ -111,5 +112,51 @@ describe('mintDelegationToken', () => {
     );
     expect(signMessage).toHaveBeenCalledOnce();
     expect(signMessage.mock.calls[0]![0]).toContain('"aud":"urn:mcp:server:person"');
+  });
+
+  // C3 pass 5b: minting emits a delegation.mint audit row.
+  it('emits delegation.mint when auditSink is wired', async () => {
+    const sink = createMemoryAuditSink();
+    const { jti } = await mintDelegationToken(
+      {
+        iss: 'demo-a2a',
+        aud: 'urn:mcp:server:person',
+        sub: SMART_ACCOUNT,
+        delegation: fixtureDelegation,
+        sessionKeyAddress: SESSION_ADDR as `0x${string}`,
+      },
+      eip191Sign,
+      { auditSink: sink, correlationId: 'corr-abc' },
+    );
+
+    const events = sink.events();
+    expect(events).toHaveLength(1);
+    const evt = events[0]!;
+    expect(evt.action).toBe('delegation.mint');
+    expect(evt.outcome).toBe('success');
+    expect(evt.correlationId).toBe('corr-abc');
+    expect(evt.subject).toEqual({ type: 'jti', id: jti });
+    expect(evt.audience).toBe('urn:mcp:server:person');
+  });
+
+  it('fail-soft: audit sink throws do not propagate', async () => {
+    const throwingSink = {
+      async write() {
+        throw new Error('sink down');
+      },
+    };
+    await expect(
+      mintDelegationToken(
+        {
+          iss: 'demo-a2a',
+          aud: 'urn:mcp:server:person',
+          sub: SMART_ACCOUNT,
+          delegation: fixtureDelegation,
+          sessionKeyAddress: SESSION_ADDR as `0x${string}`,
+        },
+        eip191Sign,
+        { auditSink: throwingSink },
+      ),
+    ).resolves.toBeDefined();
   });
 });

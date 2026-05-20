@@ -21,6 +21,7 @@ import { keccak_256 } from '@noble/hashes/sha3';
 import { hexToBytes, bytesToHex, toHex, type Address, type Hex } from 'viem';
 import type { A2AKeyProvider, KmsAccountBackend } from '../types';
 import { canonicalContextBytes } from '../aad';
+import { buildEvent, type AuditSink } from '@agenticprimitives/audit';
 
 const HKDF_INFO = 'agenticprimitives/local-aes:v1';
 const SALT_BYTES = 16;
@@ -147,15 +148,20 @@ export class LocalAesProvider implements A2AKeyProvider {
 export class LocalSecp256k1Signer implements KmsAccountBackend {
   private readonly priv: Uint8Array;
   private readonly addr: Address;
+  private readonly auditSink?: AuditSink;
 
-  constructor(opts?: { privateKeyHex?: string }) {
+  constructor(opts?: { privateKeyHex?: string; auditSink?: AuditSink }) {
     assertNotProduction('LocalSecp256k1Signer');
     this.priv = loadPrivateKey(opts?.privateKeyHex);
     const pub = secp256k1.getPublicKey(this.priv, false); // uncompressed (65 bytes)
     this.addr = publicKeyToAddress(pub);
+    this.auditSink = opts?.auditSink;
   }
 
-  async signA2AAction(input: { digest: Uint8Array; auditContext?: unknown }) {
+  async signA2AAction(input: {
+    digest: Uint8Array;
+    auditContext?: { toolId?: string; sessionId?: string; actionId?: string };
+  }) {
     if (input.digest.length !== 32) {
       throw new Error(`signA2AAction expects a 32-byte digest; got ${input.digest.length}.`);
     }
@@ -165,6 +171,35 @@ export class LocalSecp256k1Signer implements KmsAccountBackend {
     out.set(numberTo32Bytes(sig.r), 0);
     out.set(numberTo32Bytes(sig.s), 32);
     out[64] = (sig.recovery ?? 0) + 27;
+    // Audit emit (C3 pass 3c). Per CLAUDE.md security invariant:
+    //   "Every Decrypt and signing op emits an audit row with
+    //    keyVersion, hashed sessionId, optional toolId/actionId.
+    //    Raw sessionId MUST NEVER be logged."
+    if (this.auditSink) {
+      const ctx = input.auditContext ?? {};
+      try {
+        await this.auditSink.write(
+          buildEvent({
+            action: 'key-custody.sign',
+            outcome: 'success',
+            actor: { type: 'system', id: 'local-secp256k1-signer' },
+            subject: { type: 'sign-digest', id: bytesToHex(input.digest) },
+            context: {
+              keyId: 'local-master-secp256k1',
+              signerAddress: this.addr,
+              toolId: ctx.toolId ?? null,
+              actionId: ctx.actionId ?? null,
+              // Hash sessionId — never log raw.
+              sessionHash: ctx.sessionId
+                ? toHex(keccak_256(new TextEncoder().encode(ctx.sessionId))).slice(0, 18)
+                : null,
+            },
+          }),
+        );
+      } catch {
+        /* fail-soft */
+      }
+    }
     return {
       signature: out,
       keyId: 'local-master-secp256k1',

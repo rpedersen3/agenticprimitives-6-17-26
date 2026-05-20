@@ -37,6 +37,9 @@ importers:
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../../packages/agent-account
+      '@agenticprimitives/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
       '@agenticprimitives/delegation':
         specifier: workspace:*
         version: link:../../packages/delegation
@@ -230,6 +233,9 @@ importers:
 
   packages/key-custody:
     dependencies:
+      '@agenticprimitives/audit':
+        specifier: workspace:*
+        version: link:../audit
       '@agenticprimitives/identity-auth':
         specifier: workspace:*
         version: link:../identity-auth
