@@ -26,35 +26,31 @@ import { buildEvent, type AuditSink } from '@agenticprimitives/audit';
 const HKDF_INFO = 'agenticprimitives/local-aes:v1';
 const SALT_BYTES = 16;
 
-function assertNotProduction(label: string): void {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      `${label} refuses to start when NODE_ENV=production. Configure a managed KMS backend (aws-kms / gcp-kms) instead.`,
-    );
-  }
-}
-
 /**
- * Same fail-closed default as `assertNotProduction`, but lets a deliberate
- * deployment opt into a local in-memory secp256k1 signer with
- * `A2A_ALLOW_LOCAL_MASTER_KEY=true`. Use case: demo / staging stacks that
- * want to run the full A2A flow (including lazy smart-account deploys via
- * `/session/deploy/submit`) without standing up a real KMS first.
+ * Fail-closed default: refuse to start when NODE_ENV=production, but let a
+ * deliberate deployment opt into a local in-memory primitive with an explicit
+ * acknowledgement env var. Use case: demo / staging stacks that want to
+ * run the full A2A flow without standing up a real KMS first.
  *
- * The override emits a loud one-time warning at boot so reviewers and
- * operators see it. Production preflight (`scripts/check-production-deploy.ts`)
- * separately enforces that this opt-in must not coexist with a real key
- * (system-audit follow-up).
+ * Each override emits a loud one-time warning at boot. Production preflight
+ * (`scripts/check-production-deploy.ts`) is the load-bearing check that
+ * these opt-ins do not coexist with real-value keys.
+ *
+ * Two opt-ins exist because the threat models differ:
+ * - `A2A_ALLOW_LOCAL_MASTER_KEY` — in-memory secp256k1 signer (relayer,
+ *   bundler, paymaster envelope). Compromise = forge bundler txs.
+ * - `A2A_ALLOW_LOCAL_ENVELOPE_KEY` — HKDF-derived AES-GCM session-data-key
+ *   wrap. Compromise = decrypt session keypairs at rest = forge delegations.
  */
-let warnedAllowLocalMasterKey = false;
-function assertSignerAllowedInProduction(label: string): void {
+const warnedOptIns = new Set<string>();
+function assertLocalProviderAllowedInProduction(label: string, optInEnvVar: string): void {
   if (process.env.NODE_ENV !== 'production') return;
-  if (process.env.A2A_ALLOW_LOCAL_MASTER_KEY === 'true') {
-    if (!warnedAllowLocalMasterKey) {
-      warnedAllowLocalMasterKey = true;
+  if (process.env[optInEnvVar] === 'true') {
+    if (!warnedOptIns.has(optInEnvVar)) {
+      warnedOptIns.add(optInEnvVar);
       // eslint-disable-next-line no-console
       console.warn(
-        `[key-custody] ${label}: running in production via A2A_ALLOW_LOCAL_MASTER_KEY=true. ` +
+        `[key-custody] ${label}: running in production via ${optInEnvVar}=true. ` +
           `A managed KMS backend (gcp-kms / aws-kms) MUST replace this before any real-value keys land.`,
       );
     }
@@ -63,8 +59,7 @@ function assertSignerAllowedInProduction(label: string): void {
   throw new Error(
     `${label} refuses to start when NODE_ENV=production. ` +
       `Configure a managed KMS backend (gcp-kms / aws-kms), or set ` +
-      `A2A_ALLOW_LOCAL_MASTER_KEY=true to acknowledge running with a ` +
-      `private key in worker memory (demo / staging only).`,
+      `${optInEnvVar}=true to acknowledge running with local key material (demo / staging only).`,
   );
 }
 
@@ -132,7 +127,10 @@ export class LocalAesProvider implements A2AKeyProvider {
   }
 
   async generateSessionDataKey(input: { aadContext: Record<string, string> }) {
-    assertNotProduction('LocalAesProvider.generateSessionDataKey');
+    assertLocalProviderAllowedInProduction(
+      'LocalAesProvider.generateSessionDataKey',
+      'A2A_ALLOW_LOCAL_ENVELOPE_KEY',
+    );
     const salt = randomBytes(SALT_BYTES);
     const info = canonicalContextBytes(input.aadContext);
     // Derive 32-byte data key. encryptedDataKey == salt (the master is held in process memory).
@@ -151,7 +149,10 @@ export class LocalAesProvider implements A2AKeyProvider {
     keyId: string;
     keyVersion: string;
   }) {
-    assertNotProduction('LocalAesProvider.decryptSessionDataKey');
+    assertLocalProviderAllowedInProduction(
+      'LocalAesProvider.decryptSessionDataKey',
+      'A2A_ALLOW_LOCAL_ENVELOPE_KEY',
+    );
     if (input.keyVersion !== this.keyVersion) {
       throw new Error(`LocalAesProvider: keyVersion mismatch (got "${input.keyVersion}", expected "${this.keyVersion}").`);
     }
@@ -185,7 +186,7 @@ export class LocalSecp256k1Signer implements KmsAccountBackend {
   private readonly auditSink?: AuditSink;
 
   constructor(opts?: { privateKeyHex?: string; auditSink?: AuditSink }) {
-    assertSignerAllowedInProduction('LocalSecp256k1Signer');
+    assertLocalProviderAllowedInProduction('LocalSecp256k1Signer', 'A2A_ALLOW_LOCAL_MASTER_KEY');
     this.priv = loadPrivateKey(opts?.privateKeyHex);
     const pub = secp256k1.getPublicKey(this.priv, false); // uncompressed (65 bytes)
     this.addr = publicKeyToAddress(pub);

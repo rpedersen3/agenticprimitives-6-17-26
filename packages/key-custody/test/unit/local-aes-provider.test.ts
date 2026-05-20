@@ -66,6 +66,7 @@ describe('LocalAesProvider', () => {
 
   it('production guard: refuses session-data-key envelope ops when NODE_ENV=production', async () => {
     process.env.NODE_ENV = 'production';
+    delete process.env.A2A_ALLOW_LOCAL_ENVELOPE_KEY;
     // Constructor is permitted in production (the MAC path needs it).
     // The guard fires on the envelope-encryption methods specifically —
     // those require a real KMS in prod.
@@ -82,6 +83,28 @@ describe('LocalAesProvider', () => {
       }),
     ).rejects.toThrow(/refuses to start/);
     process.env.NODE_ENV = 'test';
+  });
+
+  it('production opt-in: A2A_ALLOW_LOCAL_ENVELOPE_KEY=true permits envelope ops', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.A2A_ALLOW_LOCAL_ENVELOPE_KEY = 'true';
+    try {
+      const p = new LocalAesProvider({ sessionSecretHex: TEST_SECRET });
+      const { plaintextDataKey, encryptedDataKey, keyId, keyVersion } = await p.generateSessionDataKey({
+        aadContext: { sessionId: 'opt-in-test' },
+      });
+      expect(plaintextDataKey.length).toBe(32);
+      const roundTrip = await p.decryptSessionDataKey({
+        encryptedDataKey,
+        aadContext: { sessionId: 'opt-in-test' },
+        keyId,
+        keyVersion,
+      });
+      expect(Array.from(roundTrip)).toEqual(Array.from(plaintextDataKey));
+    } finally {
+      delete process.env.A2A_ALLOW_LOCAL_ENVELOPE_KEY;
+      process.env.NODE_ENV = 'test';
+    }
   });
 
   it('production guard: PERMITS the MAC primitive when NODE_ENV=production', async () => {
