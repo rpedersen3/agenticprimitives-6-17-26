@@ -173,7 +173,16 @@ if (a2aBackend === 'gcp-kms') {
   }
   a2aVars.A2A_KMS_BACKEND = 'gcp-kms';
   a2aVars.GCP_KMS_KEY_NAME = keyName;
-  console.log(`  using A2A_KMS_BACKEND=gcp-kms with key ${keyName}`);
+  console.log(`  using A2A_KMS_BACKEND=gcp-kms with signing key ${keyName}`);
+
+  // Optional: symmetric encrypt-decrypt key for envelope encryption.
+  // When set, demo-a2a's SessionManager uses GcpKmsProvider instead of
+  // LocalAesProvider (which fails at NODE_ENV=production).
+  const encryptKeyName = process.env.GCP_KMS_ENCRYPT_KEY_NAME;
+  if (encryptKeyName) {
+    a2aVars.GCP_KMS_ENCRYPT_KEY_NAME = encryptKeyName;
+    console.log(`  using GCP_KMS_ENCRYPT_KEY_NAME=${encryptKeyName}`);
+  }
 }
 // If a paymaster address is present in the deployments file, propagate
 // it so demo-a2a's /session/deploy endpoints become available. Without
