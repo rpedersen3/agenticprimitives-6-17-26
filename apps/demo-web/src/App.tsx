@@ -3,6 +3,7 @@ import { loadOrCreateDemoUser, resetDemoUser, type DemoUser } from './test-user'
 import { signInWithSiwe } from './siwe-flow';
 import { authorizeAgent as authorizeAgentFlow } from './authorize-flow';
 import { readProfile } from './read-profile-flow';
+import { deploySmartAccount } from './deploy-flow';
 import type { Address } from '@agenticprimitives/types';
 
 const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID ?? 31337);
@@ -23,6 +24,9 @@ interface Deployments {
 interface DemoState {
   user: DemoUser;
   smartAccountAddress: Address | null;
+  isDeployed: boolean;
+  /** Set to false after /session/deploy returns 409 — no paymaster configured. */
+  paymasterAvailable: boolean;
   sessionId: string | null;
   delegationHash: string | null;
   profile: unknown;
@@ -38,6 +42,8 @@ export function App() {
     setState({
       user,
       smartAccountAddress: null,
+      isDeployed: false,
+      paymasterAvailable: true,
       sessionId: null,
       delegationHash: null,
       profile: null,
@@ -66,7 +72,25 @@ export function App() {
       return;
     }
     append(`[1] ✓ Signed in. wallet=${res.walletAddress} smartAccount=${res.smartAccountAddress} deployed=${res.isDeployed}`);
-    setState((s) => (s ? { ...s, smartAccountAddress: res.smartAccountAddress } : s));
+    setState((s) => (s ? { ...s, smartAccountAddress: res.smartAccountAddress, isDeployed: res.isDeployed } : s));
+  };
+
+  // STEP 1.5: deploy smart account via paymaster-sponsored UserOp
+  const deployAccount = async () => {
+    if (!state || !state.smartAccountAddress) return;
+    append('[1.5] /session/deploy → sign userOpHash → /session/deploy/submit…');
+    const res = await deploySmartAccount(state.user, state.user.address);
+    if (!res.ok) {
+      if (res.paymasterUnavailable) {
+        append('[1.5] paymaster not configured — falling back to counterfactual mode');
+        setState((s) => (s ? { ...s, paymasterAvailable: false } : s));
+        return;
+      }
+      append(`[1.5] FAILED: ${res.error}${res.reason ? ` (${res.reason})` : ''}`);
+      return;
+    }
+    append(`[1.5] ✓ Deployed at ${res.deployedAddress} via tx ${res.transactionHash}`);
+    setState((s) => (s ? { ...s, isDeployed: true } : s));
   };
 
   // STEP 2: a2a init session → web builds + signs Delegation → a2a packages it
@@ -144,6 +168,20 @@ export function App() {
         <button onClick={signIn} disabled={!!state.smartAccountAddress}>Sign in with EOA</button>
       </div>
 
+      {state.smartAccountAddress && state.paymasterAvailable && (
+        <div className="step">
+          <h3>Step 1.5 — Deploy smart account</h3>
+          <p>
+            {state.isDeployed
+              ? <span className="ok">✓ Smart account deployed on-chain. ERC-1271 verification is live.</span>
+              : <span className="muted">Smart account not yet deployed (counterfactual address). Deploy it via paymaster-sponsored UserOp — you sign the userOpHash; the demo's paymaster pays gas.</span>}
+          </p>
+          <button onClick={deployAccount} disabled={state.isDeployed}>
+            {state.isDeployed ? 'Deployed' : 'Deploy smart account'}
+          </button>
+        </div>
+      )}
+
       <div className="step">
         <h3>Step 2 — Authorize agent (issue delegation)</h3>
         <p>
@@ -151,7 +189,14 @@ export function App() {
             ? <span className="ok">✓ Session active: <code>{state.sessionId}</code></span>
             : <span className="muted">No session yet.</span>}
         </p>
-        <button onClick={authorizeAgent} disabled={!state.smartAccountAddress || !!state.sessionId}>
+        <button
+          onClick={authorizeAgent}
+          disabled={
+            !state.smartAccountAddress ||
+            !!state.sessionId ||
+            (state.paymasterAvailable && !state.isDeployed)
+          }
+        >
           Authorize agent
         </button>
       </div>

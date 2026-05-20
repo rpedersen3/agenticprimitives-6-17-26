@@ -32,7 +32,13 @@
     "CreateAgentAccountParams",
     "UserOperation",
     "Address",
-    "Hex"
+    "Hex",
+    "BundlerClient",
+    "BundlerClientOpts",
+    "PackedUserOperation",
+    "packGasLimits",
+    "unpackGasLimits",
+    "entryPointAbi"
   ],
   "forbiddenTerms": [
     { "term": "Caveat", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
