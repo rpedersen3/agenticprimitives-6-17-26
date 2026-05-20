@@ -392,4 +392,58 @@ contract QuorumEnforcerTest is Test {
             mstore8(add(pv, 0x40), 1)
         }
     }
+
+    // ─── Spec § 9 row 15: threshold=1 trivial case ──────────────────
+    //
+    // Doctrine: a QuorumEnforcer caveat with threshold=1 and a 1-address
+    // signer set behaves identically to a non-quorum delegation. The
+    // existence of the caveat is not a separate code path — it's just
+    // the boundary case of the same n-of-m verification with n=1.
+
+    function test_threshold_1_single_signer_accepts() public view {
+        address[] memory set = new address[](1);
+        set[0] = alice;
+        bytes memory terms = abi.encode(set, uint8(1), address(approvedHashRegistry));
+
+        uint256[] memory pks = new uint256[](1);
+        pks[0] = alicePk;
+        ( , bytes memory packed) = _packEcdsa(pks, payloadHash);
+        bytes memory args = abi.encode(payloadHash, packed);
+
+        // Should not revert — the trivial case is valid.
+        enf.beforeHook(terms, args, bytes32(0), address(0), address(0), address(0), 0, "");
+    }
+
+    function test_threshold_1_wrong_signer_rejects() public {
+        // Even at the trivial case, the signer-set membership check
+        // still runs — a wrong signer reverts UnauthorizedSigner.
+        uint256 randomPk = 0xC0FFEE01;
+        address[] memory set = new address[](1);
+        set[0] = alice;
+        bytes memory terms = abi.encode(set, uint8(1), address(approvedHashRegistry));
+
+        uint256[] memory pks = new uint256[](1);
+        pks[0] = randomPk;
+        ( , bytes memory packed) = _packEcdsa(pks, payloadHash);
+        bytes memory args = abi.encode(payloadHash, packed);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(QuorumEnforcer.UnauthorizedSigner.selector, vm.addr(randomPk))
+        );
+        enf.beforeHook(terms, args, bytes32(0), address(0), address(0), address(0), 0, "");
+    }
+
+    function test_threshold_1_undersupplied_blob_rejects() public {
+        // Zero-length signatures + threshold=1 → InsufficientQuorum.
+        // Confirms the threshold gate fires at the trivial case too.
+        address[] memory set = new address[](1);
+        set[0] = alice;
+        bytes memory terms = abi.encode(set, uint8(1), address(approvedHashRegistry));
+        bytes memory args = abi.encode(payloadHash, new bytes(0));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(QuorumEnforcer.InsufficientQuorum.selector, uint256(0), uint8(1))
+        );
+        enf.beforeHook(terms, args, bytes32(0), address(0), address(0), address(0), 0, "");
+    }
 }

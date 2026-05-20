@@ -182,4 +182,34 @@ contract AgentAccountTest is Test {
         assertEq(pk.ownerCount(), 1);
         assertEq(pk.passkeyCount(), 1);
     }
+
+    // ─── Spec § 9 row 10: acceptSessionDelegation emits ──────────────
+
+    function test_acceptSessionDelegation_emits_event() public {
+        bytes32 hash = keccak256("test-session-delegation-hash");
+        vm.expectEmit(true, false, false, false, address(acct));
+        emit AgentAccount.SessionDelegationAccepted(hash);
+        // onlySelf: prank as the account itself (simulating the userOp path).
+        vm.prank(address(acct));
+        acct.acceptSessionDelegation(hash);
+        assertTrue(acct.hasAcceptedSessionDelegation(hash));
+    }
+
+    function test_acceptSessionDelegation_idempotent_reverts_on_repeat() public {
+        bytes32 hash = keccak256("test-session-delegation-hash");
+        vm.startPrank(address(acct));
+        acct.acceptSessionDelegation(hash);
+        vm.expectRevert(
+            abi.encodeWithSelector(AgentAccount.SessionDelegationAlreadyAccepted.selector, hash)
+        );
+        acct.acceptSessionDelegation(hash);
+        vm.stopPrank();
+    }
+
+    function test_acceptSessionDelegation_onlySelf_rejects_external_caller() public {
+        bytes32 hash = keccak256("test-session-delegation-hash");
+        vm.prank(owner);
+        vm.expectRevert(AgentAccount.NotFromSelf.selector);
+        acct.acceptSessionDelegation(hash);
+    }
 }
