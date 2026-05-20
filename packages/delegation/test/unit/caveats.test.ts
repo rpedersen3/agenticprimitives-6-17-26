@@ -5,6 +5,7 @@ import {
   buildMcpToolScopeCaveat,
   buildDataScopeCaveat,
   buildDelegateBindingCaveat,
+  buildQuorumCaveat,
   encodeTimestampTerms,
   encodeValueTerms,
   encodeAllowedTargetsTerms,
@@ -108,5 +109,101 @@ describe('off-chain sentinel enforcers', () => {
     ) as readonly [`0x${string}`, `0x${string}`];
     expect(a.toLowerCase()).toBe('0x1111111111111111111111111111111111111111');
     expect(b.toLowerCase()).toBe('0x2222222222222222222222222222222222222222');
+  });
+
+  // ─── Spec 207 buildQuorumCaveat ─────────────────────────────────────
+
+  describe('buildQuorumCaveat', () => {
+    const enforcer = '0x3333333333333333333333333333333333333333' as const;
+    const approvedHashRegistry = '0x4444444444444444444444444444444444444444' as const;
+    const signers = [
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      '0xcccccccccccccccccccccccccccccccccccccccc',
+    ] as const;
+
+    it('round-trips terms through ABI decode', () => {
+      const c = buildQuorumCaveat({
+        enforcer,
+        signers: [...signers],
+        threshold: 2,
+        approvedHashRegistry,
+      });
+      expect(c.enforcer).toBe(enforcer);
+      expect(c.args).toBe('0x');
+
+      const [decodedSet, decodedThreshold, decodedReg] = decodeAbiParameters(
+        [
+          { type: 'address[]' },
+          { type: 'uint8' },
+          { type: 'address' },
+        ],
+        c.terms,
+      ) as readonly [readonly `0x${string}`[], number, `0x${string}`];
+      expect(decodedSet.map((s) => s.toLowerCase())).toEqual(
+        [...signers].map((s) => s.toLowerCase()),
+      );
+      expect(decodedThreshold).toBe(2);
+      expect(decodedReg.toLowerCase()).toBe(approvedHashRegistry);
+    });
+
+    it('rejects empty signers', () => {
+      expect(() =>
+        buildQuorumCaveat({
+          enforcer,
+          signers: [],
+          threshold: 1,
+          approvedHashRegistry,
+        }),
+      ).toThrow(/non-empty/);
+    });
+
+    it('rejects threshold < 1', () => {
+      expect(() =>
+        buildQuorumCaveat({
+          enforcer,
+          signers: [...signers],
+          threshold: 0,
+          approvedHashRegistry,
+        }),
+      ).toThrow(/threshold must be an integer/);
+    });
+
+    it('rejects threshold > signer set size', () => {
+      expect(() =>
+        buildQuorumCaveat({
+          enforcer,
+          signers: [...signers],
+          threshold: 4,
+          approvedHashRegistry,
+        }),
+      ).toThrow(/exceeds signer set size/);
+    });
+
+    it('rejects threshold > 255 (uint8 bound)', () => {
+      const big = Array.from({ length: 300 }, (_, i) =>
+        `0x${String(i).padStart(40, '0')}` as `0x${string}`,
+      );
+      expect(() =>
+        buildQuorumCaveat({
+          enforcer,
+          signers: big,
+          threshold: 256,
+          approvedHashRegistry,
+        }),
+      ).toThrow(/uint8 bound/);
+    });
+
+    it('accepts threshold=1 with a single signer (trivial case == doctrine)', () => {
+      // Spec 207 doctrine: threshold=1 with one signer IS the trivial
+      // single-signer flow, not a separate code path.
+      const c = buildQuorumCaveat({
+        enforcer,
+        signers: [signers[0]],
+        threshold: 1,
+        approvedHashRegistry,
+      });
+      expect(c.enforcer).toBe(enforcer);
+    });
   });
 });

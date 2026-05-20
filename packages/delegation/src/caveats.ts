@@ -100,3 +100,74 @@ export function buildDelegateBindingCaveat(
   );
   return { enforcer: DELEGATE_BINDING_ENFORCER, terms, args: '0x' };
 }
+
+// ─── Spec 207 — QuorumEnforcer caveat builder ────────────────────────
+//
+// On-chain enforcer at `apps/contracts/src/enforcers/QuorumEnforcer.sol`
+// (shipped in pass 6c.1). Caveat terms bind the signer set + threshold +
+// ApprovedHashRegistry at delegation issuance; redeem-time `args` carry
+// the payload hash + Safe-compatible packed signature blob. See
+// `apps/demo-web-pro/docs/multi-sig/guide.md` for the consumer-facing
+// walkthrough.
+
+export interface QuorumCaveatOpts {
+  /**
+   * Address of the deployed `QuorumEnforcer` contract for this chain.
+   * Read from `deployments-<network>.json` at the consumer-app layer
+   * — `@agenticprimitives/delegation` is chain-agnostic and never
+   * resolves addresses itself.
+   */
+  enforcer: Address;
+  /** Addresses authorized to participate in the quorum. Sorted by the
+   *  redeemer before signing (sorted-ascending is the anti-duplicate
+   *  scheme); order at issuance time is irrelevant. */
+  signers: Address[];
+  /** Minimum number of signatures required at redemption. Spec 207
+   *  § 5.1 default thresholds map naturally onto this value when the
+   *  caveat is attached to a T3+ delegation. */
+  threshold: number;
+  /** Optional `ApprovedHashRegistry` for the v=1 pre-approved-hash
+   *  signature path. Pass `0x0000…0` to forbid v=1 entirely. */
+  approvedHashRegistry: Address;
+}
+
+/**
+ * Build a `QuorumEnforcer` caveat. Pair with delegations whose
+ * `tool-policy.evaluateThresholdPolicy` decision has
+ * `requiresQuorum: true` (T3 Value and above). Without this caveat,
+ * `verifyDelegationToken({ requireQuorumForTier })` fails closed.
+ *
+ * Wire format of the terms blob exactly matches what
+ * `QuorumEnforcer.beforeHook` decodes:
+ *   abi.encode(address[] signerSet, uint8 threshold, address approvedHashRegistry)
+ *
+ * The redeem-time `args` are caller-supplied at execution time, not
+ * at issuance — `mcp-runtime.withDelegation` (6c.4) constructs them
+ * from the user's signed payload + signature blob and forwards them
+ * into the on-chain caveat evaluation.
+ */
+export function buildQuorumCaveat(opts: QuorumCaveatOpts): Caveat {
+  if (!Array.isArray(opts.signers) || opts.signers.length === 0) {
+    throw new Error('buildQuorumCaveat: signers must be a non-empty array');
+  }
+  if (!Number.isInteger(opts.threshold) || opts.threshold < 1) {
+    throw new Error('buildQuorumCaveat: threshold must be an integer ≥ 1');
+  }
+  if (opts.threshold > opts.signers.length) {
+    throw new Error(
+      `buildQuorumCaveat: threshold (${opts.threshold}) exceeds signer set size (${opts.signers.length})`,
+    );
+  }
+  if (opts.threshold > 255) {
+    throw new Error('buildQuorumCaveat: threshold exceeds uint8 bound (255)');
+  }
+  const terms = encodeAbiParameters(
+    [
+      { type: 'address[]' },
+      { type: 'uint8' },
+      { type: 'address' },
+    ],
+    [opts.signers, opts.threshold, opts.approvedHashRegistry],
+  );
+  return { enforcer: opts.enforcer, terms, args: '0x' };
+}

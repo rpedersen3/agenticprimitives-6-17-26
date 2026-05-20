@@ -9,6 +9,7 @@ export {
   buildMcpToolScopeCaveat,
   buildDataScopeCaveat,
   buildDelegateBindingCaveat,
+  buildQuorumCaveat,
   encodeTimestampTerms,
   encodeValueTerms,
   encodeAllowedTargetsTerms,
@@ -17,6 +18,7 @@ export {
   DATA_SCOPE_ENFORCER,
   DELEGATE_BINDING_ENFORCER,
 } from './caveats';
+export type { QuorumCaveatOpts } from './caveats';
 
 export { hashDelegation, hashCaveats, DELEGATION_EIP712_TYPES, delegationDomain } from './hash';
 export { evaluateCaveats } from './evaluator';

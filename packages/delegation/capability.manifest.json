@@ -43,6 +43,8 @@
     "buildMcpToolScopeCaveat",
     "buildDataScopeCaveat",
     "buildDelegateBindingCaveat",
+    "buildQuorumCaveat",
+    "QuorumCaveatOpts",
     "encodeTimestampTerms",
     "encodeValueTerms",
     "encodeAllowedTargetsTerms",
@@ -85,7 +87,7 @@
     { "term": "AAD", "reason": "AAD shape is delegation's choice but AAD encoding is key-custody's. Permitted in session-manager.ts as parameter names + comments.", "owningPackage": "@agenticprimitives/key-custody", "allowInPaths": ["src/session-manager.ts", "test/integration/session-manager.test.ts", "spec.md", "README.md", "CLAUDE.md"] },
     { "term": "RiskTier", "reason": "Policy taxonomy belongs in tool-policy. Consume requiredCaveatsForRiskTier from there; don't redefine levels.", "owningPackage": "@agenticprimitives/tool-policy", "allowInPaths": ["spec.md", "README.md"] },
     { "term": "evaluatePolicy", "reason": "Decision engine belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
-    { "term": "withDelegation", "reason": "MCP wrapper belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "withDelegation", "reason": "MCP wrapper belongs in mcp-runtime. delegation may reference the term in cross-cutting-capability docstrings (spec 207 threshold-policy gates).", "owningPackage": "@agenticprimitives/mcp-runtime", "allowInPaths": ["src/caveats.ts", "src/token.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"] },
     { "term": "@modelcontextprotocol", "reason": "MCP transport is mcp-runtime's concern.", "owningPackage": "@agenticprimitives/mcp-runtime" },
     { "term": "passkey", "reason": "Auth method internals belong in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"] },
     { "term": "SIWE", "reason": "Auth method belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] }

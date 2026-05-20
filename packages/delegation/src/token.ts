@@ -190,6 +190,16 @@ const ACCOUNT_ABI_ERC1271 = [
   },
 ] as const;
 
+const ACCEPTED_SESSION_DELEGATION_ABI = [
+  {
+    type: 'function',
+    name: 'isAcceptedSessionDelegation',
+    stateMutability: 'view',
+    inputs: [{ name: 'sessionDelegationHash', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
 const ERC1271_MAGIC = '0x1626ba7e';
 
 export interface VerifyOptsExt extends VerifyOpts {
@@ -234,6 +244,44 @@ export interface VerifyOptsExt extends VerifyOpts {
   auditSink?: AuditSink;
   /** Correlation ID threaded into emitted events. */
   correlationId?: string;
+
+  // ─── Spec 207 threshold-policy gates ────────────────────────────────
+  //
+  // Set by the caller (typically mcp-runtime.withDelegation) based on
+  // the tool's threshold-policy decision from
+  // tool-policy.evaluateThresholdPolicy(...). delegation doesn't import
+  // tool-policy directly — these opts are the cross-layer contract.
+
+  /**
+   * When set, the delegation MUST carry a caveat with an `enforcer`
+   * matching this address. The redeem-time signature check happens
+   * on-chain inside the `QuorumEnforcer.beforeHook` (apps/contracts/
+   * src/enforcers/QuorumEnforcer.sol); this opt's role is to fail
+   * closed at the OFF-CHAIN layer when a delegation was issued
+   * without the required quorum caveat at all. Without this opt set,
+   * delegation does NOT require quorum — backwards-compatible for
+   * T1/T2 tier flows that don't need it.
+   *
+   * Use case (mcp-runtime sets it for T3+ tools):
+   *   evaluateThresholdPolicy(classification).requiresQuorum
+   *     ? { enforcer: deployments.quorumEnforcer }
+   *     : undefined
+   */
+  requireQuorumCaveat?: { enforcer: Address };
+
+  /**
+   * When `true`, verify that the delegator's smart account has
+   * pre-blessed this delegation hash on-chain via
+   * `acceptSessionDelegation(hash)`. Spec 207 § 6 high-risk gate —
+   * critical-tier tool calls require an explicit on-chain
+   * authorization so a quorum at issuance isn't sufficient on its
+   * own; the user must additionally commit the specific delegation
+   * hash with a chain-visible transaction.
+   *
+   * Audit emit captures this as `context.acceptedOnChain: true` on
+   * the accept row so forensics can distinguish high-value flows.
+   */
+  requireAcceptedOnChain?: boolean;
 }
 
 interface DecodedToken {
@@ -409,6 +457,55 @@ export async function verifyDelegationToken(
     }
   }
 
+  // 4.5. Spec 207 threshold-policy gates.
+  //   - requireQuorumCaveat: the delegation MUST carry a caveat whose
+  //     enforcer matches the caller's expected QuorumEnforcer address.
+  //     Caller decides which delegations need this based on the tool's
+  //     tool-policy decision (`requiresQuorum`). Without this opt set
+  //     we don't require quorum — backwards-compatible.
+  if (opts.requireQuorumCaveat) {
+    const target = opts.requireQuorumCaveat.enforcer.toLowerCase();
+    const hasQuorum = claims.delegation.caveats.some(
+      (c) => c.enforcer.toLowerCase() === target,
+    );
+    if (!hasQuorum) {
+      return rejectWith(
+        'tier requires quorum caveat but delegation lacks one',
+        claims.delegation.delegator,
+        eip712Hash,
+      );
+    }
+  }
+
+  //   - requireAcceptedOnChain: account.isAcceptedSessionDelegation(hash)
+  //     must return true. Spec § 6 high-risk gate. Single extra chain
+  //     read; only fires when the tool-policy decision flips this on
+  //     (typically critical-tier tools).
+  let acceptedOnChain = false;
+  if (opts.requireAcceptedOnChain) {
+    try {
+      acceptedOnChain = (await publicClient.readContract({
+        address: claims.delegation.delegator,
+        abi: ACCEPTED_SESSION_DELEGATION_ABI,
+        functionName: 'isAcceptedSessionDelegation',
+        args: [eip712Hash],
+      })) as boolean;
+    } catch (e) {
+      return rejectWith(
+        `acceptSessionDelegation check reverted: ${e instanceof Error ? e.message : e}`,
+        claims.delegation.delegator,
+        eip712Hash,
+      );
+    }
+    if (!acceptedOnChain) {
+      return rejectWith(
+        'tier requires on-chain acceptSessionDelegation blessing; not present',
+        claims.delegation.delegator,
+        eip712Hash,
+      );
+    }
+  }
+
   // 5. JTI replay
   const limit = claims.usageLimit ?? 10;
   const usage = await opts.jtiStore.trackUsage(claims.jti, limit);
@@ -416,7 +513,34 @@ export async function verifyDelegationToken(
     return rejectWith('token usage limit exceeded', claims.delegation.delegator, eip712Hash);
   }
 
-  await emit('success', undefined, claims.delegation.delegator, eip712Hash);
+  // Accept emit — extended context to capture the threshold-policy
+  // outcome (`acceptedOnChain`) for forensics + dashboards. Reuses the
+  // same `emit` shape as the reject path but with extra context fields.
+  if (opts.auditSink) {
+    try {
+      const context: Record<string, string | number | boolean | null> = {};
+      if (opts.toolName) context.tool = opts.toolName;
+      if (opts.requireAcceptedOnChain !== undefined) {
+        context.acceptedOnChain = acceptedOnChain;
+      }
+      await opts.auditSink.write(
+        buildEvent({
+          action: 'delegation.verify.accept',
+          outcome: 'success',
+          correlationId: opts.correlationId,
+          actor: { type: 'user', id: claims.delegation.delegator },
+          subject: { type: 'delegation', id: eip712Hash },
+          audience: opts.audience,
+          chainId: opts.chainId,
+          digest: eip712Hash,
+          context: Object.keys(context).length > 0 ? context : undefined,
+        }),
+      );
+    } catch {
+      /* fail-soft */
+    }
+  }
+
   return { principal: claims.delegation.delegator };
 }
 
