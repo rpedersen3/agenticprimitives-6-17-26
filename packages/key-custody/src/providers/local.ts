@@ -82,11 +82,22 @@ export class LocalAesProvider implements A2AKeyProvider {
   private readonly master: Uint8Array;
 
   constructor(opts?: { sessionSecretHex?: string }) {
-    assertNotProduction('LocalAesProvider');
+    // Production guard moved from the constructor to the
+    // envelope-encryption methods (generateSessionDataKey /
+    // decryptSessionDataKey). Rationale: the production posture
+    // requires a real KMS for SESSION DATA KEY material (encrypt /
+    // decrypt of session payloads) — HKDF-from-a-local-secret is the
+    // dev-only path that gets refused in prod. The MAC primitive
+    // (generateMac, below) is just HMAC-SHA256 over a wrangler-secret-
+    // loaded value, which is a legitimate production pattern for
+    // service-to-service auth (audit C1). Splitting the guard lets
+    // generateMac work in production without weakening the encryption
+    // posture.
     this.master = loadMasterSecret(opts?.sessionSecretHex);
   }
 
   async generateSessionDataKey(input: { aadContext: Record<string, string> }) {
+    assertNotProduction('LocalAesProvider.generateSessionDataKey');
     const salt = randomBytes(SALT_BYTES);
     const info = canonicalContextBytes(input.aadContext);
     // Derive 32-byte data key. encryptedDataKey == salt (the master is held in process memory).
@@ -105,6 +116,7 @@ export class LocalAesProvider implements A2AKeyProvider {
     keyId: string;
     keyVersion: string;
   }) {
+    assertNotProduction('LocalAesProvider.decryptSessionDataKey');
     if (input.keyVersion !== this.keyVersion) {
       throw new Error(`LocalAesProvider: keyVersion mismatch (got "${input.keyVersion}", expected "${this.keyVersion}").`);
     }
@@ -120,7 +132,11 @@ export class LocalAesProvider implements A2AKeyProvider {
   }
 
   async generateMac(input: { canonicalMessage: Uint8Array; service: string; audience: string }) {
-    // Per-audience MAC subkey is HMAC(master, "mac|service|audience").
+    // Permitted in production: this is HMAC-SHA256 with a wrangler-
+    // secret-loaded shared key, which is a legitimate production
+    // pattern for service-to-service auth. Production should migrate
+    // to a managed KMS HMAC key for key rotation + IAM scoping, but
+    // the LocalAesProvider MAC path is structurally safe.
     const ctx = `mac|${input.service}|${input.audience}`;
     const subkey = hmac(sha256, this.master, new TextEncoder().encode(ctx));
     const mac = hmac(sha256, subkey, input.canonicalMessage);

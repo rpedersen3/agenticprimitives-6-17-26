@@ -64,9 +64,37 @@ describe('LocalAesProvider', () => {
     ).rejects.toThrow(/keyVersion mismatch/);
   });
 
-  it('production guard: refuses to instantiate when NODE_ENV=production', () => {
+  it('production guard: refuses session-data-key envelope ops when NODE_ENV=production', async () => {
     process.env.NODE_ENV = 'production';
-    expect(() => new LocalAesProvider({ sessionSecretHex: TEST_SECRET })).toThrow(/refuses to start/);
+    // Constructor is permitted in production (the MAC path needs it).
+    // The guard fires on the envelope-encryption methods specifically —
+    // those require a real KMS in prod.
+    const p = new LocalAesProvider({ sessionSecretHex: TEST_SECRET });
+    await expect(
+      p.generateSessionDataKey({ aadContext: { sessionId: 'x' } }),
+    ).rejects.toThrow(/refuses to start/);
+    await expect(
+      p.decryptSessionDataKey({
+        encryptedDataKey: new Uint8Array(16),
+        aadContext: { sessionId: 'x' },
+        keyId: 'local-master',
+        keyVersion: 'local-v1',
+      }),
+    ).rejects.toThrow(/refuses to start/);
+    process.env.NODE_ENV = 'test';
+  });
+
+  it('production guard: PERMITS the MAC primitive when NODE_ENV=production', async () => {
+    // MAC is a wrangler-secret-loaded HMAC, valid in production —
+    // see LocalAesProvider class comment.
+    process.env.NODE_ENV = 'production';
+    const p = new LocalAesProvider({ sessionSecretHex: TEST_SECRET });
+    const { mac } = await p.generateMac!({
+      canonicalMessage: new TextEncoder().encode('hello'),
+      service: 'a2a-to-mcp',
+      audience: 'urn:mcp:server:person',
+    });
+    expect(mac.length).toBe(32); // sha256 = 32 bytes
     process.env.NODE_ENV = 'test';
   });
 
