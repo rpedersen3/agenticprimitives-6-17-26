@@ -114,8 +114,14 @@ The local-aes signer bypasses its own `NODE_ENV=production` guard via a shim in 
      --location=us-central1 \
      --purpose=asymmetric-signing \
      --default-algorithm=ec-sign-secp256k1-sha256 \
-     --protection-level=software   # or `hsm` for HSM-backed (~$1/mo)
+     --protection-level=hsm
    ```
+   **`--protection-level=hsm` is required.** GCP gates `EC_SIGN_SECP256K1_SHA256`
+   to HSM-only — Software protection is not supported for secp256k1 in Cloud
+   KMS. If you create the key via the Console dropdown, secp256k1 appears but
+   is greyed out unless you switch protection to HSM. Cost: ~$1/mo + ~$0.30
+   per 10k signing operations. `us-central1` supports HSM; check other regions
+   via `gcloud kms locations list --filter="hsmAvailable=true"`.
 3. **(Optional)** Create a SECOND key for envelope encryption (replaces `LocalAesProvider` on the signer side; the demo's per-session AES-GCM payload encryption is still done in-Worker — Cloud KMS only wraps the session data key):
    ```bash
    gcloud kms keys create agent-envelope \

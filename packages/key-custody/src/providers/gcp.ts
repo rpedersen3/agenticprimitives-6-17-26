@@ -375,8 +375,12 @@ export class GcpKmsSigner implements KmsAccountBackend {
       throw new Error(
         `GcpKmsSigner: key ${this.keyName} has algorithm "${res.algorithm}", but ` +
           `EC_SIGN_SECP256K1_SHA256 is required for Ethereum-compatible signing. ` +
-          `Recreate the key with --default-algorithm=ec-sign-secp256k1-sha256 ` +
-          `(GCP doesn't allow changing the algorithm of an existing key).`,
+          `Recreate with: gcloud kms keys create <NAME> --purpose=asymmetric-signing ` +
+          `--default-algorithm=ec-sign-secp256k1-sha256 --protection-level=hsm. ` +
+          `Note: secp256k1 in GCP requires --protection-level=hsm; Software is not ` +
+          `supported. The Console dropdown greys out secp256k1 when Software is ` +
+          `selected. GCP doesn't allow changing the algorithm or protection level ` +
+          `of an existing key.`,
       );
     }
     const spkiDer = pemToDer(res.pem);
