@@ -13,6 +13,8 @@ import {AllowedMethodsEnforcer} from "../src/enforcers/AllowedMethodsEnforcer.so
 import {ValueEnforcer} from "../src/enforcers/ValueEnforcer.sol";
 import {SmartAgentPaymaster} from "../src/SmartAgentPaymaster.sol";
 import {UniversalSignatureValidator} from "../src/UniversalSignatureValidator.sol";
+import {QuorumEnforcer} from "../src/enforcers/QuorumEnforcer.sol";
+import {ApprovedHashRegistry} from "../src/ApprovedHashRegistry.sol";
 
 /**
  * Deploys the minimum on-chain surface the demo needs:
@@ -81,6 +83,23 @@ contract Deploy is Script {
         ValueEnforcer valueEnforcer = new ValueEnforcer();
         console2.log("ValueEnforcer:        %s", address(valueEnforcer));
 
+        // 4.5. Spec 207 multi-sig substrate (phase 6c).
+        //   QuorumEnforcer = N-of-M signature aggregation caveat that
+        //     T3+ delegations carry. SDK builders in
+        //     `@agenticprimitives/delegation.buildQuorumCaveat` reference
+        //     this address; mcp-runtime's `withDelegation` threads it
+        //     via `config.quorumEnforcer` (6c.4).
+        //   ApprovedHashRegistry = v=1 signature path companion for
+        //     passkey-only or hardware-wallet signers participating in
+        //     quorums without producing off-chain ECDSA. Per-signer +
+        //     per-hash approval; spam-resistant by construction (only
+        //     approvals from signers in the bound set count at the
+        //     QuorumEnforcer layer).
+        QuorumEnforcer quorumEnforcer = new QuorumEnforcer();
+        console2.log("QuorumEnforcer:       %s", address(quorumEnforcer));
+        ApprovedHashRegistry approvedHashRegistry = new ApprovedHashRegistry();
+        console2.log("ApprovedHashRegistry: %s", address(approvedHashRegistry));
+
         // 5. SmartAgentPaymaster — sponsors gas for user-op-based account deploys.
         //    Constructor takes entryPoint, initialOwner (for stake/deposit in this
         //    broadcast), and governance (for setDevMode + setAccepted later).
@@ -143,6 +162,8 @@ contract Deploy is Script {
         vm.serializeAddress(key, "allowedMethodsEnforcer", address(allowedMethods));
         vm.serializeAddress(key, "valueEnforcer", address(valueEnforcer));
         vm.serializeAddress(key, "smartAgentPaymaster", address(paymaster));
+        vm.serializeAddress(key, "quorumEnforcer", address(quorumEnforcer));
+        vm.serializeAddress(key, "approvedHashRegistry", address(approvedHashRegistry));
         string memory out = vm.serializeAddress(key, "universalSignatureValidator", address(universalValidator));
 
         string memory path = string.concat("deployments-", network, ".json");
