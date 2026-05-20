@@ -1,13 +1,22 @@
 # Spec 207 — Smart-account threshold policy
 
-**Status:** v0 draft · 2026-05-20
+**Status:** v0 draft · 2026-05-20 (revised — "integrated, not bolted-on")
 **Closes:** new audit finding **N16** (smart-account multi-sig and recovery policy is not productized).
-**Builds on:** spec 201 (`agent-account`), spec 202 (`delegation`), spec 130 (`passkey-flow`), the multi-sig contracts shipped in pass 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`).
+**Builds on:** spec 201 (`agent-account`), spec 202 (`delegation`), spec 204 (`tool-policy`), spec 130 (`passkey-flow`), the multi-sig contracts shipped in pass 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`).
 **Reference: smart-agent patterns to port:** `packages/contracts/src/AgentAccount.sol` (multi-owner mapping shape), `packages/contracts/src/enforcers/QuorumEnforcer.sol` (Safe-compatible signature aggregation — ported in 6c.1), `packages/contracts/src/ApprovedHashRegistry.sol` (pre-approval registry — ported in 6c.1). Deliberate divergence: smart-agent does not productize risk-tier thresholds at the account layer — that pattern is original here, modeled after Safe's owner+threshold+modules+guards architecture and MetaMask's Hybrid / Multisig account modes.
 
-> **Doctrine:** The platform's core direction is **"smart account owns multiple signers and enforces thresholds on-chain."** This spec defines the productized surface across signer types, action tiers, recovery, and admin gating. Multi-sig is not a feature toggle on the side; it is the **default shape** of the AgentAccount once this spec lands. Spec 201 (`agent-account`) v0 ships with `mode = single` as the only mode; spec 207 ships `mode ∈ {single, hybrid, multisig, enterprise}` as the productized matrix.
+> **Doctrine:** The platform's core direction is **"smart account owns multiple signers and enforces thresholds on-chain."** This spec defines the productized surface across signer types, action tiers, recovery, and admin gating. Multi-sig is the **default shape** of the AgentAccount; threshold=1 with one signer in the set is the trivial case (the existing demo flow), not a separate code path. Spec 201 (`agent-account`) v0 ships with `mode = single` as the only mode; spec 207 ships `mode ∈ {single, hybrid, multisig, enterprise}` as the productized matrix.
 >
-> **Substrate independence:** agenticprimitives ships its own multi-sig end-to-end. We do NOT integrate Gnosis Safe Singleton, Safe{Wallet}, or any other third-party multi-sig contract as a runtime dependency. We DO port battle-tested patterns from Safe (signature packing format, owner+threshold+module architecture) and from MetaMask's account-mode taxonomy — patterns are public goods; runtime deps are not. The "Safe-compatible" framing throughout this spec refers exclusively to the **on-chain signature packing format**, so external Safe-shaped tooling can sign for our accounts. Safe contracts themselves never appear in our deploy.
+> **Integration, not bolt-on.** Multi-sig is NOT a standalone `@agenticprimitives/multi-sig` package or an opt-in feature surface. The threshold + signer-set + risk-tier concepts thread through the existing packages by ownership:
+> - `agent-account` owns multi-owner state, `_guardians`, `_modeFlags`, threshold getters, admin actions, and recovery.
+> - `delegation` carries signer sets natively (threshold=1 is the trivial case), and `buildQuorumCaveat` is a peer of the existing caveat builders.
+> - `tool-policy` owns the risk-tier taxonomy (T1 Read / T2 Write / T3 Value / T4 Admin / T5 Critical / T6 Recovery) — risk tiers are already its domain per spec 204.
+> - `identity-auth` is unchanged — the `Signer` interface stays signer-shape-agnostic.
+> - `mcp-runtime` is unchanged — `withDelegation` calls verify; verify transparently handles n-of-m once delegation does.
+>
+> A consumer reading our docs should not have to "enable multi-sig" — they should always be dealing with `Delegation` objects that may have 1+ signers, gated by `threshold(tier)` on the account. The on-chain primitives shipped in 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`) stay where they landed in `apps/contracts/`; they're not getting wrapped in a new package boundary.
+>
+> **Substrate independence.** agenticprimitives ships its own multi-sig end-to-end. We do NOT integrate Gnosis Safe Singleton, Safe{Wallet}, or any other third-party multi-sig contract as a runtime dependency. We DO port battle-tested patterns from Safe (signature packing format, owner+threshold+module architecture) and from MetaMask's account-mode taxonomy — patterns are public goods; runtime deps are not. The "Safe-compatible" framing throughout this spec refers exclusively to the **on-chain signature packing format** so external Safe-shaped tooling can sign for our accounts. Safe contracts themselves never appear in our deploy.
 
 ---
 
@@ -211,37 +220,59 @@ Each row maps to a Forge test (T1–T11) or a Playwright e2e (T12 via demo flow)
 
 ## 10. Package surface changes
 
-Concrete changes to land per phase:
+The "integration, not bolt-on" doctrine maps the surface across existing packages by ownership. **No new package is created** — the on-chain primitives shipped in 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`) plug into the current package set:
 
-### Phase 6c.2 — multi-sig package + AgentAccount extension
+| Package | Concept it owns | What lands here |
+| --- | --- | --- |
+| `agent-account` | Multi-owner state, mode, thresholds, admin actions, recovery | `_guardians` mapping, `_modeFlags`, `threshold(tier)` + `recoveryThreshold()` getters, propose / execute / cancel admin machinery, `AdminAction` enum, recovery flow. SDK: `AgentAccountClient` gains `proposeAdmin` / `executeAdmin` / `cancelAdmin` / `initiateRecovery` / `executeRecovery`. Also `preApproveHash(hash)` helper (it's an account-level signal). |
+| `delegation` | Signer-set + quorum-aware delegations and caveats | `Delegation` shape stays as-is (signer set is implicit in the caveats it carries). `buildQuorumCaveat({signers, threshold, approvedHashRegistry})` joins the existing caveat-builder peers (`buildCaveat`, `buildMcpToolScopeCaveat`, `buildDelegateBindingCaveat`, `buildDataScopeCaveat`). `packSafeSignatures(parts)` ships as a delegation-side helper because the packed blob IS the redeem-time argument shape for a quorum caveat. `verifyDelegationToken` gains an optional `requireQuorumForTier(tier)` opt (fail-closed when a tier requires quorum but the delegation lacks the caveat). |
+| `tool-policy` | Risk-tier taxonomy + policy decision | Risk-tier constants (`TIER_READ` ... `TIER_RECOVERY`) become first-class exports. `evaluatePolicy(classification)` returns a `{ tier, requiresQuorum, requiresUv, requiresAcceptedOnChain }` decision that the caller composes with `delegation.verifyDelegationToken`. The existing `@sa-risk-tier` classification metadata gains the tier IDs from this spec. |
+| `identity-auth` | (unchanged) | The `Signer` interface stays signer-shape-agnostic. Multi-sig is below this layer — `identity-auth` doesn't know whether the eventual signer set is 1-of-1 or 3-of-5. |
+| `mcp-runtime` | (effectively unchanged) | `withDelegation` already calls `verifyDelegationToken`. It transparently handles n-of-m once `delegation` does. The only addition: the `tool-policy` decision (`requiresQuorum`, etc.) is threaded into the verify call. |
+| `audit` | (unchanged interface; new emitter actions) | Spec 206 vocabulary table grows: `agent-account.admin.{propose,execute,cancel}`, `agent-account.recovery.{propose,execute,cancel}`, `delegation.quorum.{accept,reject}`. |
+| `apps/contracts` | On-chain primitives | Already-shipped: `QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`. New: `AgentAccount` extended in place (no new contract); `AgentAccountFactory.createAccount*` signatures grow to take `mode + initial signers + initial guardians + thresholds`. |
 
-- Extend `AgentAccount.sol`:
-  - Add `_guardians` mapping + `_modeFlags` packed field for mode + thresholds-per-tier.
-  - Add `proposeAdmin` / `executeAdmin` / `cancelAdmin` machinery.
-  - Add `recoveryThreshold()`, `threshold(uint8 tier)` getters.
-- New `@agenticprimitives/multi-sig` package (TypeScript SDK):
-  - `buildQuorumCaveat({signers, threshold, approvedHashRegistry})` — already planned in 6c task description.
-  - `packSafeSignatures(parts)` — Safe-compatible 65-byte-slot blob packer.
-  - `preApproveHash(account, hash)` — wraps `ApprovedHashRegistry.approveHash`.
-  - **NEW from this spec:** `proposeAdminAction({account, action, args, signers})`, `executeAdminAction({account, proposalId, signers})`, `recoveryFlow(...)` helpers.
-  - Per-package `CLAUDE.md`, `AUDIT.md`, `capability.manifest.json`, `spec.md` (pointing at this 207 spec).
+### Phase 6c.2 — AgentAccount extension (Solidity)
 
-### Phase 6c.3 — wire QuorumEnforcer caveat into delegation issuance
+- Extend `AgentAccount.sol` (in place — no new contract):
+  - `_guardians` mapping + `_modeFlags` packed field (mode + per-tier thresholds).
+  - `propose<AdminAction>` / `execute<AdminAction>` / `cancel<AdminAction>` machinery dispatching on the `AdminAction` enum from § 7.
+  - `threshold(uint8 tier)` + `recoveryThreshold()` getters.
+  - Reuse existing `_owners` mapping (already multi-capable); add `_passkeys` partition tracking if not yet split out from owners.
+- Extend `AgentAccountFactory.sol`: `createAccount` / `createAccountWithPasskey` signatures grow to take an initial mode + signer set + guardian set + threshold vector. Refuse to deploy `multisig` / `enterprise` mode with 0 guardians.
+- Forge tests: rows 1, 4, 5, 6 from § 9 land here. T11 (admin event emission) verified in this pass.
 
-- `@agenticprimitives/delegation`: re-export `buildQuorumCaveat` for callers issuing T3/T4/T5 delegations.
-- `verifyDelegationToken`: accept new `requireQuorum: boolean` opt; fail closed if absent on a delegation that carries a `QuorumEnforcer` caveat.
-- Audit C3 emission gets a new `acceptedOnChain` context field on accept rows.
+### Phase 6c.3 — Delegation + tool-policy integration (TypeScript)
 
-### Phase 6c.4 — frontend wiring
+- `@agenticprimitives/tool-policy`: export `Tier` enum + `RISK_TIER_REQUIREMENTS` map. `evaluatePolicy(classification)` returns `{ tier, requiresQuorum, requiresUv, requiresAcceptedOnChain }`. Tier resolution from existing `@sa-risk-tier` classification metadata.
+- `@agenticprimitives/delegation`:
+  - New caveat builder: `buildQuorumCaveat({signers, threshold, approvedHashRegistry})`.
+  - New SDK helper: `packSafeSignatures(parts)` (Safe-compatible 65-byte-slot blob packer).
+  - `verifyDelegationToken`: accept `requireQuorumForTier(tier)` opt. When the tool-policy decision says a tier requires quorum, verify checks the delegation carries a `QuorumEnforcer` caveat; otherwise fail closed.
+  - Audit C3 emission gets a new `acceptedOnChain` context field on accept rows (for T3+ delegations that needed the on-chain `acceptSessionDelegation` blessing).
+- `@agenticprimitives/agent-account` SDK: `AgentAccountClient` gains `proposeAdmin` / `executeAdmin` / `cancelAdmin` / `initiateRecovery` / `executeRecovery` + `preApproveHash` helpers.
+- Per-package `CLAUDE.md` + `AUDIT.md` updates documenting the new exports + the integration story.
 
-- demo-web Step 0: "Account mode" selector (default to `multisig` once the package lands).
-- Step 2: tier-aware delegation issuance flow; for T3+ the UI prompts "this is a high-value grant — n signers must approve."
+### Phase 6c.4 — mcp-runtime integration (TypeScript)
+
+- `@agenticprimitives/mcp-runtime`: `withDelegation` reads `tool-policy.evaluatePolicy(classification)` (already calls this for the H2 fix), threads the result's `requiresQuorum` / `requiresAcceptedOnChain` into the `verifyDelegationToken` opts. No new public exports — the wrapper transparently enforces tier requirements.
+- Audit spec 206 vocabulary table updated with the new action names.
+
+### Phase 6c.5 — frontend wiring (demo-web)
+
+- Step 0: "Account mode" selector. Default to `multisig` for any account that adds >1 signer. (`single` stays as the dev/demo fast-path.) Wire to `AgentAccountFactory.createAccount*` extended signature.
+- Step 2: tier-aware delegation issuance — when `tool-policy.evaluatePolicy` says T3+, prompt n signers in sequence; collect a packed Safe-format blob.
 - Step 4 (NEW): Account admin panel — propose/execute/cancel admin actions; show pending admin proposals with countdown to ETA.
 - Step 5 (NEW): Recovery flow — initiate, list guardians, collect approvals, execute.
 
-### Phase 6c.5 — Forge tests + Playwright e2e
+### Phase 6c.6 — Forge tests + Playwright e2e
 
-- 12 tests from § 9, file naming: `test/ThresholdPolicy*.t.sol` + `tests/e2e/06-account-admin.spec.ts`.
+- 12 tests from § 9, files: `test/AgentAccountAdmin.t.sol`, `test/AgentAccountRecovery.t.sol`, `test/ThresholdPolicy.t.sol`, `tests/e2e/06-account-admin.spec.ts`.
+
+### Phase 6c.7 — audit doc refresh
+
+- Add **N16** to `docs/architecture/product-readiness-audit.md` open findings. Mark it closed in the same pass that finishes 6c.6 (or earlier sub-phase, whichever fully productizes the multi-sig per § 9 launch gates).
+- Per-package `AUDIT.md` refreshed in: `agent-account`, `delegation`, `tool-policy`, `mcp-runtime`, `audit`.
 
 ---
 
@@ -276,12 +307,13 @@ Per the repo doctrine, smart-agent's relevant patterns to mirror:
 When you read this spec, please react to:
 
 1. The signer taxonomy (§ 3) — three types right? Or do we want a fourth ("session" as a first-class signer separate from "delegation"?)
-2. The account modes (§ 4) — single/hybrid/multisig/enterprise feel right? Is `enterprise` overkill for v0, or table-stakes?
+2. The account modes (§ 4) — single / hybrid / multisig / enterprise feel right? Is `enterprise` overkill for v0, or table-stakes?
 3. The risk-tier table (§ 5) — tier boundaries map to your mental model?
 4. High-risk delegation reuse of `acceptSessionDelegation` (§ 6) — agree it's the right hook?
-5. The admin action enum + propose/execute/cancel shape (§ 7) — any actions missing? Anything that shouldn't be guarded?
+5. The admin action enum + propose / execute / cancel shape (§ 7) — any actions missing? Anything that shouldn't be guarded?
 6. Recovery flow + 2-passkey-minimum (§ 8) — 72h timelock right, or longer / shorter?
 7. The 12 launch-gate tests (§ 9) — coverage feels complete? Missing critical edge?
-8. Whether 6c.4 (demo-web admin + recovery panels) ships in this phase or moves to phase 7.
+8. The integration map in § 10 — does the distribution across `agent-account` / `delegation` / `tool-policy` / `mcp-runtime` feel natural, or is there a slice that wants its own home?
+9. Whether 6c.5 (demo-web admin + recovery panels) ships in this phase or moves to phase 7.
 
-Once those are pinned, I'll convert 6c.2 to "implement § 10.1" and proceed.
+Once those are pinned, I'll start 6c.2 (the `AgentAccount` Solidity extension) per § 10.
