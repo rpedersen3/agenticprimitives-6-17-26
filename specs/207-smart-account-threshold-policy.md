@@ -1,11 +1,11 @@
 # Spec 207 — Smart-account threshold policy
 
-**Status:** v0 accepted · 2026-05-20 (revised — "integrated, not bolted-on"; calibrations + threshold matrix accepted)
+**Status:** v0 accepted · 2026-05-20 (revised — product-lessons absorbed: safety+recovery framing, kind × role signers, `threshold`/`org` mode rename, 5 use cases, ERC-7579 package mapping, permission-UX requirements)
 **Closes:** new audit finding **N16** (smart-account multi-sig and recovery policy is not productized).
 **Builds on:** spec 201 (`agent-account`), spec 202 (`delegation`), spec 204 (`tool-policy`), spec 130 (`passkey-flow`), the multi-sig contracts shipped in pass 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`).
 **Reference: smart-agent patterns to port:** `packages/contracts/src/AgentAccount.sol` (multi-owner mapping shape), `packages/contracts/src/enforcers/QuorumEnforcer.sol` (Safe-compatible signature aggregation — ported in 6c.1), `packages/contracts/src/ApprovedHashRegistry.sol` (pre-approval registry — ported in 6c.1). Deliberate divergence: smart-agent does not productize risk-tier thresholds at the account layer — that pattern is original here, modeled after Safe's owner+threshold+modules+guards architecture and MetaMask's Hybrid / Multisig account modes.
 
-> **Doctrine:** The platform's core direction is **"smart account owns multiple signers and enforces thresholds on-chain."** This spec defines the productized surface across signer types, action tiers, recovery, and admin gating. Multi-sig is the **default shape** of the AgentAccount; threshold=1 with one signer in the set is the trivial case (the existing demo flow), not a separate code path. Spec 201 (`agent-account`) v0 ships with `mode = single` as the only mode; spec 207 ships `mode ∈ {single, hybrid, multisig, enterprise}` as the productized matrix.
+> **Doctrine: multi-sig is safety + recovery, not a "ceremony."** Seamless products (Safe, MetaMask Smart Accounts, Coinbase Smart Wallet) do not present multi-sig as a crypto ceremony. They present it as **account safety, recovery, approval policy, and delegation control**. We adopt the same framing throughout spec text, contract NatSpec, SDK docs, and UX copy. "Sign hash" is a smell; the user should see *"2 approvals required to let Agent X spend up to 10 USDC/day until Friday."* Spec 201 (`agent-account`) v0 ships with `mode = single` as the only mode; spec 207 ships `mode ∈ {single, hybrid, threshold, org}` as the productized matrix. Threshold=1 with one signer is the trivial case (the existing demo flow), not a separate code path.
 >
 > **Integration, not bolt-on.** Multi-sig is NOT a standalone `@agenticprimitives/multi-sig` package or an opt-in feature surface. The threshold + signer-set + risk-tier concepts thread through the existing packages by ownership:
 > - `agent-account` owns multi-owner state, `_guardians`, `_modeFlags`, threshold getters, admin actions, and recovery.
@@ -25,12 +25,13 @@
 Define how an `AgentAccount` represents, authorizes, and recovers from multi-signer ownership. Today the contract has `_owners` as a `mapping(address => bool)` (multi-owner-capable) but the **product surface treats it as 1-of-N** — any single owner can authorize anything via ERC-1271. That's fine for the demo. It's disqualifying for any production deploy that holds non-trivial value, deploys irreversible actions, or carries recovery obligations.
 
 This spec productizes:
-- **Signer types** as a first-class taxonomy (EOA / passkey / guardian).
-- **Account modes** as the user-selectable shape of the account.
-- **Risk-tier thresholds** — different actions require different signer counts, not a single global threshold.
-- **High-risk delegation approval** — large-value grants require on-chain pre-authorization via the existing `acceptSessionDelegation` hook.
-- **Guarded admin actions** — owner management, upgrade, and registry changes require threshold + (sometimes) timelock.
-- **Multi-passkey recovery** — production accounts MUST be recoverable without a single point of compromise.
+- **Signers as a two-dimensional model** — kind (EOA / passkey / smart-account / hardware wallet) × role (primary / recovery / agent / steward). Sessions are an authority role, not a signer kind.
+- **Account modes** as the user-selectable shape of the account: `single` / `hybrid` / `threshold` / `org`. User-facing labels: "Just me" / "Me + backups" / "Multiple approvers" / "Organization."
+- **Threshold classes** — different actions require different signer counts; the T1–T6 tier table in § 5 is the contract-layer surface, exposed in user-readable language ("daily threshold," "admin threshold," "high-risk delegation threshold," "recovery threshold") in SDK + UI.
+- **High-risk delegation approval** — large-value grants require human-readable permission cards + threshold approval + on-chain pre-authorization via the existing `acceptSessionDelegation` hook.
+- **Guarded admin actions** — owner / passkey / guardian / mode changes require threshold; upgrade + DelegationManager + paymaster + session-issuer changes also require timelock.
+- **Multi-passkey enrollment as normal onboarding** — "Add a backup so you don't lose your agent account" is the second step after account creation, not buried in advanced settings (Coinbase Smart Wallet doctrine).
+- **Permission UX as security** — no caveat-free production delegation; every caveat has human-readable copy; permission cards show who / what / where / when / how much / how often / how to revoke.
 
 The 6c.1 primitives (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`) are the on-chain building blocks; this spec defines **how** they compose into a product surface that an operator can reason about.
 
@@ -40,36 +41,96 @@ The 6c.1 primitives (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnl
 
 | ID | Severity | Finding | Owner | Remediation |
 | --- | --- | --- | --- | --- |
-| **N16** | P2 | **Smart-account multi-sig and recovery policy is not productized.** `AgentAccount` supports multiple owners/passkeys at the contract layer, but the product does not define threshold requirements for recovery, upgrades, owner changes, high-risk delegation grants, or `DelegationManager` changes. Any single owner currently authorizes any action. | `agent-account` + new `multi-sig` package | Land spec 207; productize signer taxonomy + account modes + risk-tier thresholds + guarded admin actions; ship with at least two passkey owners required before any production deploy. Tests required before production listed in § 9 below. |
+| **N16** | P2 | **Smart-account safety + recovery policy is not productized.** `AgentAccount` supports multiple owners/passkeys at the contract layer, but the product does not define threshold requirements for recovery, upgrades, owner changes, high-risk delegation grants, or `DelegationManager` changes. Any single owner currently authorizes any action; no human-readable permission UX exists for high-risk grants. | `agent-account` + `delegation` + `tool-policy` (integrated, no new package per the integration-not-bolt-on doctrine) | Land spec 207; productize signer kind × role model + account modes + threshold classes + guarded admin actions + permission-UX requirements; ship with at least one backup signer required for the hybrid+ modes before any production deploy. Tests required before production listed in § 9 below. |
 
 ---
 
-## 3. Signer taxonomy
+## 3. Signers — two dimensions: kind × role
 
-Three signer types, each with a distinct role + key shape + authority class. These are **product concepts** — they're enforced via contract state + caveats, not via separate signer interfaces in the SDK (which stays the unified `Signer` from `identity-auth`).
+The signer model is **two-dimensional**, not a flat list. Every signer has both:
 
-| Signer type | Key shape | Authority class | Removable? | Typical use |
-| --- | --- | --- | --- | --- |
-| **EOA** | secp256k1 private key | Primary signer | Yes, by threshold | The user's wallet (MetaMask, Rainbow, ledger), or a service-account relayer |
-| **Passkey** | P-256 WebAuthn credential | Primary signer | Yes, by threshold | Device-bound auth, biometric UV gate available for write tier |
-| **Guardian** | EOA OR contract (multi-sig itself) | Recovery-only | Yes, by threshold | Trusted third party (a friend, a custodian, another AgentAccount) authorized to participate in recovery quorum but NOT in routine delegation issuance |
+- a **kind** — the key shape + verification path
+- a **role** — the authority class on this account (what they're allowed to authorize)
 
-**Why a Guardian role:** Recovery threshold and routine threshold serve different threat models. A guardian should not be able to issue session delegations or trigger payments on the user's behalf; they should only be able to participate in a recovery flow that re-establishes the user's primary signer set. Contract-level distinction: guardians are tracked in a separate `_guardians` mapping; their address recovers ERC-1271 only when the call is gated by the `RECOVERY_QUORUM_CAVEAT` (see § 6).
+This separation is the critical insight from the product-lessons survey (Safe / MetaMask / Coinbase / ZeroDev). A "guardian" isn't a *different kind of key* — it's an EOA or passkey (or other account) playing a different *role*. A "session" isn't a kind of key — it's an authority role with delegated, temporary power.
+
+### Signer kinds (how the verification works)
+
+| Kind | Key shape | Verification path |
+| --- | --- | --- |
+| **EOA** | secp256k1 | ECDSA / eth_sign / EIP-191 (`SignatureSlotRecovery` v ∈ {27, 28, > 30}) |
+| **Passkey** | P-256 WebAuthn | On-chain `_verifyWebAuthn` for routine; pre-approved-hash registry (v = 1) for joining quorums it can't natively prove |
+| **Smart account** | ERC-1271 caller | `IERC1271.isValidSignature` (`SignatureSlotRecovery` v = 0) — covers another `AgentAccount`, a Safe (interop), or any other ERC-1271 wallet |
+| **Hardware wallet** | secp256k1 (Ledger, etc.) | ECDSA via the EOA path — kind is informational only at the contract layer, but the SDK / UI distinguishes for UX |
+
+Keeping kinds as a *non-exhaustive* set: future kinds (RIP-7212 P-256 precompile, FIDO L3 attested keys, etc.) plug in via the `SignatureSlotRecovery` library without changing the role surface.
+
+### Authority roles (what they're allowed to authorize)
+
+| Role | Removable? | Authorizes |
+| --- | --- | --- |
+| **Primary** | Yes, by threshold | Routine delegation issuance, T1–T3 actions, account admin (with quorum). The default role. |
+| **Recovery (guardian)** | Yes, by threshold | T6 recovery quorum only. Cannot participate in routine signing or delegation issuance. |
+| **Agent (session)** | Auto-expires | Off-chain agent operations under a redelegated session keypair. Not stored as a signer on-chain — represented as the delegate of a `Delegation`. Listed here for completeness because the user sees it as "an authority that can act," even though the contract layer treats it as a delegation grant. |
+| **Steward** | Yes, by threshold | A primary-role signer with explicit cross-delegation rights. Stewards can re-delegate narrower scopes to agents but cannot widen scope (attenuation invariant). Use case 4 below. |
+
+**Why this two-dimensional model matters:**
+
+- A user can have one EOA in **primary** role + the same EOA's mobile-passkey-paired contract account in **recovery** role. The kind is reused; the role differs.
+- A "guardian" with the kind = smart account is a *vouching* guardian (their own multi-sig blesses recovery), which is exactly the "another AgentAccount as guardian" pattern referenced in spec 207 § 11 open questions.
+- The SDK exposes `addSigner({ kind, role, address })` rather than separate `addOwner` / `addGuardian` calls, which makes the role explicit and prevents the "I accidentally added them to the wrong set" footgun.
+
+Contract layer: today `agent-account` keeps separate mappings (`_owners` for primary EOAs, `_passkeys` for primary passkeys, `_guardians` for recovery). That's fine — the role is encoded by which mapping the signer lives in. The two-dimensional model is the **user-facing concept**, not necessarily the storage layout.
 
 ---
 
 ## 4. Account modes
 
-Four canonical modes the user picks during account creation. Each mode pins specific defaults for the § 5 risk-tier table.
+Four canonical modes the user picks during account creation. Each mode pins specific defaults for the § 5 threshold table.
 
-| Mode | Owners | Passkeys | Guardians | Default behavior |
+| Mode | Primary signers | Guardians | Default behavior | UX framing |
 | --- | --- | --- | --- | --- |
-| **`single`** | 1 EOA | 0 | 0 | Today's demo. 1-of-1 across all tiers. Disqualifying for any production deploy. |
-| **`hybrid`** | 1 EOA | ≥ 1 passkey | 0 | Like MetaMask's Hybrid account: the EOA is the "main" signer; passkeys gate write/deploy tiers via UV. Single passkey acceptable for desktop demos; **production requires ≥ 2 passkeys.** |
-| **`multisig`** | 0+ EOA | 0+ passkeys | 0+ guardians | First-class threshold account. Owner set is configurable n-of-m; risk tiers map to different sub-thresholds. **Recommended default for any non-trivial value.** |
-| **`enterprise`** | 0+ EOA | 0+ passkeys | 0+ guardians | Same shape as `multisig` plus mandatory timelocks on every § 7 admin action, plus separation of duties (a single signer cannot participate in both quorum and timelock-execute roles). |
+| **`single`** | 1 EOA *or* 1 passkey | 0 | 1-of-1 across all tiers. Today's demo. | "Just me on this device." |
+| **`hybrid`** | 1 primary + ≥ 1 backup (different kind preferred) | 0–N | Routine: 1-of-N. Admin / recovery: threshold. Coinbase-style — multi-passkey enrollment is **normal onboarding**, not "advanced security." | "Me + my backup devices." |
+| **`threshold`** | ≥ 2 primary | ≥ 0 | n-of-m for routine; m-of-m (or m-1-of-m) for admin; recovery via guardians. Replaces what we used to call "multisig." | "Multiple approvers required." |
+| **`org`** | ≥ 2 primary | ≥ 2 | `threshold` plus mandatory timelocks on every T4/T5 admin action, plus separation of duties on T5 (no signer participates in both propose and execute). Replaces what we used to call "enterprise." | "Treasury / organization account." |
+
+**Mode-naming doctrine** (per the safety + recovery framing): the user-facing labels are `Just me` / `Me + backups` / `Multiple approvers` / `Organization`. Contract / SDK identifiers stay `single` / `hybrid` / `threshold` / `org` so dev-facing log lines + docs use a consistent vocabulary that maps cleanly to the UX.
 
 Mode is **set at deploy time** in the factory's `createAccount*` calls and emitted in the `AccountCreated` event. Mode changes require a § 7 admin flow.
+
+---
+
+## 4.1 The five use cases (every design must support these)
+
+A spec, contract change, SDK method, or UX flow that doesn't fit at least one of these is suspect. Listed here so future contributors can sanity-check additions.
+
+1. **Individual user, seamless recovery** — User creates an account with one passkey. The next step in onboarding is *"add a backup passkey or recovery wallet."* Adding a backup flips mode from `single` to `hybrid`. Low-risk actions stay 1-of-N; admin and recovery actions become threshold. **UX copy: "Add a backup so you don't lose your agent account."**
+
+2. **High-risk agent delegation** — User delegates "transfer up to 10 USDC/day to approved vendors" to an agent. Because it's T3 value, it requires (a) human-readable permission card showing token + cap + recipient allowlist + expiry + revoke link, (b) threshold approval at issue time, and (c) `acceptSessionDelegation(hash)` on-chain blessing. **UX copy: "This permission needs 2 approvals because it can move money."**
+
+3. **Org treasury** — Org creates an `org`-mode account with 3 admins. Threshold: 2-of-3 for treasury actions; 3-of-3 for trust-root changes. Agent can *draft* payments (propose) but cannot execute without threshold approval. Low-risk profile reads stay 1-of-N. **UX copy: "Agent prepared payment. Needs 2 approvals."**
+
+4. **Steward → delegate → agent chain** — User grants a steward primary role with profile-read + limited-write authority. Steward re-delegates a *narrower* scope to an agent. System proves the child delegation is a subset of the parent (attenuation). Agent cannot widen scope. **UX copy: "Steward can delegate only these permissions. Agent received a narrower permission."**
+
+5. **Lost device recovery** — User loses laptop passkey. Signs in with phone passkey. Initiates `T6 Recovery` proposing removal of the lost passkey + (optional) addition of a new one. Recovery requires guardian quorum and runs through the 48h timelock. **UX copy: "Recovery requested. This change becomes active in 24 hours unless cancelled."**
+
+These five drive every test gate in § 9 and every UX surface in phase 7.
+
+---
+
+## 4.2 ERC-7579-shaped mapping to our packages
+
+Per Rhinestone's modular-account model (validators / executors / hooks / fallbacks), our existing package boundaries already map cleanly:
+
+| ERC-7579 module type | Our package | Owns |
+| --- | --- | --- |
+| **Validators** (who can approve) | `identity-auth` + on-chain signer state in `agent-account` | `Signer` interface, ERC-1271 verification, owner / passkey / guardian state |
+| **Executors** (what can act) | `delegation` | `Delegation`, sessions, caveat builders, redelegation chain |
+| **Hooks** (pre / post checks) | `tool-policy` + the caveat enforcer contracts in `apps/contracts/src/enforcers/` | Risk tiers, classification, `evaluatePolicy`, `beforeHook` / `afterHook` |
+| **Runtime adapters** | `mcp-runtime` (today); future `a2a-runtime` etc. | Wraps the validator → executor → hook pipeline behind a transport-specific surface |
+
+This validates the existing package-boundary doctrine. Spec 207 doesn't change any boundary; it deepens the integration along this already-correct architecture.
 
 ---
 
@@ -77,7 +138,7 @@ Mode is **set at deploy time** in the factory's `createAccount*` calls and emitt
 
 This is the spec's headline contribution: actions are not gated by a single global threshold; they are partitioned by **risk tier**, and each tier has its own threshold requirement. The tiers below are the canonical set; new actions added later MUST map to one of them or motivate a new tier.
 
-| Action | Tier | Requirement (single) | Requirement (hybrid) | Requirement (multisig) | Requirement (enterprise) |
+| Action | Tier | Requirement (single) | Requirement (hybrid) | Requirement (threshold) | Requirement (org) |
 | --- | --- | --- | --- | --- | --- |
 | Read-only MCP delegation issuance | T1 — Read | 1 signer | 1 signer | 1 signer | 1 signer |
 | Write / deploy session delegation | T2 — Write | 1 signer | 1 EOA **+** passkey UV | threshold | threshold + UV |
@@ -85,7 +146,7 @@ This is the spec's headline contribution: actions are not gated by a single glob
 | Add / remove owner | T4 — Admin | 1 signer | 1 EOA + passkey UV | threshold | threshold + timelock |
 | Add / remove passkey | T4 — Admin | 1 signer | 1 EOA + passkey UV | threshold | threshold + timelock |
 | Add / remove guardian | T4 — Admin | 1 signer | 1 EOA + passkey UV | threshold | threshold + timelock |
-| Change account mode | T4 — Admin | 1 signer | n/a (must be multisig+) | threshold | threshold + timelock |
+| Change account mode | T4 — Admin | 1 signer | n/a (must be threshold+) | threshold | threshold + timelock |
 | Upgrade account implementation | T5 — Critical | 1 signer | 1 EOA + passkey UV | threshold + timelock | threshold + timelock + separation |
 | Change DelegationManager | T5 — Critical | 1 signer | 1 EOA + passkey UV | threshold + timelock | threshold + timelock + separation |
 | Change paymaster / session-issuer role | T5 — Critical | 1 signer | 1 EOA + passkey UV | threshold + timelock | threshold + timelock + separation |
@@ -95,7 +156,7 @@ This is the spec's headline contribution: actions are not gated by a single glob
 
 - **T1 Read** — Delegations whose redeem can ONLY produce information disclosure or off-chain effects. No on-chain state mutation. No value transfer. Caveats MUST pin the target contract to known read-only surfaces (use `AllowedTargetsEnforcer` + `AllowedMethodsEnforcer` to restrict to view-shaped selectors).
 - **T2 Write** — Delegations that mutate on-chain state but transfer no native value or token > `T3_VALUE_CEILING`. Default ceiling: 0.001 ETH equivalent.
-- **T3 Value** — Delegations that transfer native ETH or tokens above the T3 ceiling. The QuorumEnforcer caveat is **required** for the multisig/enterprise modes.
+- **T3 Value** — Delegations that transfer native ETH or tokens above the T3 ceiling. The QuorumEnforcer caveat is **required** for the threshold/org modes.
 - **T4 Admin** — Owner/passkey/guardian/mode changes on the account. Mutates the trust root.
 - **T5 Critical** — Mutates platform-level pointers (impl, DelegationManager, paymaster). Effectively a re-architecture of trust.
 - **T6 Recovery** — Re-establishes the signer set when the user has lost primary keys.
@@ -110,7 +171,7 @@ This is the spec's headline contribution: actions are not gated by a single glob
 
 ### 5.1 Default threshold matrix
 
-When a `multisig` account is created with N owners, the factory installs these per-tier thresholds by default. Users can override via the factory's `createAccount*` parameters or post-deploy via a T5 `SetThreshold` admin action.
+When a `threshold` account is created with N owners, the factory installs these per-tier thresholds by default. Users can override via the factory's `createAccount*` parameters or post-deploy via a T5 `SetThreshold` admin action.
 
 | N owners | T1 Read | T2 Write | T3 Value | T4 Admin | T5 Critical | T6 Recovery |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -125,7 +186,7 @@ For N=2, the factory issues a warning at deploy time: "2-of-2 means either signe
 
 For N >= 5, factory issues a warning: "large signer sets risk coordination failure; consider whether a guardian set is a better fit for some signers."
 
-`enterprise` mode adds **separation of duties** on T5: any owner who participated in `propose<T5>` is disqualified from participating in `execute<T5>`. This means N=5 enterprise effectively requires a *6th distinct signer* to execute a propose-quorum-of-5 — impossible by construction. So `enterprise` mode requires either N ≥ 7 (so 5 propose + 5 execute can be disjoint at the threshold level) OR a relaxed T5 threshold that allows for the SoD constraint. Factory rejects `enterprise` deploys that can't satisfy the math.
+`org` mode adds **separation of duties** on T5: any owner who participated in `propose<T5>` is disqualified from participating in `execute<T5>`. This means N=5 `org` effectively requires a *6th distinct signer* to execute a propose-quorum-of-5 — impossible by construction. So `org` mode requires either N ≥ 7 (so 5 propose + 5 execute can be disjoint at the threshold level) OR a relaxed T5 threshold that allows for the SoD constraint. Factory rejects `org` deploys that can't satisfy the math.
 
 ---
 
@@ -136,7 +197,7 @@ Builds on the existing `acceptSessionDelegation(hash)` hook on `AgentAccount` (s
 | Tier | Off-chain delegation signature alone? | On-chain `acceptSessionDelegation` required? |
 | --- | --- | --- |
 | T1 Read | ✅ | ❌ |
-| T2 Write | ✅ for `single`/`hybrid`; quorum sig for `multisig`/`enterprise` | ❌ |
+| T2 Write | ✅ for `single`/`hybrid`; quorum sig for `threshold`/`org` | ❌ |
 | T3 Value | quorum sig | ❌ for routine; ✅ when above `T3_HIGHVALUE_THRESHOLD` |
 | T4–T6 | quorum sig | ✅ (timelock+propose flow) |
 
@@ -184,7 +245,7 @@ enum AdminAction {
 
 `executeAdmin(uint256 proposalId, bytes quorumSignatures)`:
 - Loads the proposal, requires `block.timestamp >= proposal.eta`.
-- In **enterprise** mode: rejects if the executing signer set overlaps the proposing signer set by `>= threshold(tier) - 1` (separation of duties).
+- In **org** mode: rejects if the executing signer set overlaps the proposing signer set by `>= threshold(tier) - 1` (separation of duties).
 - Dispatches via internal `_apply<Action>` functions.
 - Emits `AdminExecuted(proposalId)`.
 
@@ -210,7 +271,7 @@ Recovery hardens audit finding **N7** (passkey recovery is unclear today). The f
 5. After `TIMELOCK_DURATION(T6_RECOVERY)` (default: **48h**), calls `executeRecovery(proposalId, recoverySignatures)`.
 6. The first **24h** of the 48h window is the primary-owner **cancel window**: any surviving primary signer can call `cancelAdmin(proposalId, sig)` with a single T4-threshold signature to kill a hostile recovery. After the 24h window closes, recovery can only be cancelled by another recovery-threshold quorum. Rationale: 24h gives the rightful owner one full waking day to react to a notification; the remaining 24h is the "no one objected" window that lets recovery proceed even if the rightful owner is on vacation (different threat model from active compromise).
 
-**Recovery threshold** is configured at account-creation time, defaulting to `ceil(guardianCount / 2) + 1` (majority + 1). If the account has 0 guardians, recovery is impossible — by design, since key-loss is unrecoverable without external trust. The factory's `createAccount` MUST refuse to deploy a `multisig`/`enterprise` account with 0 guardians.
+**Recovery threshold** is configured at account-creation time, defaulting to `ceil(guardianCount / 2) + 1` (majority + 1). If the account has 0 guardians, recovery is impossible — by design, since key-loss is unrecoverable without external trust. The factory's `createAccount` MUST refuse to deploy a `threshold`/`org` account with 0 guardians.
 
 **Recommended guardian count: 5.** That's the sweet spot: a 5-guardian account loses 1 or 2 guardians (to forgetfulness, key loss, life events) and still passes a 3-of-5 recovery threshold. 3 guardians is the practical minimum (passes 2-of-3) but leaves zero slack. >7 starts to make coordination cumbersome. Frontend SHOULD nudge users toward 5 during account setup; spec only enforces minima (see table below).
 
@@ -220,8 +281,8 @@ Recovery hardens audit finding **N7** (passkey recovery is unclear today). The f
 | --- | --- |
 | `single` | Disallowed for production |
 | `hybrid` | ≥ 2 passkeys OR 1 passkey + 1 recovery-EOA guardian |
-| `multisig` | ≥ 2 guardians required at account creation |
-| `enterprise` | ≥ 3 guardians required (so recovery threshold is ≥ 2) |
+| `threshold` | ≥ 2 guardians required at account creation |
+| `org` | ≥ 3 guardians required (so recovery threshold is ≥ 2) |
 
 The factory enforces these minima for any account whose `mode != single`. The frontend (demo-web) MUST warn the user before they deploy a `single` account.
 
@@ -233,20 +294,20 @@ This section is the **launch gate** for any account mode beyond `single`. Produc
 
 | # | Test | What it proves |
 | --- | --- | --- |
-| 1 | T1 read delegation in `multisig` mode with 1 signer succeeds | Tier mapping correctly bypasses quorum on read-only |
+| 1 | T1 read delegation in `threshold` mode with 1 signer succeeds | Tier mapping correctly bypasses quorum on read-only |
 | 2 | T2 write delegation in `hybrid` mode without UV fails closed | Hybrid mode's UV gate is load-bearing |
 | 3 | T3 value delegation above `T3_HIGHVALUE_THRESHOLD` without `acceptSessionDelegation` fails closed | High-value on-chain blessing is enforced |
-| 4 | T4 `AddOwner` in `multisig` with sub-threshold sigs fails closed | Quorum verification on admin path |
-| 5 | T5 `UpgradeImpl` in `multisig` without timelock fails closed | Timelock is enforced |
-| 6 | T5 `UpgradeImpl` in `enterprise` with overlapping propose/execute signers fails closed | Separation of duties is enforced |
+| 4 | T4 `AddOwner` in `threshold` mode with sub-threshold sigs fails closed | Quorum verification on admin path |
+| 5 | T5 `UpgradeImpl` in `threshold` mode without timelock fails closed | Timelock is enforced |
+| 6 | T5 `UpgradeImpl` in `org` mode with overlapping propose/execute signers fails closed | Separation of duties is enforced |
 | 7 | T6 recovery with 3-of-5 guardians + 48h timelock succeeds | Recovery happy path |
 | 8 | T6 recovery cancelled by primary owner within the 24h cancel window reverts the execute | Hostile-recovery escape hatch (cancel window enforced) |
-| 9 | Recovery with 0 guardians is impossible (factory rejects deploy of `multisig`/`enterprise`) | No-recovery footgun blocked |
+| 9 | Recovery with 0 guardians is impossible (factory rejects deploy of `threshold`/`org`) | No-recovery footgun blocked |
 | 10 | `acceptSessionDelegation` emits an audit event recording the on-chain blessing | Trail captures the high-value gate |
 | 11 | All admin actions emit `AdminProposed` / `AdminExecuted` / `AdminCancelled` events | Forensics trail for trust-root mutations |
 | 12 | QuorumEnforcer caveat composes correctly with TimestampEnforcer + ValueEnforcer on T3 delegations | Caveat stacking is not broken by quorum requirement |
 | 13 | T6 recovery proposal during a pending T5 admin proposal — recovery executes; the T5 proposal is implicitly invalidated | Precedence: recovery wins over in-flight trust-root changes |
-| 14 | Mode change from `multisig` → `single` with non-empty guardian set is rejected | No downgrading to a mode that loses recovery |
+| 14 | Mode change from `threshold` → `single` with non-empty guardian set is rejected | No downgrading to a mode that loses recovery |
 | 15 | `QuorumEnforcer` caveat with `threshold=1` and a 1-address signer set behaves identically to a non-quorum delegation | Validates the doctrine "threshold=1 IS the trivial case" — no separate code path |
 
 Each row maps to a Forge test (T1–T11, T13–T15) or a Playwright e2e (T12 via demo flow). System-level testing strategy in `specs/110-test-strategy.md` updated to include this section.
@@ -274,7 +335,7 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
   - `propose<AdminAction>` / `execute<AdminAction>` / `cancel<AdminAction>` machinery dispatching on the `AdminAction` enum from § 7.
   - `threshold(uint8 tier)` + `recoveryThreshold()` getters.
   - Reuse existing `_owners` mapping (already multi-capable); add `_passkeys` partition tracking if not yet split out from owners.
-- Extend `AgentAccountFactory.sol`: `createAccount` / `createAccountWithPasskey` signatures grow to take an initial mode + signer set + guardian set + threshold vector. Refuse to deploy `multisig` / `enterprise` mode with 0 guardians.
+- Extend `AgentAccountFactory.sol`: `createAccount` / `createAccountWithPasskey` signatures grow to take an initial mode + signer set + guardian set + threshold vector. Refuse to deploy `threshold` / `org` mode with 0 guardians.
 - Forge tests: rows 1, 4, 5, 6 from § 9 land here. T11 (admin event emission) verified in this pass.
 
 ### Phase 6c.3 — Delegation + tool-policy integration (TypeScript)
@@ -294,7 +355,7 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
 
 ### Phase 6c.5 — Forge tests + Playwright e2e
 
-- 15 tests from § 9, files: `test/AgentAccountAdmin.t.sol`, `test/AgentAccountRecovery.t.sol`, `test/ThresholdPolicy.t.sol`, `test/EnterpriseSeparation.t.sol` (T6 enterprise SoD), `tests/e2e/06-multi-sig-delegation.spec.ts` (T12 — caveat composition end-to-end). Demo-web's admin + recovery panels are deferred to **phase 7**; the SDK + contract surface is the substrate, and cast / scripts can drive the actions during the 6c testing pass without an admin UI.
+- 15 tests from § 9, files: `test/AgentAccountAdmin.t.sol`, `test/AgentAccountRecovery.t.sol`, `test/ThresholdPolicy.t.sol`, `test/OrgSeparation.t.sol` (T6 org SoD), `tests/e2e/06-threshold-delegation.spec.ts` (T12 — caveat composition end-to-end). Demo-web's admin + recovery panels are deferred to **phase 7**; the SDK + contract surface is the substrate, and cast / scripts can drive the actions during the 6c testing pass without an admin UI.
 
 ### Phase 6c.6 — audit doc refresh
 
@@ -303,7 +364,7 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
 
 ### Phase 7 — demo-web admin + recovery UI (deferred)
 
-- Step 0: "Account mode" selector. Default to `multisig` for any account that adds >1 signer.
+- Step 0: "Account mode" selector. Default to `threshold` for any account that adds >1 signer.
 - Step 2: tier-aware delegation issuance — when `tool-policy.evaluatePolicy` says T3+, prompt n signers in sequence.
 - Step 4: Account admin panel — propose/execute/cancel admin actions; show pending admin proposals with countdown to ETA.
 - Step 5: Recovery flow — initiate, list guardians, collect approvals, execute.
@@ -332,23 +393,28 @@ Per the repo doctrine, smart-agent's relevant patterns to mirror:
 **Deliberate divergence:**
 
 - **Risk-tier table is original to agenticprimitives.** Smart-agent does not productize risk tiers at the account layer. The closest analog is the data-scope grant model in spec 003 (intent marketplace), but that's a delegation-level construct, not an account-level one.
-- **Account modes (single/hybrid/multisig/enterprise) are original.** Smart-agent has a single AgentAccount shape; we adopt MetaMask's account-mode taxonomy because it maps cleanly onto user mental models.
+- **Account modes (single/hybrid/threshold/org) are original.** Smart-agent has a single AgentAccount shape; we adopt MetaMask's account-mode taxonomy because it maps cleanly onto user mental models.
 - **Timelock semantics are original.** Smart-agent has no timelocked admin actions; we add them for T5/T6 because the threat models genuinely differ from routine signing.
 
 ---
 
-## 13. Acceptance for review
+## 13. Resolved decisions + open follow-ups
 
-When you read this spec, please react to:
+Resolved in v0 (2026-05-20):
 
-1. The signer taxonomy (§ 3) — three types right? Or do we want a fourth ("session" as a first-class signer separate from "delegation"?)
-2. The account modes (§ 4) — single / hybrid / multisig / enterprise feel right? Is `enterprise` overkill for v0, or table-stakes?
-3. The risk-tier table (§ 5) — tier boundaries map to your mental model?
-4. High-risk delegation reuse of `acceptSessionDelegation` (§ 6) — agree it's the right hook?
-5. The admin action enum + propose / execute / cancel shape (§ 7) — any actions missing? Anything that shouldn't be guarded?
-6. Recovery flow + 2-passkey-minimum (§ 8) — 72h timelock right, or longer / shorter?
-7. The 12 launch-gate tests (§ 9) — coverage feels complete? Missing critical edge?
-8. The integration map in § 10 — does the distribution across `agent-account` / `delegation` / `tool-policy` / `mcp-runtime` feel natural, or is there a slice that wants its own home?
-9. Whether 6c.5 (demo-web admin + recovery panels) ships in this phase or moves to phase 7.
+- ✅ Signer model: kind × role two-dimensional (§ 3); session is an authority role, not a kind.
+- ✅ Account modes: `single` / `hybrid` / `threshold` / `org` (§ 4). All four ship in v0; `org` is table-stakes per the org-treasury use case.
+- ✅ Risk-tier table (§ 5) with T3_HIGHVALUE_THRESHOLD default 0.01 ETH and timelocks 1h T4 / 24h T5 / 48h T6.
+- ✅ `acceptSessionDelegation` reused as the high-risk gate (§ 6).
+- ✅ AdminAction enum (§ 7) — 14 actions including the operational `RotateAllOwners` / `ChangeT3Ceiling` / `SetRecoveryThreshold`.
+- ✅ Recovery: 48h timelock + 24h primary-owner cancel window; recommended 5 guardians (§ 8).
+- ✅ 15 launch-gate tests (§ 9).
+- ✅ Integration map (§ 10): no new package; surface threads through `agent-account` / `delegation` / `tool-policy`.
+- ✅ Phase 7 deferral of admin + recovery UI; SDK + contract surface ship in 6c.
 
-Once those are pinned, I'll start 6c.2 (the `AgentAccount` Solidity extension) per § 10.
+Open follow-ups (tracked separately):
+
+- **Spec 208 — argument-level caveat policies (Biconomy-style predicates).** Tool-policy's risk tiers + existing caveats are tool-level today. Argument-level — target, method, value ceiling, token, recipient allowlist, parameter predicates, usage count, chain ID, time bounds — is the future. Owned by `tool-policy`; should land before any production deploy with non-trivial agent authority because "Allow agent to call `get_profile`" is too vague for the human-readable permission card model.
+- **Permission-UX spec (phase 7 prerequisite).** Define the human-readable card schema: who / what / where / when / how much / how often / how to revoke. Maps onto the caveat-builder output so SDK can render cards directly from the issued `Delegation`.
+- **Cross-account guardian semantics.** Open question in § 11 — a guardian whose kind is "smart account" votes via ERC-1271 (v=0 path already supported by `SignatureSlotRecovery`). Demo doesn't exercise this in v0; document the pattern when a real consumer asks.
+- **Threshold-class language mapping.** SDK + UI surface uses "daily threshold," "admin threshold," "high-risk delegation threshold," "recovery threshold" (per the safety+recovery doctrine memory); spec text keeps the T1–T6 tier IDs as the canonical names. The mapping doc is a phase 7 deliverable alongside the permission-UX spec.
