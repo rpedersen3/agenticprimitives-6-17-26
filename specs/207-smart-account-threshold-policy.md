@@ -1,6 +1,6 @@
 # Spec 207 — Smart-account threshold policy
 
-**Status:** v0 draft · 2026-05-20 (revised — "integrated, not bolted-on")
+**Status:** v0 accepted · 2026-05-20 (revised — "integrated, not bolted-on"; calibrations + threshold matrix accepted)
 **Closes:** new audit finding **N16** (smart-account multi-sig and recovery policy is not productized).
 **Builds on:** spec 201 (`agent-account`), spec 202 (`delegation`), spec 204 (`tool-policy`), spec 130 (`passkey-flow`), the multi-sig contracts shipped in pass 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`).
 **Reference: smart-agent patterns to port:** `packages/contracts/src/AgentAccount.sol` (multi-owner mapping shape), `packages/contracts/src/enforcers/QuorumEnforcer.sol` (Safe-compatible signature aggregation — ported in 6c.1), `packages/contracts/src/ApprovedHashRegistry.sol` (pre-approval registry — ported in 6c.1). Deliberate divergence: smart-agent does not productize risk-tier thresholds at the account layer — that pattern is original here, modeled after Safe's owner+threshold+modules+guards architecture and MetaMask's Hybrid / Multisig account modes.
@@ -104,9 +104,28 @@ This is the spec's headline contribution: actions are not gated by a single glob
 
 **"+ UV"** means: at least one passkey signature with the `UV` (user-verification) flag set. Biometric gate on the device.
 
-**"+ timelock"** means: the action's intent must be queued on-chain via `propose<Action>(...)` and execute only after `block.timestamp >= proposal.eta`. ETA = `block.timestamp + TIMELOCK_DURATION(tier)`. Default durations: 1h for T4, 24h for T5.
+**"+ timelock"** means: the action's intent must be queued on-chain via `propose<Action>(...)` and execute only after `block.timestamp >= proposal.eta`. ETA = `block.timestamp + TIMELOCK_DURATION(tier)`. Default durations: **1h for T4, 24h for T5, 48h for T6 Recovery**. (T6's 48h covers a weekend without dragging; the primary-owner cancel window is the first 24h of that — see § 8.) All durations are per-account configurable via a T5 admin flow.
 
 **"+ separation"** means: the signer set that participated in `propose` MUST NOT overlap (by `>= threshold(tier)`) with the signer set that participates in `execute`. Enforces "two-person rule" semantics.
+
+### 5.1 Default threshold matrix
+
+When a `multisig` account is created with N owners, the factory installs these per-tier thresholds by default. Users can override via the factory's `createAccount*` parameters or post-deploy via a T5 `SetThreshold` admin action.
+
+| N owners | T1 Read | T2 Write | T3 Value | T4 Admin | T5 Critical | T6 Recovery |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2 | 1 | 2 | 2 | 2 | 2 | majority of guardians |
+| 3 | 1 | 2 | 2 | 3 | 3 | majority of guardians |
+| 5 | 1 | 3 | 3 | 4 | 5 | majority of guardians |
+| 7 | 1 | 4 | 4 | 5 | 6 | majority of guardians |
+
+**Doctrine:** routine = majority of owners; trust-root mutations (T4/T5) = unanimous or near-unanimous; recovery = majority of *guardians* (separate set from owners). The asymmetry is the point — a single offline owner can't brick an account, but no single owner can unilaterally rotate the signer set or upgrade the impl.
+
+For N=2, the factory issues a warning at deploy time: "2-of-2 means either signer can deadlock the account; recommended minimum is 3 owners." Demo-web's account-creation flow nudges N=3 unless the user explicitly opts for N=2.
+
+For N >= 5, factory issues a warning: "large signer sets risk coordination failure; consider whether a guardian set is a better fit for some signers."
+
+`enterprise` mode adds **separation of duties** on T5: any owner who participated in `propose<T5>` is disqualified from participating in `execute<T5>`. This means N=5 enterprise effectively requires a *6th distinct signer* to execute a propose-quorum-of-5 — impossible by construction. So `enterprise` mode requires either N ≥ 7 (so 5 propose + 5 execute can be disjoint at the threshold level) OR a relaxed T5 threshold that allows for the SoD constraint. Factory rejects `enterprise` deploys that can't satisfy the math.
 
 ---
 
@@ -123,7 +142,7 @@ Builds on the existing `acceptSessionDelegation(hash)` hook on `AgentAccount` (s
 
 For T3 high-value grants, the redeem path checks `account.isAcceptedSessionDelegation(hash)` and fails closed if false. The existing `verifyDelegationToken` accept event (audit C3, closed in pass 5b) gets a new `acceptedOnChain: boolean` context field so the audit trail records whether the redeem leaned on the on-chain blessing.
 
-`T3_HIGHVALUE_THRESHOLD` is a per-account configurable bound, defaulting to 1 ETH equivalent (set at account creation, mutable via T4 admin flow).
+`T3_HIGHVALUE_THRESHOLD` is a per-account configurable bound, defaulting to **0.01 ETH** equivalent (set at account creation, mutable via the T4 `ChangeT3Ceiling` admin flow in § 7). The low default is deliberate: it makes the high-value on-chain blessing gate observable in demo + early-production usage so the path is exercised before a real-value account hits it.
 
 ---
 
@@ -143,7 +162,18 @@ enum AdminAction {
     UpgradeImpl,
     ChangeDelegationManager,
     ChangePaymaster,
-    ChangeSessionIssuer
+    ChangeSessionIssuer,
+    // Operational tuning + atomic-rotation actions:
+    RotateAllOwners,        // T4 — atomic "replace entire owner set" so a
+                            // post-incident rotation doesn't pass through
+                            // fragmented intermediate states (owner partially
+                            // added, partially removed) where authority is
+                            // ambiguous. Args: (address[] newOwners).
+    ChangeT3Ceiling,        // T4 — tune T3_HIGHVALUE_THRESHOLD without a
+                            // full impl upgrade. Args: (uint256 newCeilingWei).
+    SetRecoveryThreshold    // T4 — explicit recovery-threshold setter so
+                            // guardian-set churn doesn't leave a stale
+                            // implicit threshold. Args: (uint8 newThreshold).
 }
 ```
 
@@ -177,10 +207,12 @@ Recovery hardens audit finding **N7** (passkey recovery is unclear today). The f
    - Signs the recovery EIP-712 payload off-chain (any of the QuorumEnforcer v=27/28/>30 paths).
 3. The recovery flow assembles `recoverySignatures` from a quorum of guardians + (optionally) any surviving primary signers.
 4. Calls `proposeRecovery(newOwners[], newPasskeys[], removeOldOwners[], removeOldPasskeys[], recoverySignatures)`.
-5. After `TIMELOCK_DURATION(T6_RECOVERY)` (default: 72h), calls `executeRecovery(proposalId, recoverySignatures)`.
-6. The 72h timelock window is non-negotiable: it gives the rightful owner a window to **cancel** a hostile recovery attempt if any primary signer is still functional. The primary owner can call `cancelAdmin(proposalId, sig)` with their own signature (T4 threshold) during this window.
+5. After `TIMELOCK_DURATION(T6_RECOVERY)` (default: **48h**), calls `executeRecovery(proposalId, recoverySignatures)`.
+6. The first **24h** of the 48h window is the primary-owner **cancel window**: any surviving primary signer can call `cancelAdmin(proposalId, sig)` with a single T4-threshold signature to kill a hostile recovery. After the 24h window closes, recovery can only be cancelled by another recovery-threshold quorum. Rationale: 24h gives the rightful owner one full waking day to react to a notification; the remaining 24h is the "no one objected" window that lets recovery proceed even if the rightful owner is on vacation (different threat model from active compromise).
 
 **Recovery threshold** is configured at account-creation time, defaulting to `ceil(guardianCount / 2) + 1` (majority + 1). If the account has 0 guardians, recovery is impossible — by design, since key-loss is unrecoverable without external trust. The factory's `createAccount` MUST refuse to deploy a `multisig`/`enterprise` account with 0 guardians.
+
+**Recommended guardian count: 5.** That's the sweet spot: a 5-guardian account loses 1 or 2 guardians (to forgetfulness, key loss, life events) and still passes a 3-of-5 recovery threshold. 3 guardians is the practical minimum (passes 2-of-3) but leaves zero slack. >7 starts to make coordination cumbersome. Frontend SHOULD nudge users toward 5 during account setup; spec only enforces minima (see table below).
 
 **Two-passkey-minimum requirement for production:**
 
@@ -207,14 +239,17 @@ This section is the **launch gate** for any account mode beyond `single`. Produc
 | 4 | T4 `AddOwner` in `multisig` with sub-threshold sigs fails closed | Quorum verification on admin path |
 | 5 | T5 `UpgradeImpl` in `multisig` without timelock fails closed | Timelock is enforced |
 | 6 | T5 `UpgradeImpl` in `enterprise` with overlapping propose/execute signers fails closed | Separation of duties is enforced |
-| 7 | T6 recovery with 2-of-3 guardians + 72h timelock succeeds | Recovery happy path |
-| 8 | T6 recovery cancelled by primary owner within 72h reverts the execute | Hostile-recovery escape hatch |
-| 9 | Recovery with 0 guardians is impossible (factory rejects deploy) | No-recovery footgun blocked |
+| 7 | T6 recovery with 3-of-5 guardians + 48h timelock succeeds | Recovery happy path |
+| 8 | T6 recovery cancelled by primary owner within the 24h cancel window reverts the execute | Hostile-recovery escape hatch (cancel window enforced) |
+| 9 | Recovery with 0 guardians is impossible (factory rejects deploy of `multisig`/`enterprise`) | No-recovery footgun blocked |
 | 10 | `acceptSessionDelegation` emits an audit event recording the on-chain blessing | Trail captures the high-value gate |
 | 11 | All admin actions emit `AdminProposed` / `AdminExecuted` / `AdminCancelled` events | Forensics trail for trust-root mutations |
 | 12 | QuorumEnforcer caveat composes correctly with TimestampEnforcer + ValueEnforcer on T3 delegations | Caveat stacking is not broken by quorum requirement |
+| 13 | T6 recovery proposal during a pending T5 admin proposal — recovery executes; the T5 proposal is implicitly invalidated | Precedence: recovery wins over in-flight trust-root changes |
+| 14 | Mode change from `multisig` → `single` with non-empty guardian set is rejected | No downgrading to a mode that loses recovery |
+| 15 | `QuorumEnforcer` caveat with `threshold=1` and a 1-address signer set behaves identically to a non-quorum delegation | Validates the doctrine "threshold=1 IS the trivial case" — no separate code path |
 
-Each row maps to a Forge test (T1–T11) or a Playwright e2e (T12 via demo flow). System-level testing strategy in `specs/110-test-strategy.md` updated to include this section.
+Each row maps to a Forge test (T1–T11, T13–T15) or a Playwright e2e (T12 via demo flow). System-level testing strategy in `specs/110-test-strategy.md` updated to include this section.
 
 ---
 
@@ -224,8 +259,8 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
 
 | Package | Concept it owns | What lands here |
 | --- | --- | --- |
-| `agent-account` | Multi-owner state, mode, thresholds, admin actions, recovery | `_guardians` mapping, `_modeFlags`, `threshold(tier)` + `recoveryThreshold()` getters, propose / execute / cancel admin machinery, `AdminAction` enum, recovery flow. SDK: `AgentAccountClient` gains `proposeAdmin` / `executeAdmin` / `cancelAdmin` / `initiateRecovery` / `executeRecovery`. Also `preApproveHash(hash)` helper (it's an account-level signal). |
-| `delegation` | Signer-set + quorum-aware delegations and caveats | `Delegation` shape stays as-is (signer set is implicit in the caveats it carries). `buildQuorumCaveat({signers, threshold, approvedHashRegistry})` joins the existing caveat-builder peers (`buildCaveat`, `buildMcpToolScopeCaveat`, `buildDelegateBindingCaveat`, `buildDataScopeCaveat`). `packSafeSignatures(parts)` ships as a delegation-side helper because the packed blob IS the redeem-time argument shape for a quorum caveat. `verifyDelegationToken` gains an optional `requireQuorumForTier(tier)` opt (fail-closed when a tier requires quorum but the delegation lacks the caveat). |
+| `agent-account` | Multi-owner state, mode, thresholds, admin actions, recovery, owner-signature aggregation | `_guardians` mapping, `_modeFlags`, `threshold(tier)` + `recoveryThreshold()` getters, propose / execute / cancel admin machinery, `AdminAction` enum (incl. `RotateAllOwners` / `ChangeT3Ceiling` / `SetRecoveryThreshold`), recovery flow. SDK: `AgentAccountClient` gains `proposeAdmin` / `executeAdmin` / `cancelAdmin` / `initiateRecovery` / `executeRecovery` / `preApproveHash(hash)`. Also **`packSafeSignatures(parts)`** — the Safe-compatible 65-byte-slot blob packer lives here because owners' signatures are aggregated by the account-side SDK, not the delegation builder. |
+| `delegation` | Signer-set + quorum-aware delegations and caveats | `Delegation` shape stays as-is (signer set is implicit in the caveats it carries). `buildQuorumCaveat({signers, threshold, approvedHashRegistry})` joins the existing caveat-builder peers (`buildCaveat`, `buildMcpToolScopeCaveat`, `buildDelegateBindingCaveat`, `buildDataScopeCaveat`). `verifyDelegationToken` gains an optional `requireQuorumForTier(tier)` opt (fail-closed when a tier requires quorum but the delegation lacks the caveat). |
 | `tool-policy` | Risk-tier taxonomy + policy decision | Risk-tier constants (`TIER_READ` ... `TIER_RECOVERY`) become first-class exports. `evaluatePolicy(classification)` returns a `{ tier, requiresQuorum, requiresUv, requiresAcceptedOnChain }` decision that the caller composes with `delegation.verifyDelegationToken`. The existing `@sa-risk-tier` classification metadata gains the tier IDs from this spec. |
 | `identity-auth` | (unchanged) | The `Signer` interface stays signer-shape-agnostic. Multi-sig is below this layer — `identity-auth` doesn't know whether the eventual signer set is 1-of-1 or 3-of-5. |
 | `mcp-runtime` | (effectively unchanged) | `withDelegation` already calls `verifyDelegationToken`. It transparently handles n-of-m once `delegation` does. The only addition: the `tool-policy` decision (`requiresQuorum`, etc.) is threaded into the verify call. |
@@ -247,10 +282,9 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
 - `@agenticprimitives/tool-policy`: export `Tier` enum + `RISK_TIER_REQUIREMENTS` map. `evaluatePolicy(classification)` returns `{ tier, requiresQuorum, requiresUv, requiresAcceptedOnChain }`. Tier resolution from existing `@sa-risk-tier` classification metadata.
 - `@agenticprimitives/delegation`:
   - New caveat builder: `buildQuorumCaveat({signers, threshold, approvedHashRegistry})`.
-  - New SDK helper: `packSafeSignatures(parts)` (Safe-compatible 65-byte-slot blob packer).
   - `verifyDelegationToken`: accept `requireQuorumForTier(tier)` opt. When the tool-policy decision says a tier requires quorum, verify checks the delegation carries a `QuorumEnforcer` caveat; otherwise fail closed.
   - Audit C3 emission gets a new `acceptedOnChain` context field on accept rows (for T3+ delegations that needed the on-chain `acceptSessionDelegation` blessing).
-- `@agenticprimitives/agent-account` SDK: `AgentAccountClient` gains `proposeAdmin` / `executeAdmin` / `cancelAdmin` / `initiateRecovery` / `executeRecovery` + `preApproveHash` helpers.
+- `@agenticprimitives/agent-account` SDK: `AgentAccountClient` gains `proposeAdmin` / `executeAdmin` / `cancelAdmin` / `initiateRecovery` / `executeRecovery` + `preApproveHash(hash)` + **`packSafeSignatures(parts)`** (the Safe-compatible 65-byte-slot blob packer — moved here from `delegation` because owners' signatures are aggregated by the account-side SDK).
 - Per-package `CLAUDE.md` + `AUDIT.md` updates documenting the new exports + the integration story.
 
 ### Phase 6c.4 — mcp-runtime integration (TypeScript)
@@ -258,21 +292,22 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
 - `@agenticprimitives/mcp-runtime`: `withDelegation` reads `tool-policy.evaluatePolicy(classification)` (already calls this for the H2 fix), threads the result's `requiresQuorum` / `requiresAcceptedOnChain` into the `verifyDelegationToken` opts. No new public exports — the wrapper transparently enforces tier requirements.
 - Audit spec 206 vocabulary table updated with the new action names.
 
-### Phase 6c.5 — frontend wiring (demo-web)
+### Phase 6c.5 — Forge tests + Playwright e2e
 
-- Step 0: "Account mode" selector. Default to `multisig` for any account that adds >1 signer. (`single` stays as the dev/demo fast-path.) Wire to `AgentAccountFactory.createAccount*` extended signature.
-- Step 2: tier-aware delegation issuance — when `tool-policy.evaluatePolicy` says T3+, prompt n signers in sequence; collect a packed Safe-format blob.
-- Step 4 (NEW): Account admin panel — propose/execute/cancel admin actions; show pending admin proposals with countdown to ETA.
-- Step 5 (NEW): Recovery flow — initiate, list guardians, collect approvals, execute.
+- 15 tests from § 9, files: `test/AgentAccountAdmin.t.sol`, `test/AgentAccountRecovery.t.sol`, `test/ThresholdPolicy.t.sol`, `test/EnterpriseSeparation.t.sol` (T6 enterprise SoD), `tests/e2e/06-multi-sig-delegation.spec.ts` (T12 — caveat composition end-to-end). Demo-web's admin + recovery panels are deferred to **phase 7**; the SDK + contract surface is the substrate, and cast / scripts can drive the actions during the 6c testing pass without an admin UI.
 
-### Phase 6c.6 — Forge tests + Playwright e2e
+### Phase 6c.6 — audit doc refresh
 
-- 12 tests from § 9, files: `test/AgentAccountAdmin.t.sol`, `test/AgentAccountRecovery.t.sol`, `test/ThresholdPolicy.t.sol`, `tests/e2e/06-account-admin.spec.ts`.
-
-### Phase 6c.7 — audit doc refresh
-
-- Add **N16** to `docs/architecture/product-readiness-audit.md` open findings. Mark it closed in the same pass that finishes 6c.6 (or earlier sub-phase, whichever fully productizes the multi-sig per § 9 launch gates).
+- Add **N16** to `docs/architecture/product-readiness-audit.md` open findings. Mark it closed in the same pass that finishes 6c.5 (or earlier sub-phase, whichever fully productizes the multi-sig per § 9 launch gates).
 - Per-package `AUDIT.md` refreshed in: `agent-account`, `delegation`, `tool-policy`, `mcp-runtime`, `audit`.
+
+### Phase 7 — demo-web admin + recovery UI (deferred)
+
+- Step 0: "Account mode" selector. Default to `multisig` for any account that adds >1 signer.
+- Step 2: tier-aware delegation issuance — when `tool-policy.evaluatePolicy` says T3+, prompt n signers in sequence.
+- Step 4: Account admin panel — propose/execute/cancel admin actions; show pending admin proposals with countdown to ETA.
+- Step 5: Recovery flow — initiate, list guardians, collect approvals, execute.
+- This phase MUST take a proper UX-designer pass (trust-critical screens — adding/removing owners, initiating recovery — are highest-stakes UI in the whole demo).
 
 ---
 
