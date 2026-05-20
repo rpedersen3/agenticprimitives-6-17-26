@@ -31,7 +31,11 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
 
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    // Use `localhost` (not 127.0.0.1) so WebAuthn accepts the
+    // origin's effective domain as a valid rp.id. WebAuthn rejects
+    // IP addresses as relying-party identifiers; only hostnames are
+    // permitted (with `localhost` as a special exception).
+    baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

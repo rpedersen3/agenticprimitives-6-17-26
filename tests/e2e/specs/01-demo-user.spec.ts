@@ -26,7 +26,9 @@ test.describe('demo user', () => {
 
     // The mnemonic is generated lazily on first render. Wait until the
     // address appears in the "Demo user (EOA)" panel.
-    const addressPanel = page.locator('.step', { hasText: 'Demo user (EOA)' });
+    // Step 0 ("Choose signer") shows the EOA address when the
+    // default 'eoa' radio is selected.
+    const addressPanel = page.locator('.step', { hasText: 'Step 0 — Choose signer' });
     await expect(addressPanel).toBeVisible();
     const code = addressPanel.locator('code').first();
     await expect(code).toBeVisible();
@@ -36,7 +38,7 @@ test.describe('demo user', () => {
 
   test('persists the same EOA across page reloads', async ({ page }) => {
     await page.goto('/');
-    const code = page.locator('.step', { hasText: 'Demo user (EOA)' }).locator('code').first();
+    const code = page.locator('.step', { hasText: 'Step 0 — Choose signer' }).locator('code').first();
     await expect(code).toBeVisible();
     const first = await code.innerText();
 
@@ -49,14 +51,14 @@ test.describe('demo user', () => {
 
   test('reset button generates a different EOA', async ({ page }) => {
     await page.goto('/');
-    const code = page.locator('.step', { hasText: 'Demo user (EOA)' }).locator('code').first();
+    const code = page.locator('.step', { hasText: 'Step 0 — Choose signer' }).locator('code').first();
     await expect(code).toBeVisible();
     const first = await code.innerText();
 
     // Reset reloads the page, so we listen for the reload before clicking.
     await Promise.all([
       page.waitForURL('**'),
-      page.locator('button', { hasText: 'Reset user' }).click(),
+      page.locator('button', { hasText: 'Reset all state' }).click(),
     ]);
 
     await expect(code).toBeVisible();

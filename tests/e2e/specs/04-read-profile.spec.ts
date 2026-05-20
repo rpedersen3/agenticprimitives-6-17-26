@@ -32,15 +32,33 @@ import { test, expect } from '@playwright/test';
 async function signInAndAuthorize(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/');
   // Step 1
-  await page.locator('button', { hasText: 'Sign in with EOA' }).click();
-  await expect(page.locator('.step', { hasText: 'Step 1' })).toContainText('Signed in.', {
-    timeout: 15_000,
+  const step1 = page.locator('.step').filter({
+    has: page.locator('h3', { hasText: /^Step 1 — Sign in/ }),
   });
+  await step1.locator('button', { hasText: 'Sign in with EOA' }).click();
+  await expect(step1).toContainText('Signed in.', { timeout: 15_000 });
+
+  // Step 1.5 — paymaster deploy. EOA path requires the account to be
+  // deployed before Step 2 can run.
+  const step15 = page.locator('.step').filter({
+    has: page.locator('h3', { hasText: /^Step 1\.5 — Deploy smart account/ }),
+  });
+  if (await step15.count() > 0) {
+    const deployBtn = step15.locator('button', { hasText: 'Deploy smart account' });
+    if (await deployBtn.count() > 0 && await deployBtn.isEnabled()) {
+      await deployBtn.click();
+      await expect(step15).toContainText('Smart account deployed on-chain.', {
+        timeout: 60_000,
+      });
+    }
+  }
+
   // Step 2
-  await page.locator('button', { hasText: 'Authorize agent' }).click();
-  await expect(page.locator('.step', { hasText: 'Step 2' })).toContainText('Session active:', {
-    timeout: 15_000,
+  const step2 = page.locator('.step').filter({
+    has: page.locator('h3', { hasText: /^Step 2 — Authorize agent/ }),
   });
+  await step2.locator('button', { hasText: 'Authorize agent' }).click();
+  await expect(step2).toContainText('Session active:', { timeout: 15_000 });
 }
 
 test.describe('Read profile via agent (Step 3)', () => {

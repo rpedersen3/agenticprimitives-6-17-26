@@ -58,6 +58,11 @@ interface Deployments {
   valueEnforcer: string;
   /** Optional — present after running deploy:paymaster:<network> + merge. */
   smartAgentPaymaster?: string;
+  /** Optional — signer-agnostic verifier (ECDSA / ERC-1271 / ERC-6492).
+   *  When propagated, demo-a2a's /auth/siwe-verify uses the on-chain
+   *  validator instead of legacy ECDSA recovery. Required for the
+   *  passkey path (spec 130). */
+  universalSignatureValidator?: string;
 }
 
 function run(cmd: string, opts: { cwd?: string } = {}): void {
@@ -191,6 +196,12 @@ if (a2aBackend === 'gcp-kms') {
 if (d.smartAgentPaymaster) {
   a2aVars.PAYMASTER = d.smartAgentPaymaster;
   console.log(`  using PAYMASTER ${d.smartAgentPaymaster}`);
+}
+// Propagate the universal validator address so /auth/siwe-verify
+// switches to the signer-agnostic path (passkey + ERC-6492 support).
+if (d.universalSignatureValidator) {
+  a2aVars.UNIVERSAL_SIGNATURE_VALIDATOR = d.universalSignatureValidator;
+  console.log(`  using UNIVERSAL_SIGNATURE_VALIDATOR ${d.universalSignatureValidator}`);
 }
 const a2aOut = runCapture(
   `wrangler deploy --env production ${buildVarFlags(a2aVars)}`,

@@ -25,12 +25,31 @@ import { test, expect } from '@playwright/test';
 
 async function signInAndCaptureSmartAccount(page: import('@playwright/test').Page): Promise<string> {
   await page.goto('/');
-  const step1 = page.locator('.step', { hasText: 'Step 1 — Sign in (SIWE)' });
+  const step1 = page.locator('.step').filter({
+    has: page.locator('h3', { hasText: /^Step 1 — Sign in/ }),
+  });
   await step1.locator('button', { hasText: 'Sign in with EOA' }).click();
   await expect(step1).toContainText('Signed in. Smart account:', { timeout: 15_000 });
-  const code = step1.locator('code');
+  const code = step1.locator('code').first();
   await expect(code).toBeVisible();
-  return code.innerText();
+  const smartAccount = await code.innerText();
+
+  // Step 1.5 — deploy via paymaster-sponsored UserOp. Required for the EOA
+  // path before Step 2 (the Authorize button is disabled until isDeployed).
+  // Skipped when no paymaster is configured; the button won't appear.
+  const step15 = page.locator('.step').filter({
+    has: page.locator('h3', { hasText: /^Step 1\.5 — Deploy smart account/ }),
+  });
+  if (await step15.count() > 0) {
+    const deployBtn = step15.locator('button', { hasText: 'Deploy smart account' });
+    if (await deployBtn.count() > 0 && await deployBtn.isEnabled()) {
+      await deployBtn.click();
+      await expect(step15).toContainText('Smart account deployed on-chain.', {
+        timeout: 60_000,
+      });
+    }
+  }
+  return smartAccount;
 }
 
 test.describe('Authorize agent (Step 2)', () => {

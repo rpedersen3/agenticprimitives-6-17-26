@@ -27,6 +27,10 @@ interface Deployments {
   allowedTargetsEnforcer: Address;
   allowedMethodsEnforcer: Address;
   valueEnforcer: Address;
+  /** Address of the on-chain ECDSA/ERC-1271/ERC-6492 verifier.
+   *  Null if demo-a2a was deployed without the validator wired up —
+   *  passkey login will not work in that mode. */
+  universalSignatureValidator: Address | null;
 }
 
 interface DemoState {

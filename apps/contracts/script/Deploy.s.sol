@@ -12,6 +12,7 @@ import {AllowedTargetsEnforcer} from "../src/enforcers/AllowedTargetsEnforcer.so
 import {AllowedMethodsEnforcer} from "../src/enforcers/AllowedMethodsEnforcer.sol";
 import {ValueEnforcer} from "../src/enforcers/ValueEnforcer.sol";
 import {SmartAgentPaymaster} from "../src/SmartAgentPaymaster.sol";
+import {UniversalSignatureValidator} from "../src/UniversalSignatureValidator.sol";
 
 /**
  * Deploys the minimum on-chain surface the demo needs:
@@ -91,6 +92,13 @@ contract Deploy is Script {
         );
         console2.log("SmartAgentPaymaster:  %s", address(paymaster));
 
+        // 6. UniversalSignatureValidator — signer-agnostic verifier
+        //    (ECDSA / ERC-1271 / ERC-6492). demo-a2a's /auth/siwe-verify
+        //    calls into this so it never inspects signature bytes;
+        //    passkey vs EOA dispatch happens on-chain inside the validator.
+        UniversalSignatureValidator universalValidator = new UniversalSignatureValidator();
+        console2.log("UniversalSignatureValidator: %s", address(universalValidator));
+
         // Stake + deposit so the paymaster can sponsor UserOps immediately.
         // - addStake locks ETH for the unstake-delay window (anti-DoS for bundlers
         //   that want to know the paymaster has skin in the game).
@@ -119,7 +127,8 @@ contract Deploy is Script {
         vm.serializeAddress(key, "allowedTargetsEnforcer", address(allowedTargets));
         vm.serializeAddress(key, "allowedMethodsEnforcer", address(allowedMethods));
         vm.serializeAddress(key, "valueEnforcer", address(valueEnforcer));
-        string memory out = vm.serializeAddress(key, "smartAgentPaymaster", address(paymaster));
+        vm.serializeAddress(key, "smartAgentPaymaster", address(paymaster));
+        string memory out = vm.serializeAddress(key, "universalSignatureValidator", address(universalValidator));
 
         string memory path = string.concat("deployments-", network, ".json");
         vm.writeFile(path, out);

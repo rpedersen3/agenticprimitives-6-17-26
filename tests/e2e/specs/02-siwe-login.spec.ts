@@ -51,7 +51,10 @@ test.describe('SIWE login', () => {
     await page.goto('/');
 
     // Step 1 panel starts in "Not signed in" state
-    const step1 = page.locator('.step', { hasText: 'Step 1 — Sign in (SIWE)' });
+    // Use a heading-specific locator to disambiguate from Step 1.5.
+    const step1 = page.locator('.step').filter({
+      has: page.locator('h3', { hasText: /^Step 1 — Sign in/ }),
+    });
     await expect(step1).toContainText('Not signed in.');
 
     const signInButton = step1.locator('button', { hasText: 'Sign in with EOA' });
@@ -68,14 +71,17 @@ test.describe('SIWE login', () => {
 
     // The log line at the bottom reports the wallet + smart account
     const log = page.locator('.step', { hasText: 'Log' }).locator('pre');
-    await expect(log).toContainText('[1] ✓ Signed in.');
+    await expect(log).toContainText('[1] ✓ Signed in (EOA).');
     await expect(log).toContainText('wallet=0x');
     await expect(log).toContainText('smartAccount=0x');
   });
 
   test('Sign in button is disabled after a successful login', async ({ page }) => {
     await page.goto('/');
-    const step1 = page.locator('.step', { hasText: 'Step 1 — Sign in (SIWE)' });
+    // Use a heading-specific locator to disambiguate from Step 1.5.
+    const step1 = page.locator('.step').filter({
+      has: page.locator('h3', { hasText: /^Step 1 — Sign in/ }),
+    });
     await step1.locator('button', { hasText: 'Sign in with EOA' }).click();
     await expect(step1).toContainText('Signed in. Smart account:', { timeout: 15_000 });
     await expect(step1.locator('button', { hasText: 'Sign in with EOA' })).toBeDisabled();
@@ -83,8 +89,11 @@ test.describe('SIWE login', () => {
 
   test('a2a sets the agentic-session cookie after SIWE verify', async ({ page, context }) => {
     await page.goto('/');
-    await page.locator('button', { hasText: 'Sign in with EOA' }).click();
-    await expect(page.locator('.step', { hasText: 'Step 1' })).toContainText('Signed in.', { timeout: 15_000 });
+    const step1 = page.locator('.step').filter({
+      has: page.locator('h3', { hasText: /^Step 1 — Sign in/ }),
+    });
+    await step1.locator('button', { hasText: 'Sign in with EOA' }).click();
+    await expect(step1).toContainText('Signed in.', { timeout: 15_000 });
     const cookies = await context.cookies();
     const session = cookies.find((c) => c.name === 'agentic-session');
     expect(session).toBeDefined();
