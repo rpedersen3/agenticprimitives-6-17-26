@@ -90,12 +90,16 @@ Four canonical modes the user picks during account creation. Each mode pins spec
 
 | Mode | Primary signers | Guardians | Default behavior | UX framing |
 | --- | --- | --- | --- | --- |
-| **`single`** | 1 EOA *or* 1 passkey | 0 | 1-of-1 across all tiers. Today's demo. | "Just me on this device." |
-| **`hybrid`** | 1 primary + ≥ 1 backup (different kind preferred) | 0–N | Routine: 1-of-N. Admin / recovery: threshold. Coinbase-style — multi-passkey enrollment is **normal onboarding**, not "advanced security." | "Me + my backup devices." |
+| **`single`** | 1 EOA *or* 1 passkey | 0 | 1-of-1 across all tiers. **Demo-only.** Disqualifying for any production deploy. | "Just me on this device." |
+| **`hybrid`** ★ | 1 primary + ≥ 1 backup (different kind preferred) | 0–N | Routine: 1-of-N. Admin / recovery: threshold. Coinbase-style — multi-passkey enrollment is **normal onboarding**, not "advanced security." | "Me + my backup devices." |
 | **`threshold`** | ≥ 2 primary | ≥ 0 | n-of-m for routine; m-of-m (or m-1-of-m) for admin; recovery via guardians. Replaces what we used to call "multisig." | "Multiple approvers required." |
 | **`org`** | ≥ 2 primary | ≥ 2 | `threshold` plus mandatory timelocks on every T4/T5 admin action, plus separation of duties on T5 (no signer participates in both propose and execute). Replaces what we used to call "enterprise." | "Treasury / organization account." |
 
+★ **`hybrid` is the default consumer mode.** The frontend's account-creation flow defaults to `hybrid` and prompts the user to *"add a backup passkey"* as the immediate next step after account deploy. `single` is intentionally available only as a development / demo affordance, and the UI labels it as such (e.g. "Demo mode — single signer"). This default matches the MetaMask Hybrid + delegation-toolkit shape that the platform's current substrate is closest to (see § 4.3 below) and gets every consumer to a recoverable account without optional steps.
+
 **Mode-naming doctrine** (per the safety + recovery framing): the user-facing labels are `Just me` / `Me + backups` / `Multiple approvers` / `Organization`. Contract / SDK identifiers stay `single` / `hybrid` / `threshold` / `org` so dev-facing log lines + docs use a consistent vocabulary that maps cleanly to the UX.
+
+**One substrate, explicit policy modes** (load-bearing design move): there is exactly one `AgentAccount` contract. Account mode is a packed state field (`_modeFlags` in the threshold-policy storage) — not separate contract types, not separate factories, not separate inheritance branches. The same substrate runs in `single` / `hybrid` / `threshold` / `org`; what changes is the policy that gates actions. New contract files claiming to be "for the multi-sig mode" are a red flag and violate the integration-not-bolt-on doctrine.
 
 Mode is **set at deploy time** in the factory's `createAccount*` calls and emitted in the `AccountCreated` event. Mode changes require a § 7 admin flow.
 
@@ -131,6 +135,29 @@ Per Rhinestone's modular-account model (validators / executors / hooks / fallbac
 | **Runtime adapters** | `mcp-runtime` (today); future `a2a-runtime` etc. | Wraps the validator → executor → hook pipeline behind a transport-specific surface |
 
 This validates the existing package-boundary doctrine. Spec 207 doesn't change any boundary; it deepens the integration along this already-correct architecture.
+
+---
+
+## 4.3 Where we are vs. where we go
+
+The current substrate is closest to "MetaMask Hybrid + Delegation Toolkit." Spec 207 is the bridge from "we support EOA / passkey" to "we have a production smart-account security model." This table maps platform capabilities to MetaMask's published account-mode taxonomy + Safe-style features so reviewers can locate gaps:
+
+| MetaMask / Safe concept | Our design equivalent | Status today | Gap closed by spec 207 § |
+| --- | --- | --- | --- |
+| Hybrid account (EOA + passkeys) | `AgentAccount` with `_owners` + `_passkeys` + `_validateSig` dispatch | Mostly present | § 4 default `hybrid` mode + § 8 multi-passkey recovery |
+| Multisig account (M-of-N + threshold) | `_owners` set + (new) `_thresholdPolicyStorage` + `proposeAdmin` machinery | Substrate present, policy not productized | § 5 + § 7 + § 10 |
+| Safe Guards (pre/post checks) | `tool-policy.evaluatePolicy` + `ICaveatEnforcer.beforeHook/afterHook` | Present (T1 read enforcers shipped) | § 5 + spec 208 (argument-level caveats) |
+| Safe Modules (scoped execution paths) | Sessions + redelegation in `delegation` | Present (single-tier) | § 6 high-risk gate + § 5.1 threshold matrix |
+| Delegation Toolkit | `@agenticprimitives/delegation` + `DelegationManager.sol` | Present | DTK alignment audit pass (task #89) |
+| Caveat enforcers | `apps/contracts/src/enforcers/*` + caveat builders in `delegation` | Present, needs parameter-level parity | Spec 208 |
+| Advanced Permissions / permission cards | demo-web consent / authorize flow | Early | § 1 bullet "Permission UX as security" + phase 7 UI |
+| Paymaster / verifying paymaster | `SmartAgentPaymaster.sol` verifying mode | Present | (closed by pass 4 / audit C2) |
+| Account recovery (multi-passkey + guardian) | passkey + guardian + timelock + cancel | **Missing** | § 8 |
+| Action-specific thresholds | `_thresholdPolicyStorage.thresholdByTier` | **Missing** | § 5 / § 5.1 |
+| Pending-approval flow + UX | `proposeAdmin` / `executeAdmin` / `cancelAdmin` | **Missing** | § 7 + phase 7 admin panel |
+| High-risk delegation gating | `acceptSessionDelegation` hook | Hook present; not gated by tier | § 6 |
+
+The "**Missing**" rows are the load-bearing additions in spec 207. Nothing in the table requires forking the `AgentAccount` substrate; everything is additive policy + state on the same contract.
 
 ---
 
