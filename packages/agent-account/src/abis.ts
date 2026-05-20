@@ -67,6 +67,112 @@ export const agentAccountAbi = [
     ],
     outputs: [{ name: '', type: 'bytes4' }],
   },
+  // Spec 207 threshold-policy admin surface (6c.2-b/c/e).
+  {
+    type: 'function',
+    name: 'proposeAdmin',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'action', type: 'uint8' },
+      { name: 'args', type: 'bytes' },
+      { name: 'quorumSigs', type: 'bytes' },
+    ],
+    outputs: [{ name: 'proposalId', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'executeAdmin',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'proposalId', type: 'uint256' },
+      { name: 'quorumSigs', type: 'bytes' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'cancelAdmin',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'proposalId', type: 'uint256' },
+      { name: 'quorumSigs', type: 'bytes' },
+    ],
+    outputs: [],
+  },
+  // Threshold-policy view methods.
+  { type: 'function', name: 'mode', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'threshold', stateMutability: 'view', inputs: [{ name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'recoveryThreshold', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 't3HighValueCeiling', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'timelockDuration', stateMutability: 'view', inputs: [{ name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint32' }] },
+  { type: 'function', name: 'isGuardian', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'guardianCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'proposalCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  {
+    type: 'function',
+    name: 'getPendingAdmin',
+    stateMutability: 'view',
+    inputs: [{ name: 'proposalId', type: 'uint256' }],
+    outputs: [
+      { name: 'action', type: 'uint8' },
+      { name: 'args', type: 'bytes' },
+      { name: 'eta', type: 'uint64' },
+      { name: 'proposer', type: 'address' },
+      { name: 'executed', type: 'bool' },
+      { name: 'cancelled', type: 'bool' },
+    ],
+  },
+  { type: 'function', name: 'chainId', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  // The 6c.2-b acceptSessionDelegation hook used by the spec § 6 T3+ blessing path.
+  {
+    type: 'function',
+    name: 'acceptSessionDelegation',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'sessionDelegationHash', type: 'bytes32' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'isAcceptedSessionDelegation',
+    stateMutability: 'view',
+    inputs: [{ name: 'sessionDelegationHash', type: 'bytes32' }],
+    outputs: [{ type: 'bool' }],
+  },
+] as const;
+
+/**
+ * ApprovedHashRegistry (apps/contracts/src/ApprovedHashRegistry.sol).
+ * The v=1 path companion — passkey-only or hardware-wallet signers
+ * pre-approve a hash with one tx instead of producing an off-chain
+ * ECDSA sig. `QuorumEnforcer.beforeHook` (and the
+ * `_verifyQuorum(..., guardianMode=true)` path in AgentAccount) check
+ * `isApproved(signer, hash)` for v=1 slots in the packed blob.
+ */
+export const approvedHashRegistryAbi = [
+  {
+    type: 'function',
+    name: 'approveHash',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'hash', type: 'bytes32' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'revokeHash',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'hash', type: 'bytes32' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'isApproved',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'signer', type: 'address' },
+      { name: 'hash', type: 'bytes32' },
+    ],
+    outputs: [{ type: 'bool' }],
+  },
 ] as const;
 
 /** ERC-1271 magic value returned by isValidSignature on success. */

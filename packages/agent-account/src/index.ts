@@ -9,6 +9,16 @@ export { BundlerClient, packGasLimits, unpackGasLimits } from './bundler-client'
 export type { BundlerClientOpts, PackedUserOperation } from './bundler-client';
 export { entryPointAbi } from './abis';
 
+// Spec 207 threshold-policy + quorum utilities (6c.3-c).
+export {
+  packSafeSignatures,
+  computeAdminPayloadHash,
+  ADMIN_VERB_PROPOSE,
+  ADMIN_VERB_EXECUTE,
+  ADMIN_VERB_CANCEL,
+} from './quorum';
+export type { SafeSignatureSlot } from './quorum';
+
 // WebAuthn on-chain signature wire format (spec 130).
 // The structured `WebAuthnAssertion` struct + WebAuthn ceremony live in
 // the identity-auth package — agent-account only ships the on-chain
