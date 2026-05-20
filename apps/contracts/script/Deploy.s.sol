@@ -113,6 +113,21 @@ contract Deploy is Script {
         console2.log("  stake:   %s wei", stakeAmount);
         console2.log("  deposit: %s wei", depositAmount);
 
+        // 7. Optional: switch paymaster into verifying-paymaster mode
+        //    (audit C2 closure). When PAYMASTER_VERIFYING_SIGNER env is
+        //    set, sets the signer address + flips dev mode off. demo-a2a
+        //    will sign every paymaster envelope with the matching KMS
+        //    key. For local anvil deploys, leave the env unset → paymaster
+        //    stays in dev/accept-all mode (which is fine for tests).
+        address verifyingSigner = vm.envOr("PAYMASTER_VERIFYING_SIGNER", address(0));
+        if (verifyingSigner != address(0)) {
+            paymaster.setVerifyingSigner(verifyingSigner);
+            paymaster.setDevMode(false);
+            console2.log("  verifyingSigner: %s (dev mode OFF)", verifyingSigner);
+        } else {
+            console2.log("  (PAYMASTER_VERIFYING_SIGNER unset; dev mode stays ON)");
+        }
+
         vm.stopBroadcast();
 
         // Write deployments-<network>.json so the TS demo apps can read addresses on startup.

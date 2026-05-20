@@ -4,45 +4,78 @@ pragma solidity ^0.8.28;
 import "account-abstraction/core/BasePaymaster.sol";
 import "account-abstraction/interfaces/IEntryPoint.sol";
 import "account-abstraction/interfaces/PackedUserOperation.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "./governance/IGovernance.sol";
 
 /**
  * @title SmartAgentPaymaster
  * @notice ERC-4337 paymaster (v0.7+ interface, runs against our v0.9 EntryPoint)
  *         that sponsors gas at the EntryPoint level so users never need ETH.
- *         A userOp sets `paymasterAndData = <this paymaster> || <empty>` and
- *         the EntryPoint reimburses the bundler from this paymaster's
- *         on-EntryPoint deposit.
  *
- * Design posture (v1, ported from smart-agent):
- *   - DEV-SAFE accept-all policy. `_validatePaymasterUserOp` returns
- *     `("", 0)` for every userOp, regardless of sender or callData.
- *   - The `_acceptList` mapping + governance admin surface is wired so that
- *     a follow-up production PR can flip `_dev = false` and require senders
- *     to be allow-listed (or replace this with a verifying-paymaster variant
- *     that checks an off-chain signature in `paymasterData`).
- *   - No per-call accounting → `_postOp` is a no-op and
- *     `_validatePaymasterUserOp` returns empty context, telling EntryPoint
- *     to skip the postOp call entirely (saves ~30k gas per op).
+ * Validation modes (audit C2 — closed in pass 4):
+ *   1. **Dev mode** (`_dev=true`): accept every userOp. Local dev /
+ *      Anvil only.
+ *   2. **Allowlist mode** (`_dev=false` AND `verifyingSigner == address(0)`):
+ *      only senders in `_acceptList` are sponsored. Useful when the
+ *      set of accounts is bounded + known up front.
+ *   3. **Verifying-paymaster mode** (`_dev=false` AND
+ *      `verifyingSigner != address(0)`): a designated EOA signs over
+ *      `(userOp_canonical, validUntil, validAfter)` off-chain;
+ *      `_validatePaymasterUserOp` recovers the signature and accepts
+ *      only if it recovers to `verifyingSigner`. Standard production
+ *      pattern (Pimlico / Stackup / Alchemy reference); avoids the
+ *      per-sender state of allowlist mode while keeping the paymaster
+ *      from being drained by arbitrary callers.
  *
- * Production checklist (DO BEFORE PUBLIC DEPLOY):
- *   1. Call `setDevMode(false)` (governance only).
- *   2. Populate `_acceptList` with the canonical AgentAccountFactory and/or
- *      the set of legitimate smart-account senders.
- *   3. Consider upgrading to a verifying-paymaster (off-chain signed
- *      paymasterData) before exposing this to untrusted senders.
- *   4. Monitor `getDeposit()` and alert below a runway threshold.
+ * Wire format of `paymasterAndData` (verifying-paymaster mode):
+ * ```
+ *   [20 bytes paymaster addr]
+ *   [16 bytes paymasterVerificationGasLimit]
+ *   [16 bytes paymasterPostOpGasLimit]
+ *   [6  bytes validUntil  (uint48 BE)]
+ *   [6  bytes validAfter  (uint48 BE)]
+ *   [65 bytes ECDSA signature (r,s,v) over getHash(...)]
+ * ```
  *
- * @dev Inherits `addStake`, `unlockStake`, `withdrawStake`, `deposit`, and
- *      `withdrawTo` from `BasePaymaster`. Ownable owner is set in the
- *      constructor (Ownable2Step pattern).
+ * Hash signed off-chain (matches the canonical-paymaster reference):
+ * ```
+ *   keccak256(abi.encode(
+ *     sender, nonce, keccak256(initCode), keccak256(callData),
+ *     accountGasLimits, preVerificationGas, gasFees,
+ *     chainId, address(this), validUntil, validAfter
+ *   ))
+ * ```
+ *
+ * Note: the signature itself is NOT in the hash (otherwise recursive).
+ * The hash deliberately omits `paymasterAndData` from the userOp
+ * because the signature lives there.
+ *
+ * Production checklist:
+ *   1. Call `setDevMode(false)` (governance only) to leave dev mode.
+ *   2. Call `setVerifyingSigner(<KMS-backed signer addr>)` to enable
+ *      verifying-paymaster mode (preferred). OR populate `_acceptList`
+ *      via `setAccepted` if you want allowlist mode.
+ *   3. Monitor `getDeposit()` and alert below a runway threshold.
+ *
+ * @dev Inherits `addStake`, `unlockStake`, `withdrawStake`, `deposit`,
+ *      and `withdrawTo` from `BasePaymaster`. Ownable owner is set in
+ *      the constructor (Ownable2Step pattern).
  */
 contract SmartAgentPaymaster is BasePaymaster {
+    using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
+
     /// @notice Whether the paymaster is in dev (accept-all) mode.
     bool private _dev;
 
-    /// @notice Per-sender allow-list for production mode.
+    /// @notice Per-sender allow-list for production allowlist mode.
     mapping(address => bool) private _acceptList;
+
+    /// @notice EOA that signs paymaster-validation envelopes off-chain.
+    ///         `address(0)` disables verifying mode (allowlist becomes
+    ///         the production check). Set via governance.
+    address public verifyingSigner;
 
     /// @notice The Governance contract whose pause flag halts paymaster
     ///         validation. Stored immutable.
@@ -52,22 +85,23 @@ contract SmartAgentPaymaster is BasePaymaster {
     error SystemPaused();
     error ZeroGovernance();
     error NotGovernance();
+    error PaymasterDataMalformed();
+    error PaymasterSignatureInvalid();
 
     event DevModeSet(bool dev);
     event SenderAcceptedSet(address indexed sender, bool accepted);
+    event VerifyingSignerSet(address indexed oldSigner, address indexed newSigner);
 
-    /// @dev Storage gap reserves slots for future state.
-    uint256[50] private __gap;
+    /// @dev Storage gap reserves slots for future state. Phase A.5 §3.1.
+    uint256[49] private __gap;
 
-    /// @param entryPointAddr ERC-4337 EntryPoint.
-    /// @param initialOwner   Transient Ownable owner used during deploy
-    ///                       so the deployer can `addStake` / `deposit`
-    ///                       in the same broadcast. Transfer ownership
-    ///                       to `governance_` at the end of deploy via
-    ///                       `transferOwnership` + `acceptOwnership`.
-    /// @param governance_    The Governance contract; sourced for the
-    ///                       pause flag. Stored immutable so it cannot
-    ///                       be redirected post-deploy.
+    /// @dev Length of the paymaster-data tail when in verifying mode:
+    ///      6 (validUntil) + 6 (validAfter) + 65 (sig) = 77 bytes.
+    uint256 private constant VERIFYING_PAYMASTER_DATA_LEN = 77;
+    /// @dev Offset in `paymasterAndData` where the post-prefix payload
+    ///      begins: 20 (paymaster addr) + 16 (verifGas) + 16 (postOpGas).
+    uint256 private constant PM_DATA_OFFSET = 52;
+
     constructor(
         IEntryPoint entryPointAddr,
         address initialOwner,
@@ -103,6 +137,15 @@ contract SmartAgentPaymaster is BasePaymaster {
         }
     }
 
+    /// @notice Set the EOA that signs paymaster-validation envelopes.
+    ///         Pass `address(0)` to disable verifying mode + fall back
+    ///         to allowlist (when `_dev=false`).
+    function setVerifyingSigner(address newSigner) external onlyGovernance {
+        address old = verifyingSigner;
+        verifyingSigner = newSigner;
+        emit VerifyingSignerSet(old, newSigner);
+    }
+
     // ─── Views ──────────────────────────────────────────────────────────
 
     function devMode() external view returns (bool) {
@@ -113,34 +156,104 @@ contract SmartAgentPaymaster is BasePaymaster {
         return _acceptList[sender];
     }
 
+    /// @notice The canonical hash a verifying signer must sign.
+    ///         Off-chain callers compute the same hash + sign via
+    ///         EIP-191 ("\x19Ethereum Signed Message:\n32" prefix);
+    ///         on-chain validation recovers via that wrapper.
+    /// @dev Deliberately omits paymasterAndData (the signature lives
+    ///      there) and the userOp.signature (the account signs
+    ///      independently). Includes chainId + paymaster address for
+    ///      replay protection across chains + deployments.
+    function getHash(
+        PackedUserOperation calldata userOp,
+        uint48 validUntil,
+        uint48 validAfter
+    ) public view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                userOp.sender,
+                userOp.nonce,
+                keccak256(userOp.initCode),
+                keccak256(userOp.callData),
+                userOp.accountGasLimits,
+                userOp.preVerificationGas,
+                userOp.gasFees,
+                block.chainid,
+                address(this),
+                validUntil,
+                validAfter
+            )
+        );
+    }
+
     // ─── Paymaster hook ────────────────────────────────────────────────
 
     /// @inheritdoc BasePaymaster
-    /// @dev Accept-all in dev; allow-list in prod. Returns empty context so
-    ///      EntryPoint skips postOp (cheaper). validationData=0 signals
-    ///      "valid signature, valid indefinitely".
     function _validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
         bytes32 /*userOpHash*/,
         uint256 /*maxCost*/
     ) internal view override returns (bytes memory context, uint256 validationData) {
-        // Pause check is only meaningful if governance is a contract with
-        // isPaused(). For demo/dev deploys where governance is an EOA, we
-        // can't call isPaused() (it would revert with no return data), so
-        // skip the check. Production MUST point governance at a real
-        // Governance contract — the constructor's ZeroGovernance check
-        // catches address(0); this branch catches "EOA was given".
+        // Pause check (only when governance is a contract).
         if (governance.code.length > 0) {
             if (IGovernanceView(governance).isPaused()) revert SystemPaused();
         }
-        if (!_dev) {
-            if (!_acceptList[userOp.sender]) revert SenderNotAccepted(userOp.sender);
+
+        if (_dev) {
+            // Dev mode: accept all. validationData = 0 → "valid sig,
+            // valid indefinitely".
+            return ("", 0);
         }
+
+        // Production. Prefer verifying-paymaster when a signer is
+        // configured; fall back to the legacy allowlist otherwise.
+        if (verifyingSigner != address(0)) {
+            // Parse paymasterData tail.
+            if (userOp.paymasterAndData.length < PM_DATA_OFFSET + VERIFYING_PAYMASTER_DATA_LEN) {
+                revert PaymasterDataMalformed();
+            }
+            bytes calldata payData = userOp.paymasterAndData[PM_DATA_OFFSET:];
+            uint48 validUntil = uint48(bytes6(payData[0:6]));
+            uint48 validAfter = uint48(bytes6(payData[6:12]));
+            bytes calldata signature = payData[12:VERIFYING_PAYMASTER_DATA_LEN];
+
+            bytes32 hash = getHash(userOp, validUntil, validAfter);
+            // EIP-191 wrap matches what KMS-backed `signMessage({raw})`
+            // produces via the v0.7 reference paymaster convention.
+            bytes32 ethHash = hash.toEthSignedMessageHash();
+            (address recovered, ECDSA.RecoverError err, ) = ECDSA.tryRecover(ethHash, signature);
+            if (err != ECDSA.RecoverError.NoError || recovered != verifyingSigner) {
+                // Returning sigFailed=true (per EntryPoint convention)
+                // is the canonical way to signal sig invalid; we revert
+                // explicitly for a clearer error in tests + tools.
+                revert PaymasterSignatureInvalid();
+            }
+            // Encode (sigFailed=false, validUntil, validAfter) into validationData.
+            return ("", _packValidationData(false, validUntil, validAfter));
+        }
+
+        // Fallback: allowlist mode.
+        if (!_acceptList[userOp.sender]) revert SenderNotAccepted(userOp.sender);
         return ("", 0);
     }
 
+    /// @dev v0.7 EntryPoint convention. Bits 0: sigFailed,
+    ///      [1..49]: validUntil, [50..98]: validAfter (or similar).
+    ///      We use the simple packing: aggregator addr (160 bits, 0),
+    ///      validUntil (48 bits), validAfter (48 bits).
+    function _packValidationData(
+        bool sigFailed,
+        uint48 validUntil,
+        uint48 validAfter
+    ) internal pure returns (uint256) {
+        return
+            (sigFailed ? 1 : 0) |
+            (uint256(validUntil) << 160) |
+            (uint256(validAfter) << (160 + 48));
+    }
+
     /// @inheritdoc BasePaymaster
-    /// @dev No per-call accounting in v1. No-op so EntryPoint can safely
+    /// @dev No per-call accounting. No-op so EntryPoint can safely
     ///      call us if it ever does (it won't — we return empty context).
     function _postOp(
         PostOpMode /*mode*/,

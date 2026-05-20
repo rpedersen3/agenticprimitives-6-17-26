@@ -210,6 +210,16 @@ if (d.smartAgentPaymaster) {
   a2aVars.PAYMASTER = d.smartAgentPaymaster;
   console.log(`  using PAYMASTER ${d.smartAgentPaymaster}`);
 }
+// Audit C2: when the paymaster is in verifying-paymaster mode
+// (production), demo-a2a needs the signer address to know it must
+// sign every paymaster envelope. The address is set by the contract
+// deploy via PAYMASTER_VERIFYING_SIGNER env; we mirror it here so
+// the Worker knows.
+const pmVerifyingSigner = process.env.PAYMASTER_VERIFYING_SIGNER;
+if (pmVerifyingSigner) {
+  a2aVars.PAYMASTER_VERIFYING_SIGNER = pmVerifyingSigner;
+  console.log(`  using PAYMASTER_VERIFYING_SIGNER ${pmVerifyingSigner}`);
+}
 // Propagate the universal validator address so /auth/siwe-verify
 // switches to the signer-agnostic path (passkey + ERC-6492 support).
 if (d.universalSignatureValidator) {

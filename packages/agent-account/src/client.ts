@@ -8,8 +8,10 @@
 import {
   createPublicClient,
   createWalletClient,
+  encodeAbiParameters,
   encodeFunctionData,
   http,
+  keccak256,
   getContract,
   type Address,
   type Hex,
@@ -22,6 +24,66 @@ import type { Signer } from '@agenticprimitives/identity-auth';
 import { agentAccountFactoryAbi, agentAccountAbi, ERC1271_MAGIC_VALUE } from './abis';
 import { BundlerClient, packGasLimits, type PackedUserOperation } from './bundler-client';
 import type { UserOperation } from './types';
+
+/**
+ * Build `paymasterAndData` with the standard v0.7+ prefix:
+ *   [20 paymaster][16 pmVerifGas][16 pmPostOpGas]
+ *
+ * When `verifyingPaymaster.signFn` is provided (audit C2), additionally
+ * appends `[6 validUntil][6 validAfter][65 signature]`. The signature
+ * is produced by passing the canonical hash from
+ * `AgentAccountClient.computeVerifyingPaymasterHash` to `signFn` —
+ * which MUST EIP-191-wrap the hash (e.g. via viem's `signMessage({ raw })`
+ * or a KMS-backed equivalent).
+ *
+ * The on-chain `SmartAgentPaymaster._validatePaymasterUserOp` recovers
+ * the signature via `MessageHashUtils.toEthSignedMessageHash`, matching
+ * the EIP-191 wrap. Sig must recover to `verifyingSigner` on the
+ * paymaster.
+ */
+async function buildPaymasterAndData(args: {
+  paymaster: Address;
+  pmVerifGas: bigint;
+  pmPostOpGas: bigint;
+  verifyingPaymaster?: {
+    signFn: (hash: Hex) => Promise<Hex>;
+    validUntilSeconds?: number;
+    validAfterSeconds?: number;
+  };
+  userOpFields: Pick<
+    PackedUserOperation,
+    'sender' | 'nonce' | 'initCode' | 'callData' | 'accountGasLimits' | 'preVerificationGas' | 'gasFees'
+  >;
+  chainId: number;
+}): Promise<Hex> {
+  const prefix = (args.paymaster +
+    args.pmVerifGas.toString(16).padStart(32, '0') +
+    args.pmPostOpGas.toString(16).padStart(32, '0')) as Hex;
+  if (!args.verifyingPaymaster) return prefix;
+
+  const now = Math.floor(Date.now() / 1000);
+  const validUntil = args.verifyingPaymaster.validUntilSeconds ?? now + 3600;
+  const validAfter = args.verifyingPaymaster.validAfterSeconds ?? 0;
+
+  const hash = AgentAccountClient.computeVerifyingPaymasterHash({
+    userOp: args.userOpFields,
+    paymaster: args.paymaster,
+    chainId: args.chainId,
+    validUntil,
+    validAfter,
+  });
+  const signature = await args.verifyingPaymaster.signFn(hash);
+
+  const validUntilHex = validUntil.toString(16).padStart(12, '0');
+  const validAfterHex = validAfter.toString(16).padStart(12, '0');
+  const sigStripped = signature.startsWith('0x') ? signature.slice(2) : signature;
+  if (sigStripped.length !== 130) {
+    throw new Error(
+      `verifyingPaymaster.signFn returned ${sigStripped.length / 2} bytes; expected 65 (r,s,v ECDSA)`,
+    );
+  }
+  return (prefix + validUntilHex + validAfterHex + sigStripped) as Hex;
+}
 
 export interface AgentAccountClientOpts {
   rpcUrl: string;
@@ -210,6 +272,55 @@ export class AgentAccountClient {
    *   - `sender`: the predicted smart-account address (same as
    *     `getAddress(owner, salt)`)
    */
+  /**
+   * Compute the canonical hash a verifying-paymaster signer must sign
+   * (audit C2). Matches `SmartAgentPaymaster.getHash(...)` on-chain.
+   * Returns the raw keccak256 — callers wrap with EIP-191 ("\\x19Ethereum
+   * Signed Message:\\n32" prefix) before signing, which is what
+   * `signMessage({ raw })` does by convention on the viem side.
+   */
+  static computeVerifyingPaymasterHash(args: {
+    userOp: Pick<
+      PackedUserOperation,
+      'sender' | 'nonce' | 'initCode' | 'callData' | 'accountGasLimits' | 'preVerificationGas' | 'gasFees'
+    >;
+    paymaster: Address;
+    chainId: number;
+    validUntil: number;
+    validAfter: number;
+  }): Hex {
+    return keccak256(
+      encodeAbiParameters(
+        [
+          { type: 'address' }, // userOp.sender
+          { type: 'uint256' }, // userOp.nonce
+          { type: 'bytes32' }, // keccak256(userOp.initCode)
+          { type: 'bytes32' }, // keccak256(userOp.callData)
+          { type: 'bytes32' }, // userOp.accountGasLimits
+          { type: 'uint256' }, // userOp.preVerificationGas
+          { type: 'bytes32' }, // userOp.gasFees
+          { type: 'uint256' }, // chainId
+          { type: 'address' }, // paymaster
+          { type: 'uint48' },  // validUntil
+          { type: 'uint48' },  // validAfter
+        ],
+        [
+          args.userOp.sender,
+          args.userOp.nonce,
+          keccak256(args.userOp.initCode),
+          keccak256(args.userOp.callData),
+          args.userOp.accountGasLimits,
+          args.userOp.preVerificationGas,
+          args.userOp.gasFees,
+          BigInt(args.chainId),
+          args.paymaster,
+          args.validUntil,
+          args.validAfter,
+        ],
+      ),
+    );
+  }
+
   async buildDeployUserOp(opts: {
     owner: Address;
     salt: bigint;
@@ -217,6 +328,22 @@ export class AgentAccountClient {
     verificationGasLimit?: bigint;
     preVerificationGas?: bigint;
     paymasterVerificationGasLimit?: bigint;
+    /**
+     * Verifying-paymaster mode (audit C2). When provided, the client
+     * appends `[validUntil(6)][validAfter(6)][sig(65)]` to
+     * `paymasterAndData`, where the signature is produced by calling
+     * `signFn(hash)` over the EIP-191-wrapped `getHash(...)` digest.
+     * The signFn typically wraps a KMS-backed signMessage call.
+     *
+     * When omitted, `paymasterAndData` is just the standard prefix
+     * (paymaster addr + gas limits) — works for paymasters in dev /
+     * accept-all mode (local anvil) or allowlist mode.
+     */
+    verifyingPaymaster?: {
+      signFn: (hash: Hex) => Promise<Hex>;
+      validUntilSeconds?: number; // default: now + 1h
+      validAfterSeconds?: number; // default: 0 (always valid from start)
+    };
   }): Promise<{ userOp: PackedUserOperation; userOpHash: Hex; sender: Address }> {
     const sender = await this.getAddress(opts.owner, opts.salt);
 
@@ -253,11 +380,14 @@ export class AgentAccountClient {
     //   [16 bytes paymasterPostOpGasLimit][remaining bytes paymasterData]
     const pmVerifGas = opts.paymasterVerificationGasLimit ?? 50_000n;
     const pmPostOpGas = 0n; // our SmartAgentPaymaster._postOp is a no-op
-    const paymasterAndData = (
-      opts.paymaster +
-      pmVerifGas.toString(16).padStart(32, '0') +
-      pmPostOpGas.toString(16).padStart(32, '0')
-    ) as Hex;
+    const paymasterAndData = await buildPaymasterAndData({
+      paymaster: opts.paymaster,
+      pmVerifGas,
+      pmPostOpGas,
+      verifyingPaymaster: opts.verifyingPaymaster,
+      userOpFields: { sender, nonce: 0n, initCode, callData: '0x' as Hex, accountGasLimits, preVerificationGas, gasFees },
+      chainId: this.opts.chainId,
+    });
 
     const userOp: PackedUserOperation = {
       sender,
@@ -301,6 +431,12 @@ export class AgentAccountClient {
     verificationGasLimit?: bigint;
     preVerificationGas?: bigint;
     paymasterVerificationGasLimit?: bigint;
+    /** Audit C2: verifying-paymaster signature. See buildDeployUserOp opts. */
+    verifyingPaymaster?: {
+      signFn: (hash: Hex) => Promise<Hex>;
+      validUntilSeconds?: number;
+      validAfterSeconds?: number;
+    };
   }): Promise<{ userOp: PackedUserOperation; userOpHash: Hex; sender: Address }> {
     const sender = await this.getAddressForPasskey(
       opts.credentialIdDigest,
@@ -338,11 +474,14 @@ export class AgentAccountClient {
 
     const pmVerifGas = opts.paymasterVerificationGasLimit ?? 50_000n;
     const pmPostOpGas = 0n;
-    const paymasterAndData = (
-      opts.paymaster +
-      pmVerifGas.toString(16).padStart(32, '0') +
-      pmPostOpGas.toString(16).padStart(32, '0')
-    ) as Hex;
+    const paymasterAndData = await buildPaymasterAndData({
+      paymaster: opts.paymaster,
+      pmVerifGas,
+      pmPostOpGas,
+      verifyingPaymaster: opts.verifyingPaymaster,
+      userOpFields: { sender, nonce: 0n, initCode, callData: '0x' as Hex, accountGasLimits, preVerificationGas, gasFees },
+      chainId: this.opts.chainId,
+    });
 
     const userOp: PackedUserOperation = {
       sender,
