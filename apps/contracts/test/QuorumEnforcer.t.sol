@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import "forge-std/Test.sol";
 import "../src/enforcers/QuorumEnforcer.sol";
 import "../src/ApprovedHashRegistry.sol";
+import "../src/libraries/SignatureSlotRecovery.sol";
 
 /// Mock ERC-1271 wallet that returns the magic value when its stored
 /// `expectedHash` matches the queried hash. Anything else returns
@@ -209,7 +210,7 @@ contract QuorumEnforcerTest is Test {
     function test_v1_unapproved_hash_reverts() public {
         bytes memory packed = _interleaveEcdsaAndV1(alice, alicePk, bob);
         bytes memory args = abi.encode(payloadHash, packed);
-        vm.expectRevert(abi.encodeWithSelector(QuorumEnforcer.ApprovedHashRequired.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(SignatureSlotRecovery.ApprovedHashRequired.selector, bob));
         enf.beforeHook(_terms(2), args, bytes32(0), address(0), address(0), address(0), 0, "");
     }
 
@@ -221,7 +222,7 @@ contract QuorumEnforcerTest is Test {
 
         bytes memory packed = _interleaveEcdsaAndV1(alice, alicePk, bob);
         bytes memory args = abi.encode(payloadHash, packed);
-        vm.expectRevert(abi.encodeWithSelector(QuorumEnforcer.ApprovedHashRequired.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(SignatureSlotRecovery.ApprovedHashRequired.selector, bob));
         enf.beforeHook(_terms(2), args, bytes32(0), address(0), address(0), address(0), 0, "");
     }
 
@@ -357,7 +358,7 @@ contract QuorumEnforcerTest is Test {
         }
 
         bytes memory args = abi.encode(payloadHash, packed);
-        vm.expectRevert(abi.encodeWithSelector(QuorumEnforcer.ContractSigInvalid.selector, walletAddr));
+        vm.expectRevert(abi.encodeWithSelector(SignatureSlotRecovery.ContractSigInvalid.selector, walletAddr));
         enf.beforeHook(_termsWithSet(set, 2), args, bytes32(0), address(0), address(0), address(0), 0, "");
     }
 

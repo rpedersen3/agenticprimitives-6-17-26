@@ -2,8 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "../ICaveatEnforcer.sol";
-import "../ApprovedHashRegistry.sol";
-import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import "../libraries/SignatureSlotRecovery.sol";
 
 /**
  * @title QuorumEnforcer
@@ -74,11 +73,6 @@ contract QuorumEnforcer is ICaveatEnforcer {
     error InsufficientQuorum(uint256 supplied, uint8 threshold);
     error UnauthorizedSigner(address signer);
     error DuplicateOrUnsortedSigner(address signer);
-    error InvalidSignature(uint8 v);
-    error ApprovedHashRequired(address signer);
-    error ContractSigInvalid(address signer);
-
-    bytes4 internal constant ERC1271_MAGIC = 0x1626ba7e;
 
     function beforeHook(
         bytes calldata terms,
@@ -100,7 +94,12 @@ contract QuorumEnforcer is ICaveatEnforcer {
 
         address prev;
         for (uint256 i; i < threshold; i++) {
-            address signer = _recover(payloadHash, signatures, i, approvedHashRegistry);
+            address signer = SignatureSlotRecovery.recoverFromSlot(
+                payloadHash,
+                signatures,
+                i,
+                approvedHashRegistry
+            );
 
             // Sorted-ascending check (also rejects duplicates).
             if (signer <= prev) revert DuplicateOrUnsortedSigner(signer);
@@ -121,68 +120,6 @@ contract QuorumEnforcer is ICaveatEnforcer {
         uint256,
         bytes calldata
     ) external pure override {}
-
-    /// Recover the signer for the i-th 65-byte slot.
-    function _recover(
-        bytes32 payloadHash,
-        bytes memory signatures,
-        uint256 index,
-        address approvedHashRegistry
-    ) internal view returns (address signer) {
-        bytes32 r;
-        bytes32 s;
-        uint8 v;
-        uint256 offset = index * 65;
-        assembly {
-            let pos := add(signatures, add(0x20, offset))
-            r := mload(pos)
-            s := mload(add(pos, 0x20))
-            v := byte(0, mload(add(pos, 0x40)))
-        }
-
-        if (v == 0) {
-            // ERC-1271 contract signature. r holds the signer (left-padded);
-            // s holds the byte offset into `signatures` to a (length, blob) tail.
-            signer = address(uint160(uint256(r)));
-            uint256 sigOffset = uint256(s);
-            // Slice the dynamic sig tail out of `signatures`.
-            uint256 sigLen;
-            assembly {
-                sigLen := mload(add(signatures, add(0x20, sigOffset)))
-            }
-            bytes memory dyn = new bytes(sigLen);
-            assembly {
-                let src := add(signatures, add(0x40, sigOffset))
-                let dst := add(dyn, 0x20)
-                for { let j := 0 } lt(j, sigLen) { j := add(j, 0x20) } {
-                    mstore(add(dst, j), mload(add(src, j)))
-                }
-            }
-            try IERC1271(signer).isValidSignature(payloadHash, dyn) returns (bytes4 magic) {
-                if (magic != ERC1271_MAGIC) revert ContractSigInvalid(signer);
-            } catch {
-                revert ContractSigInvalid(signer);
-            }
-        } else if (v == 1) {
-            // Pre-approved hash. r is signer, payloadHash must be in the registry.
-            signer = address(uint160(uint256(r)));
-            if (!ApprovedHashRegistry(approvedHashRegistry).isApproved(signer, payloadHash)) {
-                revert ApprovedHashRequired(signer);
-            }
-        } else if (v == 27 || v == 28) {
-            signer = ecrecover(payloadHash, v, r, s);
-            if (signer == address(0)) revert InvalidSignature(v);
-        } else if (v > 30) {
-            // eth_sign: signer wrapped payloadHash with the "Ethereum Signed Message"
-            // prefix before signing. Subtract 4 from v to recover the original recovery byte.
-            bytes32 wrapped =
-                keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", payloadHash));
-            signer = ecrecover(wrapped, v - 4, r, s);
-            if (signer == address(0)) revert InvalidSignature(v);
-        } else {
-            revert InvalidSignature(v);
-        }
-    }
 
     function _inSet(address signer, address[] memory set) internal pure returns (bool) {
         for (uint256 i; i < set.length; i++) {
