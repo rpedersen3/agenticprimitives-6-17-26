@@ -76,7 +76,7 @@ What this package does NOT own:
 | ID | Severity | Finding | Status | Notes |
 | --- | --- | --- | --- | --- |
 | **C1** (system) | P0 | Service-to-service MAC not load-bearing. | **CLOSED 2026-05-20** | `verifyServiceMac` + `generateServiceMac` shipped; demo-mcp Hono middleware verifies before delegation parse. 18 unit tests cover happy path + tamper + audience/route/body mismatch + clock skew + replay + wrong-key. Production must set `A2A_MAC_SECRET` (or swap to GCP HMAC key via `buildMacProvider`). |
-| **C3** (system) | P0 | No audit-event emission from `withDelegation`. | **PARTIALLY CLOSED 2026-05-20** | `withDelegation` + `verifyServiceMac` now accept an optional `auditSink` opt and emit `mcp-runtime.with-delegation.{accept,reject}` + `mcp-runtime.service-mac.reject` events. demo-mcp wires `createConsoleAuditSink`. Production preflight should eventually require a sink to be wired. |
+| **C3** (system) | P0 | No audit-event emission from `withDelegation`. | **CLOSED 2026-05-20 (pass 5f)** | `withDelegation` + `verifyServiceMac` accept an optional `auditSink` opt and emit `mcp-runtime.with-delegation.{accept,reject}` + `mcp-runtime.service-mac.{accept,reject}`. Accept-side for service-mac added in pass 5f for forensics symmetry — MAC and delegation are separate primitives with separate threat models, so anomaly-detection (accept rate per primitive, missing-pair detection) needs both as distinct rows. demo-mcp wires `composeSinks(console, d1)` with `X-Correlation-Id` stitching across the a2a boundary. |
 | **H2** (system) | P1 | `tool-policy.evaluatePolicy()` not called. | **CLOSED 2026-05-20** | `withDelegation` now accepts `opts.classification` and calls `evaluatePolicy` after delegation verify. Fail-closed on `deny` + `requires-consent` (this runtime doesn't host a consent loop). demo-mcp passes `GET_PROFILE_CLASSIFICATION`. |
 | **H5** (system) | P1 | `withCrossDelegation` is a stub. | Open | Returns not-implemented. |
 | **L2** (system) | P3 | Memory JTI store is not distributed-safe. | Documented | Test-only; production must use D1. |
@@ -84,8 +84,9 @@ What this package does NOT own:
 
 ## 6. Test posture
 
-- **Unit:** 2 files, 8 tests as of 2026-05-20:
-  `jti-stores.test.ts` (4), `with-delegation.test.ts` (4).
+- **Unit:** 3 files, 28 tests as of 2026-05-20:
+  `jti-stores.test.ts` (4), `with-delegation.test.ts` (4),
+  `service-mac.test.ts` (20 — adds pass-5f accept-emit + fail-soft sink tests).
 - **E2E:** Playwright `04-read-profile.spec.ts` and `05-passkey-login.spec.ts` exercise `withDelegation` end-to-end against the running demo-mcp.
 - **Gaps:**
   - No cross-package integration test that exercises `withDelegation` with a synthetic delegation built by `delegation` and a JTI store backed by a real D1.

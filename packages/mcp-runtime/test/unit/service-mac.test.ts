@@ -7,6 +7,7 @@ import {
   type ServiceMacContext,
 } from '../../src/service-mac';
 import { createMemoryJtiStore } from '../../src/jti-stores';
+import { createMemoryAuditSink } from '@agenticprimitives/audit';
 import type { Hex } from '@agenticprimitives/types';
 
 // Minimal in-memory MAC provider for tests. Uses HMAC-SHA256 over a
@@ -126,6 +127,52 @@ describe('verifyServiceMac', () => {
       provider,
       jtiStore,
       now: () => NOW,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('emits mcp-runtime.service-mac.accept when sink is wired', async () => {
+    const { provider, headers } = await freshHeaders();
+    const jtiStore = createMemoryJtiStore();
+    const sink = createMemoryAuditSink();
+    const result = await verifyServiceMac({
+      ctx: ctx(),
+      headers,
+      provider,
+      jtiStore,
+      now: () => NOW,
+      auditSink: sink,
+      correlationId: 'corr-mac-accept',
+    });
+    expect(result.ok).toBe(true);
+    const events = sink.events();
+    expect(events).toHaveLength(1);
+    const evt = events[0]!;
+    expect(evt.action).toBe('mcp-runtime.service-mac.accept');
+    expect(evt.outcome).toBe('success');
+    expect(evt.correlationId).toBe('corr-mac-accept');
+    expect(evt.subject).toEqual({ type: 'tool', id: 'get_profile' });
+    expect(evt.audience).toBe('urn:mcp:server:person');
+    // nonceHash is a short prefix of sha256(nonce); raw nonce never logged.
+    expect(typeof evt.context?.nonceHash).toBe('string');
+    expect(JSON.stringify(evt)).not.toContain(headers.nonce);
+  });
+
+  it('accept emit is fail-soft: sink throws do not propagate', async () => {
+    const { provider, headers } = await freshHeaders();
+    const jtiStore = createMemoryJtiStore();
+    const throwingSink = {
+      async write() {
+        throw new Error('sink down');
+      },
+    };
+    const result = await verifyServiceMac({
+      ctx: ctx(),
+      headers,
+      provider,
+      jtiStore,
+      now: () => NOW,
+      auditSink: throwingSink,
     });
     expect(result.ok).toBe(true);
   });

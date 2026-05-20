@@ -162,12 +162,19 @@ export async function verifyServiceMac(args: {
   maxClockSkewMs?: number;
   now?: () => number;
   /**
-   * Audit sink (audit C3). When provided, every rejection emits a
-   * `mcp-runtime.service-mac.reject` event so forensics can reconstruct
-   * who attempted what. Successful verifies are typically left to the
-   * downstream `withDelegation` event to avoid double-emission per
-   * request; emitters wanting per-MAC accept events can wire a
-   * separate emit themselves.
+   * Audit sink (audit C3). When provided, both outcomes emit:
+   *
+   * - On reject: `mcp-runtime.service-mac.reject` with a `reason` string
+   *   classifying the failure (clock skew, mac mismatch, nonce replay,
+   *   malformed input, ...).
+   * - On accept: `mcp-runtime.service-mac.accept` with the keyId + a
+   *   short hash of the consumed nonce.
+   *
+   * Both events fire even when the downstream `withDelegation` wrapper
+   * also emits — service-mac and delegation are separate primitives
+   * with separate threat models, so anomaly detection (accept rate
+   * per primitive, missing-pair detection) needs them as distinct
+   * rows. Per-emit overhead is one D1 INSERT; not worth coalescing.
    */
   auditSink?: AuditSink;
   /** Correlation ID threaded into emitted events. */
@@ -247,6 +254,28 @@ export async function verifyServiceMac(args: {
     return reject('mac nonce already consumed (replay)');
   }
   void ts; // ts is bounded by clock-skew gate above; no further use here.
+
+  if (args.auditSink) {
+    try {
+      await args.auditSink.write(
+        buildEvent({
+          action: 'mcp-runtime.service-mac.accept',
+          outcome: 'success',
+          correlationId: args.correlationId,
+          actor: { type: 'service', id: args.ctx.service },
+          subject: { type: 'tool', id: args.ctx.route },
+          audience: args.ctx.audience,
+          context: {
+            keyId: args.headers.keyId,
+            nonceHash: nonceHashShort(args.headers.nonce),
+          },
+        }),
+      );
+    } catch {
+      /* fail-soft */
+    }
+  }
+
   return { ok: true };
 }
 

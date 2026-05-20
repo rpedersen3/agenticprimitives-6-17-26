@@ -133,7 +133,7 @@ An external auditor evaluating this package needs:
 
 This package emits no events itself. It defines the schema + sinks. Emitting packages document their event actions in their own `AUDIT.md`. As of 2026-05-20:
 
-- `@agenticprimitives/mcp-runtime` — `mcp-runtime.with-delegation.{accept,reject}`, `mcp-runtime.service-mac.{accept,reject}`.
+- `@agenticprimitives/mcp-runtime` — `mcp-runtime.with-delegation.{accept,reject}`, `mcp-runtime.service-mac.{accept,reject}` (accept side added 2026-05-20 pass 5f).
 - `@agenticprimitives/delegation` — `delegation.verify.{accept,reject}`, `delegation.mint` (NEW, pass 5b).
 - `@agenticprimitives/key-custody` — `key-custody.sign` (NEW, pass 5b). Envelope-encryption emit (`key-custody.envelope.{encrypt,decrypt}`) is a remaining slice; the auditContext is already accepted on the interface.
 - (Follow-up: `@agenticprimitives/identity-auth` — caller-emit pattern.)

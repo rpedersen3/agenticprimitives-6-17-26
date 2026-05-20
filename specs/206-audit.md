@@ -83,14 +83,18 @@ Emitters MUST pick `action` from the controlled set below. New actions get added
 
 | Action | Emitter | Outcome semantics |
 | --- | --- | --- |
+Naming convention: `<pkg>.<primitive>[.<outcome>]`. The outcome suffix is omitted when only one outcome is meaningful (e.g. `delegation.mint` has no rejection path — mint throws).
+
 | `delegation.mint` | `@agenticprimitives/delegation` | `success` (no failure path — mint throws) |
 | `delegation.verify.accept` | `@agenticprimitives/delegation`, `@agenticprimitives/mcp-runtime` | `success` |
 | `delegation.verify.reject` | same | `denied` + `reason` |
 | `key-custody.sign` | `@agenticprimitives/key-custody` (`LocalSecp256k1Signer`, `GcpKmsSigner`) | `success` (failures propagate before sign returns) |
 | `key-custody.envelope.encrypt` | `LocalAesProvider`, `GcpKmsProvider` (v0.1) | `success` / `failure` |
 | `key-custody.envelope.decrypt` | same | `success` / `failure` (AAD tamper → failure + reason) |
-| `mac.verify.accept` | `@agenticprimitives/mcp-runtime` | `success` |
-| `mac.verify.reject` | same | `denied` + `reason` (nonce-reuse, skew, sig-mismatch) |
+| `mcp-runtime.service-mac.accept` | `@agenticprimitives/mcp-runtime` (`verifyServiceMac`) | `success` |
+| `mcp-runtime.service-mac.reject` | same | `denied` + `reason` (nonce-reuse, skew, mac-mismatch, malformed input) |
+| `mcp-runtime.with-delegation.accept` | `@agenticprimitives/mcp-runtime` (`withDelegation` wrapper) | `success` |
+| `mcp-runtime.with-delegation.reject` | same | `denied` + `reason` |
 | `policy.decide` | `@agenticprimitives/mcp-runtime` (`evaluatePolicy` bridge) | `success` / `denied` |
 
 ## 6. Security invariants (DO NOT BREAK)
