@@ -27,6 +27,41 @@ struct AgentAccountInitParams {
 }
 
 /**
+ * @notice One passkey to add as part of a T6 recovery. Coupled to
+ *         `AgentAccountRecoveryArgs.addPasskeys` so callers can name
+ *         each entry instead of juggling parallel arrays.
+ */
+struct AgentAccountRecoveryPasskeyAdd {
+    bytes32 credentialIdDigest;
+    uint256 x;
+    uint256 y;
+}
+
+/**
+ * @notice Payload for `AdminAction.RecoverAccount` (T6). Atomically
+ *         adds + removes owners and passkeys in a single executed
+ *         action so the recovery flow doesn't pass through fragmented
+ *         intermediate states (half-rotated signer set).
+ *
+ *         Spec 207 § 8 describes the flow:
+ *           1. Guardian quorum proposes recovery.
+ *           2. 48h timelock; first 24h is the primary-owner
+ *              cancel window.
+ *           3. Guardian quorum executes; signer set rotates atomically.
+ *
+ *         Removal lists may name signers that don't exist (no-op);
+ *         add lists may include signers already present (no-op). This
+ *         lets callers idempotently re-propose if a recovery race
+ *         partially succeeded.
+ */
+struct AgentAccountRecoveryArgs {
+    address[] addOwners;
+    address[] removeOwners;
+    AgentAccountRecoveryPasskeyAdd[] addPasskeys;
+    bytes32[] removePasskeyCredentialIdDigests;
+}
+
+/**
  * @title IAgentAccount
  * @notice Interface for an agent-native ERC-4337 smart account.
  */

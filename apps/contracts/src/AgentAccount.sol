@@ -1301,18 +1301,20 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         AddGuardian,               // 4  — T4
         RemoveGuardian,            // 5  — T4
         ChangeMode,                // 6  — T4
-        UpgradeImpl,               // 7  — T5 (stub in 6c.2-b)
-        ChangeDelegationManager,   // 8  — T5 (stub in 6c.2-b)
-        ChangePaymaster,           // 9  — T5 (stub in 6c.2-b)
-        ChangeSessionIssuer,       // 10 — T5 (stub in 6c.2-b)
+        UpgradeImpl,               // 7  — T5
+        ChangeDelegationManager,   // 8  — T5
+        ChangePaymaster,           // 9  — T5 (still stubbed)
+        ChangeSessionIssuer,       // 10 — T5 (still stubbed)
         RotateAllOwners,           // 11 — T4
         ChangeT3Ceiling,           // 12 — T4
-        SetRecoveryThreshold       // 13 — T4
+        SetRecoveryThreshold,      // 13 — T4
+        RecoverAccount             // 14 — T6
     }
 
     struct AdminProposal {
         AdminAction action;
         bytes args;
+        uint64 proposedAt;   // timestamp at propose time — for cancel-window math
         uint64 eta;          // packed with proposer + flags
         address proposer;
         bool executed;
@@ -1369,6 +1371,17 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     event OwnersRotated(uint256 newOwnerCount);
     event ApprovedHashRegistryChanged(address indexed oldAddr, address indexed newAddr);
     event DelegationManagerChanged(address indexed oldDm, address indexed newDm);
+    /// @notice Emitted when a T6 RecoverAccount executes. Carries the
+    ///         net signer-set deltas for off-chain indexers — finer-
+    ///         grained `OwnerAdded` / `OwnerRemoved` / `PasskeyAdded` /
+    ///         `PasskeyRemoved` events also fire per-add/remove inside
+    ///         the handler for compatibility with the existing trail.
+    event AccountRecovered(
+        uint256 ownersAddedCount,
+        uint256 ownersRemovedCount,
+        uint256 passkeysAddedCount,
+        uint256 passkeysRemovedCount
+    );
 
     error InvalidAdminAction(uint8 action);
     error InvalidTier(uint8 tier);
@@ -1394,6 +1407,16 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     /// @notice In `org` mode, a signer who participated in `proposeAdmin`
     ///         cannot also participate in `executeAdmin` (two-person rule).
     error SeparationOfDutiesViolation(address signer);
+    /// @notice T6 RecoverAccount requires a guardian set + a non-zero
+    ///         recoveryThreshold. Hybrid-mode accounts with 0 guardians
+    ///         cannot use T6 — they recover via T4 admin actions signed
+    ///         by their other primary signers (multi-passkey enrollment).
+    error RecoveryRequiresGuardianQuorum();
+    /// @notice Guardian-set membership check failed for a tier-6 sig.
+    ///         Distinct from `AdminUnauthorizedSigner` so callers can
+    ///         disambiguate "you're not an owner" from "you're not a
+    ///         guardian."
+    error UnauthorizedGuardian(address signer);
 
     // ─── Public propose / execute / cancel ──────────────────────────
 
@@ -1419,7 +1442,6 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     ) external returns (uint256 proposalId) {
         ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
         uint8 tier = _tierFor(action);
-        uint8 reqThreshold = _thresholdValue(tier);
         uint32 timelock = _timelockValue(tier);
 
         // T5 (Critical) and T6 (Recovery) MUST be timelocked per spec
@@ -1430,14 +1452,31 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
             revert TimelockRequiredForTier(tier);
         }
 
-        uint64 eta = uint64(block.timestamp + timelock);
+        // T6 RecoverAccount: signers must be guardians + the account
+        // must have a configured recoveryThreshold. Hybrid-mode
+        // accounts with 0 guardians can't use T6 — they recover via
+        // T4 admin actions signed by their other primary signers.
+        bool isRecovery = (action == AdminAction.RecoverAccount);
+        uint8 reqThreshold;
+        if (isRecovery) {
+            if ($.guardianCount == 0 || $.recoveryThreshold == 0) {
+                revert RecoveryRequiresGuardianQuorum();
+            }
+            reqThreshold = $.recoveryThreshold;
+        } else {
+            reqThreshold = _thresholdValue(tier);
+        }
+
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 eta = uint64(nowTs + timelock);
         proposalId = ++$.nextProposalId;
         bytes32 payloadHash = _adminPayloadHash(ADMIN_VERB_PROPOSE, proposalId, action, args, eta);
-        address[] memory propSigners = _verifyOwnerQuorum(payloadHash, quorumSigs, reqThreshold);
+        address[] memory propSigners = _verifyQuorum(payloadHash, quorumSigs, reqThreshold, isRecovery);
 
         $.pending[proposalId] = AdminProposal({
             action: action,
             args: args,
+            proposedAt: nowTs,
             eta: eta,
             proposer: msg.sender,
             executed: false,
@@ -1473,15 +1512,16 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         if (p.cancelled) revert ProposalAlreadyCancelled(proposalId);
         if (block.timestamp < p.eta) revert ProposalNotReady(proposalId, p.eta);
 
+        bool isRecovery = (p.action == AdminAction.RecoverAccount);
         uint8 tier = _tierFor(p.action);
-        uint8 reqThreshold = _thresholdValue(tier);
+        uint8 reqThreshold = isRecovery ? $.recoveryThreshold : _thresholdValue(tier);
         bytes32 payloadHash = _adminPayloadHash(ADMIN_VERB_EXECUTE, proposalId, p.action, p.args, p.eta);
-        address[] memory execSigners = _verifyOwnerQuorum(payloadHash, quorumSigs, reqThreshold);
+        address[] memory execSigners = _verifyQuorum(payloadHash, quorumSigs, reqThreshold, isRecovery);
 
-        // Org-mode separation of duties. Spec § 5.1 "two-person rule"
-        // interpretation: zero-overlap. Any signer that participated
-        // in propose is disqualified from execute.
-        if ($.mode == 3) {
+        // Org-mode separation of duties (T4/T5 only — recovery has its
+        // own dual cancel-window mechanic). Spec § 5.1 "two-person rule":
+        // zero-overlap between propose and execute signer sets.
+        if ($.mode == 3 && !isRecovery) {
             for (uint256 i; i < execSigners.length; i++) {
                 if ($.proposerSigners[proposalId][execSigners[i]]) {
                     revert SeparationOfDutiesViolation(execSigners[i]);
@@ -1507,14 +1547,38 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         if (p.executed) revert ProposalAlreadyExecuted(proposalId);
         if (p.cancelled) revert ProposalAlreadyCancelled(proposalId);
 
-        uint8 tier = _tierFor(p.action);
-        uint8 reqThreshold = _thresholdValue(tier);
         bytes32 payloadHash = _adminPayloadHash(ADMIN_VERB_CANCEL, proposalId, p.action, p.args, p.eta);
-        _verifyOwnerQuorum(payloadHash, quorumSigs, reqThreshold);
+
+        // T6 RecoverAccount has a DUAL cancel window per spec § 8:
+        //   - First 24h after propose: a primary owner can cancel
+        //     with T4-threshold sigs (the "hostile recovery" escape
+        //     hatch — any surviving owner kills a recovery attempt).
+        //   - After 24h: cancel requires recovery-threshold guardian
+        //     sigs (because the owners may legitimately be unreachable
+        //     by this point — that's why recovery was initiated).
+        // For all other tiers, cancel uses the same threshold as
+        // propose, verified against owners.
+        if (p.action == AdminAction.RecoverAccount) {
+            uint64 cancelWindowEnds = p.proposedAt + RECOVERY_PRIMARY_CANCEL_WINDOW;
+            bool inOwnerCancelWindow = block.timestamp < cancelWindowEnds;
+            uint8 reqThreshold = inOwnerCancelWindow
+                ? _thresholdValue(4)
+                : $.recoveryThreshold;
+            _verifyQuorum(payloadHash, quorumSigs, reqThreshold, !inOwnerCancelWindow);
+        } else {
+            uint8 tier = _tierFor(p.action);
+            uint8 reqThreshold = _thresholdValue(tier);
+            _verifyQuorum(payloadHash, quorumSigs, reqThreshold, false);
+        }
 
         p.cancelled = true;
         emit AdminCancelled(proposalId);
     }
+
+    /// @dev Spec § 8: the first 24h of T6's 48h timelock is the
+    ///      primary-owner cancel window. Hardcoded — not a per-account
+    ///      tunable in v0 because the spec calibrates it directly.
+    uint64 internal constant RECOVERY_PRIMARY_CANCEL_WINDOW = 24 hours;
 
     // ─── Views ──────────────────────────────────────────────────────
 
@@ -1579,6 +1643,9 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     // ─── Internal: tier + payload + threshold lookups ───────────────
 
     function _tierFor(AdminAction action) internal pure returns (uint8) {
+        if (action == AdminAction.RecoverAccount) {
+            return 6; // T6 Recovery — guardian quorum + 48h timelock + 24h cancel window
+        }
         if (
             action == AdminAction.UpgradeImpl ||
             action == AdminAction.ChangeDelegationManager ||
@@ -1627,26 +1694,34 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     // ─── Internal: quorum verification ──────────────────────────────
 
     /**
-     * @dev Verify a Safe-compatible packed signature blob against the
-     *      owner set. Reuses the SignatureSlotRecovery library so the
-     *      same 4-path logic that QuorumEnforcer applies (ECDSA, eth_sign,
-     *      v=1 pre-approved, v=0 ERC-1271) governs admin authorization.
+     * @dev Verify a Safe-compatible packed signature blob against either
+     *      the owner set OR the guardian set. Reuses the
+     *      SignatureSlotRecovery library so the same 4-path logic that
+     *      QuorumEnforcer applies (ECDSA, eth_sign, v=1 pre-approved,
+     *      v=0 ERC-1271) governs admin AND recovery authorization.
      *      Sorted-ascending enforcement is the anti-duplicate scheme.
      *
      *      Returns the recovered signer set so callers (proposeAdmin,
      *      executeAdmin) can record proposer signers for the org-mode
      *      separation-of-duties check.
+     *
+     * @param guardianMode  When `true`, verify against `_guardians` and
+     *                      revert `UnauthorizedGuardian` on miss. When
+     *                      `false`, verify against `_owners` and revert
+     *                      `AdminUnauthorizedSigner` on miss.
      */
-    function _verifyOwnerQuorum(
+    function _verifyQuorum(
         bytes32 payloadHash,
         bytes calldata signatures,
-        uint8 reqThreshold
+        uint8 reqThreshold,
+        bool guardianMode
     ) internal view returns (address[] memory signers) {
         if (signatures.length < uint256(reqThreshold) * 65) {
             revert AdminInsufficientQuorum(signatures.length / 65, reqThreshold);
         }
+        ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
         bytes memory sigsMem = signatures;
-        address approvedHashReg = _thresholdPolicyStorage().approvedHashRegistry;
+        address approvedHashReg = $.approvedHashRegistry;
         signers = new address[](reqThreshold);
         address prev;
         for (uint256 i; i < reqThreshold; i++) {
@@ -1655,7 +1730,11 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
             );
             if (signer <= prev) revert AdminDuplicateOrUnsortedSigner(signer);
             prev = signer;
-            if (!_owners[signer]) revert AdminUnauthorizedSigner(signer);
+            if (guardianMode) {
+                if (!$.guardians[signer]) revert UnauthorizedGuardian(signer);
+            } else {
+                if (!_owners[signer]) revert AdminUnauthorizedSigner(signer);
+            }
             signers[i] = signer;
         }
     }
@@ -1693,6 +1772,9 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         } else if (action == AdminAction.SetRecoveryThreshold) {
             (uint8 newThreshold) = abi.decode(args, (uint8));
             _applySetRecoveryThreshold(newThreshold);
+        } else if (action == AdminAction.RecoverAccount) {
+            AgentAccountRecoveryArgs memory r = abi.decode(args, (AgentAccountRecoveryArgs));
+            _applyRecoverAccount(r);
         } else if (action == AdminAction.UpgradeImpl) {
             (address newImpl) = abi.decode(args, (address));
             _applyUpgradeImpl(newImpl);
@@ -1873,6 +1955,83 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         address oldDm = _delegationManager;
         _delegationManager = newDm;
         emit DelegationManagerChanged(oldDm, newDm);
+    }
+
+    // ─── Internal: action handler (T6 Recovery) ─────────────────────
+
+    /**
+     * @dev Atomic T6 recovery. Spec § 8 flow: removes lost signers,
+     *      adds replacements, all in one execute so the account never
+     *      passes through a fragmented intermediate state where
+     *      authority is ambiguous. Removal lists tolerate missing
+     *      entries (no-op) so idempotent re-proposal works after a
+     *      partial race.
+     *
+     *      The CannotRemoveLastSigner invariant is enforced post-
+     *      processing — the FINAL signer count (owners + passkeys)
+     *      after all adds/removes apply must be ≥ 1.
+     */
+    function _applyRecoverAccount(AgentAccountRecoveryArgs memory r) internal {
+        // 1. Add owners first so any owners that will be removed by
+        //    the same recovery (an unusual but legitimate "rotate
+        //    by recovery" pattern) don't trip the last-signer guard
+        //    transiently.
+        uint256 addedOwners;
+        for (uint256 i; i < r.addOwners.length; i++) {
+            address o = r.addOwners[i];
+            if (o == address(0)) revert ZeroAddress();
+            if (!_owners[o]) {
+                _owners[o] = true;
+                _ownerCount += 1;
+                addedOwners += 1;
+                emit OwnerAdded(o);
+            }
+        }
+
+        // 2. Add passkeys (similar reasoning).
+        uint256 addedPasskeys;
+        PasskeyStorage storage ps = _passkeyStorage();
+        for (uint256 i; i < r.addPasskeys.length; i++) {
+            AgentAccountRecoveryPasskeyAdd memory pk = r.addPasskeys[i];
+            if (pk.x == 0 || pk.y == 0) revert InvalidPasskeyPublicKey();
+            if (!ps.registered[pk.credentialIdDigest]) {
+                ps.keys[pk.credentialIdDigest] = PasskeyEntry({ x: pk.x, y: pk.y });
+                ps.registered[pk.credentialIdDigest] = true;
+                ps.count += 1;
+                addedPasskeys += 1;
+                emit PasskeyAdded(pk.credentialIdDigest, pk.x, pk.y);
+            }
+        }
+
+        // 3. Remove owners.
+        uint256 removedOwners;
+        for (uint256 i; i < r.removeOwners.length; i++) {
+            address o = r.removeOwners[i];
+            if (_owners[o]) {
+                _owners[o] = false;
+                _ownerCount -= 1;
+                removedOwners += 1;
+                emit OwnerRemoved(o);
+            }
+        }
+
+        // 4. Remove passkeys.
+        uint256 removedPasskeys;
+        for (uint256 i; i < r.removePasskeyCredentialIdDigests.length; i++) {
+            bytes32 cid = r.removePasskeyCredentialIdDigests[i];
+            if (ps.registered[cid]) {
+                delete ps.keys[cid];
+                ps.registered[cid] = false;
+                ps.count -= 1;
+                removedPasskeys += 1;
+                emit PasskeyRemoved(cid);
+            }
+        }
+
+        // 5. Post-condition: at least one signer must remain.
+        if (_ownerCount + ps.count == 0) revert CannotRemoveLastSigner();
+
+        emit AccountRecovered(addedOwners, removedOwners, addedPasskeys, removedPasskeys);
     }
 
     // ─── Receive ETH ────────────────────────────────────────────────
