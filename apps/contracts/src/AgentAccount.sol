@@ -11,6 +11,7 @@ import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import "./IAgentAccount.sol";
+import "./libraries/SignatureSlotRecovery.sol";
 import "./libraries/WebAuthnLib.sol";
 
 /// @dev Minimal subset of AgentAccountFactory's surface used by the
@@ -1092,6 +1093,512 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     /// @notice Total count of registered passkeys.
     function passkeyCount() external view returns (uint256) {
         return _passkeyStorage().count;
+    }
+
+    // ─── Threshold policy + admin actions (spec 207) ────────────────
+    //
+    // Multi-sig is the default shape of the AgentAccount; threshold=1
+    // with one signer in the owners set is the trivial case (the
+    // existing single-signer flow).
+    //
+    // The propose / execute / cancel triple here is the canonical
+    // path for owner / passkey / guardian mutations + trust-root
+    // changes. UserOp-direct paths (addOwner / removeOwner / setDM /
+    // etc.) stay onlySelf for backwards-compat with mode == single
+    // accounts; for mode != single the SDK should route admin
+    // actions exclusively through this surface.
+
+    /// @dev ERC-7201 namespaced storage slot — isolates threshold-policy
+    ///      state from the existing private slots so future upgrades
+    ///      can extend the struct without storage shifts.
+    ///      slot = keccak256(abi.encode(uint256(keccak256("agenticprimitives.agent-account.threshold-policy.v1")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant THRESHOLD_POLICY_STORAGE_SLOT =
+        0x9bf066624290847e7b22d7abe1660edaa886aac673f26c459e94c35bd96e6f00;
+
+    enum AdminAction {
+        AddOwner,                  // 0  — T4
+        RemoveOwner,               // 1  — T4
+        AddPasskey,                // 2  — T4
+        RemovePasskey,             // 3  — T4
+        AddGuardian,               // 4  — T4
+        RemoveGuardian,            // 5  — T4
+        ChangeMode,                // 6  — T4
+        UpgradeImpl,               // 7  — T5 (stub in 6c.2-b)
+        ChangeDelegationManager,   // 8  — T5 (stub in 6c.2-b)
+        ChangePaymaster,           // 9  — T5 (stub in 6c.2-b)
+        ChangeSessionIssuer,       // 10 — T5 (stub in 6c.2-b)
+        RotateAllOwners,           // 11 — T4
+        ChangeT3Ceiling,           // 12 — T4
+        SetRecoveryThreshold       // 13 — T4
+    }
+
+    struct AdminProposal {
+        AdminAction action;
+        bytes args;
+        uint64 eta;          // packed with proposer + flags
+        address proposer;
+        bool executed;
+        bool cancelled;
+    }
+
+    struct ThresholdPolicyStorage {
+        uint8 mode;                                       // 0=single, 1=hybrid, 2=threshold, 3=org
+        uint8 recoveryThreshold;                          // n-of-guardians for T6
+        uint256 t3HighValueCeiling;                       // wei
+        // Threshold per tier. Index 0 unused; T1..T6 use 1..6.
+        // uint8[7] inline (single storage slot for the array).
+        mapping(uint8 => uint8) thresholdByTier;
+        // Timelock duration per tier (seconds). Same indexing.
+        mapping(uint8 => uint32) timelockByTier;
+        // Guardian set + size. Separate from _owners — guardians are
+        // recovery-only authority and never participate in routine
+        // delegation issuance.
+        mapping(address => bool) guardians;
+        uint256 guardianCount;
+        // Admin-proposal queue.
+        uint256 nextProposalId;
+        mapping(uint256 => AdminProposal) pending;
+        // Optional ApprovedHashRegistry for the v=1 admin-sig path.
+        // 0 disables v=1 entirely (admin sigs must be ECDSA or
+        // ERC-1271 only). Configurable via a T5 admin action
+        // (deferred to 6c.2-c).
+        address approvedHashRegistry;
+    }
+
+    /// @dev internal (not private) so subclassed test harnesses can seed
+    ///      threshold-policy state before the factory extension (6c.2-c)
+    ///      plumbs it in at deploy time.
+    function _thresholdPolicyStorage() internal pure returns (ThresholdPolicyStorage storage $) {
+        bytes32 slot = THRESHOLD_POLICY_STORAGE_SLOT;
+        assembly { $.slot := slot }
+    }
+
+    event AdminProposed(uint256 indexed proposalId, AdminAction indexed action, uint64 eta, address proposer);
+    event AdminExecuted(uint256 indexed proposalId);
+    event AdminCancelled(uint256 indexed proposalId);
+    event GuardianAdded(address indexed guardian);
+    event GuardianRemoved(address indexed guardian);
+    event ThresholdChanged(uint8 indexed tier, uint8 oldValue, uint8 newValue);
+    event ModeChanged(uint8 oldMode, uint8 newMode);
+    event T3CeilingChanged(uint256 oldCeiling, uint256 newCeiling);
+    event RecoveryThresholdChanged(uint8 oldValue, uint8 newValue);
+    event OwnersRotated(uint256 newOwnerCount);
+    event ApprovedHashRegistryChanged(address indexed oldAddr, address indexed newAddr);
+
+    error InvalidAdminAction(uint8 action);
+    error InvalidTier(uint8 tier);
+    error ProposalNotFound(uint256 proposalId);
+    error ProposalAlreadyExecuted(uint256 proposalId);
+    error ProposalAlreadyCancelled(uint256 proposalId);
+    error ProposalNotReady(uint256 proposalId, uint64 eta);
+    error AdminInsufficientQuorum(uint256 supplied, uint8 required);
+    error AdminDuplicateOrUnsortedSigner(address signer);
+    error AdminUnauthorizedSigner(address signer);
+    error GuardianAlreadyExists(address guardian);
+    error GuardianDoesNotExist(address guardian);
+    error InvalidMode(uint8 mode_);
+    error InvalidThresholdValue(uint8 thr);
+    error RecoveryRequiresGuardians();
+    error EmptyOwnerSet();
+    error AdminActionNotYetImplemented(uint8 action);
+    error CannotDowngradeWithGuardians();
+
+    // ─── Public propose / execute / cancel ──────────────────────────
+
+    /**
+     * @notice Propose an admin action. Verifies an owner-quorum signature
+     *         over the proposal payload; queues the action with an ETA
+     *         (which equals `block.timestamp` when the tier's timelock
+     *         is 0). For non-timelocked tiers (default T4=0), the
+     *         caller can follow immediately with `executeAdmin` in a
+     *         second tx.
+     *
+     * @param action          Admin action discriminator.
+     * @param args            ABI-encoded action-specific arguments.
+     * @param quorumSigs      Safe-compatible packed signature blob —
+     *                        sorted-ascending owner sigs over the
+     *                        propose payload hash.
+     * @return proposalId     Identifier for the queued proposal.
+     */
+    function proposeAdmin(
+        AdminAction action,
+        bytes calldata args,
+        bytes calldata quorumSigs
+    ) external returns (uint256 proposalId) {
+        ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
+        uint8 tier = _tierFor(action);
+        uint8 reqThreshold = _thresholdValue(tier);
+        uint64 eta = uint64(block.timestamp + _timelockValue(tier));
+
+        proposalId = ++$.nextProposalId;
+        bytes32 payloadHash = _adminPayloadHash(ADMIN_VERB_PROPOSE, proposalId, action, args, eta);
+        _verifyOwnerQuorum(payloadHash, quorumSigs, reqThreshold);
+
+        $.pending[proposalId] = AdminProposal({
+            action: action,
+            args: args,
+            eta: eta,
+            proposer: msg.sender,
+            executed: false,
+            cancelled: false
+        });
+        emit AdminProposed(proposalId, action, eta, msg.sender);
+    }
+
+    /**
+     * @notice Execute a previously-proposed admin action. Verifies an
+     *         owner-quorum signature over the execute payload + the
+     *         queued proposal's ETA has elapsed. Idempotency-guarded
+     *         via the proposal's `executed` flag.
+     *
+     *         Enterprise-mode separation-of-duties (signers in propose
+     *         ≠ signers in execute) is enforced in 6c.2-c.
+     */
+    function executeAdmin(uint256 proposalId, bytes calldata quorumSigs) external {
+        ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
+        AdminProposal storage p = $.pending[proposalId];
+        if (p.eta == 0) revert ProposalNotFound(proposalId);
+        if (p.executed) revert ProposalAlreadyExecuted(proposalId);
+        if (p.cancelled) revert ProposalAlreadyCancelled(proposalId);
+        if (block.timestamp < p.eta) revert ProposalNotReady(proposalId, p.eta);
+
+        uint8 tier = _tierFor(p.action);
+        uint8 reqThreshold = _thresholdValue(tier);
+        bytes32 payloadHash = _adminPayloadHash(ADMIN_VERB_EXECUTE, proposalId, p.action, p.args, p.eta);
+        _verifyOwnerQuorum(payloadHash, quorumSigs, reqThreshold);
+
+        p.executed = true;
+        emit AdminExecuted(proposalId);
+        _applyAdminAction(p.action, p.args);
+    }
+
+    /**
+     * @notice Cancel a queued (not-yet-executed) admin proposal.
+     *         Requires the same threshold as `proposeAdmin` for the
+     *         tier. The recovery-cancel-window mechanics from spec § 8
+     *         layer on top of this in 6c.2-c (recovery commit).
+     */
+    function cancelAdmin(uint256 proposalId, bytes calldata quorumSigs) external {
+        ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
+        AdminProposal storage p = $.pending[proposalId];
+        if (p.eta == 0) revert ProposalNotFound(proposalId);
+        if (p.executed) revert ProposalAlreadyExecuted(proposalId);
+        if (p.cancelled) revert ProposalAlreadyCancelled(proposalId);
+
+        uint8 tier = _tierFor(p.action);
+        uint8 reqThreshold = _thresholdValue(tier);
+        bytes32 payloadHash = _adminPayloadHash(ADMIN_VERB_CANCEL, proposalId, p.action, p.args, p.eta);
+        _verifyOwnerQuorum(payloadHash, quorumSigs, reqThreshold);
+
+        p.cancelled = true;
+        emit AdminCancelled(proposalId);
+    }
+
+    // ─── Views ──────────────────────────────────────────────────────
+
+    function mode() external view returns (uint8) {
+        return _thresholdPolicyStorage().mode;
+    }
+
+    /// @notice Per-tier threshold. Defaults to 1 (the trivial case)
+    ///         when unset, preserving 1-of-N semantics for accounts
+    ///         deployed before the threshold-policy storage was
+    ///         initialised.
+    function threshold(uint8 tier) external view returns (uint8) {
+        return _thresholdValue(tier);
+    }
+
+    function recoveryThreshold() external view returns (uint8) {
+        return _thresholdPolicyStorage().recoveryThreshold;
+    }
+
+    /// @notice T3 high-value ceiling (wei). Default
+    ///         `type(uint256).max` (no high-value gate) for
+    ///         pre-threshold-policy accounts.
+    function t3HighValueCeiling() external view returns (uint256) {
+        uint256 c = _thresholdPolicyStorage().t3HighValueCeiling;
+        return c == 0 ? type(uint256).max : c;
+    }
+
+    /// @notice Per-tier timelock duration (seconds). Default 0
+    ///         (immediate execute).
+    function timelockDuration(uint8 tier) external view returns (uint32) {
+        return _timelockValue(tier);
+    }
+
+    function isGuardian(address account) external view returns (bool) {
+        return _thresholdPolicyStorage().guardians[account];
+    }
+
+    function guardianCount() external view returns (uint256) {
+        return _thresholdPolicyStorage().guardianCount;
+    }
+
+    function proposalCount() external view returns (uint256) {
+        return _thresholdPolicyStorage().nextProposalId;
+    }
+
+    function getPendingAdmin(uint256 proposalId) external view returns (
+        AdminAction action,
+        bytes memory args,
+        uint64 eta,
+        address proposer,
+        bool executed,
+        bool cancelled
+    ) {
+        AdminProposal storage p = _thresholdPolicyStorage().pending[proposalId];
+        return (p.action, p.args, p.eta, p.proposer, p.executed, p.cancelled);
+    }
+
+    function approvedHashRegistry() external view returns (address) {
+        return _thresholdPolicyStorage().approvedHashRegistry;
+    }
+
+    // ─── Internal: tier + payload + threshold lookups ───────────────
+
+    function _tierFor(AdminAction action) internal pure returns (uint8) {
+        if (
+            action == AdminAction.UpgradeImpl ||
+            action == AdminAction.ChangeDelegationManager ||
+            action == AdminAction.ChangePaymaster ||
+            action == AdminAction.ChangeSessionIssuer
+        ) {
+            return 5; // T5 Critical
+        }
+        return 4;     // All other AdminAction members are T4 Admin
+    }
+
+    function _thresholdValue(uint8 tier) internal view returns (uint8) {
+        if (tier == 0 || tier > 6) revert InvalidTier(tier);
+        uint8 v = _thresholdPolicyStorage().thresholdByTier[tier];
+        return v == 0 ? 1 : v; // default: 1-of-N (the trivial case)
+    }
+
+    function _timelockValue(uint8 tier) internal view returns (uint32) {
+        if (tier == 0 || tier > 6) revert InvalidTier(tier);
+        return _thresholdPolicyStorage().timelockByTier[tier];
+    }
+
+    /**
+     * @dev Canonical payload hash bound to (verb, proposalId, action, args,
+     *      eta, address(this), chainid). Verb distinguishes propose/execute/
+     *      cancel so a propose sig can't be replayed as an execute sig and
+     *      vice versa. Account address + chain id bind the sig to this
+     *      account on this chain.
+     */
+    bytes32 internal constant ADMIN_VERB_PROPOSE = bytes32("ADMIN_PROPOSE");
+    bytes32 internal constant ADMIN_VERB_EXECUTE = bytes32("ADMIN_EXECUTE");
+    bytes32 internal constant ADMIN_VERB_CANCEL  = bytes32("ADMIN_CANCEL");
+
+    function _adminPayloadHash(
+        bytes32 verb,
+        uint256 proposalId,
+        AdminAction action,
+        bytes memory args,
+        uint64 eta
+    ) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(verb, proposalId, action, keccak256(args), eta, address(this), block.chainid)
+        );
+    }
+
+    // ─── Internal: quorum verification ──────────────────────────────
+
+    /**
+     * @dev Verify a Safe-compatible packed signature blob against the
+     *      owner set. Reuses the SignatureSlotRecovery library so the
+     *      same 4-path logic that QuorumEnforcer applies (ECDSA, eth_sign,
+     *      v=1 pre-approved, v=0 ERC-1271) governs admin authorization.
+     *      Sorted-ascending enforcement is the anti-duplicate scheme.
+     */
+    function _verifyOwnerQuorum(
+        bytes32 payloadHash,
+        bytes calldata signatures,
+        uint8 reqThreshold
+    ) internal view {
+        if (signatures.length < uint256(reqThreshold) * 65) {
+            revert AdminInsufficientQuorum(signatures.length / 65, reqThreshold);
+        }
+        bytes memory sigsMem = signatures;
+        address approvedHashReg = _thresholdPolicyStorage().approvedHashRegistry;
+        address prev;
+        for (uint256 i; i < reqThreshold; i++) {
+            address signer = SignatureSlotRecovery.recoverFromSlot(
+                payloadHash, sigsMem, i, approvedHashReg
+            );
+            if (signer <= prev) revert AdminDuplicateOrUnsortedSigner(signer);
+            prev = signer;
+            if (!_owners[signer]) revert AdminUnauthorizedSigner(signer);
+        }
+    }
+
+    // ─── Internal: action dispatcher ────────────────────────────────
+
+    function _applyAdminAction(AdminAction action, bytes memory args) internal {
+        if (action == AdminAction.AddOwner) {
+            (address ownerToAdd) = abi.decode(args, (address));
+            _applyAddOwner(ownerToAdd);
+        } else if (action == AdminAction.RemoveOwner) {
+            (address ownerToRemove) = abi.decode(args, (address));
+            _applyRemoveOwner(ownerToRemove);
+        } else if (action == AdminAction.AddPasskey) {
+            (bytes32 cid, uint256 x, uint256 y) = abi.decode(args, (bytes32, uint256, uint256));
+            _applyAddPasskey(cid, x, y);
+        } else if (action == AdminAction.RemovePasskey) {
+            (bytes32 cid) = abi.decode(args, (bytes32));
+            _applyRemovePasskey(cid);
+        } else if (action == AdminAction.AddGuardian) {
+            (address guardian) = abi.decode(args, (address));
+            _applyAddGuardian(guardian);
+        } else if (action == AdminAction.RemoveGuardian) {
+            (address guardian) = abi.decode(args, (address));
+            _applyRemoveGuardian(guardian);
+        } else if (action == AdminAction.ChangeMode) {
+            (uint8 newMode) = abi.decode(args, (uint8));
+            _applyChangeMode(newMode);
+        } else if (action == AdminAction.RotateAllOwners) {
+            (address[] memory newOwners) = abi.decode(args, (address[]));
+            _applyRotateAllOwners(newOwners);
+        } else if (action == AdminAction.ChangeT3Ceiling) {
+            (uint256 newCeiling) = abi.decode(args, (uint256));
+            _applyChangeT3Ceiling(newCeiling);
+        } else if (action == AdminAction.SetRecoveryThreshold) {
+            (uint8 newThreshold) = abi.decode(args, (uint8));
+            _applySetRecoveryThreshold(newThreshold);
+        } else if (
+            action == AdminAction.UpgradeImpl ||
+            action == AdminAction.ChangeDelegationManager ||
+            action == AdminAction.ChangePaymaster ||
+            action == AdminAction.ChangeSessionIssuer
+        ) {
+            // T5 actions wire to the existing upgrade timelock /
+            // setDelegationManager flows in 6c.2-c. Stub-revert until
+            // then so callers fail noisily instead of silently no-op'ing.
+            revert AdminActionNotYetImplemented(uint8(action));
+        } else {
+            revert InvalidAdminAction(uint8(action));
+        }
+    }
+
+    // ─── Internal: action handlers (T4) ─────────────────────────────
+
+    function _applyAddOwner(address newOwner) internal {
+        if (newOwner == address(0)) revert ZeroAddress();
+        if (_owners[newOwner]) revert OwnerAlreadyExists(newOwner);
+        _owners[newOwner] = true;
+        _ownerCount += 1;
+        emit OwnerAdded(newOwner);
+    }
+
+    function _applyRemoveOwner(address ownerToRemove) internal {
+        if (!_owners[ownerToRemove]) revert OwnerDoesNotExist(ownerToRemove);
+        // Combined-signer invariant: account must retain at least one
+        // signer across owners + passkeys.
+        uint256 totalSignersAfter = _ownerCount - 1 + _passkeyStorage().count;
+        if (totalSignersAfter == 0) revert CannotRemoveLastSigner();
+        _owners[ownerToRemove] = false;
+        _ownerCount -= 1;
+        emit OwnerRemoved(ownerToRemove);
+    }
+
+    function _applyAddPasskey(bytes32 credentialIdDigest, uint256 x, uint256 y) internal {
+        if (x == 0 || y == 0) revert InvalidPasskeyPublicKey();
+        PasskeyStorage storage ps = _passkeyStorage();
+        if (ps.registered[credentialIdDigest]) revert PasskeyAlreadyRegistered(credentialIdDigest);
+        ps.keys[credentialIdDigest] = PasskeyEntry({ x: x, y: y });
+        ps.registered[credentialIdDigest] = true;
+        ps.count += 1;
+        emit PasskeyAdded(credentialIdDigest, x, y);
+    }
+
+    function _applyRemovePasskey(bytes32 credentialIdDigest) internal {
+        PasskeyStorage storage ps = _passkeyStorage();
+        if (!ps.registered[credentialIdDigest]) revert PasskeyNotRegistered(credentialIdDigest);
+        if (_ownerCount + ps.count == 1) revert CannotRemoveLastSigner();
+        delete ps.keys[credentialIdDigest];
+        ps.registered[credentialIdDigest] = false;
+        ps.count -= 1;
+        emit PasskeyRemoved(credentialIdDigest);
+    }
+
+    function _applyAddGuardian(address guardian) internal {
+        if (guardian == address(0)) revert ZeroAddress();
+        ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
+        if ($.guardians[guardian]) revert GuardianAlreadyExists(guardian);
+        $.guardians[guardian] = true;
+        $.guardianCount += 1;
+        emit GuardianAdded(guardian);
+    }
+
+    function _applyRemoveGuardian(address guardian) internal {
+        ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
+        if (!$.guardians[guardian]) revert GuardianDoesNotExist(guardian);
+        // The recovery-requires-guardians invariant: if recoveryThreshold
+        // is set, we must retain at least recoveryThreshold guardians.
+        // We allow the guardian count to drop to recoveryThreshold - 1
+        // only if the recoveryThreshold itself is then lowered via a
+        // companion SetRecoveryThreshold action; for in-pass safety
+        // we keep this strict.
+        if ($.recoveryThreshold > 0 && $.guardianCount - 1 < $.recoveryThreshold) {
+            revert RecoveryRequiresGuardians();
+        }
+        $.guardians[guardian] = false;
+        $.guardianCount -= 1;
+        emit GuardianRemoved(guardian);
+    }
+
+    function _applyChangeMode(uint8 newMode) internal {
+        if (newMode > 3) revert InvalidMode(newMode);
+        ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
+        uint8 oldMode = $.mode;
+        // Downgrade-to-single with a non-empty guardian set is rejected
+        // (spec § 9 test #14: no downgrading to a mode that loses recovery).
+        if (newMode == 0 && $.guardianCount > 0) revert CannotDowngradeWithGuardians();
+        $.mode = newMode;
+        emit ModeChanged(oldMode, newMode);
+    }
+
+    function _applyRotateAllOwners(address[] memory newOwners) internal {
+        if (newOwners.length == 0) revert EmptyOwnerSet();
+        // Clear existing owners. _owners is a mapping; we don't track
+        // a list, so the SDK is expected to pass the full new set AND
+        // the explicit removals are emitted off the prior state. For
+        // 6c.2-b we accept the simpler shape: caller passes newOwners;
+        // we wipe + reinstall by iterating. Since _owners is a mapping
+        // we can't iterate it directly, so RotateAllOwners requires the
+        // SDK to also have called RemoveOwner for each old owner via
+        // batched MultiSendCallOnly. Pure "newOwners only" rotation
+        // without explicit removals is a 6c.2-c follow-up that uses
+        // ApprovedHashRegistry-style enumeration. For now: emit-only
+        // signal + install newOwners (existing owners stay until
+        // explicit removal). Captures intent in events; full rotation
+        // semantics deferred.
+        for (uint256 i; i < newOwners.length; i++) {
+            address o = newOwners[i];
+            if (o == address(0)) revert ZeroAddress();
+            if (!_owners[o]) {
+                _owners[o] = true;
+                _ownerCount += 1;
+                emit OwnerAdded(o);
+            }
+        }
+        emit OwnersRotated(newOwners.length);
+    }
+
+    function _applyChangeT3Ceiling(uint256 newCeiling) internal {
+        ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
+        uint256 oldCeiling = $.t3HighValueCeiling;
+        $.t3HighValueCeiling = newCeiling;
+        emit T3CeilingChanged(oldCeiling, newCeiling);
+    }
+
+    function _applySetRecoveryThreshold(uint8 newThreshold) internal {
+        ThresholdPolicyStorage storage $ = _thresholdPolicyStorage();
+        if (newThreshold > 0 && $.guardianCount < newThreshold) revert RecoveryRequiresGuardians();
+        if (newThreshold > $.guardianCount) revert InvalidThresholdValue(newThreshold);
+        uint8 oldThreshold = $.recoveryThreshold;
+        $.recoveryThreshold = newThreshold;
+        emit RecoveryThresholdChanged(oldThreshold, newThreshold);
     }
 
     // ─── Receive ETH ────────────────────────────────────────────────
