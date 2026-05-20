@@ -1,0 +1,149 @@
+# `@agenticprimitives/delegation` — Security & Architecture Audit
+
+**Status:** alpha
+**Last refreshed:** 2026-05-20
+**Owners:** delegation package CODEOWNERS
+**System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
+
+## 1. Charter
+
+The keystone authorization package. Owns: the `Delegation` data shape, the
+canonical EIP-712 domain + types + hash, caveat builders + the
+deterministic evaluator, `SessionManager` lifecycle (session keypair
+generation → envelope-encryption via `key-custody` → AAD-bound storage →
+package + revocation), and the `DelegationToken` mint/verify path the
+A2A→MCP boundary depends on. Imports `types`, `identity-auth`,
+`agent-account`, `key-custody`.
+
+What this package does NOT own (per its `CLAUDE.md`):
+
+- JWT session cookies (those live in `identity-auth`).
+- Concrete KMS backends (`key-custody`).
+- Tool execution / MCP transport (`mcp-runtime`).
+- The smart account itself (`agent-account`).
+- Tool classification / risk-tier policy (`tool-policy`).
+
+## 2. Security invariants (DO NOT BREAK)
+
+1. **EIP-712 domain + struct hash MUST match the on-chain `DelegationManager`**
+  *bit-for-bit*. Off-by-one in name / version / chainId / verifyingContract
+   means consumers sign one thing while the chain expects another →
+   ERC-1271 verification silently fails OR (much worse) accepts the
+   wrong message.
+   Tests: `test/unit/hash.test.ts` (8 tests, includes domain-separator
+   golden values). **Gap:** no cross-language test that derives the same
+   digest from a Solidity helper.
+2. **Caveats are fail-closed.** Unknown enforcer → reject. Failed
+  evaluator call → reject. Test: `test/unit/evaluator.test.ts:14` cases.
+   Reference: `evaluateCaveats(opts.failClosed=true)` (the default).
+3. **JTI is bound to a delegation + minted-once.** The MCP-side store
+  must atomically `INSERT ... ON CONFLICT ... RETURNING` so a replay
+   loses the race. Test: `test/unit/token.test.ts`, plus
+   `mcp-runtime/test/unit/jti-stores.test.ts`.
+4. **Revocation read must be fail-closed in production mode.** If the
+  on-chain `isRevoked(delegationHash)` read throws, `verifyDelegationToken`
+   today catches and continues (`src/verify.ts` ~line 250). System audit
+   **H3** open — must be gated on `NODE_ENV` or an explicit `failClosed`
+   flag.
+5. `**requireDeployed: true` is the default.** A counterfactual delegator
+  account whose code isn't on-chain cannot satisfy ERC-1271, so
+   `verifyDelegationToken` must refuse unless the caller explicitly
+   opted into `requireDeployed: false` (which is a demo-only path).
+6. **Session manager AAD binding.** The session-key envelope is
+  `key-custody`-encrypted with an AAD derived via
+   `canonicalContextBytes()` from `key-custody`. Decryption with the
+   wrong AAD → AEAD failure. Test: `test/integration/session-manager.test.ts`.
+7. **Token verifier MUST consult the on-chain delegation chain** —
+  `ROOT_AUTHORITY` is the only delegator whose signature is the root.
+   No partial-chain shortcut.
+
+## 3. Public API surface (audit scope)
+
+
+| Symbol                                                                                              | Kind             | Trust boundary                                                                       |
+| --------------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------ |
+| `ROOT_AUTHORITY`                                                                                    | const            | Sentinel address used as the root of every chain — must equal the on-chain constant. |
+| `Delegation`, `DelegationToken`, `Caveat`, `SessionRow`                                             | types            | Wire-format types; consumers serialise/deserialise across HTTP.                      |
+| `hashDelegation`, `hashCaveats`, `DELEGATION_EIP712_TYPES`, `delegationDomain`                      | functions/consts | Off-chain digest — must match Solidity.                                              |
+| `evaluateCaveats`                                                                                   | function         | Deterministic policy decision; fail-closed default.                                  |
+| `buildCaveat`, `buildMcpToolScopeCaveat`, `encodeTimestampTerms`, `encodeAllowedTargetsTerms`, etc. | builders         | Produce wire-format terms for known enforcers.                                       |
+| `DelegationClient`                                                                                  | class            | Signs delegations off-chain.                                                         |
+| `SessionManager`, `createMemorySessionStore`                                                        | class / factory  | Session lifecycle + envelope encryption.                                             |
+| `mintDelegationToken`, `verifyDelegationToken`, `verifyCrossDelegation`                             | functions        | Token mint/verify; the A2A↔MCP trust boundary.                                       |
+| `isRevoked`, `revokeDelegation`                                                                     | functions        | On-chain revocation surface.                                                         |
+
+
+## 4. Threat model
+
+
+| Threat                                     | Likelihood              | Impact                                             | Mitigation                                           | Status                                    |
+| ------------------------------------------ | ----------------------- | -------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------- |
+| EIP-712 domain drift between TS + Solidity | Low                     | Critical (silent verify failure or false-positive) | Golden hash tests; spec 202; on-chain CI cross-check | **Gap:** no automated cross-check; TODO   |
+| Replay of delegation token                 | Medium                  | High (unauthorized tool call after expiry)         | JTI atomic-insert in MCP store                       | Covered (jti-stores tests)                |
+| Revocation read failure swallowed          | High (RPC flake)        | High (revoked delegation accepted)                 | TODO: NODE_ENV gate (H3)                             | **Open: H3 (system)**                     |
+| Counterfactual account spoofed             | Low (validator handles) | High                                               | `requireDeployed=true` default + universal validator | Covered                                   |
+| Caveat parser parses unknown enforcer      | Medium                  | High (policy bypass)                               | Fail-closed on unknown selector                      | Covered (`evaluator.ts`)                  |
+| AAD mismatch on session decrypt            | Low                     | Low (decryption fails closed)                      | AEAD tag verification                                | Covered                                   |
+| Session key leakage at rest                | Medium                  | High                                               | Envelope encryption via `key-custody`                | Covered, depends on KMS provider strength |
+| Cross-delegation forgery                   | N/A                     | High when shipped                                  | Currently stub; **H5** open                          | **Not implemented**                       |
+
+
+## 5. Findings (open)
+
+
+| ID              | Severity | Finding                                                                          | Status     | Notes                                                                                                                             |
+| --------------- | -------- | -------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **H3** (system) | P1       | Revocation check tolerates RPC failure.                                          | Open       | `src/verify.ts:250` — must gate by `NODE_ENV` or `failClosed`. **Top-5 hardening pass target.**                                   |
+| **H5** (system) | P1       | Cross-delegation is not implemented.                                             | Open       | `verifyCrossDelegation` returns not-implemented; `withCrossDelegation` (in mcp-runtime) similarly stub.                           |
+| **DEL-1**       | P2       | No automated cross-language hash check.                                          | Open       | Need a Forge test or Anvil helper that derives `hashDelegation` from Solidity and compares to a TS golden. Prevents domain drift. |
+| **DEL-2**       | P3       | `verifyDelegationToken` error messages may leak chain state to external callers. | Open       | E.g. `"delegator smart account ... is not deployed"` reveals address state. Consider opaque external error + internal log.        |
+| **DEL-3**       | P3       | Memory session store is process-local.                                           | Documented | `createMemorySessionStore()` is test-only; production must use Durable Object or D1. Linked to system L2.                         |
+
+
+## 6. Test posture
+
+- **Unit:** 7 files, 55 tests passing as of 2026-05-20:
+`caveats.test.ts` (13), `delegation-client.test.ts` (3), `evaluator.test.ts`
+(14), `hash.test.ts` (8), `token.test.ts` (4), `verify-require-deployed.test.ts`
+(5), `session-manager.test.ts` (8 integration).
+- **Cross-package:** consumed by `mcp-runtime` (`with-delegation.ts`),
+`apps/demo-a2a` (session/init + session/package), `apps/demo-web`
+(signing). Integration coverage via Playwright specs `03-authorize-agent`
+  - `04-read-profile` + `05-passkey-login`.
+- **Forge tests (consumer-side):** `apps/contracts/test/DelegationManager.t.sol`
+exercises the on-chain side.
+- **Gaps:**
+  - No property test for caveat evaluation (system M4 + should-fix-before-beta).
+  - No cross-language hash check (DEL-1).
+  - No negative test for `verifyCrossDelegation` shape (H5 — stub is fine until implementation lands).
+  - No deployed smoke test of the full A2A→MCP delegation chain (system N5).
+
+## 7. Hardening backlog
+
+- **(H3)** Gate the `isRevoked` swallowed-error path on `NODE_ENV !== 'production'`. Add `failClosed: true` opt to `verifyDelegationToken`. Top-5 pass.
+- **(DEL-1)** Add a Forge test that calls `hashDelegation` (on-chain) and compares to a TypeScript golden vector exported from this package's tests.
+- **(DEL-2)** Audit external error messages from `verifyDelegationToken` for chain-state leakage.
+- **(H5)** Design + implement `verifyCrossDelegation` with negative tests; coordinate with `mcp-runtime/with-cross-delegation.ts`.
+- **(system M4)** Add property tests for `evaluateCaveats` over a random caveat-set generator.
+- **(system C3)** Emit audit events from `mintDelegationToken`, `verifyDelegationToken`, `revokeDelegation` once the audit-event schema is defined.
+
+## 8. External audit readiness
+
+An external auditor evaluating this package needs:
+
+- `pnpm build` + `pnpm test` (vitest) green
+- `specs/202-delegation.md` (the spec)
+- This audit doc
+- The system audit (`docs/architecture/product-readiness-audit.md`)
+- The `evaluator.ts` + `verify.ts` + `token.ts` + `session-manager.ts` source — these are where security invariants live
+- The on-chain `DelegationManager.sol` + EIP-712 domain to cross-check
+- Open findings list (above) + system audit findings cross-referenced
+
+## 9. Accepted limitations / scope exclusions
+
+- Does NOT implement KMS / signer concretions; consumes `Signer` interface from `identity-auth` and persistence backends from `key-custody`.
+- Does NOT define the wire format of MCP requests; that's `mcp-runtime`.
+- Does NOT enforce policy tiers — that's `tool-policy` (consumed inside `mcp-runtime`).
+- Does NOT issue JWT sessions for user identity; that's `identity-auth`.
+- Forbidden imports: `apps/`*, `mcp-runtime`, `tool-policy` (would create back-edges).
+
