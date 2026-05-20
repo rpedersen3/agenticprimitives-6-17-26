@@ -69,6 +69,7 @@ What this package does NOT own:
 | **C3** (system) | P0 | No audit event emitted on policy decisions. | Open | When wired, emit `{toolName, principal, decision, reason}`. |
 | **TP-1** | P2 | No property test for `evaluatePolicy` decisions. | Open | A random-input fuzz would catch ordering / precedence regressions. |
 | **TP-2** | P3 | `lintClassification` developer-time check is not in CI. | Open | Should run as part of `pnpm check:all`. |
+| ~~**N16** (system)~~ | ~~P2~~ | ~~Smart-account multi-sig + recovery policy not productized.~~ | **MOSTLY CLOSED 2026-05-20** (phase 6c.3-a) | This package's slice: `ThresholdTier` enum (numeric T1–T6) as first-class export, `RISK_TIER_REQUIREMENTS` frozen map from `RiskTier` → `ThresholdPolicyDecision`, and `evaluateThresholdPolicy(classification)` returning `{ tier, requiresQuorum, requiresUv, requiresAcceptedOnChain }`. V0 calibration: low → T1 (no gates), medium → T2 (+UV), high → T3 (+UV +quorum), critical → T3 (+UV +quorum +on-chain blessing). Coexists with the existing string `RiskTier` (classification metadata) — they serve different layers. 7 new tests; 36 total in tool-policy. |
 
 ## 6. Test posture
 

@@ -29,7 +29,7 @@ Below the threshold: one-page convention doc or live in `CLAUDE.md`. The four-ar
 
 | Capability | Spec | Demo guide | Participating packages | Status |
 | --- | --- | --- | --- | --- |
-| **Multi-sig + threshold policy** | [`specs/207`](../../specs/207-smart-account-threshold-policy.md) | [`apps/demo-web-pro/docs/multi-sig/guide.md`](../../apps/demo-web-pro/docs/multi-sig/guide.md) | `agent-account`, `delegation`, `tool-policy`, `audit`, `mcp-runtime` | In flight (phase 6c) |
+| **Multi-sig + threshold policy** | [`specs/207`](../../specs/207-smart-account-threshold-policy.md) | [`apps/demo-web-pro/docs/multi-sig/guide.md`](../../apps/demo-web-pro/docs/multi-sig/guide.md) | `agent-account`, `delegation`, `tool-policy`, `audit`, `mcp-runtime` | Mostly closed (phase 6c) — contract + SDK + runtime shipped; live wiring + e2e pending |
 | **Audit / forensics trail** | [`specs/206`](../../specs/206-audit.md) | [`apps/demo-mcp/docs/audit/guide.md`](../../apps/demo-mcp/docs/audit/guide.md) | `audit`, `mcp-runtime`, `delegation`, `key-custody` | Closed (phase 5g) |
 
 ## Queued

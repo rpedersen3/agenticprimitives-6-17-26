@@ -1,6 +1,6 @@
 # Spec 207 — Smart-account threshold policy
 
-**Status:** v0 accepted · 2026-05-20 (revised — product-lessons absorbed: safety+recovery framing, kind × role signers, `threshold`/`org` mode rename, 5 use cases, ERC-7579 package mapping, permission-UX requirements)
+**Status:** v0 mostly implemented · 2026-05-20 — contract + SDK + runtime layers shipped end-to-end (Forge 181/181 + workspace tests green); live wiring + Playwright e2e for § 9 rows 1/2/3/12 pending. See `docs/architecture/cross-cutting-capabilities.md` for the current row.
 **Closes:** new audit finding **N16** (smart-account multi-sig and recovery policy is not productized).
 **Builds on:** spec 201 (`agent-account`), spec 202 (`delegation`), spec 204 (`tool-policy`), spec 130 (`passkey-flow`), the multi-sig contracts shipped in pass 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`).
 **Reference: smart-agent patterns to port:** `packages/contracts/src/AgentAccount.sol` (multi-owner mapping shape), `packages/contracts/src/enforcers/QuorumEnforcer.sol` (Safe-compatible signature aggregation — ported in 6c.1), `packages/contracts/src/ApprovedHashRegistry.sol` (pre-approval registry — ported in 6c.1). Deliberate divergence: smart-agent does not productize risk-tier thresholds at the account layer — that pattern is original here, modeled after Safe's owner+threshold+modules+guards architecture and MetaMask's Hybrid / Multisig account modes.

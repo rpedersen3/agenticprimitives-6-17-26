@@ -321,6 +321,7 @@ Primary trust boundaries:
 | **N13** | Managed production MAC key support is missing. | Shared secret works, but rotation/IAM/key-id story is immature. | key-custody + apps | Add GCP KMS HMAC backend or document shared-secret rotation policy as the production v0 posture. |
 | **N14** | Passkey user verification is not required. | UV-less credentials may be accepted depending on platform behavior. | identity-auth + demo-web | Decide `required` vs `preferred`; encode in spec and tests. |
 | **N15** | Contracts lack dedicated audit dossier. | Third-party reviewer lacks one place for invariants and threat model. | apps/contracts | Add `apps/contracts/AUDIT.md` covering factory, account, paymaster, enforcers, delegation manager, validator. |
+| ~~**N16**~~ | ~~Smart-account multi-sig and recovery policy is not productized.~~ | **MOSTLY CLOSED 2026-05-20 (phase 6c).** Spec 207 (smart-account threshold policy) shipped end-to-end: contract surface (QuorumEnforcer / ApprovedHashRegistry / MultiSendCallOnly + AgentAccount with `_modeFlags` / threshold getters / propose-execute-cancel admin / T6 recovery with 48h timelock + 24h primary-owner cancel window + spec § 5.1 default threshold matrix), factory extension (`createAccountWithMode` refuses `threshold` / `org` mode with insufficient guardians), SDK (`@agenticprimitives/tool-policy` `ThresholdTier` + `evaluateThresholdPolicy`; `@agenticprimitives/delegation` `buildQuorumCaveat` + `requireQuorumCaveat` / `requireAcceptedOnChain` verify gates; `@agenticprimitives/agent-account` `packSafeSignatures` + admin/recovery ABI), and runtime wiring (`mcp-runtime.withDelegation` threads threshold-policy decision into verify). 181 Forge tests + workspace SDK tests green. Demo flow (`apps/demo-web-pro/src/flows/hybrid-recovery/`) scaffolded. Remaining: contracts redeploy + live wiring + Playwright e2e for spec § 9 rows 1/2/3/12 (T1-T3 happy paths + caveat composition). | agent-account + delegation + tool-policy + mcp-runtime | Ship contracts redeploy + Playwright e2e in a follow-up phase; productize demo-web-pro admin + recovery UX panels (phase 7). |
 
 ## Open Findings — Low
 
@@ -357,6 +358,7 @@ Closed in current hardening passes:
 - [x] **N2**: `/account/derive-address` input validation + rate limit.
 - [x] **C2**: Verifying paymaster mode for sponsored UserOps.
 - [x] **N3**: Paymaster status endpoint for deposit health monitoring.
+- [x] **N16** (mostly): Smart-account threshold policy productized end-to-end (phase 6c). Contract + SDK + runtime layer all in place; pending live wiring + Playwright e2e.
 - [x] **M3**: `/_dev/*` production route guard.
 - [x] **M7**: Supply-chain checks (dependency audit, secret scanning, SAST, SBOM).
 
