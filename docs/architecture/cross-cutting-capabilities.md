@@ -29,7 +29,7 @@ Below the threshold: one-page convention doc or live in `CLAUDE.md`. The four-ar
 
 | Capability | Spec | Demo guide | Participating packages | Status |
 | --- | --- | --- | --- | --- |
-| **Multi-sig + threshold policy** | [`specs/207`](../../specs/207-smart-account-threshold-policy.md) | [`apps/demo-web-pro/docs/multi-sig/guide.md`](../../apps/demo-web-pro/docs/multi-sig/guide.md) | `agent-account`, `delegation`, `tool-policy`, `audit`, `mcp-runtime` | Mostly closed (phase 6c) — contract + SDK + runtime shipped; live wiring + e2e pending |
+| **Multi-sig + threshold policy** | [`specs/207`](../../specs/207-smart-account-threshold-policy.md) (product surface) + [`specs/209`](../../specs/209-erc7579-module-taxonomy.md) (impl architecture) | [`apps/demo-web-pro/docs/multi-sig/guide.md`](../../apps/demo-web-pro/docs/multi-sig/guide.md) | `agent-account`, `delegation`, `tool-policy`, `audit`, `mcp-runtime` | Mostly closed (phase 6c) — contract + SDK + runtime shipped. Live wiring blocked on phase 6c.5-d (ERC-7579 module decomposition — extract `ThresholdValidator` + `GuardianRecoveryValidator` from core to fit EIP-170). 2 enforcers (`QuorumEnforcer`, `ApprovedHashRegistry`) already deployed to Base Sepolia. |
 | **Audit / forensics trail** | [`specs/206`](../../specs/206-audit.md) | [`apps/demo-mcp/docs/audit/guide.md`](../../apps/demo-mcp/docs/audit/guide.md) | `audit`, `mcp-runtime`, `delegation`, `key-custody` | Closed (phase 5g) |
 
 ## Queued

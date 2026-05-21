@@ -1,6 +1,6 @@
 # Spec 207 — Smart-account threshold policy
 
-**Status:** v0 mostly implemented · 2026-05-20 — contract + SDK + runtime layers shipped end-to-end (Forge 181/181 + workspace tests green); live wiring + Playwright e2e for § 9 rows 1/2/3/12 pending. **Open blocker (phase 6c.5-d):** `AgentAccount` runtime bytecode is 26,876 bytes — 2,300 over the EIP-170 deploy ceiling — so the impl can't deploy to Base Sepolia (or any EIP-170-enforcing chain). Live wiring blocked on the AdminModule split documented in § 14. See `docs/architecture/cross-cutting-capabilities.md` for the current row.
+**Status:** v0 mostly implemented · 2026-05-20 — contract + SDK + runtime layers shipped end-to-end (Forge 181/181 + workspace tests green); live wiring + Playwright e2e for § 9 rows 1/2/3/12 pending. **Open blocker (phase 6c.5-d):** `AgentAccount` runtime bytecode is 26,876 bytes — 2,300 over the EIP-170 deploy ceiling — so the impl can't deploy to Base Sepolia (or any EIP-170-enforcing chain). Live wiring blocked on the **ERC-7579 module decomposition** documented in [spec 209](./209-erc7579-module-taxonomy.md). § 14 of this spec (an earlier "AdminModule delegatecall blob" plan) is superseded by spec 209. See `docs/architecture/cross-cutting-capabilities.md` for the current row.
 **Closes:** new audit finding **N16** (smart-account multi-sig and recovery policy is not productized).
 **Builds on:** spec 201 (`agent-account`), spec 202 (`delegation`), spec 204 (`tool-policy`), spec 130 (`passkey-flow`), the multi-sig contracts shipped in pass 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`).
 **Reference: smart-agent patterns to port:** `packages/contracts/src/AgentAccount.sol` (multi-owner mapping shape), `packages/contracts/src/enforcers/QuorumEnforcer.sol` (Safe-compatible signature aggregation — ported in 6c.1), `packages/contracts/src/ApprovedHashRegistry.sol` (pre-approval registry — ported in 6c.1). Deliberate divergence: smart-agent does not productize risk-tier thresholds at the account layer — that pattern is original here, modeled after Safe's owner+threshold+modules+guards architecture and MetaMask's Hybrid / Multisig account modes.
@@ -448,7 +448,9 @@ Open follow-ups (tracked separately):
 
 ---
 
-## 14. Phase 6c.5-d — AdminModule split (deploy-size unblock)
+## 14. Phase 6c.5-d — AdminModule split (deploy-size unblock) — **SUPERSEDED BY [SPEC 209](./209-erc7579-module-taxonomy.md)**
+
+> **Read spec 209 first.** This section describes an earlier, less-correct plan that proposed a single `AgentAccountAdminModule` delegatecall blob. The user's architectural correction (this conversation, 2026-05-20) was that ERC-7579 module decomposition (validators / executors / hooks / fallbacks) is the right pattern — a single blob just shifts the size problem one layer and introduces storage-layout coupling that ERC-7579 module isolation eliminates by design. The trigger description below (EIP-170 ceiling overshoot) remains accurate; the proposed solution below does NOT. Preserved as the architect-of-record for *why* spec 209 exists.
 
 **Discovered 2026-05-20 during phase 6c.5-c (live wiring):** the `AgentAccount`
 implementation's runtime bytecode is **26,876 bytes** — 2,300 bytes over the
