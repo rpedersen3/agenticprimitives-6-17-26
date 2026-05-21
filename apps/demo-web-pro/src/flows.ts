@@ -36,7 +36,7 @@ export const FLOWS: FlowMeta[] = [
     slug: 'create-account',
     title: 'Create AgentAccount',
     oneLiner:
-      'Deploy a new smart account in any of the four modes (single / hybrid / threshold / org). Factory installs the ThresholdValidator in the same tx so admin actions work immediately.',
+      'Deploy a new smart account in any of the four modes (single / hybrid / threshold / org). Factory installs the CustodyPolicy in the same tx so admin actions work immediately.',
     status: 'live',
     risk: 'T4 Admin',
     guidePath: 'docs/multi-sig/flows/create-account.md',
@@ -56,7 +56,7 @@ export const FLOWS: FlowMeta[] = [
     slug: 'admin-actions',
     title: 'Admin action (T4)',
     oneLiner:
-      'Propose + execute an owner / guardian / mode change through the ThresholdValidator. EIP-712 signed (MetaMask shows structured fields). T4 timelock = 1h by default.',
+      'Propose + execute an owner / guardian / mode change through the CustodyPolicy. EIP-712 signed (MetaMask shows structured fields). T4 timelock = 1h by default.',
     status: 'live',
     risk: 'T4 Admin',
     guidePath: 'docs/multi-sig/flows/admin-actions.md',

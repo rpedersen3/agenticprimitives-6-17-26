@@ -12,7 +12,7 @@ export {
   agentAccountFactoryAbi,
   approvedHashRegistryAbi,
   entryPointAbi,
-  thresholdValidatorAbi,
+  custodyPolicyAbi,
 } from './abis';
 
 // Spec 207 threshold-policy + quorum utilities (6c.3-c).

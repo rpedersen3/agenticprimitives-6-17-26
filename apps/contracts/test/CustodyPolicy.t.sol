@@ -7,9 +7,9 @@ import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import "../src/AgentAccountFactory.sol";
 import "../src/AgentAccount.sol";
 import "../src/DelegationManager.sol";
-import {ThresholdValidator} from "../src/modules/ThresholdValidator.sol";
+import {CustodyPolicy} from "../src/modules/CustodyPolicy.sol";
 
-/// @dev Phase 6c.5-d.1 smoke-test suite for the ThresholdValidator
+/// @dev Phase 6c.5-d.1 smoke-test suite for the CustodyPolicy
 ///      module. Verifies end-to-end: install → propose → execute (with
 ///      account state actually mutated by the executor self-call path
 ///      via executeFromModule). The deep test suite (matrix of all 15
@@ -17,11 +17,11 @@ import {ThresholdValidator} from "../src/modules/ThresholdValidator.sol";
 ///      relocated AgentAccountAdmin.t.sol — that migration is part of
 ///      the same phase but lives in a separate commit so the green
 ///      bar moves in checkable steps.
-contract ThresholdValidatorTest is Test {
+contract CustodyPolicyTest is Test {
     AgentAccountFactory factory;
     DelegationManager   dm;
     AgentAccount        acct;
-    ThresholdValidator  validator;
+    CustodyPolicy  validator;
 
     uint256 internal constant OWNER_PK = 0xA11CE;
     uint256 internal constant OWNER2_PK = 0xBEEF;
@@ -44,7 +44,7 @@ contract ThresholdValidatorTest is Test {
             address(0xDD)
         );
         acct = factory.createAccount(owner, 42);
-        validator = new ThresholdValidator();
+        validator = new CustodyPolicy();
     }
 
     function _installValidator(uint8 modeVal, uint8[7] memory thresholds, uint32[7] memory timelocks) internal {
@@ -86,7 +86,7 @@ contract ThresholdValidatorTest is Test {
         return keccak256(
             abi.encode(
                 DOMAIN_TYPEHASH,
-                keccak256("agenticprimitives.ThresholdValidator"),
+                keccak256("agenticprimitives.CustodyPolicy"),
                 keccak256("1"),
                 block.chainid,
                 address(validator)
@@ -100,7 +100,7 @@ contract ThresholdValidatorTest is Test {
 
     function _hashPropose(
         uint256 proposalId,
-        ThresholdValidator.AdminAction action,
+        CustodyPolicy.AdminAction action,
         bytes memory args
     ) internal view returns (bytes32) {
         return _hashTypedData(
@@ -110,7 +110,7 @@ contract ThresholdValidatorTest is Test {
 
     function _hashExecute(
         uint256 proposalId,
-        ThresholdValidator.AdminAction action,
+        CustodyPolicy.AdminAction action,
         bytes memory args,
         uint64 eta
     ) internal view returns (bytes32) {
@@ -171,18 +171,18 @@ contract ThresholdValidatorTest is Test {
         uint64 eta   = nowTs;
         uint256 proposalId = 1;  // first proposal
 
-        bytes32 proposeHash = _hashPropose(proposalId, ThresholdValidator.AdminAction.AddOwner, args);
+        bytes32 proposeHash = _hashPropose(proposalId, CustodyPolicy.AdminAction.AddOwner, args);
         bytes memory sigs = _signRaw(OWNER_PK, proposeHash);
 
         uint256 retId = validator.proposeAdmin(
             address(acct),
-            ThresholdValidator.AdminAction.AddOwner,
+            CustodyPolicy.AdminAction.AddOwner,
             args,
             sigs
         );
         assertEq(retId, proposalId);
 
-        bytes32 execHash = _hashExecute(proposalId, ThresholdValidator.AdminAction.AddOwner, args, eta);
+        bytes32 execHash = _hashExecute(proposalId, CustodyPolicy.AdminAction.AddOwner, args, eta);
         bytes memory execSigs = _signRaw(OWNER_PK, execHash);
 
         assertFalse(acct.isOwner(owner2), "pre: owner2 not yet on account");
@@ -197,10 +197,10 @@ contract ThresholdValidatorTest is Test {
     function test_proposeAdmin_revertsForUninstalledAccount() public {
         // Brand-new account; validator never installed.
         AgentAccount fresh = factory.createAccount(owner, 99);
-        vm.expectRevert(abi.encodeWithSelector(ThresholdValidator.NotInstalledOn.selector, address(fresh)));
+        vm.expectRevert(abi.encodeWithSelector(CustodyPolicy.NotInstalledOn.selector, address(fresh)));
         validator.proposeAdmin(
             address(fresh),
-            ThresholdValidator.AdminAction.AddOwner,
+            CustodyPolicy.AdminAction.AddOwner,
             abi.encode(owner2),
             hex""
         );
@@ -214,17 +214,17 @@ contract ThresholdValidatorTest is Test {
         _installValidator(1, thresholds, timelocks);
 
         bytes memory args = abi.encode(owner2);
-        bytes32 proposeHash = _hashPropose(1, ThresholdValidator.AdminAction.AddOwner, args);
+        bytes32 proposeHash = _hashPropose(1, CustodyPolicy.AdminAction.AddOwner, args);
         // Stranger signs.
         bytes memory sigs = _signRaw(0xDEAD, proposeHash);
 
         vm.expectRevert(abi.encodeWithSelector(
-            ThresholdValidator.AdminUnauthorizedSigner.selector,
+            CustodyPolicy.AdminUnauthorizedSigner.selector,
             vm.addr(0xDEAD)
         ));
         validator.proposeAdmin(
             address(acct),
-            ThresholdValidator.AdminAction.AddOwner,
+            CustodyPolicy.AdminAction.AddOwner,
             args,
             sigs
         );

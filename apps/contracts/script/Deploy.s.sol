@@ -15,7 +15,10 @@ import {SmartAgentPaymaster} from "../src/SmartAgentPaymaster.sol";
 import {UniversalSignatureValidator} from "../src/UniversalSignatureValidator.sol";
 import {QuorumEnforcer} from "../src/enforcers/QuorumEnforcer.sol";
 import {ApprovedHashRegistry} from "../src/ApprovedHashRegistry.sol";
-import {ThresholdValidator} from "../src/modules/ThresholdValidator.sol";
+import {CustodyPolicy} from "../src/modules/CustodyPolicy.sol";
+// Local var renamed below; deployment JSON key kept as
+// `thresholdValidator` until phase 6g.4 redeploys + updates the
+// deployments JSON canonical key (separate ops concern).
 
 /**
  * Deploys the minimum on-chain surface the demo needs:
@@ -101,15 +104,15 @@ contract Deploy is Script {
         ApprovedHashRegistry approvedHashRegistry = new ApprovedHashRegistry();
         console2.log("ApprovedHashRegistry: %s", address(approvedHashRegistry));
 
-        // 4.6. Spec 209 module — ThresholdValidator. Phase 6c.5-d.1
+        // 4.6. Spec 209 module — CustodyPolicy. Phase 6c.5-d.1
         //   relocated the propose/execute/cancel admin surface out of
         //   AgentAccount and into this ERC-7579 module. The factory
         //   installs it on every account created via
         //   `createAccountWithMode`. Deploying it here means the
         //   demo apps + SDK can read the canonical address from
         //   deployments-<network>.json without a separate broadcast.
-        ThresholdValidator thresholdValidator = new ThresholdValidator();
-        console2.log("ThresholdValidator:   %s", address(thresholdValidator));
+        CustodyPolicy custodyPolicy = new CustodyPolicy();
+        console2.log("CustodyPolicy:   %s", address(custodyPolicy));
 
         // 5. SmartAgentPaymaster — sponsors gas for user-op-based account deploys.
         //    Constructor takes entryPoint, initialOwner (for stake/deposit in this
@@ -175,7 +178,7 @@ contract Deploy is Script {
         vm.serializeAddress(key, "smartAgentPaymaster", address(paymaster));
         vm.serializeAddress(key, "quorumEnforcer", address(quorumEnforcer));
         vm.serializeAddress(key, "approvedHashRegistry", address(approvedHashRegistry));
-        vm.serializeAddress(key, "thresholdValidator", address(thresholdValidator));
+        vm.serializeAddress(key, "thresholdValidator", address(custodyPolicy));
         string memory out = vm.serializeAddress(key, "universalSignatureValidator", address(universalValidator));
 
         string memory path = string.concat("deployments-", network, ".json");

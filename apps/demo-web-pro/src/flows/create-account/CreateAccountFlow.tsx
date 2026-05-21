@@ -159,7 +159,7 @@ export function CreateAccountFlow() {
         <h1>Pick a mode, deploy the account.</h1>
         <p>
           The factory deploys an <code>AgentAccount</code> proxy and installs the{' '}
-          <code>ThresholdValidator</code> module atomically in the same transaction. After deploy,
+          <code>CustodyPolicy</code> module atomically in the same transaction. After deploy,
           admin actions (add owner, change mode, recover) target the validator.
         </p>
       </div>
@@ -307,7 +307,7 @@ export function CreateAccountFlow() {
               {guardianShortfall > 0 && ` (need ${guardianMin}+ for ${MODE_LABEL[mode]} mode)`}
             </li>
             <li className="approved">
-              <span>✓</span>ThresholdValidator installed as executor module
+              <span>✓</span>CustodyPolicy installed as executor module
             </li>
           </ul>
           {predictedAddress && (

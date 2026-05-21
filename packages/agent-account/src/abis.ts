@@ -171,9 +171,9 @@ export const agentAccountAbi = [
   { type: 'function', name: 'delegationManager', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
 ] as const;
 
-export const thresholdValidatorAbi = [
+export const custodyPolicyAbi = [
   // Spec 207 threshold-policy admin surface extracted to
-  // apps/contracts/src/modules/ThresholdValidator.sol (spec 209).
+  // apps/contracts/src/modules/CustodyPolicy.sol (spec 209).
   {
     type: 'function',
     name: 'proposeAdmin',

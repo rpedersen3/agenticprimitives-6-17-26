@@ -5,7 +5,7 @@
  * "Inspect this account →" link from the create flow) and the page
  * loads everything queryable: owners, ownerCount, account.accountId(),
  * mode + per-tier thresholds + guardianCount + recoveryThreshold from
- * the validator, and whether the ThresholdValidator + QuorumEnforcer
+ * the validator, and whether the CustodyPolicy + QuorumEnforcer
  * are installed as modules.
  *
  * No wallet required — uses the public-RPC chain transport from
@@ -213,7 +213,7 @@ function AccountInspector({
       </section>
 
       <section className="card">
-        <p className="eyebrow">ThresholdValidator · per-account config</p>
+        <p className="eyebrow">CustodyPolicy · per-account config</p>
         <h2>{installed ? `Mode: ${MODE_LABEL[Number(modeQ.data ?? 0)] ?? '?'}` : 'Not installed'}</h2>
         {!validatorAddress ? (
           <p className="err">

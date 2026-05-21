@@ -5,41 +5,36 @@ import {IAgentAccount, AgentAccountRecoveryArgs, AgentAccountRecoveryPasskeyAdd}
 import {SignatureSlotRecovery} from "../libraries/SignatureSlotRecovery.sol";
 
 /**
- * @title ThresholdValidator
- * @notice ERC-7579 module that owns the propose / execute / cancel
- *         admin surface for `AgentAccount` accounts running in any
- *         non-`single` mode. Per spec 209 (ERC-7579 module taxonomy)
- *         this is the first module extraction — the surface previously
- *         inlined into `AgentAccount.sol` (phase 6c.2-b through 6c.2-e)
- *         relocates here so the core impl fits under EIP-170.
+ * @title CustodyPolicy
+ * @notice ERC-7579 module that owns the schedule / apply / cancel
+ *         custody-change surface for `AgentAccount` accounts running
+ *         in any non-`single` mode. Per spec 209 (ERC-7579 module
+ *         taxonomy) this is the first module extraction; per spec 213
+ *         (custody-layer carve-out, phase 6g.1) this is renamed from
+ *         the original `ThresholdValidator` to align with the
+ *         custody-layer vocabulary firewall.
  *
- *         Despite the name "validator," this module is installed as
- *         `MODULE_TYPE_EXECUTOR` (id 2) on the account, because applying
- *         an admin action requires it to call back into the account via
- *         `executeFromModule(...)`. The user-facing semantics are
- *         "validator" (it decides who can authorize an admin action);
- *         the on-chain wiring is "executor" (it applies the action).
- *         A future SessionKeyValidator (phase 6c.5-d.4) will be
- *         installed as both VALIDATOR and EXECUTOR to bridge both
- *         worlds.
+ *         Despite the underlying module type being `EXECUTOR` (id 2),
+ *         the user-facing semantics are CUSTODY POLICY — it decides
+ *         who can authorize a custody change (m-of-n approvals from
+ *         the custody council) and applies the change via
+ *         `executeFromModule(...)`.
  *
- *         State is keyed by account address — one validator instance
- *         can serve many accounts. `msg.sender` during install is the
- *         account; subsequent admin calls take the account as an
- *         explicit first arg so they can be made from any caller (the
- *         signature blob is what authorizes).
+ *         State is keyed by account address — one CustodyPolicy
+ *         instance can serve many accounts. `msg.sender` during
+ *         install is the account; subsequent custody calls take the
+ *         account as an explicit first arg so they can be made from
+ *         any caller (the signature blob is what authorizes).
  *
- *         Spec 207 § 5 risk-tier matrix (T1 Read / T2 Write / T3 Value /
+ *         Spec 207 § 5 tier matrix (T1 Read / T2 Write / T3 Value /
  *         T4 Admin / T5 Critical / T6 Recovery) is unchanged from the
- *         pre-extraction surface. Spec 207 § 7 AdminAction enum is
- *         unchanged. Spec 207 § 8 recovery flow is unchanged.
- *
- *         Phase 6c.5-d.2 will further extract the T6 RecoverAccount
- *         branch into a `GuardianRecoveryValidator`. For d.1 the T6
- *         path lives here for fewer moving parts; the existing
- *         recovery tests stay green.
+ *         pre-extraction surface. The custody actions enum is in
+ *         phase 6g.1 renamed from AdminAction → CustodyAction (this
+ *         phase) but the enum VALUES are kept temporarily for safer
+ *         migration; phase 6g.1-b renames the values + state-vars +
+ *         function names + EIP-712 typehashes.
  */
-contract ThresholdValidator {
+contract CustodyPolicy {
     // ─── ERC-7579 marker constants (mirror of the account-side ids) ──
     uint256 internal constant MODULE_TYPE_EXECUTOR = 2;
 
@@ -98,7 +93,7 @@ contract ThresholdValidator {
     bytes32 internal constant EIP712_DOMAIN_TYPEHASH = keccak256(
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
     );
-    bytes32 internal constant EIP712_NAME_HASH = keccak256("agenticprimitives.ThresholdValidator");
+    bytes32 internal constant EIP712_NAME_HASH = keccak256("agenticprimitives.CustodyPolicy");
     bytes32 internal constant EIP712_VERSION_HASH = keccak256("1");
 
     bytes32 internal constant ADMIN_PROPOSE_TYPEHASH = keccak256(
@@ -190,8 +185,8 @@ contract ThresholdValidator {
 
     // ─── Events ───────────────────────────────────────────────────────
 
-    event ThresholdValidatorInstalled(address indexed account, uint8 mode, uint8 recoveryThreshold);
-    event ThresholdValidatorUninstalled(address indexed account);
+    event CustodyPolicyInstalled(address indexed account, uint8 mode, uint8 recoveryThreshold);
+    event CustodyPolicyUninstalled(address indexed account);
 
     event AdminProposed(address indexed account, uint256 indexed proposalId, AdminAction indexed action, uint64 eta, address proposer);
     event AdminExecuted(address indexed account, uint256 indexed proposalId);
@@ -290,7 +285,7 @@ contract ThresholdValidator {
             c.guardianCount += 1;
         }
 
-        emit ThresholdValidatorInstalled(account, modeVal, recThr);
+        emit CustodyPolicyInstalled(account, modeVal, recThr);
     }
 
     function onUninstall(bytes calldata) external {
@@ -301,7 +296,7 @@ contract ThresholdValidator {
         // Per-account state (proposals, guardians, thresholds) intentionally
         // NOT zeroed here — re-install on the same account would clobber.
         // Zeroing is a defensive choice for a future hardening pass.
-        emit ThresholdValidatorUninstalled(account);
+        emit CustodyPolicyUninstalled(account);
     }
 
     // ─── Public propose / execute / cancel ──────────────────────────

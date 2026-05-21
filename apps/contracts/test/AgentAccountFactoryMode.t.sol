@@ -7,17 +7,17 @@ import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import "../src/AgentAccountFactory.sol";
 import "../src/AgentAccount.sol";
 import "../src/DelegationManager.sol";
-import {ThresholdValidator} from "../src/modules/ThresholdValidator.sol";
+import {CustodyPolicy} from "../src/modules/CustodyPolicy.sol";
 import {AgentAccountInitParams} from "../src/IAgentAccount.sol";
 
 /// @dev Phase 6c.5-d.1.c — factory createAccountWithMode tests, restored
-///      against the new ThresholdValidator install path. Replaces the
+///      against the new CustodyPolicy install path. Replaces the
 ///      pre-d.1 file that drove `initializeWithThresholdPolicy` directly
 ///      on the account.
 contract AgentAccountFactoryModeTest is Test {
     AgentAccountFactory factory;
     DelegationManager   dm;
-    ThresholdValidator  validator;
+    CustodyPolicy  validator;
 
     uint256 internal constant MODULE_TYPE_EXECUTOR = 2;
 
@@ -40,7 +40,7 @@ contract AgentAccountFactoryModeTest is Test {
             address(0xCC),
             address(0xDD)
         );
-        validator = new ThresholdValidator();
+        validator = new CustodyPolicy();
     }
 
     function _params(uint8 mode_, address[] memory owners, address[] memory guardians)

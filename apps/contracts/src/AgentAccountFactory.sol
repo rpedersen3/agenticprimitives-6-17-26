@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./AgentAccount.sol";
 import {AgentAccountInitParams} from "./IAgentAccount.sol";
-import {ThresholdValidator} from "./modules/ThresholdValidator.sol";
+import {CustodyPolicy} from "./modules/CustodyPolicy.sol";
 import "./governance/GovernanceManaged.sol";
 
 /**
@@ -247,7 +247,7 @@ contract AgentAccountFactory is GovernanceManaged {
 
     /**
      * @notice Deploy an `AgentAccount` configured per spec 207's
-     *         threshold-policy surface + install the `ThresholdValidator`
+     *         threshold-policy surface + install the `CustodyPolicy`
      *         module atomically. Replaces the per-mode entry points
      *         (`createAccount` / `createAccountWithPasskey`) with a
      *         single API that handles all four modes from spec 207 § 4 —
@@ -270,7 +270,7 @@ contract AgentAccountFactory is GovernanceManaged {
      *         passkey enrollment use AddPasskey via the validator.
      *
      * @param params  See `AgentAccountInitParams` in `IAgentAccount.sol`.
-     * @param validator ThresholdValidator module address (callable; the
+     * @param validator CustodyPolicy module address (callable; the
      *                  factory queries `defaultThreshold(N, t)` to
      *                  compute the spec § 5.1 matrix).
      * @param salt    CREATE2 deployment salt.
@@ -369,7 +369,7 @@ contract AgentAccountFactory is GovernanceManaged {
         uint8 n = uint8(params.owners.length);
         uint8[7] memory thresholds;
         for (uint8 t = 1; t <= 5; t++) {
-            thresholds[t] = ThresholdValidator(validator).defaultThreshold(n, t);
+            thresholds[t] = CustodyPolicy(validator).defaultThreshold(n, t);
         }
         // T6 governed by recoveryThreshold below, not the matrix.
 

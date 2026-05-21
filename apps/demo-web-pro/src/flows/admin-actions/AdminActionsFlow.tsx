@@ -1,6 +1,6 @@
 /**
  * Admin actions — propose + execute admin-tier changes through the
- * ThresholdValidator's EIP-712 typed-data surface (spec 207 § 15,
+ * CustodyPolicy's EIP-712 typed-data surface (spec 207 § 15,
  * phase 6c.5-f).
  *
  * Supported actions in this flow (T4 tier, 1h timelock default):
@@ -240,7 +240,7 @@ export function AdminActionsFlow() {
 
       const sig = await signTypedDataAsync({
         domain: {
-          name: 'agenticprimitives.ThresholdValidator',
+          name: 'agenticprimitives.CustodyPolicy',
           version: '1',
           chainId: expectedChainId,
           verifyingContract: validatorAddress,
@@ -305,7 +305,7 @@ export function AdminActionsFlow() {
       const argsHash = keccak256(encodedArgs);
       const sig = await signTypedDataAsync({
         domain: {
-          name: 'agenticprimitives.ThresholdValidator',
+          name: 'agenticprimitives.CustodyPolicy',
           version: '1',
           chainId: expectedChainId,
           verifyingContract: validatorAddress,
