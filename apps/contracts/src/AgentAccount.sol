@@ -916,10 +916,58 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
 
     /**
      * @notice Stable account-implementation identifier.
-     * @dev Bumped to `.2` to signal ERC-7579 install/uninstall support.
+     * @dev Bumped to `.3` to signal ERC-7579 `executeFromModule` callback
+     *      support shipped in phase 6c.5-d.0 (spec 209).
      */
     function accountId() external pure returns (string memory) {
-        return "smart-agent.agent-account.2";
+        return "smart-agent.agent-account.3";
+    }
+
+    // ─── ERC-7579 executor callback (spec 209 phase 6c.5-d.0) ─────────
+
+    /// @notice Emitted when an installed executor module successfully
+    ///         calls `executeFromModule`.
+    event ModuleExecuted(address indexed module, address indexed target, uint256 value);
+
+    error NotInstalledExecutor(address caller);
+
+    /**
+     * @notice ERC-7579 executor callback. An installed
+     *         `MODULE_TYPE_EXECUTOR` calls this to act on the account's
+     *         behalf. When `target == address(this)` the EVM-level call
+     *         becomes a self-call (`msg.sender == account` at the
+     *         callee), so inner `onlySelf` gates pass without special
+     *         dispatch. For external targets the call goes through
+     *         directly.
+     *
+     * @dev Only an installed executor module may call. The
+     *      install-permission model IS the gate: install is
+     *      `onlyOwnerOrSelf` today and migrates to T5 (quorum + timelock)
+     *      in phase 6c.5-d.1 once `ThresholdValidator` lands.
+     *
+     *      `nonReentrant` guards against an executor calling this
+     *      function twice in a single call frame. It shares the
+     *      ReentrancyGuard slot with `execute` / `executeBatch`, so a
+     *      module cannot route through the account's `execute` — the
+     *      module IS the executor; it must call its target directly.
+     *
+     *      Bubble-revert preserves the inner error selector.
+     */
+    function executeFromModule(address target, uint256 value, bytes calldata data)
+        external
+        nonReentrant
+        returns (bytes memory)
+    {
+        ModulesStorage storage $ = _modulesStorage();
+        if (!$.installed[MODULE_TYPE_EXECUTOR][msg.sender]) {
+            revert NotInstalledExecutor(msg.sender);
+        }
+        emit ModuleExecuted(msg.sender, target, value);
+        (bool ok, bytes memory ret) = target.call{value: value}(data);
+        if (!ok) {
+            assembly { revert(add(ret, 32), mload(ret)) }
+        }
+        return ret;
     }
 
     function _isSupportedModuleType(uint256 moduleTypeId) internal pure returns (bool) {

@@ -50,9 +50,11 @@ Per ERC-7579 the type IDs are:
 ```
 MODULE_TYPE_VALIDATOR = 1    (already supported in registry)
 MODULE_TYPE_EXECUTOR  = 2    (already supported in registry)
-MODULE_TYPE_HOOK      = 3    (already supported in registry; capped at MAX_HOOKS=8)
-MODULE_TYPE_FALLBACK  = 4    (NOT yet supported; phase 7+)
+MODULE_TYPE_FALLBACK  = 3    (NOT yet supported; phase 7+)
+MODULE_TYPE_HOOK      = 4    (already supported in registry; capped at MAX_HOOKS=8)
 ```
+
+(These match the constants in `apps/contracts/src/AgentAccount.sol:754-757`. They follow the ERC-7579 spec which assigns FALLBACK=3 and HOOK=4 — earlier drafts of this spec had them swapped; corrected here for fidelity to the implementation.)
 
 **Validators** (`MODULE_TYPE_VALIDATOR`) — decide *who* can authorize. Called from `_validateSignature` / `validateUserOp` when the signature payload encodes a validator selector.
 
@@ -83,7 +85,7 @@ MODULE_TYPE_FALLBACK  = 4    (NOT yet supported; phase 7+)
 | `AuditEmitterHook` | Post-execution audit event emission (closes spec 206 C3 at the account layer) | Phase 7 |
 | `OrgPolicyGuardHook` | Org-mode separation-of-duties guard at execution time | Phase 7 |
 
-**Fallbacks** (`MODULE_TYPE_FALLBACK`, type ID 4) — add extra interfaces without changing core. Phase 7+ — not yet supported by the registry; opting in requires registry update + fallback selector dispatch.
+**Fallbacks** (`MODULE_TYPE_FALLBACK`, type ID 3) — add extra interfaces without changing core. Phase 7+ — not yet supported by the registry; opting in requires registry update + fallback selector dispatch.
 
 | Module (phase 7+) | What it does |
 | --- | --- |
@@ -280,7 +282,7 @@ Resolved in this spec (2026-05-20):
 
 Open follow-ups:
 
-- **Fallback type ID 4 support.** `_isSupportedModuleType` currently rejects it; phase 7 adds fallback selector dispatch.
+- **Fallback type ID 3 support.** `_isSupportedModuleType` currently rejects it; phase 7 adds fallback selector dispatch.
 - **Per-module governance.** A module is itself an upgradeable contract (likely UUPS); who upgrades it? Likely the same governance multisig that deploys the factory. Document in phase 6c.5-d.1.
 - **Module versioning + `accountId` bump.** When a module's interface changes, accounts that installed it need to know. Likely an additional `installedVersion` slot per `(moduleTypeId, module)`. Phase 7.
 - **Hook gas budgets.** `MAX_HOOKS=8` bounds the loop count but not per-hook gas. Phase 7+ adds a per-hook gas-limit field.
