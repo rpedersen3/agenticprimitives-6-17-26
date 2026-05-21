@@ -242,18 +242,139 @@ export class AgentAccountClient {
   }
 
   /**
-   * Build a UserOp shell. Gas estimation + paymaster signing happens at the
-   * consumer layer (we don't take an opinion on which bundler/paymaster to
-   * use). v0: callers fill in nonce / gas / signature themselves.
+   * Build an unsigned UserOp targeting an ALREADY-DEPLOYED AgentAccount.
+   * Counterpart to `buildDeployUserOp` (which deploys the account); this
+   * is for calls AFTER deploy: addOwner, addPasskey, validator.proposeAdmin,
+   * arbitrary execute(target, value, data), etc.
+   *
+   * @param opts.sender    Existing AgentAccount address.
+   * @param opts.callData  Calldata for the account's execute path. Typically
+   *                       built via viem's encodeFunctionData against
+   *                       agentAccountAbi.execute or the account's own
+   *                       per-action selectors.
+   * @param opts.paymaster Paymaster address (sponsors gas).
+   * @param opts.verifyingPaymaster When set, appends the EIP-191 paymaster
+   *                       signature to paymasterAndData (audit C2 mode).
+   *
+   * Returns { userOp, userOpHash, sender } — same shape as buildDeployUserOp.
+   * The caller signs userOpHash with their owner authority (EOA, passkey,
+   * or ERC-1271 contract sig) + drops the sig into userOp.signature, then
+   * passes the result to submitCallUserOp.
    */
-  async buildUserOp(_params: {
+  async buildCallUserOp(opts: {
+    sender: Address;
+    callData: Hex;
+    paymaster: Address;
+    verificationGasLimit?: bigint;
+    callGasLimit?: bigint;
+    preVerificationGas?: bigint;
+    paymasterVerificationGasLimit?: bigint;
+    verifyingPaymaster?: {
+      signFn: (hash: Hex) => Promise<Hex>;
+      validUntilSeconds?: number;
+      validAfterSeconds?: number;
+    };
+  }): Promise<{ userOp: PackedUserOperation; userOpHash: Hex; sender: Address }> {
+    const bundler = new BundlerClient({
+      rpcUrl: this.opts.rpcUrl,
+      entryPoint: this.opts.entryPoint,
+    });
+
+    const nonce = await bundler.getNonce(opts.sender);
+
+    // Gas defaults sized for a typical post-deploy call. validateUserOp on a
+    // deployed account is ~30-50k; we leave headroom. callGasLimit varies a
+    // lot with what's being called — 250k is enough for the validator's
+    // propose/execute paths (largest currently-supported actions).
+    const verificationGasLimit = opts.verificationGasLimit ?? 120_000n;
+    const callGasLimit         = opts.callGasLimit         ?? 250_000n;
+    const accountGasLimits     = packGasLimits(verificationGasLimit, callGasLimit);
+    const preVerificationGas   = opts.preVerificationGas   ?? 60_000n;
+
+    const block = await this.publicClient.getBlock();
+    const baseFeePerGas        = block.baseFeePerGas ?? 100_000_000n;
+    const maxPriorityFeePerGas = 100_000_000n; // 0.1 gwei
+    const maxFeePerGas         = baseFeePerGas + maxPriorityFeePerGas * 2n;
+    const gasFees              = packGasLimits(maxPriorityFeePerGas, maxFeePerGas);
+
+    const pmVerifGas = opts.paymasterVerificationGasLimit ?? 50_000n;
+    const pmPostOpGas = 0n;
+    const paymasterAndData = await buildPaymasterAndData({
+      paymaster: opts.paymaster,
+      pmVerifGas,
+      pmPostOpGas,
+      verifyingPaymaster: opts.verifyingPaymaster,
+      userOpFields: {
+        sender: opts.sender,
+        nonce,
+        initCode: '0x' as Hex,
+        callData: opts.callData,
+        accountGasLimits,
+        preVerificationGas,
+        gasFees,
+      },
+      chainId: this.opts.chainId,
+    });
+
+    const userOp: PackedUserOperation = {
+      sender: opts.sender,
+      nonce,
+      initCode: '0x',
+      callData: opts.callData,
+      accountGasLimits,
+      preVerificationGas,
+      gasFees,
+      paymasterAndData,
+      signature: '0x',
+    };
+
+    const userOpHash = await bundler.getUserOpHash(userOp);
+    return { userOp, userOpHash, sender: opts.sender };
+  }
+
+  /**
+   * Backwards-compatible alias preserving the spec 201 `buildUserOp` shape.
+   * Wraps `buildCallUserOp` for single-call userOps. Multi-call (`account.executeBatch`)
+   * is the consumer's responsibility — encode the batch as callData and pass it in.
+   */
+  async buildUserOp(params: {
     account: Address;
     calls: Array<{ to: Address; data: Hex; value: bigint }>;
-    paymaster?: Address;
-  }): Promise<UserOperation> {
-    throw new Error(
-      'AgentAccountClient.buildUserOp: not implemented in v0 demo (delegation does not require UserOp construction in the v0 demo flow). Land alongside the on-chain delegation redeem path.',
-    );
+    paymaster: Address;
+    verifyingPaymaster?: {
+      signFn: (hash: Hex) => Promise<Hex>;
+      validUntilSeconds?: number;
+      validAfterSeconds?: number;
+    };
+  }): Promise<{ userOp: PackedUserOperation; userOpHash: Hex; sender: Address }> {
+    if (params.calls.length === 0) throw new Error('buildUserOp: at least one call required');
+    if (params.calls.length > 1) {
+      throw new Error('buildUserOp: multi-call not implemented in v0 — encode as account.executeBatch in callData');
+    }
+    const c = params.calls[0]!;
+    const callData = encodeFunctionData({
+      abi: [
+        {
+          type: 'function',
+          name: 'execute',
+          stateMutability: 'nonpayable',
+          inputs: [
+            { name: 'target', type: 'address' },
+            { name: 'value', type: 'uint256' },
+            { name: 'data', type: 'bytes' },
+          ],
+          outputs: [],
+        },
+      ],
+      functionName: 'execute',
+      args: [c.to, c.value, c.data],
+    });
+    return this.buildCallUserOp({
+      sender: params.account,
+      callData,
+      paymaster: params.paymaster,
+      verifyingPaymaster: params.verifyingPaymaster,
+    });
   }
 
   /**
@@ -544,6 +665,24 @@ export class AgentAccountClient {
     });
     const receipt = await bundler.sendUserOps([userOp], bundlerAccount.address, bundlerAccount);
     return { deployedAddress: userOp.sender, receipt };
+  }
+
+  /**
+   * Submit a (signed) post-deploy UserOp via EntryPoint.handleOps. Counterpart
+   * to `submitDeployUserOp`. The relayer (bundlerAccount) pays gas; the
+   * paymaster reimburses the bundler from its EntryPoint deposit.
+   */
+  async submitCallUserOp(
+    userOp: PackedUserOperation,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    bundlerAccount: any,
+  ): Promise<{ receipt: TransactionReceipt }> {
+    const bundler = new BundlerClient({
+      rpcUrl: this.opts.rpcUrl,
+      entryPoint: this.opts.entryPoint,
+    });
+    const receipt = await bundler.sendUserOps([userOp], bundlerAccount.address, bundlerAccount);
+    return { receipt };
   }
 
   private walletFromSigner(signer: Signer): WalletClient {
