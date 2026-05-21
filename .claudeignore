@@ -1,0 +1,75 @@
+# Agent search/context hygiene
+# Anything in here is excluded from Claude's search + read scope by
+# agent tools that honor this file. Mirrors .gitignore but is more
+# aggressive about generated/cache/binary content — Claude doesn't
+# need to read these and including them inflates context + token cost.
+
+# ─── Dependencies ──────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+**/node_modules/
+
+# ─── Build output ──────────────────────────────────────────────────
+dist/
+build/
+**/dist/
+**/build/
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# ─── Foundry artifacts (8MB+ of JSON in this repo) ─────────────────
+apps/contracts/out/
+apps/contracts/cache/
+apps/contracts/broadcast/
+broadcast/
+out/
+cache/
+
+# ─── Test artifacts ────────────────────────────────────────────────
+coverage/
+**/coverage/
+playwright-report/
+test-results/
+**/playwright-report/
+**/test-results/
+
+# ─── Logs / pid files ──────────────────────────────────────────────
+*.log
+*.pid
+tmp/
+**/tmp/
+
+# ─── Lockfiles + lockfile shadows (read them only when actually needed) ─
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+foundry.lock
+
+# ─── Generated TypeScript shadows of test files ────────────────────
+packages/*/test/**/*.js
+packages/*/test/**/*.js.map
+packages/*/test/**/*.d.ts
+packages/*/test/**/*.d.ts.map
+
+# ─── Next.js / Vite ────────────────────────────────────────────────
+.next/
+.vite/
+**/.next/
+**/.vite/
+
+# ─── Env / secrets — Claude must never read these ──────────────────
+.env
+.env.local
+.env.*.local
+.env.deploy.local
+
+# ─── IDE / OS ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ─── Zone.Identifier files (Windows download metadata, sometimes
+#    drift in via WSL file copies) ────────────────────────────────
+*Zone.Identifier
+**/*Zone.Identifier

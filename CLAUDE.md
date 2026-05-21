@@ -1,46 +1,34 @@
-# agenticprimitives — Claude Code guide
+# agenticprimitives — Claude guide
 
-This is a pnpm-workspace monorepo packaging seven standalone capabilities extracted from `smart-agent` (branch `003-intent-marketplace-proposal`, at `/home/barb/smart-agent`). Package boundaries are earned from competitive-landscape research, not chosen by convenience.
+pnpm-workspace monorepo: 7 publishable packages + Foundry contracts + demo apps. Patterns mirror `smart-agent` (branch `003-intent-marketplace-proposal`, local `/home/barb/smart-agent`); we don't fork.
 
-## Repo principles
+## Where to look (by intent)
 
-- **Each package is a product boundary.** A consumer should be able to `pnpm add @agenticprimitives/<one>` and get value without pulling the others. Cross-package deps are explicit and one-directional.
-- **Specs precede code.** Every package's contract lives at `specs/200-205-*.md`; per-package `spec.md` is a pointer. Behaviour changes update the spec in the same PR.
-- **TypeScript-first.** All packages TS, ESM, target Node ≥ 20.
-- **`tool-policy` and `types` stay transport-agnostic.** Importing MCP / A2A / LangChain / Vercel from those packages is a doctrine violation.
-- **No fork of smart-agent.** Pull patterns, not code. Cross-reference smart-agent at `/home/barb/smart-agent` while implementing; don't depend on its layout.
-- **Always check smart-agent first.** Before designing or implementing any non-trivial capability here, look at the corresponding code/spec in smart-agent (branch `003-intent-marketplace-proposal`, upstream `https://github.com/agentictrustlabs/smart-agent/tree/003-intent-marketplace-proposal`, local `/home/barb/smart-agent`). The reference has likely solved the same problem already — adapt its patterns to agenticprimitives' package boundaries rather than reinventing. New `specs/*` docs MUST include a "Reference: smart-agent patterns to port" section that names the source files we are mirroring. If we deliberately diverge from smart-agent, the spec must say why.
+| You're working on | Read first |
+| --- | --- |
+| Contract code | `apps/contracts/src/AgentAccount.sol` (thin core) + `src/modules/ThresholdValidator.sol` (admin) + `specs/209-erc7579-module-taxonomy.md` |
+| A specific package | `packages/<name>/CLAUDE.md` only — it routes to the spec + key files |
+| Multi-sig / threshold / recovery | `specs/207` (product) + `specs/209` (impl) + `apps/demo-web-pro/docs/multi-sig/guide.md` |
+| Audit / forensics | `specs/206` + `apps/demo-mcp/docs/audit/guide.md` |
+| Cross-cutting capability (multi-pkg) | `docs/architecture/cross-cutting-capabilities.md` |
+| Deploy / live wiring | `apps/contracts/script/Deploy.s.sol` + `apps/contracts/deployments-base-sepolia.json` |
+| Demo flows | `apps/demo-web-pro/CLAUDE.md` + `apps/demo-web/`, `apps/demo-a2a/`, `apps/demo-mcp/` |
 
-## Dependency direction (strict)
+## Hard rules
 
-```
-types ← identity-auth ← agent-account ← delegation ← mcp-runtime
-                            ↑              ↑              ↑
-                       key-custody ────────┘              │
-                                                  tool-policy ─┘
-```
+- **Specs precede non-trivial code.** New `specs/2XX-*.md` before architecture changes; the spec is the architect-of-record.
+- **Always check smart-agent first.** Before designing any non-trivial capability look at the analog in `/home/barb/smart-agent`. New specs MUST include a "Reference: smart-agent patterns to port" section. Deliberate divergence must say why.
+- **Package boundaries** are one-directional: `types ← identity-auth ← agent-account ← delegation ← mcp-runtime`, plus `key-custody → delegation` and `tool-policy → mcp-runtime`. No back-edges. `tool-policy` and `types` are transport-agnostic (no MCP/A2A/LangChain/Vercel imports).
+- **`AgentAccount.sol` is a thin ERC-7579 modular core.** Threshold / guardians / spend / sessions are modules, not inlined. See `specs/209` + memory `feedback_erc7579_module_architecture`.
+- **No third-party multi-sig.** We ship our own; port patterns from Safe (signature packing) but no runtime deps.
+- **Per-package context budget:** `CLAUDE.md` ≤ 60 lines, `AUDIT.md` ≤ 150 lines, `README.md` ≤ 1800 words. If you're tempted to bloat one, fix the package shape.
 
-No back-edges. CI enforcement via `scripts/check-package-boundaries.ts` (stub now; implements with first real code).
+## Conventions
 
-## Where to start
+- TypeScript strict, ESM, Node ≥ 20.
+- Solidity 0.8.28, optimizer 200 runs, via-IR ON.
+- Generated/build content (`out/`, `cache/`, `dist/`, `node_modules/`, `.next/`) is in `.claudeignore` — searches skip it.
 
-1. `specs/000-product-overview.md` — product story
-2. `docs/architecture/capability-index.md` — routing table for all 7 packages (auto-generated; re-run `pnpm generate:capability-index` after manifest edits)
-3. `docs/architecture/cross-cutting-capabilities.md` — features that thread through multiple packages (multi-sig, audit/forensics, treasury, …). Top-down index → spec + canonical demo guide + participating-package CLAUDE.md sections. Enforced by `pnpm check:cross-cutting-capabilities`.
-4. `specs/100-package-boundary-doctrine.md` — boundary principles + competitive signals
-5. `specs/101-v0-package-proposal.md` — per-package justifications
-6. When narrowed to a package: `packages/<name>/CLAUDE.md` + `capability.manifest.json` + `src/index.ts`
+## Status (2026-05-20)
 
-## Per-package context budget
-
-Each `CLAUDE.md` ≤ 900 words, `README.md` ≤ 1800, `docs/architecture.md` ≤ 3000 (when it exists). If you're tempted to bloat a CLAUDE.md, fix the package shape instead — a Claude session should reach meaningful work in any one package within ~3-5k tokens of context overhead.
-
-## Implementation status
-
-Pre-alpha. Public APIs are declared in `src/index.ts` of each package; **no implementations are written yet**. The first implementation pass typically follows: `delegation` (the keystone) → `key-custody` + `identity-auth` + `agent-account` (parallel) → `tool-policy` → `mcp-runtime`.
-
-## Modeled after
-
-- **Capability-boundary doctrine:** MetaMask Delegation Toolkit (bundle smart-account with delegation when account-specific, split when account-agnostic), Alchemy Account Kit / ZeroDev / Pimlico (signer-decoupled-from-account universal pattern), Lit Protocol / Turnkey / Privy (session lifecycle lives with authority, not with KMS).
-- **Per-package agent-context model:** smart-agent's `capability.manifest.json` + `CLAUDE.md` pattern, slimmed for our smaller package set.
-- **One-job-per-package philosophy:** [1clawAI](https://github.com/1clawAI) — clearly named, narrow-scoped, separately publishable units.
+Phase 6c.5-d.1 landed: AgentAccount is under EIP-170 (15.2 KB runtime, was 27.1 KB). ThresholdValidator module owns the admin surface. 152 Forge tests + workspace tests passing. Next: phase 6c.5-d.1.c (factory rewires to install validator) → phase 6c.5-c (live deploy resume). See task list.
