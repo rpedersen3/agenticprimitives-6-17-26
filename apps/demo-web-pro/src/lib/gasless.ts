@@ -97,8 +97,21 @@ export function useGaslessTx(): GaslessTxResult {
         const detail = await submitRes.text();
         throw new Error(`submit-call-userop ${submitRes.status}: ${detail}`);
       }
-      const { transactionHash } = (await submitRes.json()) as { transactionHash: Hex };
+      const { transactionHash, status } = (await submitRes.json()) as {
+        transactionHash: Hex;
+        status: 'success' | 'reverted' | string;
+      };
       setTxHash(transactionHash);
+      // The HTTP response only tells us the userOp was submitted +
+      // included in a block. The userOp itself can revert during
+      // execution (insufficient gas, validator rejected, inner call
+      // failed). Surface that as an error so the UI doesn't claim
+      // success on a no-op tx.
+      if (status !== 'success' && status !== '0x1') {
+        throw new Error(
+          `userOp included but reverted on chain (status=${status}). Inspect tx ${transactionHash} on basescan.org/sepolia.`,
+        );
+      }
       setState('done');
       return transactionHash;
     } catch (e) {
