@@ -1,8 +1,23 @@
 # Spec 211 — Treasury Service Agent demo (apps/demo-web-pro reshape)
 
-**Status:** draft · 2026-05-21
+**Status:** draft v2 · 2026-05-21 (revised after architectural decisions locked in)
 **Replaces:** the capability-gallery shape of `apps/demo-web-pro` (phase 6c.5-e). The directory + package name stay; the content transforms.
-**Builds on:** spec 207 (threshold-policy), spec 209 (modular core), spec 210 (Treasury as Service Agent — ontology + agency model).
+**Builds on:** spec 207 (threshold-policy), spec 209 (modular core), spec 210 (Treasury as Service Agent — ontology + agency model), **spec 212 (agent-centric delegation — the load-bearing architectural principle)**.
+
+## Locked-in architectural decisions (2026-05-21 planning round)
+
+The questions spec 211 v1 left open are now decided. They reshape the demo significantly — particularly the Organization gets first-class on-chain identity:
+
+| Question | Decision |
+| --- | --- |
+| Is the Org an on-chain Smart Agent? | **Yes.** Acme Construction is a first-class on-chain `prov:Organization` with its own AgentAccount + `org-a2a` server + `org-mcp` exposing all org-management surfaces. |
+| Person a2a/mcp multi-tenancy | **Multi-tenant.** One `person-a2a` server hosts Person #1 + Person #2 + N; same for `person-mcp`. Tenant-scoped by Smart Agent address. |
+| Org MCP tool surface | **All things about the org.** `list_members`, `get_treasury_address`, `propose_membership_change`, `propose_service_agent_change`, `get_org_metadata`, `list_service_agents`, audit-trail views, governance state. |
+| Treasury MCP tool surface | **All things + behavior associated with Treasury.** `get_balances`, `list_pending_actions`, `propose_payment`, `approve_pending`, `execute_approved`, `view_audit_trail`, recovery surface, configuration views. |
+| User authority modeling | **MINIMAL.** Connected user controls EXACTLY their Person Smart Agent via passkey. No EOA dependency. ALL stewardship — Person↔Org, Person↔Treasury, Org↔Treasury — is delegation between Smart Agents. Per spec 212. |
+| Onboarding mechanic | Predetermined seats — see § 4a below. |
+
+These decisions cascade into reshaping the act ladder + add scope. See § 4-onward.
 **Reference: smart-agent patterns to port:**
 - `/home/barb/smart-agent/apps/a2a-agent/` — per-agent-class a2a server pattern, session lifecycle, delegation issuance + redemption surface.
 - `/home/barb/smart-agent/apps/person-mcp/` — MCP server scoped to person resources, delegation-token authentication.
@@ -39,7 +54,51 @@ Every UI string + every code identifier honors the table below. Implementation p
 
 ---
 
-## 3. Three-entity user model
+## 3. Four-Agent architecture (revised after 2026-05-21 decisions)
+
+> **Per spec 212**: the user is NOT in this graph. The user controls their Person Smart Agent via passkey. All authority below is agent-to-agent.
+
+```
+                          ┌──────────────────────────┐
+                          │  Acme Construction       │  prov:Organization
+                          │  (on-chain AgentAccount) │
+                          │  org-a2a + org-mcp       │
+                          └────────┬───────┬─────────┘
+                                   │       │
+                       prov:hadMember│       │acts via (member delegations)
+                                   │       │
+              ┌────────────────────┴───┐ ┌─┴──────────────────────┐
+              ▼                        ▼ ▼                          ▼
+   ┌──────────────────┐                                  ┌──────────────────┐
+   │ Person #1        │                                  │ Person #2        │
+   │ (Alice)          │                                  │ (Bob)            │
+   │ on-chain AA      │                                  │ on-chain AA      │
+   │ person-a2a       │                                  │ person-a2a       │
+   │ person-mcp       │                                  │ person-mcp       │
+   │ (multi-tenant)   │                                  │ (multi-tenant)   │
+   └────────┬─────────┘                                  └────────┬─────────┘
+            │                                                       │
+            │ passkey controls (NOT delegates)                      │ passkey controls
+            │                                                       │
+            ▼                                                       ▼
+        🔑 Alice's                                              🔑 Bob's
+         passkey                                                 passkey
+
+                          ┌──────────────────────────┐
+                          │  Acme Treasury           │  ap:ServiceAgent →
+                          │  (on-chain AgentAccount) │  ap:Treasury
+                          │  treasury-a2a            │  prov:actedOnBehalfOf
+                          │  treasury-mcp            │      Acme Construction
+                          │  ap:hasSteward Alice,Bob │
+                          └──────────────────────────┘
+```
+
+Authority flow examples:
+- **Alice's Person Agent → Org Agent → Treasury Agent**: nested delegation chain when Alice authorizes a Treasury action that needs Org-level approval.
+- **Alice's Person Agent → Treasury Agent (direct)**: when Alice's standing delegation from the Treasury permits direct draft-payment authority within caveats.
+- **Org Agent → Treasury Agent**: the foundational delegation that makes Treasury act on behalf of the Org (issued at Treasury creation; renewed as policy evolves).
+
+## 3a. Three-entity USER model (the user-facing picture)
 
 ```text
 USER (Alice or Bob — human)
@@ -74,54 +133,117 @@ The user is technically a direct owner of the treasury, but the **demo enforces 
 
 ---
 
-## 4. Act ladder (the story)
+## 4. Onboarding mechanic (NEW — predetermined seats)
 
-Linear progression. No branching. Each act is gated on the previous one completing.
+App boot loads the predefined organization config (env-driven for re-branding):
 
-### Act 1 — Create Alice Person Account
+```
+ORG_NAME=Acme Construction
+ORG_ADMIN_SEATS=2
+ORG_SEAT_LABELS=Alice,Bob
+```
+
+First screen — seat picker:
+
+```
+┌──────────────────────────────────────────────┐
+│  Acme Construction                            │
+│  Shared treasury demo · two-admin org         │
+│                                                │
+│  Pick a seat to begin.                         │
+│                                                │
+│  ┌─────────────┐  ┌─────────────┐             │
+│  │   Alice     │  │    Bob      │             │
+│  │  (open)     │  │  (open)     │             │
+│  └─────────────┘  └─────────────┘             │
+│                                                │
+│  Both seats need admins for the treasury to    │
+│  activate.                                     │
+└──────────────────────────────────────────────┘
+```
+
+Visitor picks "Alice" → passkey ceremony → Person Smart Agent deployed for Alice → Alice's seat is "claimed."
+
+Visitor returns (same browser, new tab, or same tab after a refresh) → seat picker shows "Alice ✓ claimed" + "Bob open" → picks Bob → same flow.
+
+After both seats filled, the role switcher appears in the top bar:
+
+```
+[Acting as: Alice ▼] · Acme Construction · Acme Treasury status: ready to set up
+```
+
+The switcher lets the visitor play Alice + Bob in turn. Honest about being a demo cheat (the right panel explainer says so).
+
+The seat-picker disappears after both seats claimed (the demo state is now "two-person org in operation").
+
+## 5. Act ladder (revised for four-agent architecture)
+
+Linear progression with the onboarding loop above as a prerequisite. Acts 2 + 3 are MORE INVOLVED than spec v1 because the Org has its own on-chain identity now.
+
+### Act 1 — Create Alice Person Smart Agent
 - WebAuthn registration → store Alice's credentialId + (x, y) locally.
 - Counterfactual address preview from `factory.getAddressForPasskey`.
 - Deploy via `factory.createAccountWithPasskey` (gasless via existing paymaster).
 - Display Alice's person smart account address + a generated `.agent`-style label.
 - Live status: 🟢 LIVE on Base Sepolia.
 
-### Act 2 — Create Treasury Service Agent
-- Alice creates the treasury service agent (single-owner initially).
-- `factory.createAccountWithModeCustomT4` with `mode=org` (or threshold; the addition of Bob in Act 4 promotes it to N≥2).
-- Initial T4 timelock from a dropdown (mirrors current CreateAccountFlow capability — keep the dropdown).
-- "Account safety policy" badge surfaces: 1-of-1 today, will become 2-of-2 in Act 4.
+### Act 2 — Create Acme Construction (Org Smart Agent)
+- Alice (now the founder via Act 1) creates the Org on-chain.
+- `factory.createAccountWithModeCustomT4` with `mode=org`, owner = Alice's Person Smart Agent.
+- The Org's AgentAccount becomes "Acme Construction" on-chain. Alice is its sole member initially.
+- This is BEFORE Treasury creation — the Org owns the Treasury (per Option β architecture).
+- "Account safety policy" surfaces: 1 approval required (sole-member org). Will become 2 in Act 4.
+- The Org's a2a + MCP servers come up tenant-scoped to this Org address.
 - Live status: 🟢 LIVE.
 
-### Act 3 — Add Bob Person Account
-- Same flow as Act 1, but for Bob.
-- Detect + warn if browser returns the same credential as Alice (same physical authenticator).
-- If the demo runs in a single browser session, mark as 🟡 SIMULATED ("Bob is simulated in this browser; distinct passkey artifact").
-- Live status: 🟢 LIVE if distinct passkey; 🟡 SIMULATED otherwise.
+### Act 2.5 — Create Acme Treasury (Service Smart Agent)
+- Treasury is created with the ORG (not Alice directly) as its owner.
+- `factory.createAccountWithModeCustomT4`, owner = Acme Construction's AgentAccount address.
+- Treasury's `ap:hasSteward` set is empty initially (admins are added in Act 4); Org is the sole authority.
+- Treasury a2a + treasury-mcp servers come up scoped to this Treasury address.
+- Org issues its FIRST delegation: "Acme Construction authorizes Acme Treasury to hold + custody assets on its behalf" — establishes the `prov:actedOnBehalfOf` relationship on chain.
+- Live status: 🟢 LIVE for account + module deploy; 🟡 SIMULATED for the Org→Treasury initial delegation enforcement (delegation OBJECT exists; redemption path lights up in phase 6f.7).
 
-### Act 4 — Set 2-Person Control on Treasury
-- Schedule + execute `AddOwner(Bob's person smart account)` admin action against the treasury.
-- Uses existing `flows/admin-actions/AdminActionsFlow.tsx` machinery, but folded into a scripted single-screen flow.
-- UI labels: **Schedule owner change**, **Safety delay** (T4 timelock), **Apply approved change**.
-- After execution: 2-of-2 control surfaces in the dashboard.
-- Live status: 🟢 LIVE for AddOwner. The TRANSITION to actual 2-of-2 quorum (where both Alice + Bob must sign subsequent admin changes) marked 🟡 IN-FLIGHT until packed multi-sig signature collection is hardened.
+### Act 3 — Bob joins as Org member
+- Visitor takes Bob's seat (passkey ceremony, deploy Bob's Person Smart Agent).
+- Alice (acting as Org's sole admin) proposes `AddMember(Bob's Person Smart Agent)` as an Org T4 admin action.
+- T4 timelock elapses (configurable via the same dropdown from Act 2).
+- Alice executes the change. Org now has 2 members.
+- UI labels: "Schedule new member" / "Safety delay" / "Apply approved change."
+- Detect same-credential collision; mark as 🟡 SIMULATED if Bob's passkey isn't distinct.
+- Live status: 🟢 LIVE.
+
+### Act 4 — Set 2-Person Org Control (and thus Treasury)
+- Org's "approvals required" goes from 1 to 2.
+- Two T4 admin actions executed in sequence:
+  1. `AddSteward(Bob's Person Smart Agent)` on the Treasury — Bob joins the steward set
+  2. `ChangeApprovalsRequired(2)` on the Org — admin changes now require both Alice + Bob
+- Both run through the existing AdminActionsFlow machinery, folded into a scripted two-step act.
+- After execution: any future Org admin change OR Treasury action (per Org's policy) requires both Alice + Bob.
+- Live status: 🟢 LIVE for both AddSteward and ChangeApprovalsRequired. The downstream "now 2-of-2 enforcement actually applies" 🟡 IN-FLIGHT until packed multi-sig signature collection is hardened (phase 6f.7).
 
 ### Act 5 — Delegate Treasury Management to Person Agents
-- The treasury issues a permission card to each person agent: "Alice's person agent / Bob's person agent can draft treasury actions + read balances + request spending within limits."
-- Limits surfaced as plain-language: token, amount, destination, expiry, network, revocation.
+- Treasury (signed by Org's 2-of-2 quorum, since Acme Construction owns Treasury) issues two delegations:
+  - **Alice's Person Agent**: standing draft-payment + read-balance authority, limited by recipient allowlist + amount cap + 90-day expiry
+  - **Bob's Person Agent**: same shape, separately issued
+- These are agent-to-agent delegations per spec 212. The user's passkey never appears in the delegation hash. The delegations are SIGNED by the Org Smart Agent (which is in turn controlled by its 2-of-2 admin set, which is in turn controlled by Alice's + Bob's Person Smart Agents, which are in turn controlled by their passkeys — but the chain of agent identities is what matters for authority).
+- Permission cards rendered from the registry (phase 6b.1 enforcer registry).
+- Limits in plain language: token, recipient allowlist, max per call, max cumulative, expiry, revocation path.
 - "What this delegation does NOT permit": add owners, change policy, bypass approvals, drain arbitrary assets.
-- Uses `@agenticprimitives/delegation` for token construction.
-- Live status: 🟡 SIMULATED for runtime enforcement (the on-chain redeem path is hardened against the existing demo-mcp; running it against the treasury needs session-package + accepted-session work). The delegation OBJECT is built live, signed, hashed; the ENFORCEMENT story is paragraph copy with a clear "this enforcement is not yet wired" badge.
+- Live status: 🟡 SIMULATED for runtime enforcement. The delegation OBJECTS are built live + signed + hashed by the Org Smart Agent; the ENFORCEMENT story is paragraph copy with a clear "this enforcement lights up in phase 6f.7" badge.
 
-### Act 6 — Treasury Control Dashboard
+### Act 6 — Acme Construction Control Dashboard
 - Persistent dashboard for the rest of the demo.
+- Top of dashboard: **Acme Construction** (the Org) is the focal entity. Treasury + Persons are arrayed as relationships.
 - Panels:
-  - **Treasury service agent**: address, mode, owners (Alice's + Bob's person smart accounts), approvals required.
-  - **Person controllers**: Alice + Bob passkey accounts + status (connected / disconnected).
-  - **Person agents**: per-person card showing the active delegation from the treasury.
-  - **Pending scheduled admin changes**: empty after Act 4 in the happy path; populated if the user runs additional changes.
-  - **Active treasury permissions**: list of standing delegations (Act 5 output).
-  - **Audit trail**: tx hash, signatures, delegation hash, revocation path. PROV-O attribution surfaced ("Activity 0x… wasAssociatedWith Alice's person agent · actedOnBehalfOf Organization").
-- Live status: 🟢 LIVE for reads.
+  - **Acme Construction**: org address, members, approvals required, list of service agents (just Treasury today, but the shape supports more)
+  - **Acme Treasury (Service Smart Agent)**: address, stewards (Alice + Bob via Org), prov:actedOnBehalfOf Acme Construction, balances, approvals required
+  - **Person Smart Agents**: Alice + Bob — passkey-controlled, Org members
+  - **Person Agents**: per-person card showing the active delegation from Treasury
+  - **Pending scheduled admin changes** (Org-level + Treasury-level)
+  - **Active treasury permissions** (the standing delegations from Act 5)
+  - **Audit trail (PROV-O)**: every Activity tagged with Agent URIs — `wasAssociatedWith :alicePersonAgent · actedOnBehalfOf :acmeConstruction`. No user URIs anywhere (per spec 212).
+- Live status: 🟢 LIVE for reads (all read from chain + the org/treasury MCPs).
 
 ---
 
@@ -177,13 +299,15 @@ Add:
 
 | Phase | Deliverable | Live boundary |
 | --- | --- | --- |
-| **6f.1 — Shell + Act 1** | Strip current App.tsx gallery. Build the persistent shell (top/left/main/right/bottom). Implement Act 1 end-to-end (create Alice). New components: `ActorCard`, `LiveStatusBadge`, `ProgressRail`. | 🟢 LIVE — Alice deploy is the most-shipped path |
-| **6f.2 — Acts 2 + 4** | Treasury creation + 2-person control via existing CreateAccount + AdminActions machinery, folded into acts | 🟢 LIVE — fully live |
-| **6f.3 — Act 3** | Bob person account; multi-identity browser-state isolation in `lib/passkey.ts` | 🟢/🟡 LIVE w/ distinct passkey; SIMULATED if browser collapses |
-| **6f.4 — Act 5** | Delegation construction + permission-card UI. Runtime enforcement DEFERRED | 🟡 SIMULATED enforcement, LIVE object construction |
-| **6f.5 — Act 6 Dashboard** | Stitch all reads into a persistent dashboard. PROV-O attribution surfaced in `AuditStrip` | 🟢 LIVE reads |
-| **6f.6 — Per-agent-class servers** | Port person-a2a + person-mcp + organization-a2a + organization-mcp + treasury-a2a + treasury-mcp scaffolding from smart-agent. Wire the demo to use them | 🟡 → 🟢 transition |
-| **6f.7 — Runtime delegation enforcement** | Act 5's simulated enforcement becomes LIVE: accepted-session blessing + session-package validation + treasury-a2a redeem | 🟢 LIVE; closes the demo's biggest "simulated" caveat |
+| **6f.1 — Shell + Onboarding + Act 1** | Strip current App.tsx gallery. Build the persistent shell (top/left/main/right/bottom). Implement the seat picker. Implement Act 1 (passkey ceremony + Alice's Person Smart Agent deploy). New components: `SeatPicker`, `ActorCard`, `LiveStatusBadge`, `ProgressRail`, `PrincipalChip`. | 🟢 LIVE for Alice deploy |
+| **6f.2 — Acts 2 + 2.5 (Create Org + Treasury)** | Org AgentAccount (Acme Construction) deploy in org-mode; Treasury AgentAccount deploy with Org as owner; initial Org→Treasury delegation. **More scope than v1** because Org is now on-chain. | 🟢 LIVE for accounts/modules; 🟡 SIMULATED for Org→Treasury delegation enforcement (lights up in 6f.7) |
+| **6f.3 — Act 3 (Bob joins Org)** | Bob's seat claim → Bob's Person Smart Agent deploy → Alice proposes AddMember(Bob) on the Org → execute. Multi-identity passkey isolation in `lib/passkey.ts`. | 🟢 LIVE w/ distinct passkey; 🟡 SIMULATED otherwise |
+| **6f.4 — Act 4 (Set 2-Person Control)** | Treasury AddSteward(Bob) + Org ChangeApprovalsRequired(2). Two T4 admin actions, scripted into one act. | 🟢 LIVE for the admin actions themselves; 🟡 IN-FLIGHT for full 2-of-2 enforcement |
+| **6f.5 — Act 5 (Delegate Treasury Management)** | Treasury issues delegations to Alice's + Bob's Person Agents via Org's 2-of-2 quorum. Permission cards rendered from enforcer registry. Construction LIVE; runtime enforcement SIMULATED. | 🟡 SIMULATED enforcement, LIVE object construction |
+| **6f.6 — Act 6 (Org Control Dashboard)** | Stitch all reads into a persistent Org-focal dashboard. Audit trail tags activities with PROV-O Agent URIs. | 🟢 LIVE reads |
+| **6f.7 — Per-agent-class server scaffolding** | Port `person-a2a` (multi-tenant) + `person-mcp` (multi-tenant) + `org-a2a` (single-tenant per Org) + `org-mcp` + `treasury-a2a` + `treasury-mcp` from smart-agent. Wire the demo to use them. New apps in `apps/demo-*-a2a` / `apps/demo-*-mcp`. | enables 🟡→🟢 transition |
+| **6f.8 — Runtime delegation enforcement** | Acts 2.5 + 5 SIMULATED enforcement become LIVE: accepted-session blessing + session-package validation + treasury-a2a redeem path. The demo's biggest 🟡 flips to 🟢. | 🟢 LIVE; closes the demo's simulation gap |
+| **6f.9 — PROV-O Activity emission** | Audit-trail events extended with optional PROV-O Activity URIs per spec 210 § 5. Dashboard Audit Strip renders the resulting graph. | 🟢 LIVE attribution |
 
 ---
 
