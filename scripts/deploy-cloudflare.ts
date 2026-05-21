@@ -63,6 +63,15 @@ interface Deployments {
    *  validator instead of legacy ECDSA recovery. Required for the
    *  passkey path (spec 130). */
   universalSignatureValidator?: string;
+  /** Phase 6c.5-d.1 — ERC-7579 module that owns the propose/execute/
+   *  cancel admin surface for accounts in non-single modes. Factory's
+   *  createAccountWithMode takes it as a per-call arg + installs it on
+   *  every new account. Demo-web-pro reads it from worker env vars. */
+  thresholdValidator?: string;
+  /** Phase 6c.1 — quorum caveat enforcer; T3+ delegations carry it. */
+  quorumEnforcer?: string;
+  /** Phase 6c.1 — v=1 signature path companion. */
+  approvedHashRegistry?: string;
 }
 
 function run(cmd: string, opts: { cwd?: string } = {}): void {
@@ -157,6 +166,12 @@ const contractVars: Record<string, string> = {
   ALLOWED_METHODS_ENFORCER: d.allowedMethodsEnforcer,
   VALUE_ENFORCER: d.valueEnforcer,
 };
+// Phase 6c.5-c — phase 6c multi-sig substrate. Each is optional in
+// the JSON but, when present, propagates to the workers so demo-a2a
+// + demo-mcp + demo-web-pro can find them without bundling addresses.
+if (d.thresholdValidator)   contractVars.THRESHOLD_VALIDATOR    = d.thresholdValidator;
+if (d.quorumEnforcer)       contractVars.QUORUM_ENFORCER        = d.quorumEnforcer;
+if (d.approvedHashRegistry) contractVars.APPROVED_HASH_REGISTRY = d.approvedHashRegistry;
 
 // 3. Deploy demo-mcp Worker (no external deps — deploy first so we can pass
 //    its URL into demo-a2a as MCP_URL)
