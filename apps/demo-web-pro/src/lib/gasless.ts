@@ -61,9 +61,15 @@ export function useGaslessTx(): GaslessTxResult {
 
     try {
       setState('building');
+      // CSRF bootstrap — fetch token (sets cookie + returns matching header value).
+      const csrfRes = await fetch(`${config.demoA2aUrl}/auth/csrf`, { credentials: 'include' });
+      if (!csrfRes.ok) throw new Error(`csrf bootstrap ${csrfRes.status}`);
+      const { token: csrfToken } = (await csrfRes.json()) as { token: string };
+
       const buildRes = await fetch(`${config.demoA2aUrl}/account/build-call-userop`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        headers: { 'content-type': 'application/json', 'X-CSRF-Token': csrfToken },
         body: JSON.stringify({ sender, callData }),
       });
       if (!buildRes.ok) {
@@ -83,7 +89,8 @@ export function useGaslessTx(): GaslessTxResult {
       setState('submitting');
       const submitRes = await fetch(`${config.demoA2aUrl}/account/submit-call-userop`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        headers: { 'content-type': 'application/json', 'X-CSRF-Token': csrfToken },
         body: JSON.stringify({ userOp: signedUserOp }),
       });
       if (!submitRes.ok) {

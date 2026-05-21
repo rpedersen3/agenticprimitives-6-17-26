@@ -199,7 +199,8 @@ step(4, 'Deploying demo-a2a Worker…');
 const a2aVars: Record<string, string> = {
   ...contractVars,
   MCP_URL: demoMcpUrl,
-  ALLOWED_ORIGINS: DEMO_WEB_URL,
+  // Both demo-web and demo-web-pro Pages projects need CSRF clearance.
+  ALLOWED_ORIGINS: `${DEMO_WEB_URL},${DEMO_WEB_PRO_URL}`,
 };
 const a2aBackend = process.env.A2A_KMS_BACKEND;
 if (a2aBackend === 'gcp-kms') {
