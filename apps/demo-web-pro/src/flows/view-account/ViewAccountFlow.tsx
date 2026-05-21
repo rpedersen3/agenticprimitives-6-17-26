@@ -3,7 +3,7 @@
  *
  * Paste any deployed AgentAccount address (or arrive here via the
  * "Inspect this account →" link from the create flow) and the page
- * loads everything queryable: owners, ownerCount, account.accountId(),
+ * loads everything queryable: owners, custodianCount, account.accountId(),
  * mode + per-tier thresholds + trusteeCount + recoveryApprovals from
  * the validator, and whether the CustodyPolicy + QuorumEnforcer
  * are installed as modules.
@@ -25,8 +25,8 @@ import { shortAddress } from '../../components';
 // include `accountId`, so we declare what we need inline.
 const accountAbi = [
   { type: 'function', name: 'accountId',  stateMutability: 'pure', inputs: [], outputs: [{ type: 'string' }] },
-  { type: 'function', name: 'ownerCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'isOwner',    stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'custodianCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'isCustodian',    stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'bool' }] },
 ] as const;
 
 // Minimal validator ABI — just the views we need here.
@@ -141,7 +141,7 @@ function AccountInspector({
   const ownerCountQ = useReadContract({
     address: account,
     abi: accountAbi,
-    functionName: 'ownerCount',
+    functionName: 'custodianCount',
   });
 
   // ─── Validator-side reads ───
@@ -207,8 +207,8 @@ function AccountInspector({
         </dl>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
           To enumerate individual owners you'd need an event scan
-          (<code>OwnerAdded</code> / <code>OwnerRemoved</code>) — not done here. Per-address
-          membership: <code>account.isOwner(0x…)</code>.
+          (<code>CustodianAdded</code> / <code>CustodianRemoved</code>) — not done here. Per-address
+          membership: <code>account.isCustodian(0x…)</code>.
         </p>
       </section>
 

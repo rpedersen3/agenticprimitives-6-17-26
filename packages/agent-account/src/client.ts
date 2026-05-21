@@ -197,8 +197,8 @@ export class AgentAccountClient {
     return predicted;
   }
 
-  async isOwner(account: Address, address: Address): Promise<boolean> {
-    // AgentAccount has an internal _owners mapping; expose via a view if
+  async isCustodian(account: Address, address: Address): Promise<boolean> {
+    // AgentAccount has an internal _custodians mapping; expose via a view if
     // the contract has one. For v0 we don't have a public read; return
     // false as a conservative default until the consumer wires one.
     // (Deferred: extend ABI when needed.)
@@ -244,7 +244,7 @@ export class AgentAccountClient {
   /**
    * Build an unsigned UserOp targeting an ALREADY-DEPLOYED AgentAccount.
    * Counterpart to `buildDeployUserOp` (which deploys the account); this
-   * is for calls AFTER deploy: addOwner, addPasskey, validator.proposeAdmin,
+   * is for calls AFTER deploy: addCustodian, addPasskey, validator.proposeAdmin,
    * arbitrary execute(target, value, data), etc.
    *
    * @param opts.sender    Existing AgentAccount address.

@@ -518,7 +518,7 @@ contract CustodyPolicy {
             if (guardianMode) {
                 if (!c.trustees[signer]) revert UnauthorizedTrustee(signer);
             } else {
-                if (!IAgentAccount(account).isOwner(signer)) revert AdminUnauthorizedSigner(signer);
+                if (!IAgentAccount(account).isCustodian(signer)) revert AdminUnauthorizedSigner(signer);
             }
             signers[i] = signer;
         }
@@ -534,10 +534,10 @@ contract CustodyPolicy {
     ) internal {
         if (action == CustodyAction.AddCustodian) {
             (address newOwner) = abi.decode(args, (address));
-            _execute(account, abi.encodeCall(IAgentAccount.addOwner, (newOwner)));
+            _execute(account, abi.encodeCall(IAgentAccount.addCustodian, (newOwner)));
         } else if (action == CustodyAction.RemoveCustodian) {
             (address oldOwner) = abi.decode(args, (address));
-            _execute(account, abi.encodeCall(IAgentAccount.removeOwner, (oldOwner)));
+            _execute(account, abi.encodeCall(IAgentAccount.removeCustodian, (oldOwner)));
         } else if (action == CustodyAction.AddPasskeyCredential) {
             (bytes32 cid, uint256 x, uint256 y) = abi.decode(args, (bytes32, uint256, uint256));
             _execute(account, abi.encodeWithSignature("addPasskey(bytes32,uint256,uint256)", cid, x, y));
@@ -584,7 +584,7 @@ contract CustodyPolicy {
     /// @dev Single entry-point for account self-calls. The account's
     ///      `executeFromModule` does the EVM-level call; when target ==
     ///      account, msg.sender at the callee is the account itself,
-    ///      satisfying onlySelf gates on `addOwner` / `removeOwner` / etc.
+    ///      satisfying onlySelf gates on `addCustodian` / `removeCustodian` / etc.
     function _execute(address account, bytes memory data) internal {
         // Use a low-level call so the calldata is the exact ABI-encoded
         // call to executeFromModule, which then bubble-reverts the
@@ -635,8 +635,8 @@ contract CustodyPolicy {
         for (uint256 i; i < newOwners.length; i++) {
             address o = newOwners[i];
             if (o == address(0)) revert ZeroAddress();
-            if (!IAgentAccount(account).isOwner(o)) {
-                _execute(account, abi.encodeCall(IAgentAccount.addOwner, (o)));
+            if (!IAgentAccount(account).isCustodian(o)) {
+                _execute(account, abi.encodeCall(IAgentAccount.addCustodian, (o)));
                 added++;
             }
         }
@@ -662,8 +662,8 @@ contract CustodyPolicy {
         for (uint256 i; i < r.addOwners.length; i++) {
             address o = r.addOwners[i];
             if (o == address(0)) revert ZeroAddress();
-            if (!IAgentAccount(account).isOwner(o)) {
-                _execute(account, abi.encodeCall(IAgentAccount.addOwner, (o)));
+            if (!IAgentAccount(account).isCustodian(o)) {
+                _execute(account, abi.encodeCall(IAgentAccount.addCustodian, (o)));
                 addedOwners++;
             }
         }
@@ -681,8 +681,8 @@ contract CustodyPolicy {
         uint256 removedOwners;
         for (uint256 i; i < r.removeOwners.length; i++) {
             address o = r.removeOwners[i];
-            if (IAgentAccount(account).isOwner(o)) {
-                _execute(account, abi.encodeCall(IAgentAccount.removeOwner, (o)));
+            if (IAgentAccount(account).isCustodian(o)) {
+                _execute(account, abi.encodeCall(IAgentAccount.removeCustodian, (o)));
                 removedOwners++;
             }
         }

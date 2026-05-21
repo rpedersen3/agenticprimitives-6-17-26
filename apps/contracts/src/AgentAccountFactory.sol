@@ -13,7 +13,7 @@ import "./governance/GovernanceManaged.sol";
  *
  * Phase A (spec 007 — architecture hardening) — capability role split:
  *   - `bundlerSigner` and `sessionIssuer` are factory-level capability
- *     roles. They are NEVER added to any account's `_owners` set. Each
+ *     roles. They are NEVER added to any account's `_custodians` set. Each
  *     deployed account reads them from this factory via the
  *     `bundlerSigner()` / `sessionIssuer()` views.
  *

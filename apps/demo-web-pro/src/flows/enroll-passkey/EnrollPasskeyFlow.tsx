@@ -65,7 +65,7 @@ const accountAbi = [
   },
   {
     type: 'function',
-    name: 'isOwner',
+    name: 'isCustodian',
     stateMutability: 'view',
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ type: 'bool' }],
@@ -96,7 +96,7 @@ export function EnrollPasskeyFlow() {
   const { data: connectedIsOwner } = useReadContract({
     address: accountAddr ?? undefined,
     abi: accountAbi,
-    functionName: 'isOwner',
+    functionName: 'isCustodian',
     args: signerAddress ? [signerAddress] : undefined,
     query: { enabled: !!accountAddr && !!signerAddress },
   });

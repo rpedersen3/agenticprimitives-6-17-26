@@ -201,28 +201,28 @@ contract ExecuteFromModuleTest is Test {
     // ─── 3. Self-call path satisfies onlySelf ─────────────────────────
 
     function test_executeFromModule_selfCallTriggersAddOwner_onlySelf() public {
-        // addOwner has the onlySelf gate. When executeFromModule routes
+        // addCustodian has the onlySelf gate. When executeFromModule routes
         // back to address(this), msg.sender at the callee == account, so
         // the gate passes.
-        assertFalse(acct.isOwner(newOwner), "pre: newOwner not yet an owner");
+        assertFalse(acct.isCustodian(newOwner), "pre: newOwner not yet an owner");
 
         executor.callExecuteFromModule(
             address(acct),
             address(acct),
             0,
-            abi.encodeCall(IAgentAccount.addOwner, (newOwner))
+            abi.encodeCall(IAgentAccount.addCustodian, (newOwner))
         );
 
-        assertTrue(acct.isOwner(newOwner), "post: newOwner added");
+        assertTrue(acct.isCustodian(newOwner), "post: newOwner added");
     }
 
     function test_executeFromModule_selfCallToOnlySelfFromNonModule_reverts() public {
-        // Sanity: calling addOwner directly from a non-self caller still
+        // Sanity: calling addCustodian directly from a non-self caller still
         // reverts (the onlySelf gate is intact). Catches a regression
         // where executeFromModule accidentally relaxes the gate.
         vm.expectRevert(AgentAccount.NotFromSelf.selector);
         vm.prank(address(0xBADCAFE));
-        acct.addOwner(newOwner);
+        acct.addCustodian(newOwner);
     }
 
     // ─── 4. External-call value forwarding ────────────────────────────

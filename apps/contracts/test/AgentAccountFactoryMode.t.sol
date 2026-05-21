@@ -56,7 +56,7 @@ contract AgentAccountFactoryModeTest is Test {
         });
     }
 
-    function _owners(address a) internal pure returns (address[] memory r) {
+    function _custodians(address a) internal pure returns (address[] memory r) {
         r = new address[](1); r[0] = a;
     }
     function _ownersN(address[] memory addrs) internal pure returns (address[] memory) {
@@ -72,9 +72,9 @@ contract AgentAccountFactoryModeTest is Test {
     // ─── 1. Single mode ─────────────────────────────────────────────
 
     function test_createAccountWithMode_single() public {
-        AgentAccountInitParams memory p = _params(0, _owners(owner1), new address[](0));
+        AgentAccountInitParams memory p = _params(0, _custodians(owner1), new address[](0));
         AgentAccount acct = factory.createAccountWithMode(p, address(validator), 1);
-        assertTrue(acct.isOwner(owner1));
+        assertTrue(acct.isCustodian(owner1));
         assertEq(validator.custodyMode(address(acct)), 0);
         assertTrue(validator.isInstalledOn(address(acct)));
     }
@@ -82,7 +82,7 @@ contract AgentAccountFactoryModeTest is Test {
     // ─── 2. Hybrid mode (consumer default) ──────────────────────────
 
     function test_createAccountWithMode_hybrid_with_one_owner() public {
-        AgentAccountInitParams memory p = _params(1, _owners(owner1), new address[](0));
+        AgentAccountInitParams memory p = _params(1, _custodians(owner1), new address[](0));
         AgentAccount acct = factory.createAccountWithMode(p, address(validator), 2);
         assertEq(validator.custodyMode(address(acct)), 1);
         // Default T4 threshold for N=1 is 1
@@ -128,7 +128,7 @@ contract AgentAccountFactoryModeTest is Test {
     // ─── 5. Idempotent return ───────────────────────────────────────
 
     function test_createAccountWithMode_idempotent() public {
-        AgentAccountInitParams memory p = _params(1, _owners(owner1), new address[](0));
+        AgentAccountInitParams memory p = _params(1, _custodians(owner1), new address[](0));
         AgentAccount acct1 = factory.createAccountWithMode(p, address(validator), 99);
         AgentAccount acct2 = factory.createAccountWithMode(p, address(validator), 99);
         assertEq(address(acct1), address(acct2));
@@ -137,7 +137,7 @@ contract AgentAccountFactoryModeTest is Test {
     // ─── 6. Counterfactual address derivation ──────────────────────
 
     function test_getAddressForMode_matches_deploy() public {
-        AgentAccountInitParams memory p = _params(1, _owners(owner1), new address[](0));
+        AgentAccountInitParams memory p = _params(1, _custodians(owner1), new address[](0));
         address predicted = factory.getAddressForMode(p, 7);
         AgentAccount actual = factory.createAccountWithMode(p, address(validator), 7);
         assertEq(predicted, address(actual));
@@ -178,7 +178,7 @@ contract AgentAccountFactoryModeTest is Test {
     // ─── 10. Invalid mode value ─────────────────────────────────────
 
     function test_createAccountWithMode_rejects_invalidMode() public {
-        AgentAccountInitParams memory p = _params(7, _owners(owner1), new address[](0));
+        AgentAccountInitParams memory p = _params(7, _custodians(owner1), new address[](0));
         vm.expectRevert(abi.encodeWithSelector(AgentAccountFactory.InvalidMode.selector, uint8(7)));
         factory.createAccountWithMode(p, address(validator), 11);
     }
@@ -186,7 +186,7 @@ contract AgentAccountFactoryModeTest is Test {
     // ─── 11. Zero validator address rejected ────────────────────────
 
     function test_createAccountWithMode_rejects_zeroValidator() public {
-        AgentAccountInitParams memory p = _params(1, _owners(owner1), new address[](0));
+        AgentAccountInitParams memory p = _params(1, _custodians(owner1), new address[](0));
         vm.expectRevert(AgentAccountFactory.ZeroAddress.selector);
         factory.createAccountWithMode(p, address(0), 12);
     }
@@ -194,7 +194,7 @@ contract AgentAccountFactoryModeTest is Test {
     // ─── 12. Module install event observable ────────────────────────
 
     function test_createAccountWithMode_emitsEvents() public {
-        AgentAccountInitParams memory p = _params(1, _owners(owner1), new address[](0));
+        AgentAccountInitParams memory p = _params(1, _custodians(owner1), new address[](0));
         address predicted = factory.getAddressForMode(p, 13);
 
         vm.expectEmit(true, true, true, true, address(factory));

@@ -183,7 +183,7 @@ contract AgentAccountFactoryTest is Test {
         assertEq(gx, TEST_PASSKEY_X);
         assertEq(gy, TEST_PASSKEY_Y);
         assertEq(acct.passkeyCount(), 1);
-        assertEq(acct.ownerCount(), 0, "passkey-only account must have 0 EOA owners");
+        assertEq(acct.custodianCount(), 0, "passkey-only account must have 0 EOA owners");
     }
 
     function test_passkey_account_carries_factory_and_dm() public {

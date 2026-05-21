@@ -57,8 +57,8 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     /// @dev internal (not private) so test harnesses can subclass + seed
     ///      owner state for the threshold-policy tests. Storage layout
     ///      is unaffected by visibility.
-    mapping(address => bool) internal _owners;
-    uint256 internal _ownerCount;
+    mapping(address => bool) internal _custodians;
+    uint256 internal _custodianCount;
 
     /// @dev Spec 007 Phase A — the factory that deployed this account.
     ///      `bundlerSigner()` and `sessionIssuer()` are read off this
@@ -107,10 +107,10 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     // ─── Errors ─────────────────────────────────────────────────────
 
     error NotFromSelf();
-    error NotOwnerOrSelf();
-    error OwnerAlreadyExists(address owner);
-    error OwnerDoesNotExist(address owner);
-    error CannotRemoveLastOwner();
+    error NotCustodianOrSelf();
+    error CustodianAlreadyExists(address owner);
+    error CustodianDoesNotExist(address owner);
+    error CannotRemoveLastCustodian();
     error ZeroAddress();
     error PasskeyAlreadyRegistered(bytes32 credentialIdDigest);
     error PasskeyNotRegistered(bytes32 credentialIdDigest);
@@ -175,7 +175,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      *         DelegationManager, and the factory address.
      *
      *         Spec 007 Phase A: the master / bundler / session-issuer
-     *         keys are NOT added to `_owners`. The factory address is
+     *         keys are NOT added to `_custodians`. The factory address is
      *         stored so the account can resolve `bundlerSigner()` and
      *         `sessionIssuer()` on demand. This lets a future factory
      *         upgrade rotate those roles without per-account
@@ -190,9 +190,9 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      */
     function initialize(address initialOwner, address dm, address factory_) external initializer {
         if (initialOwner == address(0)) revert ZeroAddress();
-        _owners[initialOwner] = true;
-        _ownerCount = 1;
-        emit OwnerAdded(initialOwner);
+        _custodians[initialOwner] = true;
+        _custodianCount = 1;
+        emit CustodianAdded(initialOwner);
 
         _delegationManager = dm;
         _factory = factory_;
@@ -210,7 +210,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      *         accounts are single-owner under Phase A).
      *
      *         The co-owner is removable post-bootstrap via a userOp
-     *         signed by the primary owner (`addOwner` / `removeOwner`
+     *         signed by the primary owner (`addCustodian` / `removeCustodian`
      *         are `onlySelf` — see `SessionAgentAccountFactory.sol`
      *         for the documented cleanup path).
      */
@@ -221,13 +221,13 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         address factory_
     ) external initializer {
         if (initialOwner == address(0)) revert ZeroAddress();
-        _owners[initialOwner] = true;
-        _ownerCount = 1;
-        emit OwnerAdded(initialOwner);
+        _custodians[initialOwner] = true;
+        _custodianCount = 1;
+        emit CustodianAdded(initialOwner);
         if (coOwner != address(0) && coOwner != initialOwner) {
-            _owners[coOwner] = true;
-            _ownerCount = 2;
-            emit OwnerAdded(coOwner);
+            _custodians[coOwner] = true;
+            _custodianCount = 2;
+            emit CustodianAdded(coOwner);
         }
         _delegationManager = dm;
         _factory = factory_;
@@ -245,9 +245,9 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      *         enrolls a credential before any EOA is connected.
      *
      *         Additional signers (EOA owners or extra passkeys) can be
-     *         added post-deploy via `addOwner` / `addPasskey` userOps
+     *         added post-deploy via `addCustodian` / `addPasskey` userOps
      *         signed by the passkey. The `removePasskey` invariant
-     *         (`_ownerCount + count == 1`) keeps the account from being
+     *         (`_custodianCount + count == 1`) keeps the account from being
      *         rendered unsignable.
      *
      * @param credentialIdDigest keccak256(credentialId) — same wire form
@@ -272,9 +272,9 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         $.count = 1;
         emit PasskeyAdded(credentialIdDigest, x, y);
 
-        // _ownerCount stays at 0 — passkey is the only signer. The
+        // _custodianCount stays at 0 — passkey is the only signer. The
         // CannotRemoveLastSigner invariant in removePasskey
-        // (`_ownerCount + count == 1`) prevents bricking.
+        // (`_custodianCount + count == 1`) prevents bricking.
 
         _delegationManager = dm;
         _factory = factory_;
@@ -432,8 +432,8 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      *         Can be called by an owner (for initial setup) or by the account itself.
      */
     function setDelegationManager(address dm) external {
-        if (msg.sender != address(this) && !_owners[msg.sender]) {
-            revert NotOwnerOrSelf();
+        if (msg.sender != address(this) && !_custodians[msg.sender]) {
+            revert NotCustodianOrSelf();
         }
         _delegationManager = dm;
     }
@@ -520,7 +520,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      *             `block.chainid`. Master / random callers cannot
      *             impersonate the bundler.
      *           - The inner `op.signature` is validated against
-     *             `_owners` (or the WebAuthn passkey set) via the
+     *             `_custodians` (or the WebAuthn passkey set) via the
      *             standard `_validateSig` path. The bundler envelope
      *             alone is insufficient.
      *
@@ -636,8 +636,8 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     ///      mode-specific module set; once the account is in use, the
     ///      threshold validator's quorum gate replaces this surface.
     modifier onlyOwnerOrSelf() {
-        if (msg.sender != address(this) && !_owners[msg.sender] && msg.sender != _factory) {
-            revert NotOwnerOrSelf();
+        if (msg.sender != address(this) && !_custodians[msg.sender] && msg.sender != _factory) {
+            revert NotCustodianOrSelf();
         }
         _;
     }
@@ -1020,12 +1020,12 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     function _verifyEcdsa(bytes32 hash, bytes memory sig) internal view returns (bool) {
         // Try raw hash first — matches EntryPoint v0.8 (EIP-712 userOpHash signed directly).
         (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(hash, sig);
-        if (err == ECDSA.RecoverError.NoError && _owners[recovered]) return true;
+        if (err == ECDSA.RecoverError.NoError && _custodians[recovered]) return true;
         // Fall back to eth-signed-message wrap — matches v0.7 and legacy ERC-1271
         // callers that pre-prefix the digest.
         bytes32 ethSigned = hash.toEthSignedMessageHash();
         (recovered, err,) = ECDSA.tryRecover(ethSigned, sig);
-        return err == ECDSA.RecoverError.NoError && _owners[recovered];
+        return err == ECDSA.RecoverError.NoError && _custodians[recovered];
     }
 
     /// @dev Verify a signature recovers to a SPECIFIC expected signer
@@ -1059,37 +1059,37 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     ///      chain bottoms out at this AgentAccount as the rootDelegator,
     ///      DelegationManager calls `this.execute(...)` and the resulting
     ///      external call has `msg.sender == address(this)`. Downstream
-    ///      `isOwner(msg.sender)` checks (e.g. FundRegistry.onlyFundOwner)
+    ///      `isCustodian(msg.sender)` checks (e.g. FundRegistry.onlyFundOwner)
     ///      should pass — the account IS the actor making the call.
-    function isOwner(address account) external view override returns (bool) {
+    function isCustodian(address account) external view override returns (bool) {
         if (account == address(this)) return true;
-        return _owners[account];
+        return _custodians[account];
     }
 
     /// @inheritdoc IAgentAccount
-    function ownerCount() external view override returns (uint256) {
-        return _ownerCount;
+    function custodianCount() external view override returns (uint256) {
+        return _custodianCount;
     }
 
     /// @inheritdoc IAgentAccount
-    function addOwner(address owner) external override onlySelf {
+    function addCustodian(address owner) external override onlySelf {
         if (owner == address(0)) revert ZeroAddress();
-        if (_owners[owner]) revert OwnerAlreadyExists(owner);
-        _owners[owner] = true;
-        _ownerCount++;
-        emit OwnerAdded(owner);
+        if (_custodians[owner]) revert CustodianAlreadyExists(owner);
+        _custodians[owner] = true;
+        _custodianCount++;
+        emit CustodianAdded(owner);
     }
 
     /// @inheritdoc IAgentAccount
     /// @dev Enforces a multi-signer-safe invariant: can't remove the last
     ///      owner if there are also no registered passkeys. A passkey-only
     ///      account is allowed, but a zero-signer account is not.
-    function removeOwner(address owner) external override onlySelf {
-        if (!_owners[owner]) revert OwnerDoesNotExist(owner);
-        if (_ownerCount == 1 && _passkeyStorage().count == 0) revert CannotRemoveLastOwner();
-        _owners[owner] = false;
-        _ownerCount--;
-        emit OwnerRemoved(owner);
+    function removeCustodian(address owner) external override onlySelf {
+        if (!_custodians[owner]) revert CustodianDoesNotExist(owner);
+        if (_custodianCount == 1 && _passkeyStorage().count == 0) revert CannotRemoveLastCustodian();
+        _custodians[owner] = false;
+        _custodianCount--;
+        emit CustodianRemoved(owner);
     }
 
     // ─── Passkey (WebAuthn P-256) management ──────────────────────
@@ -1137,7 +1137,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     function removePasskey(bytes32 credentialIdDigest) external onlySelf {
         PasskeyStorage storage $ = _passkeyStorage();
         if (!$.registered[credentialIdDigest]) revert PasskeyNotRegistered(credentialIdDigest);
-        if (_ownerCount + $.count == 1) revert CannotRemoveLastSigner();
+        if (_custodianCount + $.count == 1) revert CannotRemoveLastSigner();
         delete $.keys[credentialIdDigest];
         $.registered[credentialIdDigest] = false;
         $.count -= 1;

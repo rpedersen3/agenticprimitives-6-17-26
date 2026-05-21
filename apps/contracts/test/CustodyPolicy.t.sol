@@ -185,11 +185,11 @@ contract CustodyPolicyTest is Test {
         bytes32 execHash = _hashExecute(changeId, CustodyPolicy.CustodyAction.AddCustodian, args, eta);
         bytes memory execSigs = _signRaw(OWNER_PK, execHash);
 
-        assertFalse(acct.isOwner(owner2), "pre: owner2 not yet on account");
+        assertFalse(acct.isCustodian(owner2), "pre: owner2 not yet on account");
 
         validator.applyCustodyChange(address(acct), changeId, execSigs);
 
-        assertTrue(acct.isOwner(owner2), "post: owner2 added via executeFromModule path");
+        assertTrue(acct.isCustodian(owner2), "post: owner2 added via executeFromModule path");
     }
 
     // ─── 3. Reject when not installed ─────────────────────────────────

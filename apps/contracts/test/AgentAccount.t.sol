@@ -131,8 +131,8 @@ contract AgentAccountTest is Test {
 
     function test_initializeWithPasskey_leaves_zero_eoa_owners() public {
         AgentAccount pk = _deployPasskey(101);
-        assertEq(pk.ownerCount(), 0);
-        assertFalse(pk.isOwner(address(0xBEEF)));
+        assertEq(pk.custodianCount(), 0);
+        assertFalse(pk.isCustodian(address(0xBEEF)));
     }
 
     function test_initializeWithPasskey_cannot_be_called_twice() public {
@@ -177,9 +177,9 @@ contract AgentAccountTest is Test {
         // by adding an EOA owner via a self-call (post-init UserOp path).
         AgentAccount pk = _deployPasskey(106);
         vm.prank(address(pk));
-        pk.addOwner(address(0xCAFE));
-        assertTrue(pk.isOwner(address(0xCAFE)));
-        assertEq(pk.ownerCount(), 1);
+        pk.addCustodian(address(0xCAFE));
+        assertTrue(pk.isCustodian(address(0xCAFE)));
+        assertEq(pk.custodianCount(), 1);
         assertEq(pk.passkeyCount(), 1);
     }
 

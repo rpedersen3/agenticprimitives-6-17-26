@@ -173,8 +173,8 @@ contract AdminFlowsViaValidatorTest is Test {
 
     function test_admin_addOwner_executes_via_validator() public {
         _proposeAndExecuteByOwner(CustodyPolicy.CustodyAction.AddCustodian, abi.encode(newOwner));
-        assertTrue(acct.isOwner(newOwner));
-        assertEq(acct.ownerCount(), 2);
+        assertTrue(acct.isCustodian(newOwner));
+        assertEq(acct.custodianCount(), 2);
     }
 
     // ─── 2. AddTrustee writes to validator's per-account state ─────
@@ -307,7 +307,7 @@ contract AdminFlowsViaValidatorTest is Test {
             address(acct), changeId, _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, eh)
         );
 
-        assertTrue(acct.isOwner(newOwner), "recovery added newOwner");
+        assertTrue(acct.isCustodian(newOwner), "recovery added newOwner");
     }
 
     // ─── 8. T6 dual cancel window — primary owner short-circuit ─────
