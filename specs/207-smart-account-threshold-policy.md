@@ -585,3 +585,142 @@ moving `addPasskey` / `removePasskey` / `setUpgradeTimelock` / module
 install/uninstall onto the AdminModule too (currently
 `onlySelf`-gated; the threat model is compatible with a delegatecall
 forwarder). Document that as 6c.5-d.alt if needed.
+
+---
+
+## 15. Phase 6c.5-f — EIP-712 admin signing (closes task #101)
+
+**Problem discovered during 6c.5-c live wiring + 6c.5-e UI rebuild:**
+the pre-6c.5-f propose path computed `eta = block.timestamp + timelock`
+server-side at tx mine time + included it in the signed payload hash.
+The signer must commit to a future `eta` they can't predict precisely
+(block.timestamp drifts between sign and mine), so EOA-driven propose
+calls fail in practice on a real chain. In Forge tests the issue is
+masked because `vm.warp` pins time.
+
+The fix is two-fold:
+
+1. **Drop `eta` from the propose hash.** It's not security-relevant
+   there — proposalId is auto-incremented + monotonic per account, so
+   propose-sig replay is already impossible. The eta is *computed* +
+   stored at propose time and *read* + bound into the execute/cancel
+   hashes when those sigs are checked.
+
+2. **Move from ABI-encoded keccak to EIP-712 typed-data signing.** This
+   was already worth doing for UX (MetaMask + every other wallet show
+   structured fields instead of a raw 32-byte hash with the "Only sign
+   if you trust this site" warning). Closing #101 is a natural
+   trigger.
+
+### 15.1 EIP-712 domain
+
+```text
+EIP712Domain {
+  string name             = "agenticprimitives.ThresholdValidator"
+  string version          = "1"
+  uint256 chainId         = block.chainid
+  address verifyingContract = address(this)   // the deployed validator
+}
+```
+
+domain separator computed once + cached as an immutable in the
+validator constructor for the deploy-time chainId; if `block.chainid`
+differs at call time (chain fork) we recompute on demand (mirrors
+OpenZeppelin's EIP712 base).
+
+### 15.2 Typed structs
+
+```text
+AdminProposeRequest {
+  address account
+  uint8   action
+  bytes32 argsHash         // keccak256(args) so variable-length args fit
+  uint256 proposalId       // predicted: validator.proposalCount(account) + 1
+}
+
+AdminExecuteRequest {
+  address account
+  uint8   action
+  bytes32 argsHash
+  uint256 proposalId
+  uint64  eta              // copied from the stored AdminProposal
+}
+
+AdminCancelRequest {
+  address account
+  uint8   action
+  bytes32 argsHash
+  uint256 proposalId
+  uint64  eta
+}
+```
+
+`AdminProposeRequest` deliberately omits `eta`. The other two include
+it because their hash must be unique across the proposal's lifecycle
+(propose-then-execute, propose-then-cancel) AND must be replayable
+across cancel attempts (a cancel sig collected at T+0 stays valid for
+the entire timelock window).
+
+### 15.3 Type hashes
+
+```text
+EIP712_DOMAIN_TYPEHASH = keccak256(
+  "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+)
+
+ADMIN_PROPOSE_TYPEHASH = keccak256(
+  "AdminProposeRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId)"
+)
+
+ADMIN_EXECUTE_TYPEHASH = keccak256(
+  "AdminExecuteRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+)
+
+ADMIN_CANCEL_TYPEHASH = keccak256(
+  "AdminCancelRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+)
+```
+
+### 15.4 Final signed digest
+
+```text
+digest = keccak256(
+  abi.encodePacked(
+    bytes2(0x1901),
+    domainSeparator,
+    keccak256(abi.encode(structTypehash, ...structFields))
+  )
+)
+```
+
+Mirrors EIP-712 § "Specification of the eth_signTypedData JSON RPC."
+This is what `useSignTypedData` produces in viem / wagmi; the
+validator's `_verifyQuorum` recovers from the same digest.
+
+### 15.5 Backward compatibility
+
+There is none. The old validator at `0xccfD79BBDfF7126A0B6Ba3F881edccb3998E6554`
+keeps its old payload format. The new validator deploys at a fresh
+address. Existing accounts that have the old validator installed
+(e.g. `0x6Bb5554E13FeEC0CDb45Cf9b83F4C6b8DD94F366`) become museum
+pieces from the admin-action perspective — they can still be used
+through the existing `single`-mode owner self-call path on the
+account, just not via the validator's propose/execute/cancel
+surface. Demo recommendation: create a fresh account post-redeploy.
+
+`apps/contracts/deployments-base-sepolia.json` pins the new validator
+address as `thresholdValidator`; the old one moves to
+`thresholdValidatorLegacy` for the deployment trail.
+
+### 15.6 SDK + UI impact
+
+- `@agenticprimitives/agent-account` exposes a new
+  `buildAdminProposeRequest({account, action, argsHash, proposalId})`
+  helper that returns the typed-data structure suitable for
+  `viem.signTypedData` / wagmi `useSignTypedData`.
+- `apps/demo-web-pro/src/flows/admin-actions/` (NEW): connect →
+  pick account → pick action → fill args → propose (sign typed data
+  via MetaMask, then send tx with sig as `quorumSigs`) → wait
+  timelock → execute (sign typed data, send tx).
+- MetaMask shows structured fields: "Account: 0x… · Action: 0
+  (AddOwner) · proposalId: 5".

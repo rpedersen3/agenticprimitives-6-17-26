@@ -67,15 +67,55 @@ contract ThresholdValidatorTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _adminPayloadHash(
-        bytes32 verb,
+    // ─── EIP-712 hash helpers (spec 207 § 15) ─────────────────────────
+
+    bytes32 constant DOMAIN_TYPEHASH = keccak256(
+        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+    );
+    bytes32 constant PROPOSE_TYPEHASH = keccak256(
+        "AdminProposeRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId)"
+    );
+    bytes32 constant EXECUTE_TYPEHASH = keccak256(
+        "AdminExecuteRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+    );
+    bytes32 constant CANCEL_TYPEHASH = keccak256(
+        "AdminCancelRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+    );
+
+    function _domainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                DOMAIN_TYPEHASH,
+                keccak256("agenticprimitives.ThresholdValidator"),
+                keccak256("1"),
+                block.chainid,
+                address(validator)
+            )
+        );
+    }
+
+    function _hashTypedData(bytes32 structHash) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(bytes2(0x1901), _domainSeparator(), structHash));
+    }
+
+    function _hashPropose(
+        uint256 proposalId,
+        ThresholdValidator.AdminAction action,
+        bytes memory args
+    ) internal view returns (bytes32) {
+        return _hashTypedData(
+            keccak256(abi.encode(PROPOSE_TYPEHASH, address(acct), uint8(action), keccak256(args), proposalId))
+        );
+    }
+
+    function _hashExecute(
         uint256 proposalId,
         ThresholdValidator.AdminAction action,
         bytes memory args,
         uint64 eta
     ) internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(verb, proposalId, action, keccak256(args), eta, address(acct), block.chainid)
+        return _hashTypedData(
+            keccak256(abi.encode(EXECUTE_TYPEHASH, address(acct), uint8(action), keccak256(args), proposalId, eta))
         );
     }
 
@@ -131,15 +171,7 @@ contract ThresholdValidatorTest is Test {
         uint64 eta   = nowTs;
         uint256 proposalId = 1;  // first proposal
 
-        bytes32 proposeHash = _adminPayloadHash(
-            keccak256("ADMIN_PROPOSE") == bytes32("ADMIN_PROPOSE") ? bytes32("ADMIN_PROPOSE") : bytes32(0), // sanity
-            proposalId,
-            ThresholdValidator.AdminAction.AddOwner,
-            args,
-            eta
-        );
-        proposeHash = _adminPayloadHash(bytes32("ADMIN_PROPOSE"), proposalId, ThresholdValidator.AdminAction.AddOwner, args, eta);
-
+        bytes32 proposeHash = _hashPropose(proposalId, ThresholdValidator.AdminAction.AddOwner, args);
         bytes memory sigs = _signRaw(OWNER_PK, proposeHash);
 
         uint256 retId = validator.proposeAdmin(
@@ -150,9 +182,7 @@ contract ThresholdValidatorTest is Test {
         );
         assertEq(retId, proposalId);
 
-        bytes32 execHash = _adminPayloadHash(
-            bytes32("ADMIN_EXECUTE"), proposalId, ThresholdValidator.AdminAction.AddOwner, args, eta
-        );
+        bytes32 execHash = _hashExecute(proposalId, ThresholdValidator.AdminAction.AddOwner, args, eta);
         bytes memory execSigs = _signRaw(OWNER_PK, execHash);
 
         assertFalse(acct.isOwner(owner2), "pre: owner2 not yet on account");
@@ -184,10 +214,7 @@ contract ThresholdValidatorTest is Test {
         _installValidator(1, thresholds, timelocks);
 
         bytes memory args = abi.encode(owner2);
-        uint64 eta = uint64(block.timestamp);
-        bytes32 proposeHash = _adminPayloadHash(
-            bytes32("ADMIN_PROPOSE"), 1, ThresholdValidator.AdminAction.AddOwner, args, eta
-        );
+        bytes32 proposeHash = _hashPropose(1, ThresholdValidator.AdminAction.AddOwner, args);
         // Stranger signs.
         bytes memory sigs = _signRaw(0xDEAD, proposeHash);
 

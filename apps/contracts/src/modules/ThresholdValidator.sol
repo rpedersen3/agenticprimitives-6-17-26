@@ -93,9 +93,96 @@ contract ThresholdValidator {
 
     // ─── Constants ────────────────────────────────────────────────────
 
-    bytes32 internal constant ADMIN_VERB_PROPOSE = bytes32("ADMIN_PROPOSE");
-    bytes32 internal constant ADMIN_VERB_EXECUTE = bytes32("ADMIN_EXECUTE");
-    bytes32 internal constant ADMIN_VERB_CANCEL  = bytes32("ADMIN_CANCEL");
+    // ─── EIP-712 (spec 207 § 15) ─────────────────────────────────────
+
+    bytes32 internal constant EIP712_DOMAIN_TYPEHASH = keccak256(
+        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+    );
+    bytes32 internal constant EIP712_NAME_HASH = keccak256("agenticprimitives.ThresholdValidator");
+    bytes32 internal constant EIP712_VERSION_HASH = keccak256("1");
+
+    bytes32 internal constant ADMIN_PROPOSE_TYPEHASH = keccak256(
+        "AdminProposeRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId)"
+    );
+    bytes32 internal constant ADMIN_EXECUTE_TYPEHASH = keccak256(
+        "AdminExecuteRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+    );
+    bytes32 internal constant ADMIN_CANCEL_TYPEHASH = keccak256(
+        "AdminCancelRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+    );
+
+    /// @dev Cached at deploy-time for the deploy-time chainId. If
+    ///      `block.chainid` differs at call time (chain fork), we
+    ///      recompute on demand. Mirrors OpenZeppelin's EIP712 base.
+    uint256 private immutable _CACHED_CHAIN_ID;
+    bytes32 private immutable _CACHED_DOMAIN_SEPARATOR;
+
+    constructor() {
+        _CACHED_CHAIN_ID = block.chainid;
+        _CACHED_DOMAIN_SEPARATOR = _buildDomainSeparator();
+    }
+
+    function _buildDomainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                EIP712_DOMAIN_TYPEHASH,
+                EIP712_NAME_HASH,
+                EIP712_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    function _domainSeparator() internal view returns (bytes32) {
+        if (block.chainid == _CACHED_CHAIN_ID) return _CACHED_DOMAIN_SEPARATOR;
+        return _buildDomainSeparator();
+    }
+
+    /// @notice EIP-712 domain separator. Off-chain code can `eth_call` to
+    ///         confirm what domain wallet sigs are bound to.
+    function domainSeparator() external view returns (bytes32) {
+        return _domainSeparator();
+    }
+
+    function _hashTypedDataV4(bytes32 structHash) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(bytes2(0x1901), _domainSeparator(), structHash));
+    }
+
+    function _hashProposeRequest(
+        address account,
+        AdminAction action,
+        bytes memory args,
+        uint256 proposalId
+    ) internal view returns (bytes32) {
+        return _hashTypedDataV4(
+            keccak256(abi.encode(ADMIN_PROPOSE_TYPEHASH, account, uint8(action), keccak256(args), proposalId))
+        );
+    }
+
+    function _hashExecuteRequest(
+        address account,
+        AdminAction action,
+        bytes memory args,
+        uint256 proposalId,
+        uint64 eta
+    ) internal view returns (bytes32) {
+        return _hashTypedDataV4(
+            keccak256(abi.encode(ADMIN_EXECUTE_TYPEHASH, account, uint8(action), keccak256(args), proposalId, eta))
+        );
+    }
+
+    function _hashCancelRequest(
+        address account,
+        AdminAction action,
+        bytes memory args,
+        uint256 proposalId,
+        uint64 eta
+    ) internal view returns (bytes32) {
+        return _hashTypedDataV4(
+            keccak256(abi.encode(ADMIN_CANCEL_TYPEHASH, account, uint8(action), keccak256(args), proposalId, eta))
+        );
+    }
 
     /// @dev Spec 207 § 8 — first 24h of the T6 timelock is the
     ///      primary-owner cancel window.
@@ -249,7 +336,7 @@ contract ThresholdValidator {
         uint64 nowTs = uint64(block.timestamp);
         uint64 eta = uint64(nowTs + timelock);
         proposalId = ++c.nextProposalId;
-        bytes32 payloadHash = _adminPayloadHash(account, ADMIN_VERB_PROPOSE, proposalId, action, args, eta);
+        bytes32 payloadHash = _hashProposeRequest(account, action, args, proposalId);
         address[] memory propSigners = _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, isRecovery);
 
         c.pending[proposalId] = AdminProposal({
@@ -282,7 +369,7 @@ contract ThresholdValidator {
         bool isRecovery = (p.action == AdminAction.RecoverAccount);
         uint8 tier = _tierFor(p.action);
         uint8 reqThreshold = isRecovery ? c.recoveryThreshold : _thresholdValue(c, tier);
-        bytes32 payloadHash = _adminPayloadHash(account, ADMIN_VERB_EXECUTE, proposalId, p.action, p.args, p.eta);
+        bytes32 payloadHash = _hashExecuteRequest(account, p.action, p.args, proposalId, p.eta);
         address[] memory execSigners = _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, isRecovery);
 
         if (c.mode == 3 && !isRecovery) {
@@ -307,7 +394,7 @@ contract ThresholdValidator {
         if (p.executed) revert ProposalAlreadyExecuted(proposalId);
         if (p.cancelled) revert ProposalAlreadyCancelled(proposalId);
 
-        bytes32 payloadHash = _adminPayloadHash(account, ADMIN_VERB_CANCEL, proposalId, p.action, p.args, p.eta);
+        bytes32 payloadHash = _hashCancelRequest(account, p.action, p.args, proposalId, p.eta);
 
         if (p.action == AdminAction.RecoverAccount) {
             uint64 cancelWindowEnds = p.proposedAt + RECOVERY_PRIMARY_CANCEL_WINDOW;
@@ -409,19 +496,6 @@ contract ThresholdValidator {
     function _timelockValue(Config storage c, uint8 tier) internal view returns (uint32) {
         if (tier == 0 || tier > 6) revert InvalidTier(tier);
         return c.timelockByTier[tier];
-    }
-
-    function _adminPayloadHash(
-        address account,
-        bytes32 verb,
-        uint256 proposalId,
-        AdminAction action,
-        bytes memory args,
-        uint64 eta
-    ) internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(verb, proposalId, action, keccak256(args), eta, account, block.chainid)
-        );
     }
 
     function _verifyQuorum(

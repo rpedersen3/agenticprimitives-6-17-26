@@ -72,6 +72,38 @@ contract AdminFlowsViaValidatorTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
+    // ─── EIP-712 hash helpers (spec 207 § 15) ─────────────────────────
+
+    bytes32 constant DOMAIN_TYPEHASH = keccak256(
+        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+    );
+    bytes32 constant PROPOSE_TYPEHASH = keccak256(
+        "AdminProposeRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId)"
+    );
+    bytes32 constant EXECUTE_TYPEHASH = keccak256(
+        "AdminExecuteRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+    );
+    bytes32 constant CANCEL_TYPEHASH = keccak256(
+        "AdminCancelRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+    );
+
+    function _domainSeparator() internal view returns (bytes32) {
+        return keccak256(abi.encode(
+            DOMAIN_TYPEHASH,
+            keccak256("agenticprimitives.ThresholdValidator"),
+            keccak256("1"),
+            block.chainid,
+            address(validator)
+        ));
+    }
+
+    function _hashTypedData(bytes32 structHash) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(bytes2(0x1901), _domainSeparator(), structHash));
+    }
+
+    /// @dev Accepts the legacy 5-arg shape so existing call sites compile;
+    ///      `verb` selects the typehash; `eta` is ignored for propose,
+    ///      required for execute + cancel.
     function _payloadHash(
         bytes32 verb,
         uint256 proposalId,
@@ -79,9 +111,20 @@ contract AdminFlowsViaValidatorTest is Test {
         bytes memory args,
         uint64 eta
     ) internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(verb, proposalId, action, keccak256(args), eta, address(acct), block.chainid)
-        );
+        if (verb == bytes32("ADMIN_PROPOSE")) {
+            return _hashTypedData(keccak256(abi.encode(
+                PROPOSE_TYPEHASH, address(acct), uint8(action), keccak256(args), proposalId
+            )));
+        }
+        if (verb == bytes32("ADMIN_EXECUTE")) {
+            return _hashTypedData(keccak256(abi.encode(
+                EXECUTE_TYPEHASH, address(acct), uint8(action), keccak256(args), proposalId, eta
+            )));
+        }
+        // ADMIN_CANCEL
+        return _hashTypedData(keccak256(abi.encode(
+            CANCEL_TYPEHASH, address(acct), uint8(action), keccak256(args), proposalId, eta
+        )));
     }
 
     function _timelockFor(ThresholdValidator.AdminAction action) internal pure returns (uint32) {
