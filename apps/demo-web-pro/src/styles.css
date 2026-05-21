@@ -601,3 +601,242 @@ button.primary:hover, .button-link.primary:hover {
   font-size: 0.85rem;
   font-weight: 500;
 }
+
+
+/* ─── Treasury demo shell (spec 211 § 5) ───────────────────────────── */
+
+.treasury-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--surface-0, #fafafa);
+}
+
+.treasury-topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid var(--line-1, #e5e5e5);
+  background: var(--surface-1, #fff);
+}
+.treasury-topbar .brand {
+  font-weight: 600;
+  text-decoration: none;
+  color: inherit;
+  font-size: 1rem;
+}
+.treasury-topbar__actors {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-left: 0.5rem;
+}
+.actor-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-1, #e5e5e5);
+  font-size: 0.78rem;
+  background: var(--surface-2, #f6f6f6);
+  color: var(--ink-3, #555);
+}
+.actor-pill .dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #d1d1d1;
+}
+.actor-pill.claimed .dot { background: #2bb673; }
+.actor-pill.open .dot    { background: #d1d1d1; }
+.actor-pill.treasury .dot { background: #c9c9c9; }
+.actor-pill.claimed { color: var(--ink-1, #111); border-color: #c9e7d6; background: #f1faf5; }
+
+.treasury-topbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.principal-chip {
+  position: relative;
+}
+.principal-chip__trigger {
+  background: var(--surface-2, #f6f6f6);
+  border: 1px solid var(--line-1, #e5e5e5);
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.principal-chip__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  background: #fff;
+  border: 1px solid var(--line-1, #e5e5e5);
+  border-radius: 6px;
+  min-width: 8rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  z-index: 10;
+}
+.principal-chip__menu button {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.7rem;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.principal-chip__menu button.is-active { font-weight: 600; }
+.principal-chip__menu button:hover { background: var(--surface-2, #f6f6f6); }
+
+.treasury-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr 260px;
+  gap: 1px;
+  flex: 1;
+  background: var(--line-1, #e5e5e5);
+}
+.treasury-layout > * { background: var(--surface-1, #fff); padding: 1.2rem 1.25rem; }
+.treasury-main { padding: 1.5rem 2rem; }
+
+.progress-rail ol {
+  list-style: none;
+  padding: 0;
+  margin: 0.6rem 0 1rem;
+}
+.rail-item {
+  margin: 0.25rem 0;
+}
+.rail-item a {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: inherit;
+  align-items: flex-start;
+}
+.rail-item a:hover { background: var(--surface-2, #f6f6f6); }
+.rail-item--active a { background: var(--surface-2, #f6f6f6); font-weight: 500; }
+.rail-item--done .rail-marker { color: #2bb673; }
+.rail-item--queued a { color: var(--ink-4, #888); }
+.rail-marker { font-weight: 600; min-width: 1.2rem; }
+.rail-content { display: flex; flex-direction: column; gap: 0.25rem; flex: 1; }
+.rail-title { font-size: 0.85rem; }
+.rail-meta {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.7rem;
+}
+.rail-modality {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-4, #888);
+}
+.rail-footnote {
+  font-size: 0.72rem;
+  border-top: 1px solid var(--line-1, #e5e5e5);
+  padding-top: 0.7rem;
+}
+
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.status-dot .dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #c9c9c9;
+}
+.status-dot--live .dot { background: #2bb673; }
+.status-dot--sim .dot  { background: #e3b53a; }
+.status-dot--queued .dot { background: #c9c9c9; }
+.status-dot--live   { color: #2bb673; }
+.status-dot--sim    { color: #b08510; }
+.status-dot--queued { color: var(--ink-4, #888); }
+
+.treasury-explainer h3 { margin: 0.4rem 0 0.5rem; }
+.status-line { margin: 0.6rem 0; }
+
+.treasury-audit-strip {
+  border-top: 1px solid var(--line-1, #e5e5e5);
+  background: var(--surface-1, #fff);
+  padding: 0.55rem 1.25rem;
+  text-align: center;
+}
+
+.seat-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+}
+.actor-card {
+  display: block;
+  text-align: left;
+  background: var(--surface-1, #fff);
+  border: 1px solid var(--line-1, #e5e5e5);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.actor-card--pickable:hover:not(:disabled) { border-color: #888; }
+.actor-card--claimed { cursor: default; background: #f1faf5; border-color: #c9e7d6; }
+.actor-card--active  { border-color: #6093e8; }
+.actor-card-header { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.actor-name { font-weight: 600; }
+.actor-status-pill {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-2, #f6f6f6);
+  color: var(--ink-4, #888);
+}
+.actor-status-pill.claimed { background: #def4e6; color: #1e7a47; }
+.actor-card-body { margin-top: 0.6rem; }
+.actor-card-body .muted { margin: 0.25rem 0; font-size: 0.85rem; }
+.actor-card-body .small { font-size: 0.78rem; }
+.actor-card-body code {
+  display: inline-block;
+  background: var(--surface-2, #f6f6f6);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.seat-picker__footnote { margin-top: 1rem; font-size: 0.85rem; }
+
+.kv dt { font-weight: 600; margin-top: 0.5rem; font-size: 0.85rem; }
+.kv dd { margin: 0.2rem 0 0; font-size: 0.85rem; }
+
+button.primary {
+  background: var(--ink-1, #111);
+  color: #fff;
+  border: none;
+  padding: 0.55rem 1.1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+button.primary:disabled { opacity: 0.5; cursor: not-allowed; }

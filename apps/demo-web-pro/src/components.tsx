@@ -1,50 +1,10 @@
 import type { ReactNode } from 'react';
-import { useAccount, useChainId } from 'wagmi';
-import { ConnectButton } from './connect-button';
-import { config } from './config';
-import type { FlowMeta, FlowStatus } from './flows';
 
-export function AppShell({
-  activeFlow,
-  children,
-}: {
-  activeFlow?: FlowMeta;
-  children: ReactNode;
-}) {
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="#/" aria-label="agenticprimitives demo-web-pro home">
-          agenticprimitives <span>pro</span>
-        </a>
-        <WalletAndModeBar activeFlow={activeFlow} />
-      </header>
-      <div className="layout">
-        {activeFlow && <StepRail steps={activeFlow.steps} activeIndex={0} />}
-        <main className="main">{children}</main>
-      </div>
-    </div>
-  );
-}
-
-function WalletAndModeBar({ activeFlow }: { activeFlow?: FlowMeta }) {
-  const chainId = useChainId();
-  const { isConnected } = useAccount();
-  const expected = config.chainId;
-  const wrongChain = expected !== undefined && chainId !== expected;
-  const chainName =
-    expected === 84532 ? 'Base Sepolia' : expected ? `Chain ${expected}` : `Chain ${chainId}`;
-  return (
-    <div className="wallet-bar">
-      <span className={`chain-pill ${wrongChain ? 'danger' : isConnected ? 'ok' : ''}`}>
-        <span className="dot" aria-hidden />
-        {wrongChain ? `Wrong chain · ${chainId}` : chainName}
-      </span>
-      {activeFlow && <RiskBadge risk={activeFlow.risk} />}
-      <ConnectButton />
-    </div>
-  );
-}
+// Shared display helpers used across the Treasury demo shell.
+// The legacy `AppShell` + `WalletAndModeBar` + `StatusBadge` + `RiskBadge`
+// + `StepRail` were removed in phase 6f.1 along with the capability
+// gallery (see ../App.tsx). The Treasury shell owns its own layout
+// under `treasury/TreasuryShell.tsx`.
 
 export function ModePill({
   mode,
@@ -67,26 +27,6 @@ export function ModePill({
       {detail && <span>{detail}</span>}
     </span>
   );
-}
-
-export function StepRail({ steps, activeIndex }: { steps: string[]; activeIndex: number }) {
-  return (
-    <aside className="step-rail" aria-label="Flow progress">
-      <p className="eyebrow">Flow steps</p>
-      <ol>
-        {steps.map((step, idx) => (
-          <li key={step} className={idx === activeIndex ? 'active' : idx < activeIndex ? 'done' : ''}>
-            <span>{idx + 1}</span>
-            {step}
-          </li>
-        ))}
-      </ol>
-    </aside>
-  );
-}
-
-export function StatusBadge({ status }: { status: FlowStatus }) {
-  return <span className={`badge ${status}`}>{status}</span>;
 }
 
 export function RiskBadge({ risk }: { risk: string }) {
