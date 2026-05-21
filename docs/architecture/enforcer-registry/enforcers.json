@@ -1,0 +1,249 @@
+{
+  "$schema": "./enforcers.schema.json",
+  "description": "Canonical inventory of caveat enforcers — agenticprimitives-own, ported from smart-agent, and gaps relative to MetaMask DTK. Walked by scripts/check-enforcer-registry.ts (CI rail) + scripts/check-sentinel-enforcers.ts (sentinel-detection lint) + future SDK + UI permission-card rendering. Update this file when shipping a new enforcer; CI will catch drift between the manifest and the source tree.",
+  "version": 1,
+  "lastReviewed": "2026-05-21",
+  "enforcers": [
+    {
+      "name": "TimestampEnforcer",
+      "status": "shipped",
+      "category": "time",
+      "contractPath": "apps/contracts/src/enforcers/TimestampEnforcer.sol",
+      "auditPath": "apps/contracts/src/enforcers/TimestampEnforcer.AUDIT.md",
+      "sdkBuilder": "encodeTimestampTerms",
+      "sdkExport": "@agenticprimitives/delegation",
+      "deployments": {
+        "base-sepolia": "0x81AB5167ccEfD6a2cD7C95baFE27a120A94F37f0"
+      },
+      "dtkEquivalent": "TimestampEnforcer",
+      "dtkParity": "match",
+      "smartAgentEquivalent": "TimestampEnforcer.sol",
+      "summary": "validAfter / validUntil window using block.timestamp. Independent port of the spec, not the DTK source."
+    },
+    {
+      "name": "AllowedTargetsEnforcer",
+      "status": "shipped",
+      "category": "scope",
+      "contractPath": "apps/contracts/src/enforcers/AllowedTargetsEnforcer.sol",
+      "auditPath": "apps/contracts/src/enforcers/AllowedTargetsEnforcer.AUDIT.md",
+      "sdkBuilder": "encodeAllowedTargetsTerms",
+      "sdkExport": "@agenticprimitives/delegation",
+      "deployments": {
+        "base-sepolia": "0x4D00295D51962a9E81Dada0b90FeA49567863dC5"
+      },
+      "dtkEquivalent": "AllowedTargetsEnforcer",
+      "dtkParity": "match",
+      "smartAgentEquivalent": "AllowedTargetsEnforcer.sol",
+      "summary": "Restricts the redemption target to an allowlist of contract addresses."
+    },
+    {
+      "name": "AllowedMethodsEnforcer",
+      "status": "shipped",
+      "category": "scope",
+      "contractPath": "apps/contracts/src/enforcers/AllowedMethodsEnforcer.sol",
+      "auditPath": "apps/contracts/src/enforcers/AllowedMethodsEnforcer.AUDIT.md",
+      "sdkBuilder": "encodeAllowedMethodsTerms",
+      "sdkExport": "@agenticprimitives/delegation",
+      "deployments": {
+        "base-sepolia": "0xdE873dEa2EdC4288FEB32Ade7fDdA798983289c0"
+      },
+      "dtkEquivalent": "AllowedMethodsEnforcer",
+      "dtkParity": "match",
+      "smartAgentEquivalent": "AllowedMethodsEnforcer.sol",
+      "summary": "Restricts the redemption to a function-selector allowlist on whatever target."
+    },
+    {
+      "name": "ValueEnforcer",
+      "status": "shipped",
+      "category": "value",
+      "contractPath": "apps/contracts/src/enforcers/ValueEnforcer.sol",
+      "auditPath": "apps/contracts/src/enforcers/ValueEnforcer.AUDIT.md",
+      "sdkBuilder": "encodeValueTerms",
+      "sdkExport": "@agenticprimitives/delegation",
+      "deployments": {
+        "base-sepolia": "0x49F0B31bf5228B1964dED8DC0F357f104cA74523"
+      },
+      "dtkEquivalent": "ValueLteEnforcer / NativeTokenLimitEnforcer",
+      "dtkParity": "match",
+      "smartAgentEquivalent": "ValueEnforcer.sol",
+      "summary": "Caps the native-token value per redemption. DTK splits per-call vs cumulative; ours is per-call only — cumulative is a phase 8 follow-up."
+    },
+    {
+      "name": "QuorumEnforcer",
+      "status": "shipped",
+      "category": "auth",
+      "contractPath": "apps/contracts/src/enforcers/QuorumEnforcer.sol",
+      "auditPath": "apps/contracts/src/enforcers/QuorumEnforcer.AUDIT.md",
+      "sdkBuilder": "buildQuorumCaveat",
+      "sdkExport": "@agenticprimitives/delegation",
+      "deployments": {
+        "base-sepolia": "0x3418A5297C75989000985802B8ab01229CDDDD24"
+      },
+      "dtkEquivalent": null,
+      "dtkParity": "divergent",
+      "smartAgentEquivalent": "QuorumEnforcer.sol",
+      "summary": "n-of-m Safe-compatible signature aggregation caveat. Spec 207 § 5 makes multi-sig caveat-shaped so threshold-policy threads through delegations. DTK does not have this — multi-sig is account-shaped in their framework. Deliberate divergence; see specs/207 § 12 + dtk-alignment-audit.md § 5.4."
+    },
+    {
+      "name": "ArgumentRuleEnforcer",
+      "status": "planned",
+      "category": "argument",
+      "contractPath": "apps/contracts/src/enforcers/ArgumentRuleEnforcer.sol",
+      "auditPath": null,
+      "sdkBuilder": "buildArgumentRuleCaveat",
+      "sdkExport": "@agenticprimitives/delegation",
+      "deployments": {},
+      "dtkEquivalent": "AllowedCalldataEnforcer + ArgsEqualityCheckEnforcer + ExactExecutionEnforcer + ERC20TransferAmountEnforcer",
+      "dtkParity": "subsumes",
+      "smartAgentEquivalent": "CallDataHashEnforcer.sol",
+      "spec": "specs/208-argument-level-caveats.md",
+      "summary": "Per-argument predicate framework. Single enforcer subsumes 4 DTK enforcers + smart-agent's CallDataHashEnforcer. EQ / NEQ / LT / LTE / GT / GTE / IN over ADDRESS / UINT256 / BOOL / BYTES32 / BYTES_HASH. Phase 6c.6 / 7a."
+    },
+    {
+      "name": "RateLimitEnforcer",
+      "status": "gap",
+      "category": "rate",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": null,
+      "deployments": {},
+      "dtkEquivalent": "LimitedCallsEnforcer (partial)",
+      "dtkParity": "gap",
+      "smartAgentEquivalent": "RateLimitEnforcer.sol",
+      "summary": "N calls per time window. Port from smart-agent — common-enough use case. Phase 7."
+    },
+    {
+      "name": "MCP_TOOL_SCOPE_ENFORCER",
+      "status": "sentinel-footgun",
+      "category": "scope",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": "MCP_TOOL_SCOPE_ENFORCER (sentinel address)",
+      "sdkExport": "@agenticprimitives/delegation",
+      "deployments": {},
+      "dtkEquivalent": null,
+      "dtkParity": "n/a",
+      "smartAgentEquivalent": "McpToolScopeEnforcer.sol",
+      "summary": "SENTINEL ONLY — SDK exports a non-deployed address. Would revert at redeem. Flagged in dtk-alignment-audit.md § 5.5 for phase 7 cleanup: either ship the contract (port from smart-agent) or remove from SDK exports."
+    },
+    {
+      "name": "DATA_SCOPE_ENFORCER",
+      "status": "sentinel-footgun",
+      "category": "scope",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": "DATA_SCOPE_ENFORCER (sentinel address)",
+      "sdkExport": "@agenticprimitives/delegation",
+      "deployments": {},
+      "dtkEquivalent": null,
+      "dtkParity": "n/a",
+      "smartAgentEquivalent": "DataScopeEnforcer.sol",
+      "summary": "SENTINEL ONLY. Same status as MCP_TOOL_SCOPE_ENFORCER."
+    },
+    {
+      "name": "DELEGATE_BINDING_ENFORCER",
+      "status": "sentinel-footgun",
+      "category": "binding",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": "DELEGATE_BINDING_ENFORCER (sentinel address)",
+      "sdkExport": "@agenticprimitives/delegation",
+      "deployments": {},
+      "dtkEquivalent": null,
+      "dtkParity": "n/a",
+      "smartAgentEquivalent": null,
+      "summary": "SENTINEL ONLY. Cross-delegation delegate binding. Enforcer contract pending phase H5 (cross-delegation in mcp-runtime)."
+    },
+    {
+      "name": "AllowedCalldataEnforcer",
+      "status": "gap",
+      "category": "argument",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": null,
+      "deployments": {},
+      "dtkEquivalent": "AllowedCalldataEnforcer",
+      "dtkParity": "gap",
+      "smartAgentEquivalent": "CallDataHashEnforcer.sol",
+      "summary": "Pin exact calldata. Subsumed by the planned ArgumentRuleEnforcer (spec 208)."
+    },
+    {
+      "name": "ERC20TransferAmountEnforcer",
+      "status": "gap",
+      "category": "argument",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": null,
+      "deployments": {},
+      "dtkEquivalent": "ERC20TransferAmountEnforcer",
+      "dtkParity": "gap",
+      "smartAgentEquivalent": null,
+      "summary": "Per-call ERC-20 amount gate. Subsumed by the planned ArgumentRuleEnforcer + the ruleErc20Transfer SDK sugar (spec 208)."
+    },
+    {
+      "name": "ERC20BalanceChangeEnforcer",
+      "status": "gap",
+      "category": "balance",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": null,
+      "deployments": {},
+      "dtkEquivalent": "ERC20BalanceChangeEnforcer",
+      "dtkParity": "gap",
+      "smartAgentEquivalent": null,
+      "summary": "Post-call balance-delta check. Cross-call state — harder. Phase 8."
+    },
+    {
+      "name": "LimitedCallsEnforcer",
+      "status": "gap",
+      "category": "rate",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": null,
+      "deployments": {},
+      "dtkEquivalent": "LimitedCallsEnforcer",
+      "dtkParity": "gap",
+      "smartAgentEquivalent": "RateLimitEnforcer.sol (super-set)",
+      "summary": "N total calls. Could land as a RateLimitEnforcer port (smart-agent has the time-windowed super-set) or its own contract. Phase 7."
+    },
+    {
+      "name": "BlockNumberEnforcer",
+      "status": "gap",
+      "category": "time",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": null,
+      "deployments": {},
+      "dtkEquivalent": "BlockNumberEnforcer",
+      "dtkParity": "gap",
+      "smartAgentEquivalent": null,
+      "summary": "Mirror of TimestampEnforcer for block-number windows. Low priority — block.timestamp + clock-skew tolerance covers most use cases."
+    },
+    {
+      "name": "DeployedEnforcer",
+      "status": "gap",
+      "category": "scope",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": null,
+      "deployments": {},
+      "dtkEquivalent": "DeployedEnforcer",
+      "dtkParity": "gap",
+      "smartAgentEquivalent": null,
+      "summary": "Target must / must-not be deployed. Niche. Low priority."
+    },
+    {
+      "name": "IdEnforcer",
+      "status": "divergent",
+      "category": "replay",
+      "contractPath": null,
+      "auditPath": null,
+      "sdkBuilder": null,
+      "deployments": {},
+      "dtkEquivalent": "IdEnforcer",
+      "dtkParity": "divergent",
+      "smartAgentEquivalent": null,
+      "summary": "DTK uses per-id flag for single-use delegations. We use salt + isRevoked (DelegationManager-level) for the same effect. No contract; covered by existing primitives."
+    }
+  ]
+}

@@ -31,6 +31,7 @@ Below the threshold: one-page convention doc or live in `CLAUDE.md`. The four-ar
 | --- | --- | --- | --- | --- |
 | **Multi-sig + threshold policy** | [`specs/207`](../../specs/207-smart-account-threshold-policy.md) (product surface) + [`specs/209`](../../specs/209-erc7579-module-taxonomy.md) (impl architecture) | [`apps/demo-web-pro/docs/multi-sig/guide.md`](../../apps/demo-web-pro/docs/multi-sig/guide.md) | `agent-account`, `delegation`, `tool-policy`, `audit`, `mcp-runtime` | Mostly closed (phase 6c) — contract + SDK + runtime shipped. Live wiring blocked on phase 6c.5-d (ERC-7579 module decomposition — extract `ThresholdValidator` + `GuardianRecoveryValidator` from core to fit EIP-170). 2 enforcers (`QuorumEnforcer`, `ApprovedHashRegistry`) already deployed to Base Sepolia. |
 | **Audit / forensics trail** | [`specs/206`](../../specs/206-audit.md) | [`apps/demo-mcp/docs/audit/guide.md`](../../apps/demo-mcp/docs/audit/guide.md) | `audit`, `mcp-runtime`, `delegation`, `key-custody` | Closed (phase 5g) |
+| **DTK interop + caveat enforcer registry** | [`docs/architecture/dtk-alignment-audit.md`](dtk-alignment-audit.md) (audit) + [`specs/208`](../../specs/208-argument-level-caveats.md) (next enforcer) + [`docs/architecture/enforcer-registry/`](enforcer-registry/) (canonical registry) | TBD — likely `apps/demo-web-pro/docs/interop/guide.md` when first DTK-tooling consumer wires up | `delegation`, contracts (per-enforcer AUDIT.md files at `apps/contracts/src/enforcers/<Name>.AUDIT.md`), `tool-policy` (T3+ delegations should carry argument-level caveats) | In-flight (phase 6b.1) — audit + registry + per-enforcer AUDIT.md shipped 2026-05-21. `pnpm check:sentinel-enforcers` CI rail prevents new sentinel-only SDK exports. Remaining: ArgumentRuleEnforcer (spec 208 impl), interop fixture corpus (phase 7), permission-card renderer (phase 7). |
 
 ## Queued
 
@@ -38,7 +39,7 @@ These will earn rows once their specs land:
 
 - **Treasury** — spec TBD; phase 6e; demo home: `apps/demo-web-pro/docs/treasury/`. Depends on multi-sig + recovery.
 - **Recovery UX** — phase 7; demo home: `apps/demo-web-pro/docs/recovery/`. Substrate already in spec 207 § 8.
-- **Argument-level caveats** — [`specs/208`](../../specs/208-argument-level-caveats.md) (drafting); demo home: TBD between `apps/demo-mcp` (server-side enforcement) and `apps/demo-web-pro` (permission-card UX).
+- **Argument-level caveats** — [`specs/208`](../../specs/208-argument-level-caveats.md) (now drafted; ArgumentRuleEnforcer impl pending phase 6c.6); demo home: TBD between `apps/demo-mcp` (server-side enforcement) and `apps/demo-web-pro` (permission-card UX). Tracked under the **DTK interop + caveat enforcer registry** capability row above.
 
 ## How to add a new capability
 
