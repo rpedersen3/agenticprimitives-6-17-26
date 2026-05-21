@@ -18,7 +18,7 @@ pnpm-workspace monorepo: 7 publishable packages + Foundry contracts + demo apps.
 
 - **Specs precede non-trivial code.** New `specs/2XX-*.md` before architecture changes; the spec is the architect-of-record.
 - **Always check smart-agent first.** Before designing any non-trivial capability look at the analog in `/home/barb/smart-agent`. New specs MUST include a "Reference: smart-agent patterns to port" section. Deliberate divergence must say why.
-- **Package boundaries** are one-directional: `types ← identity-auth ← agent-account ← delegation ← mcp-runtime`, plus `key-custody → delegation` and `tool-policy → mcp-runtime`. No back-edges. `tool-policy` and `types` are transport-agnostic (no MCP/A2A/LangChain/Vercel imports).
+- **Package boundaries** are one-directional: `types ← identity-auth ← agent-account ← delegation ← mcp-runtime`, plus `key-custody → delegation`, `tool-policy → mcp-runtime`, and the custody-layer fork `types ← custody` (depended on by `agent-account` and `delegation`; see [spec 213](specs/213-custody-layer-carve-out.md) for the firewall). No back-edges. `tool-policy` and `types` are transport-agnostic (no MCP/A2A/LangChain/Vercel imports).
 - **`AgentAccount.sol` is a thin ERC-7579 modular core.** Threshold / guardians / spend / sessions are modules, not inlined. See `specs/209` + memory `feedback_erc7579_module_architecture`.
 - **No third-party multi-sig.** We ship our own; port patterns from Safe (signature packing) but no runtime deps.
 - **Per-package context budget:** `CLAUDE.md` ≤ 60 lines, `AUDIT.md` ≤ 150 lines, `README.md` ≤ 1800 words. If you're tempted to bloat one, fix the package shape.

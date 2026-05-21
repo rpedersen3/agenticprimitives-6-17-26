@@ -8,8 +8,9 @@
 - Auth methods / signers → `identity-auth`
 - Delegation primitive → `delegation`
 - KMS → `key-custody`
-- Solidity source → `apps/contracts/src/` (and admin surface → `ThresholdValidator.sol` module per spec 209)
-- Threshold / recovery / proposal machinery → `ThresholdValidator` module (NOT this package — see [spec 209](../../specs/209-erc7579-module-taxonomy.md))
+- Solidity source → `apps/contracts/src/` (core) + `apps/contracts/src/custody/` (custody) + `apps/contracts/src/agency/` (agency)
+- Custody-policy ABI / `CustodyAction` enum / typed-data helpers → `@agenticprimitives/custody` (spec 213 § 2.6)
+- Custody / recovery / approvals machinery → `CustodyPolicy` module (NOT this package — see [spec 209](../../specs/209-erc7579-module-taxonomy.md) + [spec 213](../../specs/213-custody-layer-carve-out.md))
 
 ## Read first
 1. `src/index.ts` — public API
@@ -25,7 +26,8 @@
 - KMS / envelope encryption → `key-custody`
 - Auth UX / OAuth / passkey assertion → `identity-auth`
 - Risk tiers / tool classification → `tool-policy`
-- Admin proposals / threshold logic → `apps/contracts/src/modules/ThresholdValidator.sol` (NOT this package after phase 6c.5-d.1)
+- Custody-policy ABI / `CustodyAction` enum / `Custodian` / `Trustee` types → `@agenticprimitives/custody`
+- CustodyPolicy on-chain machinery → `apps/contracts/src/custody/CustodyPolicy.sol` (NOT this package; spec 213)
 
 ## Security invariants
 - Salt derives from stable IDs via keccak; no raw user-supplied salt.
@@ -40,5 +42,5 @@ pnpm check:forbidden-terms
 ```
 
 ## Capabilities (cross-cutting)
-- **Multi-sig + threshold policy** — see [spec 207](../../specs/207-smart-account-threshold-policy.md) (product) + [spec 209](../../specs/209-erc7579-module-taxonomy.md) (impl). Phase 6c.5-d.1 moved the admin machinery OUT of this package — it lives in `apps/contracts/src/modules/ThresholdValidator.sol`. This package now exposes SDK helpers that target the validator's address, not the account's.
+- **Multi-sig + custody policy** — see [spec 207](../../specs/207-smart-account-threshold-policy.md) (product) + [spec 209](../../specs/209-erc7579-module-taxonomy.md) (impl) + [spec 213](../../specs/213-custody-layer-carve-out.md) (vocabulary firewall). Phase 6c.5-d.1 moved the custody machinery to `apps/contracts/src/custody/CustodyPolicy.sol`; phase 6g.3 moved the SDK surface to `@agenticprimitives/custody`. This package now exposes only the AgentAccount-side SDK helpers (address derivation, sign/verify, userOp build).
 - Index: [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md)
