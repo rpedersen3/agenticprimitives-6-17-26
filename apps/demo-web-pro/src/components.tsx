@@ -29,14 +29,18 @@ export function AppShell({
 
 function WalletAndModeBar({ activeFlow }: { activeFlow?: FlowMeta }) {
   const chainId = useChainId();
+  const { isConnected } = useAccount();
   const expected = config.chainId;
   const wrongChain = expected !== undefined && chainId !== expected;
+  const chainName =
+    expected === 84532 ? 'Base Sepolia' : expected ? `Chain ${expected}` : `Chain ${chainId}`;
   return (
     <div className="wallet-bar">
-      <span className={`chain-pill ${wrongChain ? 'danger' : ''}`}>
-        {wrongChain ? `Wrong chain ${chainId}` : expected ? `Chain ${expected}` : `Chain ${chainId}`}
+      <span className={`chain-pill ${wrongChain ? 'danger' : isConnected ? 'ok' : ''}`}>
+        <span className="dot" aria-hidden />
+        {wrongChain ? `Wrong chain · ${chainId}` : chainName}
       </span>
-      <ModePill mode={activeFlow?.mode ?? 'single'} detail={activeFlow?.risk ?? 'No flow selected'} />
+      {activeFlow && <RiskBadge risk={activeFlow.risk} />}
       <ConnectButton />
     </div>
   );
