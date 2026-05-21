@@ -23,12 +23,18 @@ import {
   useReadContract,
   useSignTypedData,
   useSwitchChain,
-  useWaitForTransactionReceipt,
-  useWriteContract,
 } from 'wagmi';
-import { isAddress, keccak256, encodeAbiParameters, type Address, type Hex } from 'viem';
+import {
+  isAddress,
+  keccak256,
+  encodeAbiParameters,
+  encodeFunctionData,
+  type Address,
+  type Hex,
+} from 'viem';
 import { config as deploymentConfig } from '../../config';
 import { shortAddress } from '../../components';
+import { useGaslessTx } from '../../lib/gasless';
 
 const validatorAbi = [
   {
@@ -114,8 +120,7 @@ export function AdminActionsFlow() {
   const chainId = useChainId();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
   const { signTypedDataAsync, error: signError, reset: resetSign } = useSignTypedData();
-  const { writeContract, data: txHash, isPending: isWriting, error: writeError, reset: resetWrite } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } = useWaitForTransactionReceipt({ hash: txHash });
+  const gasless = useGaslessTx();
 
   const validatorAddress = deploymentConfig.thresholdValidator;
   const expectedChainId = deploymentConfig.chainId;
@@ -183,24 +188,22 @@ export function AdminActionsFlow() {
   const wrongChain = expectedChainId !== undefined && chainId !== expectedChainId;
   const ready = isConnected && !!validatorAddress && !wrongChain && !!accountAddr && isInstalled === true && !!encodedArgs;
 
-  // Track tx → phase transitions.
+  // Track gasless.state → phase transitions.
   useEffect(() => {
-    if (!isConfirmed || !receipt) return;
+    if (gasless.state !== 'done') return;
     if (phase === 'propose-pending') {
-      // pull proposalId from validator (it returns it from proposeAdmin, but
-      // we don't have a clean way to capture it from a wagmi writeContract
-      // call — query proposalCount after confirm to recover it).
       refetchProposalCount().then((result) => {
         const count = result.data as bigint | undefined;
         if (count !== undefined) {
           setProposalId(count);
           setPhase('await-timelock');
+          gasless.reset();
         }
       });
     } else if (phase === 'execute-pending') {
       setPhase('done');
     }
-  }, [isConfirmed, receipt, phase, refetchProposalCount]);
+  }, [gasless, phase, refetchProposalCount]);
 
   // When proposalId set, pull the stored eta.
   useEffect(() => {
@@ -222,7 +225,7 @@ export function AdminActionsFlow() {
     setProposalEta(null);
     setSubmitError(null);
     resetSign();
-    resetWrite();
+    gasless.reset();
   };
 
   // ─── Propose step ─────────────────────────────────────────────────
@@ -259,20 +262,24 @@ export function AdminActionsFlow() {
         },
       });
 
-      // wagmi signTypedData returns v as 27 or 28 (raw ECDSA over the
-      // EIP-712 digest). The validator's SignatureSlotRecovery library
-      // dispatches v=27/28 → ecrecover(digest, v, r, s) directly. So we
-      // pass the sig through unchanged.
       const quorumSigs = sig as Hex;
 
-      setPhase('propose-pending');
-      resetWrite();
-      writeContract({
-        address: validatorAddress,
+      // Build the inner call (validator.proposeAdmin) + wrap in
+      // account.execute so the userOp's sender is the smart account.
+      const inner = encodeFunctionData({
         abi: validatorAbi,
         functionName: 'proposeAdmin',
         args: [accountAddr, actionId, encodedArgs, quorumSigs],
       });
+      const outer = encodeFunctionData({
+        abi: ACCOUNT_EXECUTE_ABI,
+        functionName: 'execute',
+        args: [validatorAddress, 0n, inner],
+      });
+
+      setPhase('propose-pending');
+      gasless.reset();
+      await gasless.submit({ sender: accountAddr, callData: outer });
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : String(e));
       setPhase('configure');
@@ -322,19 +329,40 @@ export function AdminActionsFlow() {
         },
       });
 
-      setPhase('execute-pending');
-      resetWrite();
-      writeContract({
-        address: validatorAddress,
+      const inner = encodeFunctionData({
         abi: validatorAbi,
         functionName: 'executeAdmin',
         args: [accountAddr, proposalId, sig as Hex],
       });
+      const outer = encodeFunctionData({
+        abi: ACCOUNT_EXECUTE_ABI,
+        functionName: 'execute',
+        args: [validatorAddress, 0n, inner],
+      });
+
+      setPhase('execute-pending');
+      gasless.reset();
+      await gasless.submit({ sender: accountAddr, callData: outer });
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : String(e));
       setPhase('await-timelock');
     }
   };
+
+  // Tiny inline ABI for account.execute(target, value, data).
+  const ACCOUNT_EXECUTE_ABI = useMemo(() => [
+    {
+      type: 'function',
+      name: 'execute',
+      stateMutability: 'nonpayable',
+      inputs: [
+        { name: 'target', type: 'address' },
+        { name: 'value', type: 'uint256' },
+        { name: 'data', type: 'bytes' },
+      ],
+      outputs: [],
+    },
+  ] as const, []);
 
   // ─── Derived rendering data ───────────────────────────────────────
 
@@ -482,18 +510,18 @@ export function AdminActionsFlow() {
             <button
               className="primary"
               onClick={handlePropose}
-              disabled={!ready || isWriting || isConfirming}
+              disabled={!ready || gasless.state === 'building' || gasless.state === 'signing' || gasless.state === 'submitting'}
               data-testid="admin-action-propose"
               style={{ marginTop: '1rem' }}
             >
-              {isWriting ? 'Confirm in wallet…' : 'Propose'}
+              {gasless.state === 'building' ? 'Building userOp…' : gasless.state === 'signing' ? 'Confirm in wallet…' : gasless.state === 'submitting' ? 'Submitting…' : 'Propose (gasless)'}
             </button>
           )}
 
           {phase === 'propose-signing' && <p className="muted">Sign the EIP-712 request in MetaMask…</p>}
-          {phase === 'propose-pending' && txHash && (
+          {phase === 'propose-pending' && gasless.txHash && (
             <p className="muted">
-              Propose tx submitted: <code>{shortAddress(txHash)}</code>. Waiting for confirmation…
+              Propose tx submitted: <code>{shortAddress(gasless.txHash)}</code>. Waiting for confirmation…
             </p>
           )}
 
@@ -524,22 +552,22 @@ export function AdminActionsFlow() {
           )}
 
           {phase === 'execute-signing' && <p className="muted">Sign the execute request in MetaMask…</p>}
-          {phase === 'execute-pending' && txHash && (
+          {phase === 'execute-pending' && gasless.txHash && (
             <p className="muted">
-              Execute tx submitted: <code>{shortAddress(txHash)}</code>. Waiting for confirmation…
+              Execute tx submitted: <code>{shortAddress(gasless.txHash)}</code>. Waiting for confirmation…
             </p>
           )}
 
           {phase === 'done' && (
             <p className="ok" data-testid="admin-action-done">
-              ✓ Action applied on chain. Tx <code>{txHash}</code>.{' '}
+              ✓ Action applied on chain (gasless). Tx <code>{gasless.txHash}</code>.{' '}
               <button onClick={reset}>Run another</button>
             </p>
           )}
 
           {submitError && <p className="err">{submitError}</p>}
           {signError && <p className="err">Sign error: {signError.message}</p>}
-          {writeError && <p className="err">{writeError.message}</p>}
+          {gasless.error && <p className="err">{gasless.error}</p>}
         </section>
       </div>
 
