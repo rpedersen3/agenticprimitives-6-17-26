@@ -20,7 +20,7 @@ Standalone library implementing the full delegation lifecycle as it exists in sm
 
 ## 2. Standard
 
-EIP-712 typed-data delegations, **ERC-7710-aligned** but NOT the MetaMask Delegation Framework verbatim.
+EIP-712 typed-data delegations, **ERC-7710-aligned** but NOT the MetaMask Delegation Framework verbatim. See [`docs/architecture/dtk-alignment-audit.md`](../docs/architecture/dtk-alignment-audit.md) for the concrete parity audit (which DTK shapes match byte-for-byte, which diverge intentionally, which are gaps).
 
 ```solidity
 struct Delegation {
