@@ -37,7 +37,7 @@ Below the threshold: one-page convention doc or live in `CLAUDE.md`. The four-ar
 
 These will earn rows once their specs land:
 
-- **Treasury** — spec TBD; phase 6e; demo home: `apps/demo-web-pro/docs/treasury/`. Depends on multi-sig + recovery.
+- **Treasury as Service Agent** — [`specs/210`](../../specs/210-treasury-service-agent.md) (now drafted; reframes Treasury as an `ap:ServiceAgent` derived from `prov:Agent`, not a kind of account). Phase 6e implementation depends on spec 208 + the RateLimitEnforcer port (phase 7). Demo home: `apps/demo-web-pro/docs/treasury/`. This spec also pins the agent-architecture principles that future Service Agents (`ap:TradingAgent`, `ap:ResearchAgent`, etc.) inherit.
 - **Recovery UX** — phase 7; demo home: `apps/demo-web-pro/docs/recovery/`. Substrate already in spec 207 § 8.
 - **Argument-level caveats** — [`specs/208`](../../specs/208-argument-level-caveats.md) (now drafted; ArgumentRuleEnforcer impl pending phase 6c.6); demo home: TBD between `apps/demo-mcp` (server-side enforcement) and `apps/demo-web-pro` (permission-card UX). Tracked under the **DTK interop + caveat enforcer registry** capability row above.
 
