@@ -1,7 +1,9 @@
 # Spec 210 — Treasury as a Service Agent
 
+> **Cross-references (phase 6g.4 refresh):** spec 207's machinery is now called `CustodyPolicy` (was `ThresholdValidator`), with renamed surface (`CustodyAction`, `scheduleCustodyChange`, `approvalsRequired`, `trustee`, `custodian`) per [spec 213](./213-custody-layer-carve-out.md). The Treasury Service Agent uses that custody-layer module but ALSO carries agency-layer obligations (delegations, stewardship) — see [spec 212](./212-agent-centric-delegation.md) for the firewall between the two roles.
+
 **Status:** draft · 2026-05-21
-**Goal:** define **Treasury** as the canonical example of a **Service Agent** — a PROV-O-derived class of `prov:Agent` that has agency, acts on behalf of an Organization (which is also an Agent), and composes from agenticprimitives' existing primitives (AgentAccount, ThresholdValidator, caveat enforcers, audit trail).
+**Goal:** define **Treasury** as the canonical example of a **Service Agent** — a PROV-O-derived class of `prov:Agent` that has agency, acts on behalf of an Organization (which is also an Agent), and composes from agenticprimitives' existing primitives (AgentAccount, CustodyPolicy, caveat enforcers, audit trail).
 **Builds on:** spec 207 (threshold-policy product surface), spec 208 (argument-level caveats — required dependency), spec 209 (ERC-7579 module taxonomy).
 **Reference: smart-agent patterns to port:** `/home/barb/smart-agent/docs/ontology/tbox/{core,identity,governance}.ttl` already root agent classes in `prov:SoftwareAgent`. We extend that pattern with an explicit `ap:ServiceAgent` class that pins the "has agency + acts on behalf of an Organization" semantics. smart-agent's `sa:Pool` and `sa:Fund` (under `sa:OrganizationAgent`) are organization-shaped containers; Treasury is the **service-shaped** counterpart.
 **Reference: external patterns to port:** W3C PROV-O ([https://www.w3.org/TR/prov-o/](https://www.w3.org/TR/prov-o/)) — the provenance ontology providing the formal agent class hierarchy + agency/attribution/association vocabulary.
@@ -117,12 +119,12 @@ A Treasury's `ap:hasCapability` set:
 | Capability | Verb | On-chain primitive | Phase |
 | --- | --- | --- | --- |
 | `ap:HoldAssets` | receive transfers, custody balances | `AgentAccount` native + ERC-20 + ERC-721 balances | ✅ shipped |
-| `ap:ProposePayment` | submit a proposed disbursement | `ThresholdValidator.proposeAdmin` with custom AdminAction `DisbursePayment` (NEW) | needs validator extension |
-| `ap:ExecutePayment` | execute a quorum-approved disbursement | `ThresholdValidator.executeAdmin` + `account.executeFromModule(target, value, data)` | ✅ shipped |
+| `ap:ProposePayment` | submit a proposed disbursement | `CustodyPolicy.scheduleCustodyChange` with custom CustodyAction `DisbursePayment` (NEW) | needs validator extension |
+| `ap:ExecutePayment` | execute a quorum-approved disbursement | `CustodyPolicy.applyCustodyChange` + `account.executeFromModule(target, value, data)` | ✅ shipped |
 | `ap:SchedulePayment` | queue a payment for future execution | Delegation with `TimestampEnforcer(validAfter)` + `ArgumentRuleEnforcer` (target/amount pinned) | needs spec 208 |
 | `ap:CapSpending` | enforce per-period spending budget | Caveat with `RateLimitEnforcer` (port pending) | needs phase 7 port |
 | `ap:AllowlistRecipients` | restrict recipients to a known set | `ArgumentRuleEnforcer` with `IN` operator on the recipient arg | needs spec 208 |
-| `ap:Recover` | atomic owner/passkey rotation by guardian quorum | `ThresholdValidator.RecoverAccount` T6 action | ✅ shipped |
+| `ap:Recover` | atomic owner/passkey rotation by guardian quorum | `CustodyPolicy.RecoverAccount` T6 action | ✅ shipped |
 | `ap:Audit` | every action emits a PROV-O / audit-trail record | spec 206 audit infrastructure | ✅ shipped |
 
 ### 4.2 Policies
@@ -141,7 +143,7 @@ ap:TimelockPolicy           rdfs:subClassOf ap:Policy .  # T4 / T5 / T6 windows
 ap:RecoveryPolicy           rdfs:subClassOf ap:Policy .  # guardian quorum + 24h cancel + 48h timelock
 ```
 
-These policies don't introduce new on-chain machinery — they map to **existing** spec 207 fields (`thresholdByTier`, `timelockByTier`, `guardians`, `recoveryThreshold`) and **planned** spec 208 caveats. A Treasury's policy set is its row in the validator's `Config` struct + the caveats baked into its delegation set.
+These policies don't introduce new on-chain machinery — they map to **existing** spec 207 fields (`approvalsRequiredByTier`, `safetyDelayByTier`, `guardians`, `recoveryApprovals`) and **planned** spec 208 caveats. A Treasury's policy set is its row in the validator's `Config` struct + the caveats baked into its delegation set.
 
 ### 4.3 Required associations
 
@@ -196,7 +198,7 @@ A Treasury sends 50 USDC to a payroll vendor. Activity graph:
     : txHash 0x…
 ```
 
-This graph is what the **audit / forensics trail** capability (spec 206) emits. Today's audit events `delegation.mint`, `validator.proposeAdmin`, `validator.executeAdmin`, `mcp-runtime.with-delegation.accept` map onto these `prov:Activity` records. Spec 210's contribution is the framing — they were already there; now we know what they MEAN provenance-wise.
+This graph is what the **audit / forensics trail** capability (spec 206) emits. Today's audit events `delegation.mint`, `validator.scheduleCustodyChange`, `validator.applyCustodyChange`, `mcp-runtime.with-delegation.accept` map onto these `prov:Activity` records. Spec 210's contribution is the framing — they were already there; now we know what they MEAN provenance-wise.
 
 ### 5.2 Three things this gives us for free
 
@@ -222,7 +224,7 @@ const treasuryParams: AgentAccountInitParams = {
   initialPasskeyY: 0n,
 };
 
-const treasuryAccount = await factory.createAccountWithModeCustomT4(
+const treasuryAccount = await factory.createAccountWithModeCustomSafetyDelay(
   treasuryParams,
   thresholdValidatorAddress,
   3600 * 6,           // T4 timelock 6h — typical treasury cadence
@@ -268,13 +270,13 @@ Three caveats compose into the Treasury's "I can spend USDC like this" policy. T
 
 ### 6.3 One-off payments (no standing delegation)
 
-For payments outside the pre-approved shape, the Treasury goes through `ThresholdValidator.proposeAdmin` (org-mode quorum + T4 timelock + SoD). That's the existing admin-actions flow — Treasury reuses spec 207's machinery without change.
+For payments outside the pre-approved shape, the Treasury goes through `CustodyPolicy.scheduleCustodyChange` (org-mode quorum + T4 timelock + SoD). That's the existing admin-actions flow — Treasury reuses spec 207's machinery without change.
 
 ### 6.4 What's missing for v0
 
 - `ArgumentRuleEnforcer` (spec 208) — required for typed recipient + amount checks. v0 Treasury demo can do without (using only `AllowedTargetsEnforcer` + `ValueEnforcer`) but loses precision.
 - `RateLimitEnforcer` (port from smart-agent — phase 7) — required for per-period budgets. v0 Treasury can ship without; ad-hoc "I've spent N this month" tracking happens off-chain.
-- A new validator AdminAction `DisbursePayment(token, recipient, amount)` — needed only if Treasury wants payments to go through the propose/execute admin path. Optional; the delegation-issuance path (§ 6.2) is more flexible.
+- A new validator CustodyAction `DisbursePayment(token, recipient, amount)` — needed only if Treasury wants payments to go through the propose/execute admin path. Optional; the delegation-issuance path (§ 6.2) is more flexible.
 - UI flows in `demo-web-pro` (see § 8 phase plan).
 
 ---

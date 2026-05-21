@@ -1,5 +1,7 @@
 # Spec 209 — ERC-7579 module taxonomy for AgentAccount
 
+> **Vocabulary note (phase 6g.1 / spec 213):** the first module extraction was originally named `ThresholdValidator`. Phase 6g.1 renamed it to `CustodyPolicy` to align with the custody / agency vocabulary firewall (spec 212 § 2.2 + spec 213). All references here use the new name; `(was ThresholdValidator)` is annotated where helpful for one cycle.
+
 **Status:** drafted 2026-05-20 · supersedes spec 207 § 14
 **Closes:** the architectural problem revealed by phase 6c.5-c — `AgentAccount` runtime bytecode hit 26,876 bytes (2,300 over the EIP-170 ceiling) because optional / policy-heavy / risky surfaces were inlined into the core contract.
 **Builds on:** spec 201 (`agent-account` core), spec 202 (`delegation`), spec 204 (`tool-policy`), spec 206 (`audit`), spec 207 (threshold-policy product surface). Does NOT build on spec 207 § 14's "AdminModule delegatecall blob" plan — that plan is superseded by this one.
@@ -61,7 +63,7 @@ MODULE_TYPE_HOOK      = 4    (already supported in registry; capped at MAX_HOOKS
 | Module | What it does | Migration phase |
 | --- | --- | --- |
 | `PasskeyAdvancedValidator` | Multi-passkey, attestation policy, credential rotation, RPID binding | Phase 7+ (current single-passkey root stays in core) |
-| `ThresholdValidator` | n-of-m owner-set + threshold + per-tier policy (the surface currently bloating core) | **Phase 6c.5-d.1** (next, the EIP-170 unblock) |
+| `CustodyPolicy` (was `ThresholdValidator` — renamed phase 6g.1) | n-of-m custodian-set + per-tier approvals + safety-delay policy (the surface that previously bloated core) | **Phase 6c.5-d.1** (the EIP-170 unblock) |
 | `GuardianRecoveryValidator` | Guardian-quorum recovery (T6 admin path) | Phase 6c.5-d.2 |
 | `SessionKeyValidator` | Per-session signer authority with TTL + scope (the delegation surface's signing side) | Phase 6c.5-d.4 (after spec 208 lands) |
 
@@ -152,8 +154,8 @@ function executeFromModule(address target, uint256 value, bytes calldata data)
 }
 ```
 
-For a `ThresholdValidator` module that needs to `addOwner` after a quorum check, the call chain is:
-`user → ThresholdValidator.executeAdmin(account, proposalId, sigs)` → `ThresholdValidator` verifies, then `account.executeFromModule(account, 0, abi.encodeCall(addOwner, owner))` → `account.addOwner(owner)` runs with `msg.sender == account` satisfying `onlySelf`.
+For a `CustodyPolicy` module that needs to `addCustodian` after a quorum check, the call chain is:
+`user → CustodyPolicy.applyCustodyChange(account, changeId, sigs)` → `CustodyPolicy` verifies, then `account.executeFromModule(account, 0, abi.encodeCall(addCustodian, owner))` → `account.addCustodian(owner)` runs with `msg.sender == account` satisfying `onlySelf`.
 
 ---
 
@@ -164,33 +166,33 @@ Module install is **security-critical** — a malicious module installed once ca
 | Install path | When | Gate |
 | --- | --- | --- |
 | `single` mode | Trivial — single signer self-installs at init | `onlyOwnerOrSelf` (current) |
-| `hybrid` / `threshold` / `org` mode | Post-init module changes | T5 admin action through the `ThresholdValidator` module (once installed) — gated by quorum + timelock |
+| `hybrid` / `threshold` / `org` mode | Post-init module changes | T5 admin action through the `CustodyPolicy` module (once installed) — gated by quorum + timelock |
 | Factory-time install | Initial set of modules at account creation | Factory passes a list of modules + initData; account installs them atomically during `initialize` |
 
 The factory becomes the **canonical place** to install the right modules for the chosen mode:
 
 - `single` mode → no modules installed; minimal owner root in core is sufficient.
-- `hybrid` mode → `ThresholdValidator` + `GuardianRecoveryValidator`.
-- `threshold` mode → `ThresholdValidator` + `GuardianRecoveryValidator`.
-- `org` mode → `ThresholdValidator` + `GuardianRecoveryValidator` + `OrgPolicyGuardHook`.
+- `hybrid` mode → `CustodyPolicy` + `GuardianRecoveryValidator`.
+- `threshold` mode → `CustodyPolicy` + `GuardianRecoveryValidator`.
+- `org` mode → `CustodyPolicy` + `GuardianRecoveryValidator` + `OrgPolicyGuardHook`.
 - All non-`single` modes → `AllowedTargetsHook` + `SpendingCapHook` if value-handling.
 
-Post-deploy module install is via the T5 admin action `InstallModule(moduleTypeId, moduleAddr, initData)` — which is itself a `ThresholdValidator` action, so it requires quorum + timelock.
+Post-deploy module install is via the T5 admin action `InstallModule(moduleTypeId, moduleAddr, initData)` — which is itself a `CustodyPolicy` action, so it requires quorum + timelock.
 
 ---
 
 ## 5. Module storage isolation
 
-Every module declares its per-account state at an ERC-7201 namespaced slot derived from its own canonical name. For example, `ThresholdValidator` uses:
+Every module declares its per-account state at an ERC-7201 namespaced slot derived from its own canonical name. For example, `CustodyPolicy` uses:
 
 ```
-slot = keccak256(abi.encode(uint256(keccak256("agenticprimitives.module.threshold-validator.v1")) - 1)) & ~bytes32(uint256(0xff))
+slot = keccak256(abi.encode(uint256(keccak256("agenticprimitives.module.custody-policy.v1")) - 1)) & ~bytes32(uint256(0xff))
 ```
 
 Two consequences:
 
 1. **No storage-layout coupling between core and modules.** Adding a state variable to AgentAccount NEVER shifts a module's slots, and vice versa. This is the property that the spec 207 § 14 "AdminModule delegatecall blob" plan got wrong — it required core + blob to share linear-layout state.
-2. **Modules can be deployed independently + reused across accounts.** A single `ThresholdValidator` contract is installed on N accounts; each account's threshold-policy state lives at the same ERC-7201 slot but the module's internal mapping is keyed by `address(this)` (the account, accessed via `delegatecall`-aware accessors) so reads/writes don't collide.
+2. **Modules can be deployed independently + reused across accounts.** A single `CustodyPolicy` contract is installed on N accounts; each account's threshold-policy state lives at the same ERC-7201 slot but the module's internal mapping is keyed by `address(this)` (the account, accessed via `delegatecall`-aware accessors) so reads/writes don't collide.
 
 But **a validator-module is NOT delegatecalled** — that's the executor pattern. A validator is *called*. So its storage is its OWN storage, keyed by account. The state of `(account, threshold)` lives at `mapping(address => uint8)` in the validator's storage. The module is a regular contract; its caller (user, then forwarded to core) is `msg.sender == account` only inside `executeFromModule`'s self-call. Account address is passed explicitly into the module's external functions.
 
@@ -219,8 +221,8 @@ Each phase is one or two PRs. Each leaves the system shippable (181 Forge tests 
 | Phase | What lands | Core delta |
 | --- | --- | --- |
 | **6c.5-d.0** | `executeFromModule(target, value, data)` shipped in core. Tests: only installed `EXECUTOR` can call; self-call satisfies `onlySelf`; external-call path works. No existing module uses it yet. | +1 function in core; ~200 bytes |
-| **6c.5-d.1** | `ThresholdValidator.sol` module shipped. Holds: per-account `mode` / `thresholdByTier` / `timelockByTier` / `guardianCount` / `proposalCount` / `pending` mapping / `proposerSigners`. Implements `proposeAdmin(account, action, args, sigs)` / `executeAdmin(account, proposalId, sigs)` / `cancelAdmin(account, proposalId, sigs)`. Calls back via `account.executeFromModule(account, 0, encodedAction)`. Old `AgentAccount.proposeAdmin` / `executeAdmin` / `cancelAdmin` REMOVED from core. Old `initializeWithThresholdPolicy` REMOVED — factory now installs the validator module + passes init data. | −7-9 KB from core (target: 18-20 KB total runtime) |
-| **6c.5-d.2** | `GuardianRecoveryValidator.sol` module shipped — extracted from the T6 branch of the old `ThresholdValidator`. Owns: guardian set, recovery threshold, dual cancel window. Reuses `executeFromModule` for the atomic add/remove dispatch in `_applyRecoverAccount`. | −1-2 KB from validator module; further specialization |
+| **6c.5-d.1** | `CustodyPolicy.sol` module shipped. Holds: per-account `mode` / `approvalsRequiredByTier` / `safetyDelayByTier` / `trusteeCount` / `scheduledChangeCount` / `pending` mapping / `proposerCustodians`. Implements `scheduleCustodyChange(account, action, args, sigs)` / `applyCustodyChange(account, changeId, sigs)` / `cancelScheduledChange(account, changeId, sigs)`. Calls back via `account.executeFromModule(account, 0, encodedAction)`. Old `AgentAccount.scheduleCustodyChange` / `applyCustodyChange` / `cancelScheduledChange` REMOVED from core. Old `initializeWithThresholdPolicy` REMOVED — factory now installs the validator module + passes init data. | −7-9 KB from core (target: 18-20 KB total runtime) |
+| **6c.5-d.2** | `GuardianRecoveryValidator.sol` module shipped — extracted from the T6 branch of the old `CustodyPolicy`. Owns: guardian set, recovery threshold, dual cancel window. Reuses `executeFromModule` for the atomic add/remove dispatch in `_applyRecoverAccount`. | −1-2 KB from validator module; further specialization |
 | **6c.5-d.3** | Three hook modules shipped: `AllowedTargetsHook`, `AllowedMethodsHook`, `SpendingCapHook`. Pre-execution hook surface wired in core's `execute` path (already exists; this fills the catalog). | No core delta |
 | **6c.5-d.4** | `DelegationExecutor.sol` + `SessionKeyValidator.sol` modules. Delegation-redemption path moves out of core into the executor. | −1-2 KB from core (if the redemption path was inlined; check before pulling) |
 | **6c.5-d.5** | `CaveatVerifierHook.sol` — the execution-time tool-policy check, mirror of the delegation-time check that already exists. Depends on spec 208 (argument-level caveats). | No core delta |
@@ -236,7 +238,7 @@ After **6c.5-d.1** alone, AgentAccount fits in EIP-170 + the live deploy can res
 | --- | --- |
 | Core ERC-4337 + ERC-7579 install/uninstall | `apps/contracts/test/AgentAccount*.t.sol` (existing 181 tests) |
 | `executeFromModule` unit + permission | `apps/contracts/test/ExecuteFromModule.t.sol` (NEW, phase 6c.5-d.0) |
-| ThresholdValidator unit + integration | `apps/contracts/test/modules/ThresholdValidator.t.sol` + per-account integration with a mock `AgentAccount` |
+| CustodyPolicy unit + integration | `apps/contracts/test/modules/CustodyPolicy.t.sol` + per-account integration with a mock `AgentAccount` |
 | Each module has its own dedicated test file | `test/modules/<ModuleName>.t.sol` |
 | Multi-module composition (validator + hook + executor on one account) | `test/integration/MultiModuleAccount.t.sol` |
 | Cross-account module reuse (one validator deployed, installed on N accounts) | `test/integration/ModuleReuse.t.sol` |
@@ -265,7 +267,7 @@ Spec 207 § 14 (the AdminModule delegatecall blob plan) is **superseded by this 
 - Read this spec for the actual solution.
 - Treat § 14's "8-14h scope estimate" as obsolete — the phase 6c.5-d series breaks the work into d.0 / d.1 / d.2 / etc., each independently shippable.
 
-Spec 207's main body (§ 1 through § 13) is **unchanged**. The product surface — modes, tiers, recovery semantics — stays the same. What moves is implementation: the threshold-policy state + propose/execute/cancel surface relocates from `AgentAccount.sol` into `apps/contracts/src/modules/ThresholdValidator.sol`.
+Spec 207's main body (§ 1 through § 13) is **unchanged**. The product surface — modes, tiers, recovery semantics — stays the same. What moves is implementation: the threshold-policy state + propose/execute/cancel surface relocates from `AgentAccount.sol` into `apps/contracts/src/custody/CustodyPolicy.sol`.
 
 ---
 
@@ -276,7 +278,7 @@ Resolved in this spec (2026-05-20):
 - ✅ AgentAccount is a thin ERC-7579 modular core; module taxonomy is validator / executor / hook / fallback.
 - ✅ `executeFromModule(target, value, data)` is the single callback path (self-call satisfies `onlySelf`).
 - ✅ Module storage isolated via ERC-7201 namespaced slots; no shared linear-layout state.
-- ✅ Install permission model: factory at init, T5 admin via `ThresholdValidator` post-init.
+- ✅ Install permission model: factory at init, T5 admin via `CustodyPolicy` post-init.
 - ✅ Migration order: validator (threshold) first → guardian recovery → hooks → executors.
 - ✅ Spec 207 § 14 superseded.
 

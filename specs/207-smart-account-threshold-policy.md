@@ -1,4 +1,6 @@
-# Spec 207 — Smart-account threshold policy
+# Spec 207 — Smart-account custody policy
+
+> **Renaming history (phase 6g.1 / spec 213):** this spec was previously titled "Smart-account threshold policy". The product is now called the **custody policy** to align with the custody / agency vocabulary firewall ([spec 212 § 2.2](./212-agent-centric-delegation.md), [spec 213](./213-custody-layer-carve-out.md)). Section headers + identifiers throughout this document use the renamed surface: `CustodyPolicy` (was `ThresholdValidator`), `CustodyAction` (was `AdminAction`), `scheduleCustodyChange` / `applyCustodyChange` / `cancelScheduledChange` (was `proposeAdmin` / `executeAdmin` / `cancelAdmin`), `approvalsRequired` (was `threshold`), `recoveryApprovals` (was `recoveryThreshold`), `safetyDelay` (was `timelockDuration`), `trustee` (was `guardian`), `custodian` (was `owner`).
 
 **Status:** v0 mostly implemented · 2026-05-20 — contract + SDK + runtime layers shipped end-to-end (Forge 181/181 + workspace tests green); live wiring + Playwright e2e for § 9 rows 1/2/3/12 pending. **Open blocker (phase 6c.5-d):** `AgentAccount` runtime bytecode is 26,876 bytes — 2,300 over the EIP-170 deploy ceiling — so the impl can't deploy to Base Sepolia (or any EIP-170-enforcing chain). Live wiring blocked on the **ERC-7579 module decomposition** documented in [spec 209](./209-erc7579-module-taxonomy.md). § 14 of this spec (an earlier "AdminModule delegatecall blob" plan) is superseded by spec 209. See `docs/architecture/cross-cutting-capabilities.md` for the current row.
 **Closes:** new audit finding **N16** (smart-account multi-sig and recovery policy is not productized).
@@ -78,7 +80,7 @@ Keeping kinds as a *non-exhaustive* set: future kinds (RIP-7212 P-256 precompile
 
 - A user can have one EOA in **primary** role + the same EOA's mobile-passkey-paired contract account in **recovery** role. The kind is reused; the role differs.
 - A "guardian" with the kind = smart account is a *vouching* guardian (their own multi-sig blesses recovery), which is exactly the "another AgentAccount as guardian" pattern referenced in spec 207 § 11 open questions.
-- The SDK exposes `addSigner({ kind, role, address })` rather than separate `addOwner` / `addGuardian` calls, which makes the role explicit and prevents the "I accidentally added them to the wrong set" footgun.
+- The SDK exposes `addSigner({ kind, role, address })` rather than separate `addCustodian` / `addTrustee` calls, which makes the role explicit and prevents the "I accidentally added them to the wrong set" footgun.
 
 Contract layer: today `agent-account` keeps separate mappings (`_owners` for primary EOAs, `_passkeys` for primary passkeys, `_guardians` for recovery). That's fine — the role is encoded by which mapping the signer lives in. The two-dimensional model is the **user-facing concept**, not necessarily the storage layout.
 
@@ -145,7 +147,7 @@ The current substrate is closest to "MetaMask Hybrid + Delegation Toolkit." Spec
 | MetaMask / Safe concept | Our design equivalent | Status today | Gap closed by spec 207 § |
 | --- | --- | --- | --- |
 | Hybrid account (EOA + passkeys) | `AgentAccount` with `_owners` + `_passkeys` + `_validateSig` dispatch | Mostly present | § 4 default `hybrid` mode + § 8 multi-passkey recovery |
-| Multisig account (M-of-N + threshold) | `_owners` set + (new) `_thresholdPolicyStorage` + `proposeAdmin` machinery | Substrate present, policy not productized | § 5 + § 7 + § 10 |
+| Multisig account (M-of-N + threshold) | `_owners` set + (new) `_thresholdPolicyStorage` + `scheduleCustodyChange` machinery | Substrate present, policy not productized | § 5 + § 7 + § 10 |
 | Safe Guards (pre/post checks) | `tool-policy.evaluatePolicy` + `ICaveatEnforcer.beforeHook/afterHook` | Present (T1 read enforcers shipped) | § 5 + spec 208 (argument-level caveats) |
 | Safe Modules (scoped execution paths) | Sessions + redelegation in `delegation` | Present (single-tier) | § 6 high-risk gate + § 5.1 threshold matrix |
 | Delegation Toolkit | `@agenticprimitives/delegation` + `DelegationManager.sol` | Present | DTK alignment audit pass (task #89) |
@@ -153,8 +155,8 @@ The current substrate is closest to "MetaMask Hybrid + Delegation Toolkit." Spec
 | Advanced Permissions / permission cards | demo-web consent / authorize flow | Early | § 1 bullet "Permission UX as security" + phase 7 UI |
 | Paymaster / verifying paymaster | `SmartAgentPaymaster.sol` verifying mode | Present | (closed by pass 4 / audit C2) |
 | Account recovery (multi-passkey + guardian) | passkey + guardian + timelock + cancel | **Missing** | § 8 |
-| Action-specific thresholds | `_thresholdPolicyStorage.thresholdByTier` | **Missing** | § 5 / § 5.1 |
-| Pending-approval flow + UX | `proposeAdmin` / `executeAdmin` / `cancelAdmin` | **Missing** | § 7 + phase 7 admin panel |
+| Action-specific thresholds | `_thresholdPolicyStorage.approvalsRequiredByTier` | **Missing** | § 5 / § 5.1 |
+| Pending-approval flow + UX | `scheduleCustodyChange` / `applyCustodyChange` / `cancelScheduledChange` | **Missing** | § 7 + phase 7 admin panel |
 | High-risk delegation gating | `acceptSessionDelegation` hook | Hook present; not gated by tier | § 6 |
 
 The "**Missing**" rows are the load-bearing additions in spec 207. Nothing in the table requires forking the `AgentAccount` substrate; everything is additive policy + state on the same contract.
@@ -230,56 +232,56 @@ Builds on the existing `acceptSessionDelegation(hash)` hook on `AgentAccount` (s
 
 For T3 high-value grants, the redeem path checks `account.isAcceptedSessionDelegation(hash)` and fails closed if false. The existing `verifyDelegationToken` accept event (audit C3, closed in pass 5b) gets a new `acceptedOnChain: boolean` context field so the audit trail records whether the redeem leaned on the on-chain blessing.
 
-`T3_HIGHVALUE_THRESHOLD` is a per-account configurable bound, defaulting to **0.01 ETH** equivalent (set at account creation, mutable via the T4 `ChangeT3Ceiling` admin flow in § 7). The low default is deliberate: it makes the high-value on-chain blessing gate observable in demo + early-production usage so the path is exercised before a real-value account hits it.
+`T3_HIGHVALUE_THRESHOLD` is a per-account configurable bound, defaulting to **0.01 ETH** equivalent (set at account creation, mutable via the T4 `ChangeValueCeiling` admin flow in § 7). The low default is deliberate: it makes the high-value on-chain blessing gate observable in demo + early-production usage so the path is exercised before a real-value account hits it.
 
 ---
 
 ## 7. Guarded admin actions
 
-The actions in the T4–T5 rows of § 5 share a common gating shape. Define them as a single `AdminAction` enum + a routed `proposeAdmin` / `executeAdmin` pair on `AgentAccount`:
+The actions in the T4–T5 rows of § 5 share a common gating shape. Define them as a single `CustodyAction` enum + a routed `scheduleCustodyChange` / `applyCustodyChange` pair on `AgentAccount`:
 
 ```solidity
-enum AdminAction {
-    AddOwner,
-    RemoveOwner,
-    AddPasskey,
-    RemovePasskey,
-    AddGuardian,
-    RemoveGuardian,
-    ChangeMode,
-    UpgradeImpl,
-    ChangeDelegationManager,
-    ChangePaymaster,
-    ChangeSessionIssuer,
+enum CustodyAction {
+    AddCustodian,
+    RemoveCustodian,
+    AddPasskeyCredential,
+    RemovePasskeyCredential,
+    AddTrustee,
+    RemoveTrustee,
+    ChangeCustodyMode,
+    ApplySystemUpdate,
+    RotateDelegationManager,
+    RotatePaymaster,
+    RotateSessionIssuer,
     // Operational tuning + atomic-rotation actions:
-    RotateAllOwners,        // T4 — atomic "replace entire owner set" so a
+    RotateAllCustodians,        // T4 — atomic "replace entire owner set" so a
                             // post-incident rotation doesn't pass through
                             // fragmented intermediate states (owner partially
                             // added, partially removed) where authority is
                             // ambiguous. Args: (address[] newOwners).
-    ChangeT3Ceiling,        // T4 — tune T3_HIGHVALUE_THRESHOLD without a
+    ChangeValueCeiling,        // T4 — tune T3_HIGHVALUE_THRESHOLD without a
                             // full impl upgrade. Args: (uint256 newCeilingWei).
-    SetRecoveryThreshold    // T4 — explicit recovery-threshold setter so
+    SetRecoveryApprovals    // T4 — explicit recovery-threshold setter so
                             // guardian-set churn doesn't leave a stale
                             // implicit threshold. Args: (uint8 newThreshold).
 }
 ```
 
-`proposeAdmin(AdminAction action, bytes args, bytes quorumSignatures)`:
+`scheduleCustodyChange(CustodyAction action, bytes args, bytes quorumSignatures)`:
 - Verifies `quorumSignatures` via the same `QuorumEnforcer.beforeHook` machinery used for delegations.
-- Records `pendingAdmin[proposalId] = AdminProposal({action, args, eta: now + TIMELOCK_DURATION(tier), proposer: msg.sender})`.
-- Emits `AdminProposed(proposalId, action, eta)`.
+- Records `pendingAdmin[changeId] = ScheduledChange({action, args, eta: now + TIMELOCK_DURATION(tier), proposer: msg.sender})`.
+- Emits `CustodyChangeScheduled(changeId, action, eta)`.
 
-`executeAdmin(uint256 proposalId, bytes quorumSignatures)`:
+`applyCustodyChange(uint256 changeId, bytes quorumSignatures)`:
 - Loads the proposal, requires `block.timestamp >= proposal.eta`.
 - In **org** mode: rejects if the executing signer set overlaps the proposing signer set by `>= threshold(tier) - 1` (separation of duties).
 - Dispatches via internal `_apply<Action>` functions.
-- Emits `AdminExecuted(proposalId)`.
+- Emits `CustodyChangeApplied(changeId)`.
 
-`cancelAdmin(uint256 proposalId, bytes quorumSignatures)`:
-- Same threshold as `proposeAdmin`.
+`cancelScheduledChange(uint256 changeId, bytes quorumSignatures)`:
+- Same threshold as `scheduleCustodyChange`.
 - Sets the proposal's `eta = type(uint256).max` so it can never execute.
-- Emits `AdminCancelled(proposalId)`.
+- Emits `ScheduledChangeCancelled(changeId)`.
 
 **Why we don't extend ERC-1271 for admin actions:** ERC-1271 is for signature verification of off-chain payloads. Admin actions are explicit state-mutating calls on the account that MUST emit events for the audit trail; they don't compose cleanly with the ERC-1271 path.
 
@@ -295,10 +297,10 @@ Recovery hardens audit finding **N7** (passkey recovery is unclear today). The f
    - Signs the recovery EIP-712 payload off-chain (any of the QuorumEnforcer v=27/28/>30 paths).
 3. The recovery flow assembles `recoverySignatures` from a quorum of guardians + (optionally) any surviving primary signers.
 4. Calls `proposeRecovery(newOwners[], newPasskeys[], removeOldOwners[], removeOldPasskeys[], recoverySignatures)`.
-5. After `TIMELOCK_DURATION(T6_RECOVERY)` (default: **48h**), calls `executeRecovery(proposalId, recoverySignatures)`.
-6. The first **24h** of the 48h window is the primary-owner **cancel window**: any surviving primary signer can call `cancelAdmin(proposalId, sig)` with a single T4-threshold signature to kill a hostile recovery. After the 24h window closes, recovery can only be cancelled by another recovery-threshold quorum. Rationale: 24h gives the rightful owner one full waking day to react to a notification; the remaining 24h is the "no one objected" window that lets recovery proceed even if the rightful owner is on vacation (different threat model from active compromise).
+5. After `TIMELOCK_DURATION(T6_RECOVERY)` (default: **48h**), calls `executeRecovery(changeId, recoverySignatures)`.
+6. The first **24h** of the 48h window is the primary-owner **cancel window**: any surviving primary signer can call `cancelScheduledChange(changeId, sig)` with a single T4-threshold signature to kill a hostile recovery. After the 24h window closes, recovery can only be cancelled by another recovery-threshold quorum. Rationale: 24h gives the rightful owner one full waking day to react to a notification; the remaining 24h is the "no one objected" window that lets recovery proceed even if the rightful owner is on vacation (different threat model from active compromise).
 
-**Recovery threshold** is configured at account-creation time, defaulting to `ceil(guardianCount / 2) + 1` (majority + 1). If the account has 0 guardians, recovery is impossible — by design, since key-loss is unrecoverable without external trust. The factory's `createAccount` MUST refuse to deploy a `threshold`/`org` account with 0 guardians.
+**Recovery threshold** is configured at account-creation time, defaulting to `ceil(trusteeCount / 2) + 1` (majority + 1). If the account has 0 guardians, recovery is impossible — by design, since key-loss is unrecoverable without external trust. The factory's `createAccount` MUST refuse to deploy a `threshold`/`org` account with 0 guardians.
 
 **Recommended guardian count: 5.** That's the sweet spot: a 5-guardian account loses 1 or 2 guardians (to forgetfulness, key loss, life events) and still passes a 3-of-5 recovery threshold. 3 guardians is the practical minimum (passes 2-of-3) but leaves zero slack. >7 starts to make coordination cumbersome. Frontend SHOULD nudge users toward 5 during account setup; spec only enforces minima (see table below).
 
@@ -324,14 +326,14 @@ This section is the **launch gate** for any account mode beyond `single`. Produc
 | 1 | T1 read delegation in `threshold` mode with 1 signer succeeds | Tier mapping correctly bypasses quorum on read-only |
 | 2 | T2 write delegation in `hybrid` mode without UV fails closed | Hybrid mode's UV gate is load-bearing |
 | 3 | T3 value delegation above `T3_HIGHVALUE_THRESHOLD` without `acceptSessionDelegation` fails closed | High-value on-chain blessing is enforced |
-| 4 | T4 `AddOwner` in `threshold` mode with sub-threshold sigs fails closed | Quorum verification on admin path |
-| 5 | T5 `UpgradeImpl` in `threshold` mode without timelock fails closed | Timelock is enforced |
-| 6 | T5 `UpgradeImpl` in `org` mode with overlapping propose/execute signers fails closed | Separation of duties is enforced |
+| 4 | T4 `AddCustodian` in `threshold` mode with sub-threshold sigs fails closed | Quorum verification on admin path |
+| 5 | T5 `ApplySystemUpdate` in `threshold` mode without timelock fails closed | Timelock is enforced |
+| 6 | T5 `ApplySystemUpdate` in `org` mode with overlapping propose/execute signers fails closed | Separation of duties is enforced |
 | 7 | T6 recovery with 3-of-5 guardians + 48h timelock succeeds | Recovery happy path |
 | 8 | T6 recovery cancelled by primary owner within the 24h cancel window reverts the execute | Hostile-recovery escape hatch (cancel window enforced) |
 | 9 | Recovery with 0 guardians is impossible (factory rejects deploy of `threshold`/`org`) | No-recovery footgun blocked |
 | 10 | `acceptSessionDelegation` emits an audit event recording the on-chain blessing | Trail captures the high-value gate |
-| 11 | All admin actions emit `AdminProposed` / `AdminExecuted` / `AdminCancelled` events | Forensics trail for trust-root mutations |
+| 11 | All admin actions emit `CustodyChangeScheduled` / `CustodyChangeApplied` / `ScheduledChangeCancelled` events | Forensics trail for trust-root mutations |
 | 12 | QuorumEnforcer caveat composes correctly with TimestampEnforcer + ValueEnforcer on T3 delegations | Caveat stacking is not broken by quorum requirement |
 | 13 | T6 recovery proposal during a pending T5 admin proposal — recovery executes; the T5 proposal is implicitly invalidated | Precedence: recovery wins over in-flight trust-root changes |
 | 14 | Mode change from `threshold` → `single` with non-empty guardian set is rejected | No downgrading to a mode that loses recovery |
@@ -347,7 +349,7 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
 
 | Package | Concept it owns | What lands here |
 | --- | --- | --- |
-| `agent-account` | Multi-owner state, mode, thresholds, admin actions, recovery, owner-signature aggregation | `_guardians` mapping, `_modeFlags`, `threshold(tier)` + `recoveryThreshold()` getters, propose / execute / cancel admin machinery, `AdminAction` enum (incl. `RotateAllOwners` / `ChangeT3Ceiling` / `SetRecoveryThreshold`), recovery flow. SDK: `AgentAccountClient` gains `proposeAdmin` / `executeAdmin` / `cancelAdmin` / `initiateRecovery` / `executeRecovery` / `preApproveHash(hash)`. Also **`packSafeSignatures(parts)`** — the Safe-compatible 65-byte-slot blob packer lives here because owners' signatures are aggregated by the account-side SDK, not the delegation builder. |
+| `agent-account` | Multi-owner state, mode, thresholds, admin actions, recovery, owner-signature aggregation | `_guardians` mapping, `_modeFlags`, `threshold(tier)` + `recoveryApprovals()` getters, propose / execute / cancel admin machinery, `CustodyAction` enum (incl. `RotateAllCustodians` / `ChangeValueCeiling` / `SetRecoveryApprovals`), recovery flow. SDK: `AgentAccountClient` gains `scheduleCustodyChange` / `applyCustodyChange` / `cancelScheduledChange` / `initiateRecovery` / `executeRecovery` / `preApproveHash(hash)`. Also **`packSafeSignatures(parts)`** — the Safe-compatible 65-byte-slot blob packer lives here because owners' signatures are aggregated by the account-side SDK, not the delegation builder. |
 | `delegation` | Signer-set + quorum-aware delegations and caveats | `Delegation` shape stays as-is (signer set is implicit in the caveats it carries). `buildQuorumCaveat({signers, threshold, approvedHashRegistry})` joins the existing caveat-builder peers (`buildCaveat`, `buildMcpToolScopeCaveat`, `buildDelegateBindingCaveat`, `buildDataScopeCaveat`). `verifyDelegationToken` gains an optional `requireQuorumForTier(tier)` opt (fail-closed when a tier requires quorum but the delegation lacks the caveat). |
 | `tool-policy` | Risk-tier taxonomy + policy decision | Risk-tier constants (`TIER_READ` ... `TIER_RECOVERY`) become first-class exports. `evaluatePolicy(classification)` returns a `{ tier, requiresQuorum, requiresUv, requiresAcceptedOnChain }` decision that the caller composes with `delegation.verifyDelegationToken`. The existing `@sa-risk-tier` classification metadata gains the tier IDs from this spec. |
 | `identity-auth` | (unchanged) | The `Signer` interface stays signer-shape-agnostic. Multi-sig is below this layer — `identity-auth` doesn't know whether the eventual signer set is 1-of-1 or 3-of-5. |
@@ -359,8 +361,8 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
 
 - Extend `AgentAccount.sol` (in place — no new contract):
   - `_guardians` mapping + `_modeFlags` packed field (mode + per-tier thresholds).
-  - `propose<AdminAction>` / `execute<AdminAction>` / `cancel<AdminAction>` machinery dispatching on the `AdminAction` enum from § 7.
-  - `threshold(uint8 tier)` + `recoveryThreshold()` getters.
+  - `propose<CustodyAction>` / `execute<CustodyAction>` / `cancel<CustodyAction>` machinery dispatching on the `CustodyAction` enum from § 7.
+  - `threshold(uint8 tier)` + `recoveryApprovals()` getters.
   - Reuse existing `_owners` mapping (already multi-capable); add `_passkeys` partition tracking if not yet split out from owners.
 - Extend `AgentAccountFactory.sol`: `createAccount` / `createAccountWithPasskey` signatures grow to take an initial mode + signer set + guardian set + threshold vector. Refuse to deploy `threshold` / `org` mode with 0 guardians.
 - Forge tests: rows 1, 4, 5, 6 from § 9 land here. T11 (admin event emission) verified in this pass.
@@ -372,7 +374,7 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
   - New caveat builder: `buildQuorumCaveat({signers, threshold, approvedHashRegistry})`.
   - `verifyDelegationToken`: accept `requireQuorumForTier(tier)` opt. When the tool-policy decision says a tier requires quorum, verify checks the delegation carries a `QuorumEnforcer` caveat; otherwise fail closed.
   - Audit C3 emission gets a new `acceptedOnChain` context field on accept rows (for T3+ delegations that needed the on-chain `acceptSessionDelegation` blessing).
-- `@agenticprimitives/agent-account` SDK: `AgentAccountClient` gains `proposeAdmin` / `executeAdmin` / `cancelAdmin` / `initiateRecovery` / `executeRecovery` + `preApproveHash(hash)` + **`packSafeSignatures(parts)`** (the Safe-compatible 65-byte-slot blob packer — moved here from `delegation` because owners' signatures are aggregated by the account-side SDK).
+- `@agenticprimitives/agent-account` SDK: `AgentAccountClient` gains `scheduleCustodyChange` / `applyCustodyChange` / `cancelScheduledChange` / `initiateRecovery` / `executeRecovery` + `preApproveHash(hash)` + **`packSafeSignatures(parts)`** (the Safe-compatible 65-byte-slot blob packer — moved here from `delegation` because owners' signatures are aggregated by the account-side SDK).
 - Per-package `CLAUDE.md` + `AUDIT.md` updates documenting the new exports + the integration story.
 
 ### Phase 6c.4 — mcp-runtime integration (TypeScript)
@@ -401,7 +403,7 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
 
 ## 11. Open questions
 
-- **Per-tier vs per-action thresholds**: spec uses tier-level thresholds. Should we allow per-action overrides (e.g. T5 `UpgradeImpl` needs 4-of-5 but T5 `ChangeDelegationManager` needs 3-of-5)? Defer to v0.1 — tier-level is simpler and easier to reason about.
+- **Per-tier vs per-action thresholds**: spec uses tier-level thresholds. Should we allow per-action overrides (e.g. T5 `ApplySystemUpdate` needs 4-of-5 but T5 `RotateDelegationManager` needs 3-of-5)? Defer to v0.1 — tier-level is simpler and easier to reason about.
 - **Cross-account guardians**: should a guardian be allowed to be another `AgentAccount` (not just an EOA)? Yes in spirit (the ERC-1271 path handles it), but the demo doesn't exercise this. Document but don't test in v0.
 - **Threshold + UV combinatorics in hybrid mode**: hybrid mode's T2/T3 says "1 EOA + passkey UV". Should "passkey UV" count toward an additional quorum slot, or be a parallel gate? Spec treats it as a parallel gate (both must be satisfied independently). Revisit if the UX gets clunky.
 - **Auto-rotation of compromised signers**: out of scope. The recovery flow handles total-loss; partial compromise requires the user to add a new signer + remove the compromised one via T4 admin flow, signed by remaining-good signers.
@@ -433,7 +435,7 @@ Resolved in v0 (2026-05-20):
 - ✅ Account modes: `single` / `hybrid` / `threshold` / `org` (§ 4). All four ship in v0; `org` is table-stakes per the org-treasury use case.
 - ✅ Risk-tier table (§ 5) with T3_HIGHVALUE_THRESHOLD default 0.01 ETH and timelocks 1h T4 / 24h T5 / 48h T6.
 - ✅ `acceptSessionDelegation` reused as the high-risk gate (§ 6).
-- ✅ AdminAction enum (§ 7) — 14 actions including the operational `RotateAllOwners` / `ChangeT3Ceiling` / `SetRecoveryThreshold`.
+- ✅ CustodyAction enum (§ 7) — 14 actions including the operational `RotateAllCustodians` / `ChangeValueCeiling` / `SetRecoveryApprovals`.
 - ✅ Recovery: 48h timelock + 24h primary-owner cancel window; recommended 5 guardians (§ 8).
 - ✅ 15 launch-gate tests (§ 9).
 - ✅ Integration map (§ 10): no new package; surface threads through `agent-account` / `delegation` / `tool-policy`.
@@ -455,7 +457,7 @@ Open follow-ups (tracked separately):
 **Discovered 2026-05-20 during phase 6c.5-c (live wiring):** the `AgentAccount`
 implementation's runtime bytecode is **26,876 bytes** — 2,300 bytes over the
 EIP-170 deploy ceiling (24,576). The bloat is concentrated in the propose /
-execute / cancel surface added across 6c.2-b/c/e: the `AdminAction` dispatcher
+execute / cancel surface added across 6c.2-b/c/e: the `CustodyAction` dispatcher
 (15 cases), per-action `_apply*` handlers, `_verifyQuorum` body,
 `_adminPayloadHash`, and `_applyRecoverAccount`. Solidity compiler tuning
 (`optimizer_runs = 1`, `via_ir = true`) only recovers 943 bytes — the surface
@@ -472,12 +474,12 @@ re-design — the on-chain ABI, storage layout, and threat model are preserved.
   EIP-4337 surface, owners + passkeys + sessions storage, signature
   validation (ERC-1271 + 6492), execute / executeBatch, modules surface,
   upgrade surface, all view functions exposed by the admin surface
-  (`mode()`, `threshold(tier)`, `recoveryThreshold()`, `guardianCount()`,
-  `proposalCount()`, `getPendingAdmin(id)`, `isGuardian(addr)`,
+  (`mode()`, `threshold(tier)`, `recoveryApprovals()`, `trusteeCount()`,
+  `scheduledChangeCount()`, `getScheduledChange(id)`, `isTrustee(addr)`,
   `approvedHashRegistry()`).
 - **`AgentAccountAdminModule`** (new singleton, ~10-12KB): the
-  state-mutating admin path — `proposeAdmin` / `executeAdmin` /
-  `cancelAdmin` bodies + the 13 `_apply*` action handlers +
+  state-mutating admin path — `scheduleCustodyChange` / `applyCustodyChange` /
+  `cancelScheduledChange` bodies + the 13 `_apply*` action handlers +
   `_verifyQuorum` + `_adminPayloadHash` + `_applyRecoverAccount`.
 
 **`AgentAccount`'s 3 external admin functions become delegatecall forwarders.**
@@ -504,15 +506,15 @@ shape drifts.
 `AgentAccount` adds a single immutable: `address public immutable adminModule`.
 Set in the constructor; the factory deploys the module first, then passes
 its address into the `AgentAccount` constructor. The module address cannot
-change without an `UpgradeImpl` admin action (which re-deploys the whole
+change without an `ApplySystemUpdate` admin action (which re-deploys the whole
 impl). Per-account rotation of the module is out of scope for v0 — same
 substrate doctrine as the rest of spec 207.
 
 ### 14.4 Forwarder shape
 
 ```solidity
-function proposeAdmin(AdminAction action, bytes calldata args, bytes calldata sigs)
-    external returns (uint256 proposalId)
+function scheduleCustodyChange(CustodyAction action, bytes calldata args, bytes calldata sigs)
+    external returns (uint256 changeId)
 {
     (bool ok, bytes memory ret) = adminModule.delegatecall(msg.data);
     if (!ok) {
@@ -522,7 +524,7 @@ function proposeAdmin(AdminAction action, bytes calldata args, bytes calldata si
 }
 ```
 
-`executeAdmin` + `cancelAdmin` follow the same shape. `msg.data` forwarding
+`applyCustodyChange` + `cancelScheduledChange` follow the same shape. `msg.data` forwarding
 preserves arg layout exactly; the bubbled revert preserves the original
 error selector so external callers see the same error shape as before the
 split.
@@ -601,7 +603,7 @@ masked because `vm.warp` pins time.
 The fix is two-fold:
 
 1. **Drop `eta` from the propose hash.** It's not security-relevant
-   there — proposalId is auto-incremented + monotonic per account, so
+   there — changeId is auto-incremented + monotonic per account, so
    propose-sig replay is already impossible. The eta is *computed* +
    stored at propose time and *read* + bound into the execute/cancel
    hashes when those sigs are checked.
@@ -616,7 +618,7 @@ The fix is two-fold:
 
 ```text
 EIP712Domain {
-  string name             = "agenticprimitives.ThresholdValidator"
+  string name             = "agenticprimitives.CustodyPolicy"
   string version          = "1"
   uint256 chainId         = block.chainid
   address verifyingContract = address(this)   // the deployed validator
@@ -635,22 +637,22 @@ AdminProposeRequest {
   address account
   uint8   action
   bytes32 argsHash         // keccak256(args) so variable-length args fit
-  uint256 proposalId       // predicted: validator.proposalCount(account) + 1
+  uint256 changeId       // predicted: validator.scheduledChangeCount(account) + 1
 }
 
 AdminExecuteRequest {
   address account
   uint8   action
   bytes32 argsHash
-  uint256 proposalId
-  uint64  eta              // copied from the stored AdminProposal
+  uint256 changeId
+  uint64  eta              // copied from the stored ScheduledChange
 }
 
 AdminCancelRequest {
   address account
   uint8   action
   bytes32 argsHash
-  uint256 proposalId
+  uint256 changeId
   uint64  eta
 }
 ```
@@ -669,15 +671,15 @@ EIP712_DOMAIN_TYPEHASH = keccak256(
 )
 
 ADMIN_PROPOSE_TYPEHASH = keccak256(
-  "AdminProposeRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId)"
+  "AdminProposeRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId)"
 )
 
 ADMIN_EXECUTE_TYPEHASH = keccak256(
-  "AdminExecuteRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+  "AdminExecuteRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId,uint64 eta)"
 )
 
 ADMIN_CANCEL_TYPEHASH = keccak256(
-  "AdminCancelRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+  "AdminCancelRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId,uint64 eta)"
 )
 ```
 
@@ -715,7 +717,7 @@ address as `thresholdValidator`; the old one moves to
 ### 15.6 SDK + UI impact
 
 - `@agenticprimitives/agent-account` exposes a new
-  `buildAdminProposeRequest({account, action, argsHash, proposalId})`
+  `buildAdminProposeRequest({account, action, argsHash, changeId})`
   helper that returns the typed-data structure suitable for
   `viem.signTypedData` / wagmi `useSignTypedData`.
 - `apps/demo-web-pro/src/flows/admin-actions/` (NEW): connect →
@@ -723,4 +725,4 @@ address as `thresholdValidator`; the old one moves to
   via MetaMask, then send tx with sig as `quorumSigs`) → wait
   timelock → execute (sign typed data, send tx).
 - MetaMask shows structured fields: "Account: 0x… · Action: 0
-  (AddOwner) · proposalId: 5".
+  (AddCustodian) · changeId: 5".

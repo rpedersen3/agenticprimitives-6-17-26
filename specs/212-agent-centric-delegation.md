@@ -54,7 +54,7 @@ From there, all authority resolves into ONE of two modalities. Both are agent-ce
 A Smart Agent's authority OVER ITSELF: setup, key control, policy changes, owner / member changes, recovery, upgrades, **and issuing delegations**.
 
 - **Signed by**: M-of-N quorum of the Smart Agent's own owners (each owner = a Person Smart Agent ultimately controlled by a passkey).
-- **Routed through**: `ThresholdValidator.proposeAdmin` / `executeAdmin`, with the per-tier timelock and the org-mode SoD invariants from spec 207.
+- **Routed through**: `CustodyPolicy.scheduleCustodyChange` / `applyCustodyChange`, with the per-tier timelock and the org-mode SoD invariants from spec 207.
 - **Examples**: Creating an Org (Acme Construction's first member signs Genesis), adding a member (T4 AddMember), changing the org's approvals required (T4 ChangeApprovalsRequired), upgrading the impl (T5 UpgradeImpl), recovering from lost signers (T6 RecoverAccount), AND issuing a delegation from this Smart Agent to another.
 - **Use shape**: rare, friction-heavy (multiple owners must do a passkey ceremony to sign), audit-heavy (every admin change emits a PROV-O Activity attributed to the owner-quorum).
 
@@ -69,11 +69,58 @@ Authority that has been DELEGATED from one Smart Agent to another — exercised 
 
 **The flow between them** is: Admin authority ISSUES stewardship delegations. Stewardship delegations are then USED. Setting up a real Treasury demo requires several Admin actions (to deploy + configure the agents + issue the standing delegations); operating that Treasury day-to-day is Stewardship.
 
-#### Vocabulary
+#### Two-layer vocabulary discipline
 
-- "Admin" is the right user-facing term for the first modality. Existing UI surfaces ("schedule admin change", "approvals required", "account safety policy") align with this.
-- "Stewardship" is the agent-centric term for the second modality. User-facing variants by function: "treasury permission card", "agent authority grant", "draft-payment authority". Avoid "session" or "delegation" alone in UI copy — both are loaded.
-- In code identifiers, use `admin*` and `steward*` / `stewardship*` to disambiguate intent. E.g., `adminActionFlow.tsx` vs `stewardshipPermissionCard.tsx`.
+agenticprimitives maintains a **vocabulary firewall** between two layers. UI surfaces use admin-layer terms; SDK / contracts / specs / audit records use agentic-layer terms. The mapping happens at the presentation boundary (the UI knows `AdminAction.AddOwner` displays as "Add custodian").
+
+**Admin layer (user-facing UI)** — control-focused, key-holder vocabulary:
+
+| Concept | Admin-layer term |
+| --- | --- |
+| Person who can authorize admin changes | **Custodian** |
+| The set of custodians | **Custody council** |
+| M-of-N required | **Approvals required** |
+| The system enforcing m-of-n | **Custody policy** |
+| A scheduled admin action | **Scheduled change** |
+| The timelock | **Safety delay** |
+| `AdminAction.AddOwner` displays as | "Add custodian" |
+| `AdminAction.RemoveOwner` displays as | "Remove custodian" |
+| `AdminAction.ChangeMode` displays as | "Change custody mode" |
+| `AdminAction.UpgradeImpl` displays as | "Apply system update" |
+| `AdminAction.RecoverAccount` displays as | "Recover account" |
+| `scheduleCustodyChange` / `applyCustodyChange` displays as | "Schedule custody change" / "Apply scheduled change" |
+| Recovery-specific authority holder | **Trustee** |
+| Recovery threshold | **Recovery approvals** |
+| Org-mode separation-of-duties | **Separation of duties** |
+
+**Agentic layer (SDK, contracts, specs, audit records)** — technical, PROV-O / multi-sig / delegation vocabulary:
+
+| Concept | Agentic-layer term |
+| --- | --- |
+| The contract enforcing m-of-n | `CustodyPolicy` |
+| Quorum value | `threshold` |
+| Queued admin action | `AdminProposal` (struct) |
+| Propose/execute/cancel | `scheduleCustodyChange` / `applyCustodyChange` / `cancelScheduledChange` |
+| Agent-to-agent authority | **Delegation**, **stewardship**, **authority grant** |
+| Delegation constraint | **Caveat** |
+| Caveat-enforcing module | **Enforcer** |
+| Acting entity class | **Agent** (PROV-O) |
+| Agent acting for another | **Service Agent**, `ap:ServiceAgent` |
+| Audit attribution | **PROV-O Activity**, `prov:wasAssociatedWith` |
+
+**The firewall rule**:
+
+- UI surfaces NEVER say: "validator", "threshold", "proposal", "quorum", "owner" (of an account), "module", "enforcer".
+- SDK / contract / spec / audit surfaces NEVER say: "custodian", "safety delay", "custody policy", "trustee" (in the agentic sense), "approvals required" (use "threshold" or "quorum" in technical contexts).
+- The UI layer owns the translation. A component like `<CustodianList accounts={custodyPolicy.getOwners()} />` mixes vocabularies AT the boundary — the prop name is admin-layer, the call into the SDK is agentic-layer.
+
+**Code identifiers by layer**:
+
+- UI components: `Custodian*`, `CustodyPolicy*`, `ScheduledChange*`, `SafetyDelay*`, `Trustee*`
+- SDK exports: `AdminAction.*`, `CustodyPolicy`, `scheduleCustodyChange`, `Delegation`, `Caveat`, `Steward*`
+- Mixed in app glue code: components import SDK with agentic names but render admin-layer copy
+
+**Why this matters**: when a user reads the dashboard, they should see a coherent custodial / governance vocabulary that matches how shared-control finance products talk. When a developer reads the SDK, they should see precise multi-sig + delegation + PROV-O terminology. The mismatch between user expectation and developer precision is bridged by the UI layer, not by either side adopting the other's language.
 
 ### 2.3 Authority modeling (continued)
 
@@ -184,6 +231,8 @@ These get their own specs/phases, but spec 212 names them so they're not forgott
 
 ## 8. Cross-references
 
+- [`specs/213-custody-layer-carve-out.md`](./213-custody-layer-carve-out.md) — implements § 2.2's vocabulary firewall as a multi-session refactor (contracts + dirs + ontology + package boundary). Landed in phases 6g.0 through 6g.4.
+- [`specs/207-smart-account-threshold-policy.md`](./207-smart-account-threshold-policy.md) — the renamed custody-policy product surface (was "Smart-account threshold policy"). Implements the custody-side modality of this spec.
 - [`specs/210-treasury-service-agent.md`](./210-treasury-service-agent.md) — Treasury is the canonical Service Agent; spec 210 is built on this principle.
 - [`specs/211-treasury-service-agent-demo.md`](./211-treasury-service-agent-demo.md) — the treasury demo IS this principle made visible; § 3 (three-entity model) is the user-side picture, § 4 (act ladder) is the agent-side picture.
 - [`specs/202-delegation.md`](./202-delegation.md) — delegation primitives. Audit for user-EOA-leakage in language.

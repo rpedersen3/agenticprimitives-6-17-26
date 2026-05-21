@@ -2,7 +2,7 @@
 
 **Status:** draft v2 · 2026-05-21 (revised after architectural decisions locked in)
 **Replaces:** the capability-gallery shape of `apps/demo-web-pro` (phase 6c.5-e). The directory + package name stay; the content transforms.
-**Builds on:** spec 207 (threshold-policy), spec 209 (modular core), spec 210 (Treasury as Service Agent — ontology + agency model), **spec 212 (agent-centric delegation — the load-bearing architectural principle)**.
+**Builds on:** spec 207 (custody policy), spec 209 (modular core), spec 210 (Treasury as Service Agent — ontology + agency model), **spec 212 (agent-centric delegation — the load-bearing architectural principle)**, spec 213 (custody-layer carve-out — vocabulary firewall that drives the identifier shapes in code samples below).
 
 ## Locked-in architectural decisions (2026-05-21 planning round)
 
@@ -41,18 +41,18 @@ Non-goals:
 
 ## 2. Vocabulary discipline
 
-Every UI string + every code identifier honors the table below. Implementation primitives (`ThresholdValidator`, `proposeAdmin`, `caveat`, `delegation token`, `userOp`) are forbidden in user-facing copy.
+Every UI string + every code identifier honors the table below. Implementation primitives (`CustodyPolicy`, `scheduleCustodyChange`, `caveat`, `delegation token`, `userOp`) are forbidden in user-facing copy.
 
 | Concept | UI label | Identifier convention | Tech mapping |
 | --- | --- | --- | --- |
-| Shared funds container, has agency | **Treasury service agent** | `treasury`, `TreasuryServiceAgent` | AgentAccount in org mode + ThresholdValidator |
-| Company organization | **Acme Construction (organization)** | `org`, `OrgSmartAgent`, `acmeConstruction` | AgentAccount in org mode + ThresholdValidator |
+| Shared funds container, has agency | **Treasury service agent** | `treasury`, `TreasuryServiceAgent` | AgentAccount in org mode + CustodyPolicy |
+| Company organization | **Acme Construction (organization)** | `org`, `OrgSmartAgent`, `acmeConstruction` | AgentAccount in org mode + CustodyPolicy |
 | Per-user on-chain identity | **Person smart agent** | `personSmartAgent`, `PersonSmartAgent` | AgentAccount in hybrid mode, passkey-owned |
 | Per-user delegated agent identity | **Person agent** | `personAgent`, `PersonAgent` | Session-bound identity (smart-agent's a2a pattern) |
-| ThresholdValidator module | **Account safety policy** | `accountSafetyPolicy` | (do not surface module/validator) |
+| CustodyPolicy module | **Account safety policy** | `accountSafetyPolicy` | (do not surface module/validator) |
 | Pending admin action | **Scheduled admin change** | `scheduledChange` | (do not surface "proposal") |
 | M-of-N threshold | **Approvals required** | `approvalsRequired` | |
-| **Admin** authority (m-of-n on Smart Agent itself) | **Admin** ("admin change", "admin action") | `admin*`, `adminAction*` | ThresholdValidator.proposeAdmin/executeAdmin; per spec 212 § 2.2 |
+| **Admin** authority (m-of-n on Smart Agent itself) | **Admin** ("admin change", "admin action") | `admin*`, `adminAction*` | CustodyPolicy.scheduleCustodyChange/applyCustodyChange; per spec 212 § 2.2 |
 | **Stewardship** authority (agent-to-agent delegation, no fresh m-of-n) | **Permission**, **authority grant**, **treasury permission card** | `steward*`, `stewardship*`, `permissionGrant*` | Delegation tokens; caveats; per spec 212 § 2.2 |
 
 ---
@@ -199,7 +199,7 @@ Every act below is labeled. The "wow moment" that EXERCISES stewardship is curre
 
 ### Act 2 — Create Acme Construction (Org Smart Agent) **[Bootstrap]**
 - Alice (now the founder via Act 1) creates the Org on-chain.
-- `factory.createAccountWithModeCustomT4` with `mode=org`, owner = Alice's Person Smart Agent.
+- `factory.createAccountWithModeCustomSafetyDelay` with `mode=org`, owner = Alice's Person Smart Agent.
 - The Org's AgentAccount becomes "Acme Construction" on-chain. Alice is its sole member initially.
 - This is BEFORE Treasury creation — the Org owns the Treasury (per Option β architecture).
 - "Account safety policy" surfaces: 1 approval required (sole-member org). Will become 2 in Act 4.
@@ -209,7 +209,7 @@ Every act below is labeled. The "wow moment" that EXERCISES stewardship is curre
 ### Act 2.5 — Create Acme Treasury (Service Smart Agent) **[Admin]**
 (The Org issues the deploy + initial Treasury setup via an Admin action — Org has only 1 owner at this point, so "approvals required" = 1; still admin-shaped, not bootstrap-shaped, because it's the Org Smart Agent acting.)
 - Treasury is created with the ORG (not Alice directly) as its owner.
-- `factory.createAccountWithModeCustomT4`, owner = Acme Construction's AgentAccount address.
+- `factory.createAccountWithModeCustomSafetyDelay`, owner = Acme Construction's AgentAccount address.
 - Treasury's `ap:hasSteward` set is empty initially (admins are added in Act 4); Org is the sole authority.
 - Treasury a2a + treasury-mcp servers come up scoped to this Treasury address.
 - Org issues its FIRST delegation: "Acme Construction authorizes Acme Treasury to hold + custody assets on its behalf" — establishes the `prov:actedOnBehalfOf` relationship on chain.
@@ -383,7 +383,7 @@ The demo MUST NOT lie about what it does. If a delegation is constructed but its
 - Per-agent-class server separation (person-a2a, org-a2a, treasury-a2a + their MCPs) is the LONG-TERM shape, but v0 can use the existing demo-a2a for all roles. The act ladder doesn't depend on the separation; the separation depends on the act ladder being valuable enough to warrant the work.
 - Treasury never talks to humans directly. The chain goes: user → person smart account → person agent → treasury service agent.
 - **Two authority modalities** are pinned per spec 212 § 2.2:
-  - **Admin**: m-of-n owner-quorum signs; routed through ThresholdValidator's propose/execute machinery. Covers setup, key control, policy, owner changes, recovery, upgrades, AND issuing delegations. Acts 2-5 in this demo are Admin.
+  - **Admin**: m-of-n owner-quorum signs; routed through CustodyPolicy's propose/execute machinery. Covers setup, key control, policy, owner changes, recovery, upgrades, AND issuing delegations. Acts 2-5 in this demo are Admin.
   - **Stewardship**: a delegate USES a delegation that was previously issued by Admin. Single signer (delegate's session key). Acts 7+ are Stewardship (currently queued; not yet in the act ladder).
 - UI vocabulary: "admin"/"admin change" for Admin authority surfaces; "permission"/"authority grant"/"treasury permission card" for Stewardship surfaces. Code identifiers: `admin*` and `steward*` / `stewardship*`.
 
