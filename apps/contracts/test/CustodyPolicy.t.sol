@@ -51,7 +51,7 @@ contract CustodyPolicyTest is Test {
         address[] memory guardians = new address[](0);
         bytes memory initData = abi.encode(
             modeVal,
-            uint8(0),                       // recoveryThreshold
+            uint8(0),                       // recoveryApprovals
             guardians,
             thresholds,
             timelocks,
@@ -73,13 +73,13 @@ contract CustodyPolicyTest is Test {
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
     );
     bytes32 constant PROPOSE_TYPEHASH = keccak256(
-        "AdminProposeRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId)"
+        "ScheduleCustodyChangeRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId)"
     );
     bytes32 constant EXECUTE_TYPEHASH = keccak256(
-        "AdminExecuteRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+        "ApplyCustodyChangeRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId,uint64 eta)"
     );
     bytes32 constant CANCEL_TYPEHASH = keccak256(
-        "AdminCancelRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+        "CancelScheduledChangeRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId,uint64 eta)"
     );
 
     function _domainSeparator() internal view returns (bytes32) {
@@ -99,23 +99,23 @@ contract CustodyPolicyTest is Test {
     }
 
     function _hashPropose(
-        uint256 proposalId,
+        uint256 changeId,
         CustodyPolicy.CustodyAction action,
         bytes memory args
     ) internal view returns (bytes32) {
         return _hashTypedData(
-            keccak256(abi.encode(PROPOSE_TYPEHASH, address(acct), uint8(action), keccak256(args), proposalId))
+            keccak256(abi.encode(PROPOSE_TYPEHASH, address(acct), uint8(action), keccak256(args), changeId))
         );
     }
 
     function _hashExecute(
-        uint256 proposalId,
+        uint256 changeId,
         CustodyPolicy.CustodyAction action,
         bytes memory args,
         uint64 eta
     ) internal view returns (bytes32) {
         return _hashTypedData(
-            keccak256(abi.encode(EXECUTE_TYPEHASH, address(acct), uint8(action), keccak256(args), proposalId, eta))
+            keccak256(abi.encode(EXECUTE_TYPEHASH, address(acct), uint8(action), keccak256(args), changeId, eta))
         );
     }
 
@@ -127,8 +127,8 @@ contract CustodyPolicyTest is Test {
         _installValidator(1, thresholds, timelocks);
 
         assertTrue(validator.isInstalledOn(address(acct)));
-        assertEq(validator.mode(address(acct)), 1);
-        assertEq(validator.threshold(address(acct), 4), 1);
+        assertEq(validator.custodyMode(address(acct)), 1);
+        assertEq(validator.approvalsRequired(address(acct), 4), 1);
         assertTrue(acct.isModuleInstalled(MODULE_TYPE_EXECUTOR, address(validator), hex""));
     }
 
@@ -169,25 +169,25 @@ contract CustodyPolicyTest is Test {
         bytes memory args = abi.encode(owner2);
         uint64 nowTs = uint64(block.timestamp);
         uint64 eta   = nowTs;
-        uint256 proposalId = 1;  // first proposal
+        uint256 changeId = 1;  // first proposal
 
-        bytes32 proposeHash = _hashPropose(proposalId, CustodyPolicy.CustodyAction.AddCustodian, args);
+        bytes32 proposeHash = _hashPropose(changeId, CustodyPolicy.CustodyAction.AddCustodian, args);
         bytes memory sigs = _signRaw(OWNER_PK, proposeHash);
 
-        uint256 retId = validator.proposeAdmin(
+        uint256 retId = validator.scheduleCustodyChange(
             address(acct),
             CustodyPolicy.CustodyAction.AddCustodian,
             args,
             sigs
         );
-        assertEq(retId, proposalId);
+        assertEq(retId, changeId);
 
-        bytes32 execHash = _hashExecute(proposalId, CustodyPolicy.CustodyAction.AddCustodian, args, eta);
+        bytes32 execHash = _hashExecute(changeId, CustodyPolicy.CustodyAction.AddCustodian, args, eta);
         bytes memory execSigs = _signRaw(OWNER_PK, execHash);
 
         assertFalse(acct.isOwner(owner2), "pre: owner2 not yet on account");
 
-        validator.executeAdmin(address(acct), proposalId, execSigs);
+        validator.applyCustodyChange(address(acct), changeId, execSigs);
 
         assertTrue(acct.isOwner(owner2), "post: owner2 added via executeFromModule path");
     }
@@ -198,7 +198,7 @@ contract CustodyPolicyTest is Test {
         // Brand-new account; validator never installed.
         AgentAccount fresh = factory.createAccount(owner, 99);
         vm.expectRevert(abi.encodeWithSelector(CustodyPolicy.NotInstalledOn.selector, address(fresh)));
-        validator.proposeAdmin(
+        validator.scheduleCustodyChange(
             address(fresh),
             CustodyPolicy.CustodyAction.AddCustodian,
             abi.encode(owner2),
@@ -222,7 +222,7 @@ contract CustodyPolicyTest is Test {
             CustodyPolicy.AdminUnauthorizedSigner.selector,
             vm.addr(0xDEAD)
         ));
-        validator.proposeAdmin(
+        validator.scheduleCustodyChange(
             address(acct),
             CustodyPolicy.CustodyAction.AddCustodian,
             args,

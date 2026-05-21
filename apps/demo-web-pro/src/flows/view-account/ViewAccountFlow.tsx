@@ -4,7 +4,7 @@
  * Paste any deployed AgentAccount address (or arrive here via the
  * "Inspect this account →" link from the create flow) and the page
  * loads everything queryable: owners, ownerCount, account.accountId(),
- * mode + per-tier thresholds + guardianCount + recoveryThreshold from
+ * mode + per-tier thresholds + trusteeCount + recoveryApprovals from
  * the validator, and whether the CustodyPolicy + QuorumEnforcer
  * are installed as modules.
  *
@@ -32,13 +32,13 @@ const accountAbi = [
 // Minimal validator ABI — just the views we need here.
 const validatorAbi = [
   { type: 'function', name: 'isInstalledOn',     stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'bool' }] },
-  { type: 'function', name: 'mode',              stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint8' }] },
-  { type: 'function', name: 'recoveryThreshold', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint8' }] },
-  { type: 'function', name: 'guardianCount',     stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'proposalCount',     stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'custodyMode',       stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'recoveryApprovals', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'trusteeCount',     stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'scheduledChangeCount',     stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 't3HighValueCeiling', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'threshold',         stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
-  { type: 'function', name: 'timelockDuration', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint32' }] },
+  { type: 'function', name: 'approvalsRequired', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'safetyDelay', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint32' }] },
 ] as const;
 
 const MODE_LABEL: Record<number, string> = {
@@ -155,28 +155,28 @@ function AccountInspector({
   const modeQ = useReadContract({
     address: validatorAddress,
     abi: validatorAbi,
-    functionName: 'mode',
+    functionName: 'custodyMode',
     args: [account],
     query: { enabled: !!validatorAddress && isInstalledQ.data === true },
   });
   const recThrQ = useReadContract({
     address: validatorAddress,
     abi: validatorAbi,
-    functionName: 'recoveryThreshold',
+    functionName: 'recoveryApprovals',
     args: [account],
     query: { enabled: !!validatorAddress && isInstalledQ.data === true },
   });
   const guardiansQ = useReadContract({
     address: validatorAddress,
     abi: validatorAbi,
-    functionName: 'guardianCount',
+    functionName: 'trusteeCount',
     args: [account],
     query: { enabled: !!validatorAddress && isInstalledQ.data === true },
   });
   const proposalsQ = useReadContract({
     address: validatorAddress,
     abi: validatorAbi,
-    functionName: 'proposalCount',
+    functionName: 'scheduledChangeCount',
     args: [account],
     query: { enabled: !!validatorAddress && isInstalledQ.data === true },
   });
@@ -284,13 +284,13 @@ function TierRow({
   const thresholdQ = useReadContract({
     address: validatorAddress,
     abi: validatorAbi,
-    functionName: 'threshold',
+    functionName: 'approvalsRequired',
     args: [account, tier],
   });
   const timelockQ = useReadContract({
     address: validatorAddress,
     abi: validatorAbi,
-    functionName: 'timelockDuration',
+    functionName: 'safetyDelay',
     args: [account, tier],
   });
   const seconds = Number(timelockQ.data ?? 0);

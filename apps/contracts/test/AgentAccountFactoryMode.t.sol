@@ -75,7 +75,7 @@ contract AgentAccountFactoryModeTest is Test {
         AgentAccountInitParams memory p = _params(0, _owners(owner1), new address[](0));
         AgentAccount acct = factory.createAccountWithMode(p, address(validator), 1);
         assertTrue(acct.isOwner(owner1));
-        assertEq(validator.mode(address(acct)), 0);
+        assertEq(validator.custodyMode(address(acct)), 0);
         assertTrue(validator.isInstalledOn(address(acct)));
     }
 
@@ -84,11 +84,11 @@ contract AgentAccountFactoryModeTest is Test {
     function test_createAccountWithMode_hybrid_with_one_owner() public {
         AgentAccountInitParams memory p = _params(1, _owners(owner1), new address[](0));
         AgentAccount acct = factory.createAccountWithMode(p, address(validator), 2);
-        assertEq(validator.mode(address(acct)), 1);
+        assertEq(validator.custodyMode(address(acct)), 1);
         // Default T4 threshold for N=1 is 1
-        assertEq(validator.threshold(address(acct), 4), 1);
+        assertEq(validator.approvalsRequired(address(acct), 4), 1);
         // T5 timelock should be 24h
-        assertEq(validator.timelockDuration(address(acct), 5), 24 hours);
+        assertEq(validator.safetyDelay(address(acct), 5), 24 hours);
     }
 
     // ─── 3. Threshold mode (≥ 2 guardians required) ─────────────────
@@ -99,14 +99,14 @@ contract AgentAccountFactoryModeTest is Test {
         AgentAccountInitParams memory p = _params(2, owners, _guardians(2, guardian1, guardian2, address(0)));
         AgentAccount acct = factory.createAccountWithMode(p, address(validator), 3);
 
-        assertEq(validator.mode(address(acct)), 2);
+        assertEq(validator.custodyMode(address(acct)), 2);
         // N=3 matrix from spec § 5.1: T4 = 3 (unanimous for N≤3)
-        assertEq(validator.threshold(address(acct), 4), 3);
+        assertEq(validator.approvalsRequired(address(acct), 4), 3);
         // T5 = 3 (unanimous for N≤5)
-        assertEq(validator.threshold(address(acct), 5), 3);
-        assertEq(validator.guardianCount(address(acct)), 2);
-        // recoveryThreshold = floor(2/2)+1 = 2 (i.e. unanimous for n=2)
-        assertEq(validator.recoveryThreshold(address(acct)), 2);
+        assertEq(validator.approvalsRequired(address(acct), 5), 3);
+        assertEq(validator.trusteeCount(address(acct)), 2);
+        // recoveryApprovals = floor(2/2)+1 = 2 (i.e. unanimous for n=2)
+        assertEq(validator.recoveryApprovals(address(acct)), 2);
     }
 
     // ─── 4. Org mode (≥ 3 guardians required) ───────────────────────
@@ -118,11 +118,11 @@ contract AgentAccountFactoryModeTest is Test {
         AgentAccountInitParams memory p = _params(3, owners, _guardians(3, guardian1, guardian2, guardian3));
         AgentAccount acct = factory.createAccountWithMode(p, address(validator), 4);
 
-        assertEq(validator.mode(address(acct)), 3);
+        assertEq(validator.custodyMode(address(acct)), 3);
         // N=5 matrix: T4 = N-1 = 4, T5 = N = 5
-        assertEq(validator.threshold(address(acct), 4), 4);
-        assertEq(validator.threshold(address(acct), 5), 5);
-        assertEq(validator.guardianCount(address(acct)), 3);
+        assertEq(validator.approvalsRequired(address(acct), 4), 4);
+        assertEq(validator.approvalsRequired(address(acct), 5), 5);
+        assertEq(validator.trusteeCount(address(acct)), 3);
     }
 
     // ─── 5. Idempotent return ───────────────────────────────────────

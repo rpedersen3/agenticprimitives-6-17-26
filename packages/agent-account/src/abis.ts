@@ -176,7 +176,7 @@ export const custodyPolicyAbi = [
   // apps/contracts/src/modules/CustodyPolicy.sol (spec 209).
   {
     type: 'function',
-    name: 'proposeAdmin',
+    name: 'scheduleCustodyChange',
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'account', type: 'address' },
@@ -184,45 +184,45 @@ export const custodyPolicyAbi = [
       { name: 'args', type: 'bytes' },
       { name: 'quorumSigs', type: 'bytes' },
     ],
-    outputs: [{ name: 'proposalId', type: 'uint256' }],
+    outputs: [{ name: 'changeId', type: 'uint256' }],
   },
   {
     type: 'function',
-    name: 'executeAdmin',
+    name: 'applyCustodyChange',
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'account', type: 'address' },
-      { name: 'proposalId', type: 'uint256' },
+      { name: 'changeId', type: 'uint256' },
       { name: 'quorumSigs', type: 'bytes' },
     ],
     outputs: [],
   },
   {
     type: 'function',
-    name: 'cancelAdmin',
+    name: 'cancelScheduledChange',
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'account', type: 'address' },
-      { name: 'proposalId', type: 'uint256' },
+      { name: 'changeId', type: 'uint256' },
       { name: 'quorumSigs', type: 'bytes' },
     ],
     outputs: [],
   },
   // Threshold-policy view methods.
-  { type: 'function', name: 'mode', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint8' }] },
-  { type: 'function', name: 'threshold', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
-  { type: 'function', name: 'recoveryThreshold', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'custodyMode', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'approvalsRequired', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'recoveryApprovals', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint8' }] },
   { type: 'function', name: 't3HighValueCeiling', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'timelockDuration', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint32' }] },
-  { type: 'function', name: 'isGuardian', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'signer', type: 'address' }], outputs: [{ type: 'bool' }] },
-  { type: 'function', name: 'guardianCount', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'proposalCount', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'safetyDelay', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint32' }] },
+  { type: 'function', name: 'isTrustee', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'signer', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'trusteeCount', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'scheduledChangeCount', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'defaultThreshold', stateMutability: 'pure', inputs: [{ name: 'nOwners', type: 'uint8' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
   {
     type: 'function',
-    name: 'getPendingAdmin',
+    name: 'getScheduledChange',
     stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }, { name: 'proposalId', type: 'uint256' }],
+    inputs: [{ name: 'account', type: 'address' }, { name: 'changeId', type: 'uint256' }],
     outputs: [
       { name: 'action', type: 'uint8' },
       { name: 'args', type: 'bytes' },
@@ -232,9 +232,9 @@ export const custodyPolicyAbi = [
       { name: 'cancelled', type: 'bool' },
     ],
   },
-  { type: 'event', name: 'AdminProposed', inputs: [{ name: 'account', type: 'address', indexed: true }, { name: 'proposalId', type: 'uint256', indexed: true }, { name: 'action', type: 'uint8', indexed: true }, { name: 'eta', type: 'uint64', indexed: false }, { name: 'proposer', type: 'address', indexed: false }] },
-  { type: 'event', name: 'AdminExecuted', inputs: [{ name: 'account', type: 'address', indexed: true }, { name: 'proposalId', type: 'uint256', indexed: true }] },
-  { type: 'event', name: 'AdminCancelled', inputs: [{ name: 'account', type: 'address', indexed: true }, { name: 'proposalId', type: 'uint256', indexed: true }] },
+  { type: 'event', name: 'CustodyChangeScheduled', inputs: [{ name: 'account', type: 'address', indexed: true }, { name: 'changeId', type: 'uint256', indexed: true }, { name: 'action', type: 'uint8', indexed: true }, { name: 'eta', type: 'uint64', indexed: false }, { name: 'proposer', type: 'address', indexed: false }] },
+  { type: 'event', name: 'CustodyChangeApplied', inputs: [{ name: 'account', type: 'address', indexed: true }, { name: 'changeId', type: 'uint256', indexed: true }] },
+  { type: 'event', name: 'ScheduledChangeCancelled', inputs: [{ name: 'account', type: 'address', indexed: true }, { name: 'changeId', type: 'uint256', indexed: true }] },
 ] as const;
 
 /**

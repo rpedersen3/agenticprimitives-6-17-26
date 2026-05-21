@@ -28,11 +28,12 @@ import {SignatureSlotRecovery} from "../libraries/SignatureSlotRecovery.sol";
  *
  *         Spec 207 § 5 tier matrix (T1 Read / T2 Write / T3 Value /
  *         T4 Admin / T5 Critical / T6 Recovery) is unchanged from the
- *         pre-extraction surface. The custody actions enum is in
- *         phase 6g.1 renamed from CustodyAction → CustodyAction (this
- *         phase) but the enum VALUES are kept temporarily for safer
- *         migration; phase 6g.1-b renames the values + state-vars +
- *         function names + EIP-712 typehashes.
+ *         pre-extraction surface. Per spec 213 § 2.2, the enum was
+ *         renamed from `AdminAction` → `CustodyAction`, the propose /
+ *         execute / cancel functions to schedule / apply / cancel
+ *         scheduled change, state vars (threshold → approvalsRequired,
+ *         timelock → safetyDelay, guardian → trustee, owner → custodian),
+ *         and EIP-712 typehashes likewise.
  */
 contract CustodyPolicy {
     // ─── ERC-7579 marker constants (mirror of the account-side ids) ──
@@ -58,7 +59,7 @@ contract CustodyPolicy {
         RecoverAccount             // 14 — T6
     }
 
-    struct AdminProposal {
+    struct ScheduledChange {
         CustodyAction action;
         bytes args;
         uint64 proposedAt;
@@ -72,15 +73,15 @@ contract CustodyPolicy {
     struct Config {
         bool installed;
         uint8 mode;                                       // 0=single, 1=hybrid, 2=threshold, 3=org
-        uint8 recoveryThreshold;
+        uint8 recoveryApprovals;
         uint256 t3HighValueCeiling;
-        mapping(uint8 => uint8) thresholdByTier;
-        mapping(uint8 => uint32) timelockByTier;
-        mapping(address => bool) guardians;
-        uint256 guardianCount;
-        uint256 nextProposalId;
-        mapping(uint256 => AdminProposal) pending;
-        mapping(uint256 => mapping(address => bool)) proposerSigners;
+        mapping(uint8 => uint8) approvalsRequiredByTier;
+        mapping(uint8 => uint32) safetyDelayByTier;
+        mapping(address => bool) trustees;
+        uint256 trusteeCount;
+        uint256 nextChangeId;
+        mapping(uint256 => ScheduledChange) pending;
+        mapping(uint256 => mapping(address => bool)) proposerCustodians;
         address approvedHashRegistry;
     }
 
@@ -96,14 +97,14 @@ contract CustodyPolicy {
     bytes32 internal constant EIP712_NAME_HASH = keccak256("agenticprimitives.CustodyPolicy");
     bytes32 internal constant EIP712_VERSION_HASH = keccak256("1");
 
-    bytes32 internal constant ADMIN_PROPOSE_TYPEHASH = keccak256(
-        "AdminProposeRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId)"
+    bytes32 internal constant SCHEDULE_CUSTODY_CHANGE_TYPEHASH = keccak256(
+        "ScheduleCustodyChangeRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId)"
     );
-    bytes32 internal constant ADMIN_EXECUTE_TYPEHASH = keccak256(
-        "AdminExecuteRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+    bytes32 internal constant APPLY_CUSTODY_CHANGE_TYPEHASH = keccak256(
+        "ApplyCustodyChangeRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId,uint64 eta)"
     );
-    bytes32 internal constant ADMIN_CANCEL_TYPEHASH = keccak256(
-        "AdminCancelRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+    bytes32 internal constant CANCEL_SCHEDULED_CHANGE_TYPEHASH = keccak256(
+        "CancelScheduledChangeRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId,uint64 eta)"
     );
 
     /// @dev Cached at deploy-time for the deploy-time chainId. If
@@ -148,10 +149,10 @@ contract CustodyPolicy {
         address account,
         CustodyAction action,
         bytes memory args,
-        uint256 proposalId
+        uint256 changeId
     ) internal view returns (bytes32) {
         return _hashTypedDataV4(
-            keccak256(abi.encode(ADMIN_PROPOSE_TYPEHASH, account, uint8(action), keccak256(args), proposalId))
+            keccak256(abi.encode(SCHEDULE_CUSTODY_CHANGE_TYPEHASH, account, uint8(action), keccak256(args), changeId))
         );
     }
 
@@ -159,11 +160,11 @@ contract CustodyPolicy {
         address account,
         CustodyAction action,
         bytes memory args,
-        uint256 proposalId,
+        uint256 changeId,
         uint64 eta
     ) internal view returns (bytes32) {
         return _hashTypedDataV4(
-            keccak256(abi.encode(ADMIN_EXECUTE_TYPEHASH, account, uint8(action), keccak256(args), proposalId, eta))
+            keccak256(abi.encode(APPLY_CUSTODY_CHANGE_TYPEHASH, account, uint8(action), keccak256(args), changeId, eta))
         );
     }
 
@@ -171,11 +172,11 @@ contract CustodyPolicy {
         address account,
         CustodyAction action,
         bytes memory args,
-        uint256 proposalId,
+        uint256 changeId,
         uint64 eta
     ) internal view returns (bytes32) {
         return _hashTypedDataV4(
-            keccak256(abi.encode(ADMIN_CANCEL_TYPEHASH, account, uint8(action), keccak256(args), proposalId, eta))
+            keccak256(abi.encode(CANCEL_SCHEDULED_CHANGE_TYPEHASH, account, uint8(action), keccak256(args), changeId, eta))
         );
     }
 
@@ -185,12 +186,12 @@ contract CustodyPolicy {
 
     // ─── Events ───────────────────────────────────────────────────────
 
-    event CustodyPolicyInstalled(address indexed account, uint8 mode, uint8 recoveryThreshold);
+    event CustodyPolicyInstalled(address indexed account, uint8 mode, uint8 recoveryApprovals);
     event CustodyPolicyUninstalled(address indexed account);
 
-    event AdminProposed(address indexed account, uint256 indexed proposalId, CustodyAction indexed action, uint64 eta, address proposer);
-    event AdminExecuted(address indexed account, uint256 indexed proposalId);
-    event AdminCancelled(address indexed account, uint256 indexed proposalId);
+    event CustodyChangeScheduled(address indexed account, uint256 indexed changeId, CustodyAction indexed action, uint64 eta, address proposer);
+    event CustodyChangeApplied(address indexed account, uint256 indexed changeId);
+    event ScheduledChangeCancelled(address indexed account, uint256 indexed changeId);
     event GuardianAdded(address indexed account, address indexed guardian);
     event GuardianRemoved(address indexed account, address indexed guardian);
     event ThresholdChanged(address indexed account, uint8 indexed tier, uint8 oldValue, uint8 newValue);
@@ -212,27 +213,27 @@ contract CustodyPolicy {
     error AlreadyInstalledOn(address account);
     error OnInstallNotByAccount(address caller);
 
-    error InvalidAdminAction(uint8 action);
+    error InvalidCustodyAction(uint8 action);
     error InvalidTier(uint8 tier);
-    error ProposalNotFound(uint256 proposalId);
-    error ProposalAlreadyExecuted(uint256 proposalId);
-    error ProposalAlreadyCancelled(uint256 proposalId);
-    error ProposalNotReady(uint256 proposalId, uint64 eta);
+    error ProposalNotFound(uint256 changeId);
+    error ProposalAlreadyExecuted(uint256 changeId);
+    error ProposalAlreadyCancelled(uint256 changeId);
+    error ProposalNotReady(uint256 changeId, uint64 eta);
     error AdminInsufficientQuorum(uint256 supplied, uint8 required);
     error AdminDuplicateOrUnsortedSigner(address signer);
     error AdminUnauthorizedSigner(address signer);
-    error GuardianAlreadyExists(address guardian);
-    error GuardianDoesNotExist(address guardian);
+    error TrusteeAlreadyExists(address guardian);
+    error TrusteeDoesNotExist(address guardian);
     error InvalidMode(uint8 mode_);
     error InvalidThresholdValue(uint8 thr);
     error RecoveryRequiresGuardians();
     error EmptyOwnerSet();
-    error AdminActionNotYetImplemented(uint8 action);
-    error CannotDowngradeWithGuardians();
+    error CustodyActionNotYetImplemented(uint8 action);
+    error CannotDowngradeWithTrustees();
     error TimelockRequiredForTier(uint8 tier);
     error SeparationOfDutiesViolation(address signer);
     error RecoveryRequiresGuardianQuorum();
-    error UnauthorizedGuardian(address signer);
+    error UnauthorizedTrustee(address signer);
     error ZeroAddress();
 
     // ─── ERC-7579 lifecycle ───────────────────────────────────────────
@@ -241,10 +242,10 @@ contract CustodyPolicy {
      * Install-time init data shape:
      *   abi.encode(
      *     uint8 mode,
-     *     uint8 recoveryThreshold,
-     *     address[] guardians,
-     *     uint8[7] thresholdByTier,   // index 0 unused; T1..T6 use 1..6
-     *     uint32[7] timelockByTier,
+     *     uint8 recoveryApprovals,
+     *     address[] trustees,
+     *     uint8[7] approvalsRequiredByTier,   // index 0 unused; T1..T6 use 1..6
+     *     uint32[7] safetyDelayByTier,
      *     uint256 t3HighValueCeiling,
      *     address approvedHashRegistry
      *   )
@@ -257,7 +258,7 @@ contract CustodyPolicy {
         (
             uint8 modeVal,
             uint8 recThr,
-            address[] memory guardians,
+            address[] memory trustees,
             uint8[7] memory thresholds,
             uint32[7] memory timelocks,
             uint256 t3Ceiling,
@@ -268,21 +269,21 @@ contract CustodyPolicy {
 
         c.installed = true;
         c.mode = modeVal;
-        c.recoveryThreshold = recThr;
+        c.recoveryApprovals = recThr;
         c.t3HighValueCeiling = t3Ceiling;
         c.approvedHashRegistry = approvedHashReg;
 
         for (uint8 t = 1; t <= 6; t++) {
-            if (thresholds[t] > 0) c.thresholdByTier[t] = thresholds[t];
-            if (timelocks[t] > 0) c.timelockByTier[t] = timelocks[t];
+            if (thresholds[t] > 0) c.approvalsRequiredByTier[t] = thresholds[t];
+            if (timelocks[t] > 0) c.safetyDelayByTier[t] = timelocks[t];
         }
 
-        for (uint256 i; i < guardians.length; i++) {
-            address g = guardians[i];
+        for (uint256 i; i < trustees.length; i++) {
+            address g = trustees[i];
             if (g == address(0)) revert ZeroAddress();
-            if (c.guardians[g]) revert GuardianAlreadyExists(g);
-            c.guardians[g] = true;
-            c.guardianCount += 1;
+            if (c.trustees[g]) revert TrusteeAlreadyExists(g);
+            c.trustees[g] = true;
+            c.trusteeCount += 1;
         }
 
         emit CustodyPolicyInstalled(account, modeVal, recThr);
@@ -293,7 +294,7 @@ contract CustodyPolicy {
         Config storage c = _configs[account];
         if (!c.installed) revert NotInstalledOn(account);
         c.installed = false;
-        // Per-account state (proposals, guardians, thresholds) intentionally
+        // Per-account state (proposals, trustees, thresholds) intentionally
         // NOT zeroed here — re-install on the same account would clobber.
         // Zeroing is a defensive choice for a future hardening pass.
         emit CustodyPolicyUninstalled(account);
@@ -301,17 +302,17 @@ contract CustodyPolicy {
 
     // ─── Public propose / execute / cancel ──────────────────────────
 
-    function proposeAdmin(
+    function scheduleCustodyChange(
         address account,
         CustodyAction action,
         bytes calldata args,
         bytes calldata quorumSigs
-    ) external returns (uint256 proposalId) {
+    ) external returns (uint256 changeId) {
         Config storage c = _configs[account];
         if (!c.installed) revert NotInstalledOn(account);
 
         uint8 tier = _tierFor(action);
-        uint32 timelock = _timelockValue(c, tier);
+        uint32 timelock = _safetyDelayValue(c, tier);
 
         if ((tier == 5 || tier == 6) && timelock == 0) {
             revert TimelockRequiredForTier(tier);
@@ -320,21 +321,21 @@ contract CustodyPolicy {
         bool isRecovery = (action == CustodyAction.RecoverAccount);
         uint8 reqThreshold;
         if (isRecovery) {
-            if (c.guardianCount == 0 || c.recoveryThreshold == 0) {
+            if (c.trusteeCount == 0 || c.recoveryApprovals == 0) {
                 revert RecoveryRequiresGuardianQuorum();
             }
-            reqThreshold = c.recoveryThreshold;
+            reqThreshold = c.recoveryApprovals;
         } else {
-            reqThreshold = _thresholdValue(c, tier);
+            reqThreshold = _approvalsValue(c, tier);
         }
 
         uint64 nowTs = uint64(block.timestamp);
         uint64 eta = uint64(nowTs + timelock);
-        proposalId = ++c.nextProposalId;
-        bytes32 payloadHash = _hashProposeRequest(account, action, args, proposalId);
+        changeId = ++c.nextChangeId;
+        bytes32 payloadHash = _hashProposeRequest(account, action, args, changeId);
         address[] memory propSigners = _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, isRecovery);
 
-        c.pending[proposalId] = AdminProposal({
+        c.pending[changeId] = ScheduledChange({
             action: action,
             args: args,
             proposedAt: nowTs,
@@ -345,101 +346,101 @@ contract CustodyPolicy {
         });
 
         for (uint256 i; i < propSigners.length; i++) {
-            c.proposerSigners[proposalId][propSigners[i]] = true;
+            c.proposerCustodians[changeId][propSigners[i]] = true;
         }
 
-        emit AdminProposed(account, proposalId, action, eta, msg.sender);
+        emit CustodyChangeScheduled(account, changeId, action, eta, msg.sender);
     }
 
-    function executeAdmin(address account, uint256 proposalId, bytes calldata quorumSigs) external {
+    function applyCustodyChange(address account, uint256 changeId, bytes calldata quorumSigs) external {
         Config storage c = _configs[account];
         if (!c.installed) revert NotInstalledOn(account);
 
-        AdminProposal storage p = c.pending[proposalId];
-        if (p.eta == 0) revert ProposalNotFound(proposalId);
-        if (p.executed) revert ProposalAlreadyExecuted(proposalId);
-        if (p.cancelled) revert ProposalAlreadyCancelled(proposalId);
-        if (block.timestamp < p.eta) revert ProposalNotReady(proposalId, p.eta);
+        ScheduledChange storage p = c.pending[changeId];
+        if (p.eta == 0) revert ProposalNotFound(changeId);
+        if (p.executed) revert ProposalAlreadyExecuted(changeId);
+        if (p.cancelled) revert ProposalAlreadyCancelled(changeId);
+        if (block.timestamp < p.eta) revert ProposalNotReady(changeId, p.eta);
 
         bool isRecovery = (p.action == CustodyAction.RecoverAccount);
         uint8 tier = _tierFor(p.action);
-        uint8 reqThreshold = isRecovery ? c.recoveryThreshold : _thresholdValue(c, tier);
-        bytes32 payloadHash = _hashExecuteRequest(account, p.action, p.args, proposalId, p.eta);
+        uint8 reqThreshold = isRecovery ? c.recoveryApprovals : _approvalsValue(c, tier);
+        bytes32 payloadHash = _hashExecuteRequest(account, p.action, p.args, changeId, p.eta);
         address[] memory execSigners = _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, isRecovery);
 
         if (c.mode == 3 && !isRecovery) {
             for (uint256 i; i < execSigners.length; i++) {
-                if (c.proposerSigners[proposalId][execSigners[i]]) {
+                if (c.proposerCustodians[changeId][execSigners[i]]) {
                     revert SeparationOfDutiesViolation(execSigners[i]);
                 }
             }
         }
 
         p.executed = true;
-        emit AdminExecuted(account, proposalId);
-        _applyAdminAction(account, c, p.action, p.args);
+        emit CustodyChangeApplied(account, changeId);
+        _applyCustodyChange(account, c, p.action, p.args);
     }
 
-    function cancelAdmin(address account, uint256 proposalId, bytes calldata quorumSigs) external {
+    function cancelScheduledChange(address account, uint256 changeId, bytes calldata quorumSigs) external {
         Config storage c = _configs[account];
         if (!c.installed) revert NotInstalledOn(account);
 
-        AdminProposal storage p = c.pending[proposalId];
-        if (p.eta == 0) revert ProposalNotFound(proposalId);
-        if (p.executed) revert ProposalAlreadyExecuted(proposalId);
-        if (p.cancelled) revert ProposalAlreadyCancelled(proposalId);
+        ScheduledChange storage p = c.pending[changeId];
+        if (p.eta == 0) revert ProposalNotFound(changeId);
+        if (p.executed) revert ProposalAlreadyExecuted(changeId);
+        if (p.cancelled) revert ProposalAlreadyCancelled(changeId);
 
-        bytes32 payloadHash = _hashCancelRequest(account, p.action, p.args, proposalId, p.eta);
+        bytes32 payloadHash = _hashCancelRequest(account, p.action, p.args, changeId, p.eta);
 
         if (p.action == CustodyAction.RecoverAccount) {
             uint64 cancelWindowEnds = p.proposedAt + RECOVERY_PRIMARY_CANCEL_WINDOW;
             bool inOwnerCancelWindow = block.timestamp < cancelWindowEnds;
             uint8 reqThreshold = inOwnerCancelWindow
-                ? _thresholdValue(c, 4)
-                : c.recoveryThreshold;
+                ? _approvalsValue(c, 4)
+                : c.recoveryApprovals;
             _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, !inOwnerCancelWindow);
         } else {
             uint8 tier = _tierFor(p.action);
-            uint8 reqThreshold = _thresholdValue(c, tier);
+            uint8 reqThreshold = _approvalsValue(c, tier);
             _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, false);
         }
 
         p.cancelled = true;
-        emit AdminCancelled(account, proposalId);
+        emit ScheduledChangeCancelled(account, changeId);
     }
 
     // ─── Views ──────────────────────────────────────────────────────
 
-    function mode(address account) external view returns (uint8) {
+    function custodyMode(address account) external view returns (uint8) {
         return _configs[account].mode;
     }
 
-    function threshold(address account, uint8 tier) external view returns (uint8) {
-        return _thresholdValue(_configs[account], tier);
+    function approvalsRequired(address account, uint8 tier) external view returns (uint8) {
+        return _approvalsValue(_configs[account], tier);
     }
 
-    function recoveryThreshold(address account) external view returns (uint8) {
-        return _configs[account].recoveryThreshold;
+    function recoveryApprovals(address account) external view returns (uint8) {
+        return _configs[account].recoveryApprovals;
     }
 
-    function isGuardian(address account, address signer) external view returns (bool) {
-        return _configs[account].guardians[signer];
+    function isTrustee(address account, address signer) external view returns (bool) {
+        return _configs[account].trustees[signer];
     }
 
-    function guardianCount(address account) external view returns (uint256) {
-        return _configs[account].guardianCount;
+    function trusteeCount(address account) external view returns (uint256) {
+        return _configs[account].trusteeCount;
     }
 
-    function proposalCount(address account) external view returns (uint256) {
-        return _configs[account].nextProposalId;
+    function scheduledChangeCount(address account) external view returns (uint256) {
+        return _configs[account].nextChangeId;
     }
 
     function t3HighValueCeiling(address account) external view returns (uint256) {
         return _configs[account].t3HighValueCeiling;
     }
 
-    function timelockDuration(address account, uint8 tier) external view returns (uint32) {
-        return _timelockValue(_configs[account], tier);
+    function safetyDelay(address account, uint8 tier) external view returns (uint32) {
+        return _safetyDelayValue(_configs[account], tier);
     }
 
     function approvedHashRegistry(address account) external view returns (address) {
@@ -450,7 +451,7 @@ contract CustodyPolicy {
         return _configs[account].installed;
     }
 
-    function getPendingAdmin(address account, uint256 proposalId) external view returns (
+    function getScheduledChange(address account, uint256 changeId) external view returns (
         CustodyAction action,
         bytes memory args,
         uint64 proposedAt,
@@ -459,7 +460,7 @@ contract CustodyPolicy {
         bool executed,
         bool cancelled
     ) {
-        AdminProposal storage p = _configs[account].pending[proposalId];
+        ScheduledChange storage p = _configs[account].pending[changeId];
         return (p.action, p.args, p.proposedAt, p.eta, p.proposer, p.executed, p.cancelled);
     }
 
@@ -482,15 +483,15 @@ contract CustodyPolicy {
         return 4;
     }
 
-    function _thresholdValue(Config storage c, uint8 tier) internal view returns (uint8) {
+    function _approvalsValue(Config storage c, uint8 tier) internal view returns (uint8) {
         if (tier == 0 || tier > 6) revert InvalidTier(tier);
-        uint8 v = c.thresholdByTier[tier];
+        uint8 v = c.approvalsRequiredByTier[tier];
         return v == 0 ? 1 : v;
     }
 
-    function _timelockValue(Config storage c, uint8 tier) internal view returns (uint32) {
+    function _safetyDelayValue(Config storage c, uint8 tier) internal view returns (uint32) {
         if (tier == 0 || tier > 6) revert InvalidTier(tier);
-        return c.timelockByTier[tier];
+        return c.safetyDelayByTier[tier];
     }
 
     function _verifyQuorum(
@@ -515,7 +516,7 @@ contract CustodyPolicy {
             if (signer <= prev) revert AdminDuplicateOrUnsortedSigner(signer);
             prev = signer;
             if (guardianMode) {
-                if (!c.guardians[signer]) revert UnauthorizedGuardian(signer);
+                if (!c.trustees[signer]) revert UnauthorizedTrustee(signer);
             } else {
                 if (!IAgentAccount(account).isOwner(signer)) revert AdminUnauthorizedSigner(signer);
             }
@@ -525,7 +526,7 @@ contract CustodyPolicy {
 
     // ─── Action dispatcher + handlers ──────────────────────────────
 
-    function _applyAdminAction(
+    function _applyCustodyChange(
         address account,
         Config storage c,
         CustodyAction action,
@@ -574,9 +575,9 @@ contract CustodyPolicy {
             action == CustodyAction.RotatePaymaster ||
             action == CustodyAction.RotateSessionIssuer
         ) {
-            revert AdminActionNotYetImplemented(uint8(action));
+            revert CustodyActionNotYetImplemented(uint8(action));
         } else {
-            revert InvalidAdminAction(uint8(action));
+            revert InvalidCustodyAction(uint8(action));
         }
     }
 
@@ -604,26 +605,26 @@ contract CustodyPolicy {
 
     function _applyAddGuardian(address account, Config storage c, address g) internal {
         if (g == address(0)) revert ZeroAddress();
-        if (c.guardians[g]) revert GuardianAlreadyExists(g);
-        c.guardians[g] = true;
-        c.guardianCount += 1;
+        if (c.trustees[g]) revert TrusteeAlreadyExists(g);
+        c.trustees[g] = true;
+        c.trusteeCount += 1;
         emit GuardianAdded(account, g);
     }
 
     function _applyRemoveGuardian(address account, Config storage c, address g) internal {
-        if (!c.guardians[g]) revert GuardianDoesNotExist(g);
-        if (c.recoveryThreshold > 0 && c.guardianCount - 1 < c.recoveryThreshold) {
+        if (!c.trustees[g]) revert TrusteeDoesNotExist(g);
+        if (c.recoveryApprovals > 0 && c.trusteeCount - 1 < c.recoveryApprovals) {
             revert RecoveryRequiresGuardians();
         }
-        c.guardians[g] = false;
-        c.guardianCount -= 1;
+        c.trustees[g] = false;
+        c.trusteeCount -= 1;
         emit GuardianRemoved(account, g);
     }
 
     function _applyChangeMode(address account, Config storage c, uint8 newMode) internal {
         if (newMode > 3) revert InvalidMode(newMode);
         uint8 oldMode = c.mode;
-        if (newMode == 0 && c.guardianCount > 0) revert CannotDowngradeWithGuardians();
+        if (newMode == 0 && c.trusteeCount > 0) revert CannotDowngradeWithTrustees();
         c.mode = newMode;
         emit ModeChanged(account, oldMode, newMode);
     }
@@ -649,10 +650,10 @@ contract CustodyPolicy {
     }
 
     function _applySetRecoveryThreshold(address account, Config storage c, uint8 newThr) internal {
-        if (newThr > 0 && c.guardianCount < newThr) revert RecoveryRequiresGuardians();
-        if (newThr > c.guardianCount) revert InvalidThresholdValue(newThr);
-        uint8 oldThr = c.recoveryThreshold;
-        c.recoveryThreshold = newThr;
+        if (newThr > 0 && c.trusteeCount < newThr) revert RecoveryRequiresGuardians();
+        if (newThr > c.trusteeCount) revert InvalidThresholdValue(newThr);
+        uint8 oldThr = c.recoveryApprovals;
+        c.recoveryApprovals = newThr;
         emit RecoveryThresholdChanged(account, oldThr, newThr);
     }
 

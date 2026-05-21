@@ -39,7 +39,7 @@ import { useGaslessTx } from '../../lib/gasless';
 const validatorAbi = [
   {
     type: 'function',
-    name: 'proposeAdmin',
+    name: 'scheduleCustodyChange',
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'account', type: 'address' },
@@ -47,15 +47,15 @@ const validatorAbi = [
       { name: 'args', type: 'bytes' },
       { name: 'quorumSigs', type: 'bytes' },
     ],
-    outputs: [{ name: 'proposalId', type: 'uint256' }],
+    outputs: [{ name: 'changeId', type: 'uint256' }],
   },
   {
     type: 'function',
-    name: 'executeAdmin',
+    name: 'applyCustodyChange',
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'account', type: 'address' },
-      { name: 'proposalId', type: 'uint256' },
+      { name: 'changeId', type: 'uint256' },
       { name: 'quorumSigs', type: 'bytes' },
     ],
     outputs: [],
@@ -69,14 +69,14 @@ const validatorAbi = [
   },
   {
     type: 'function',
-    name: 'proposalCount',
+    name: 'scheduledChangeCount',
     stateMutability: 'view',
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ type: 'uint256' }],
   },
   {
     type: 'function',
-    name: 'timelockDuration',
+    name: 'safetyDelay',
     stateMutability: 'view',
     inputs: [
       { name: 'account', type: 'address' },
@@ -86,11 +86,11 @@ const validatorAbi = [
   },
   {
     type: 'function',
-    name: 'getPendingAdmin',
+    name: 'getScheduledChange',
     stateMutability: 'view',
     inputs: [
       { name: 'account', type: 'address' },
-      { name: 'proposalId', type: 'uint256' },
+      { name: 'changeId', type: 'uint256' },
     ],
     outputs: [
       { name: 'action', type: 'uint8' },
@@ -129,7 +129,7 @@ export function AdminActionsFlow() {
   const [actionId, setActionId] = useState<ActionId>(0);
   const [argInput, setArgInput] = useState<string>('');
   const [phase, setPhase] = useState<Phase>('configure');
-  const [proposalId, setProposalId] = useState<bigint | null>(null);
+  const [changeId, setProposalId] = useState<bigint | null>(null);
   const [proposalEta, setProposalEta] = useState<bigint | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -146,7 +146,7 @@ export function AdminActionsFlow() {
   const { data: timelockSeconds } = useReadContract({
     address: validatorAddress,
     abi: validatorAbi,
-    functionName: 'timelockDuration',
+    functionName: 'safetyDelay',
     args: accountAddr ? [accountAddr, 4] : undefined,
     query: { enabled: !!accountAddr && !!validatorAddress },
   });
@@ -154,7 +154,7 @@ export function AdminActionsFlow() {
   const { data: proposalCountData, refetch: refetchProposalCount } = useReadContract({
     address: validatorAddress,
     abi: validatorAbi,
-    functionName: 'proposalCount',
+    functionName: 'scheduledChangeCount',
     args: accountAddr ? [accountAddr] : undefined,
     query: { enabled: !!accountAddr && !!validatorAddress },
   });
@@ -162,9 +162,9 @@ export function AdminActionsFlow() {
   const { data: pendingProposal, refetch: refetchPending } = useReadContract({
     address: validatorAddress,
     abi: validatorAbi,
-    functionName: 'getPendingAdmin',
-    args: accountAddr && proposalId !== null ? [accountAddr, proposalId] : undefined,
-    query: { enabled: !!accountAddr && proposalId !== null },
+    functionName: 'getScheduledChange',
+    args: accountAddr && changeId !== null ? [accountAddr, changeId] : undefined,
+    query: { enabled: !!accountAddr && changeId !== null },
   });
 
   // Decode args based on action.
@@ -205,12 +205,12 @@ export function AdminActionsFlow() {
     }
   }, [gasless, phase, refetchProposalCount]);
 
-  // When proposalId set, pull the stored eta.
+  // When changeId set, pull the stored eta.
   useEffect(() => {
-    if (proposalId === null || !pendingProposal) return;
+    if (changeId === null || !pendingProposal) return;
     const eta = pendingProposal[3] as bigint;
     setProposalEta(eta);
-  }, [proposalId, pendingProposal]);
+  }, [changeId, pendingProposal]);
 
   // Refetch pending periodically to refresh "ready to execute" countdown.
   useEffect(() => {
@@ -246,29 +246,29 @@ export function AdminActionsFlow() {
           verifyingContract: validatorAddress,
         },
         types: {
-          AdminProposeRequest: [
+          ScheduleCustodyChangeRequest: [
             { name: 'account', type: 'address' },
             { name: 'action', type: 'uint8' },
             { name: 'argsHash', type: 'bytes32' },
-            { name: 'proposalId', type: 'uint256' },
+            { name: 'changeId', type: 'uint256' },
           ],
         },
-        primaryType: 'AdminProposeRequest',
+        primaryType: 'ScheduleCustodyChangeRequest',
         message: {
           account: accountAddr,
           action: actionId,
           argsHash,
-          proposalId: nextId,
+          changeId: nextId,
         },
       });
 
       const quorumSigs = sig as Hex;
 
-      // Build the inner call (validator.proposeAdmin) + wrap in
+      // Build the inner call (validator.scheduleCustodyChange) + wrap in
       // account.execute so the userOp's sender is the smart account.
       const inner = encodeFunctionData({
         abi: validatorAbi,
-        functionName: 'proposeAdmin',
+        functionName: 'scheduleCustodyChange',
         args: [accountAddr, actionId, encodedArgs, quorumSigs],
       });
       const outer = encodeFunctionData({
@@ -295,7 +295,7 @@ export function AdminActionsFlow() {
       !encodedArgs ||
       !validatorAddress ||
       !expectedChainId ||
-      proposalId === null ||
+      changeId === null ||
       proposalEta === null
     )
       return;
@@ -311,28 +311,28 @@ export function AdminActionsFlow() {
           verifyingContract: validatorAddress,
         },
         types: {
-          AdminExecuteRequest: [
+          ApplyCustodyChangeRequest: [
             { name: 'account', type: 'address' },
             { name: 'action', type: 'uint8' },
             { name: 'argsHash', type: 'bytes32' },
-            { name: 'proposalId', type: 'uint256' },
+            { name: 'changeId', type: 'uint256' },
             { name: 'eta', type: 'uint64' },
           ],
         },
-        primaryType: 'AdminExecuteRequest',
+        primaryType: 'ApplyCustodyChangeRequest',
         message: {
           account: accountAddr,
           action: actionId,
           argsHash,
-          proposalId,
+          changeId,
           eta: proposalEta,
         },
       });
 
       const inner = encodeFunctionData({
         abi: validatorAbi,
-        functionName: 'executeAdmin',
-        args: [accountAddr, proposalId, sig as Hex],
+        functionName: 'applyCustodyChange',
+        args: [accountAddr, changeId, sig as Hex],
       });
       const outer = encodeFunctionData({
         abi: ACCOUNT_EXECUTE_ABI,
@@ -528,7 +528,7 @@ export function AdminActionsFlow() {
           {phase === 'await-timelock' && (
             <div style={{ marginTop: '1rem' }}>
               <p>
-                Proposal <code>#{proposalId !== null ? String(proposalId) : '—'}</code> queued. Ready
+                Proposal <code>#{changeId !== null ? String(changeId) : '—'}</code> queued. Ready
                 to execute{' '}
                 {secondsLeft !== null && secondsLeft > 0 ? (
                   <>

@@ -365,7 +365,7 @@ export function CreateAccountFlow() {
             </li>
             <li>
               Add more owners / guardians via the validator's admin path — blocked on task #101
-              (proposeAdmin eta-coupling).
+              (scheduleCustodyChange eta-coupling).
             </li>
           </ul>
         </section>

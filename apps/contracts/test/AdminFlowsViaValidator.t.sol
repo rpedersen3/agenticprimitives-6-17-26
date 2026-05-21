@@ -78,13 +78,13 @@ contract AdminFlowsViaValidatorTest is Test {
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
     );
     bytes32 constant PROPOSE_TYPEHASH = keccak256(
-        "AdminProposeRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId)"
+        "ScheduleCustodyChangeRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId)"
     );
     bytes32 constant EXECUTE_TYPEHASH = keccak256(
-        "AdminExecuteRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+        "ApplyCustodyChangeRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId,uint64 eta)"
     );
     bytes32 constant CANCEL_TYPEHASH = keccak256(
-        "AdminCancelRequest(address account,uint8 action,bytes32 argsHash,uint256 proposalId,uint64 eta)"
+        "CancelScheduledChangeRequest(address account,uint8 action,bytes32 argsHash,uint256 changeId,uint64 eta)"
     );
 
     function _domainSeparator() internal view returns (bytes32) {
@@ -106,24 +106,24 @@ contract AdminFlowsViaValidatorTest is Test {
     ///      required for execute + cancel.
     function _payloadHash(
         bytes32 verb,
-        uint256 proposalId,
+        uint256 changeId,
         CustodyPolicy.CustodyAction action,
         bytes memory args,
         uint64 eta
     ) internal view returns (bytes32) {
         if (verb == bytes32("ADMIN_PROPOSE")) {
             return _hashTypedData(keccak256(abi.encode(
-                PROPOSE_TYPEHASH, address(acct), uint8(action), keccak256(args), proposalId
+                PROPOSE_TYPEHASH, address(acct), uint8(action), keccak256(args), changeId
             )));
         }
         if (verb == bytes32("ADMIN_EXECUTE")) {
             return _hashTypedData(keccak256(abi.encode(
-                EXECUTE_TYPEHASH, address(acct), uint8(action), keccak256(args), proposalId, eta
+                EXECUTE_TYPEHASH, address(acct), uint8(action), keccak256(args), changeId, eta
             )));
         }
         // ADMIN_CANCEL
         return _hashTypedData(keccak256(abi.encode(
-            CANCEL_TYPEHASH, address(acct), uint8(action), keccak256(args), proposalId, eta
+            CANCEL_TYPEHASH, address(acct), uint8(action), keccak256(args), changeId, eta
         )));
     }
 
@@ -142,19 +142,19 @@ contract AdminFlowsViaValidatorTest is Test {
     function _proposeAndExecuteByOwner(
         CustodyPolicy.CustodyAction action,
         bytes memory args
-    ) internal returns (uint256 proposalId) {
+    ) internal returns (uint256 changeId) {
         uint64 nowTs = uint64(block.timestamp);
         uint32 timelock = _timelockFor(action);
         uint64 eta = nowTs + timelock;
-        proposalId = validator.proposalCount(address(acct)) + 1;
+        changeId = validator.scheduledChangeCount(address(acct)) + 1;
 
-        bytes32 ph = _payloadHash(bytes32("ADMIN_PROPOSE"), proposalId, action, args, eta);
-        validator.proposeAdmin(address(acct), action, args, _signRaw(OWNER1_PK, ph));
+        bytes32 ph = _payloadHash(bytes32("ADMIN_PROPOSE"), changeId, action, args, eta);
+        validator.scheduleCustodyChange(address(acct), action, args, _signRaw(OWNER1_PK, ph));
 
         vm.warp(nowTs + timelock + 1);
 
-        bytes32 eh = _payloadHash(bytes32("ADMIN_EXECUTE"), proposalId, action, args, eta);
-        validator.executeAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, eh));
+        bytes32 eh = _payloadHash(bytes32("ADMIN_EXECUTE"), changeId, action, args, eta);
+        validator.applyCustodyChange(address(acct), changeId, _signRaw(OWNER1_PK, eh));
     }
 
     function _twoSigsSorted(uint256 pk1, uint256 pk2, bytes32 hash) internal pure returns (bytes memory) {
@@ -183,8 +183,8 @@ contract AdminFlowsViaValidatorTest is Test {
         _proposeAndExecuteByOwner(
             CustodyPolicy.CustodyAction.AddTrustee, abi.encode(newGuardian)
         );
-        assertTrue(validator.isGuardian(address(acct), newGuardian));
-        assertEq(validator.guardianCount(address(acct)), 1);
+        assertTrue(validator.isTrustee(address(acct), newGuardian));
+        assertEq(validator.trusteeCount(address(acct)), 1);
     }
 
     // ─── 3. ChangeCustodyMode writes to validator's per-account state ──────
@@ -193,7 +193,7 @@ contract AdminFlowsViaValidatorTest is Test {
         _proposeAndExecuteByOwner(
             CustodyPolicy.CustodyAction.ChangeCustodyMode, abi.encode(uint8(2))
         );
-        assertEq(validator.mode(address(acct)), 2);
+        assertEq(validator.custodyMode(address(acct)), 2);
     }
 
     // ─── 4. Cancel blocks subsequent execute ────────────────────────
@@ -202,48 +202,48 @@ contract AdminFlowsViaValidatorTest is Test {
         bytes memory args = abi.encode(newOwner);
         uint64 nowTs = uint64(block.timestamp);
         uint64 eta = nowTs + 1 hours;
-        uint256 proposalId = 1;
+        uint256 changeId = 1;
 
         bytes32 ph = _payloadHash(
-            bytes32("ADMIN_PROPOSE"), proposalId, CustodyPolicy.CustodyAction.AddCustodian, args, eta
+            bytes32("ADMIN_PROPOSE"), changeId, CustodyPolicy.CustodyAction.AddCustodian, args, eta
         );
-        validator.proposeAdmin(
+        validator.scheduleCustodyChange(
             address(acct), CustodyPolicy.CustodyAction.AddCustodian, args, _signRaw(OWNER1_PK, ph)
         );
 
         bytes32 ch = _payloadHash(
-            bytes32("ADMIN_CANCEL"), proposalId, CustodyPolicy.CustodyAction.AddCustodian, args, eta
+            bytes32("ADMIN_CANCEL"), changeId, CustodyPolicy.CustodyAction.AddCustodian, args, eta
         );
-        validator.cancelAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, ch));
+        validator.cancelScheduledChange(address(acct), changeId, _signRaw(OWNER1_PK, ch));
 
         vm.warp(nowTs + 1 hours + 1);
         bytes32 eh = _payloadHash(
-            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.CustodyAction.AddCustodian, args, eta
+            bytes32("ADMIN_EXECUTE"), changeId, CustodyPolicy.CustodyAction.AddCustodian, args, eta
         );
         vm.expectRevert(abi.encodeWithSelector(
-            CustodyPolicy.ProposalAlreadyCancelled.selector, proposalId
+            CustodyPolicy.ProposalAlreadyCancelled.selector, changeId
         ));
-        validator.executeAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, eh));
+        validator.applyCustodyChange(address(acct), changeId, _signRaw(OWNER1_PK, eh));
     }
 
     // ─── 5. Re-execute idempotent guard ─────────────────────────────
 
     function test_admin_double_execute_reverts() public {
         bytes memory args = abi.encode(newOwner);
-        uint256 proposalId = _proposeAndExecuteByOwner(
+        uint256 changeId = _proposeAndExecuteByOwner(
             CustodyPolicy.CustodyAction.AddCustodian, args
         );
 
         // Re-sign + try again with the same eta (proposal stored its eta).
         uint64 storedEta;
-        (, , , storedEta, , ,) = validator.getPendingAdmin(address(acct), proposalId);
+        (, , , storedEta, , ,) = validator.getScheduledChange(address(acct), changeId);
         bytes32 eh = _payloadHash(
-            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.CustodyAction.AddCustodian, args, storedEta
+            bytes32("ADMIN_EXECUTE"), changeId, CustodyPolicy.CustodyAction.AddCustodian, args, storedEta
         );
         vm.expectRevert(abi.encodeWithSelector(
-            CustodyPolicy.ProposalAlreadyExecuted.selector, proposalId
+            CustodyPolicy.ProposalAlreadyExecuted.selector, changeId
         ));
-        validator.executeAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, eh));
+        validator.applyCustodyChange(address(acct), changeId, _signRaw(OWNER1_PK, eh));
     }
 
     // ─── 6. Unauthorized signer rejected ────────────────────────────
@@ -258,7 +258,7 @@ contract AdminFlowsViaValidatorTest is Test {
         vm.expectRevert(abi.encodeWithSelector(
             CustodyPolicy.AdminUnauthorizedSigner.selector, vm.addr(0xDEADBEEF)
         ));
-        validator.proposeAdmin(
+        validator.scheduleCustodyChange(
             address(acct), CustodyPolicy.CustodyAction.AddCustodian, args, sigs
         );
     }
@@ -266,7 +266,7 @@ contract AdminFlowsViaValidatorTest is Test {
     // ─── 7. T6 RecoverAccount via guardians (full round-trip) ───────
 
     function test_admin_recoverAccount_via_guardians() public {
-        // Add 2 guardians, set recoveryThreshold = 2.
+        // Add 2 guardians, set recoveryApprovals = 2.
         _proposeAndExecuteByOwner(
             CustodyPolicy.CustodyAction.AddTrustee, abi.encode(guardian1)
         );
@@ -288,12 +288,12 @@ contract AdminFlowsViaValidatorTest is Test {
 
         uint64 nowTs = uint64(block.timestamp);
         uint64 eta = nowTs + 48 hours;
-        uint256 proposalId = validator.proposalCount(address(acct)) + 1;
+        uint256 changeId = validator.scheduledChangeCount(address(acct)) + 1;
 
         bytes32 ph = _payloadHash(
-            bytes32("ADMIN_PROPOSE"), proposalId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
+            bytes32("ADMIN_PROPOSE"), changeId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
         );
-        validator.proposeAdmin(
+        validator.scheduleCustodyChange(
             address(acct), CustodyPolicy.CustodyAction.RecoverAccount, args,
             _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, ph)
         );
@@ -301,10 +301,10 @@ contract AdminFlowsViaValidatorTest is Test {
         vm.warp(nowTs + 48 hours + 1);
 
         bytes32 eh = _payloadHash(
-            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
+            bytes32("ADMIN_EXECUTE"), changeId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
         );
-        validator.executeAdmin(
-            address(acct), proposalId, _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, eh)
+        validator.applyCustodyChange(
+            address(acct), changeId, _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, eh)
         );
 
         assertTrue(acct.isOwner(newOwner), "recovery added newOwner");
@@ -332,31 +332,31 @@ contract AdminFlowsViaValidatorTest is Test {
         bytes memory args = abi.encode(r);
         uint64 nowTs = uint64(block.timestamp);
         uint64 eta = nowTs + 48 hours;
-        uint256 proposalId = validator.proposalCount(address(acct)) + 1;
+        uint256 changeId = validator.scheduledChangeCount(address(acct)) + 1;
 
         bytes32 ph = _payloadHash(
-            bytes32("ADMIN_PROPOSE"), proposalId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
+            bytes32("ADMIN_PROPOSE"), changeId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
         );
-        validator.proposeAdmin(
+        validator.scheduleCustodyChange(
             address(acct), CustodyPolicy.CustodyAction.RecoverAccount, args,
             _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, ph)
         );
 
         // Within 24h, owner cancels with T4 threshold (1).
         bytes32 ch = _payloadHash(
-            bytes32("ADMIN_CANCEL"), proposalId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
+            bytes32("ADMIN_CANCEL"), changeId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
         );
-        validator.cancelAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, ch));
+        validator.cancelScheduledChange(address(acct), changeId, _signRaw(OWNER1_PK, ch));
 
         vm.warp(nowTs + 48 hours + 1);
         bytes32 eh = _payloadHash(
-            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
+            bytes32("ADMIN_EXECUTE"), changeId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
         );
         vm.expectRevert(abi.encodeWithSelector(
-            CustodyPolicy.ProposalAlreadyCancelled.selector, proposalId
+            CustodyPolicy.ProposalAlreadyCancelled.selector, changeId
         ));
-        validator.executeAdmin(
-            address(acct), proposalId, _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, eh)
+        validator.applyCustodyChange(
+            address(acct), changeId, _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, eh)
         );
     }
 }
