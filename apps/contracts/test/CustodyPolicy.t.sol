@@ -100,7 +100,7 @@ contract CustodyPolicyTest is Test {
 
     function _hashPropose(
         uint256 proposalId,
-        CustodyPolicy.AdminAction action,
+        CustodyPolicy.CustodyAction action,
         bytes memory args
     ) internal view returns (bytes32) {
         return _hashTypedData(
@@ -110,7 +110,7 @@ contract CustodyPolicyTest is Test {
 
     function _hashExecute(
         uint256 proposalId,
-        CustodyPolicy.AdminAction action,
+        CustodyPolicy.CustodyAction action,
         bytes memory args,
         uint64 eta
     ) internal view returns (bytes32) {
@@ -159,7 +159,7 @@ contract CustodyPolicyTest is Test {
         ));
     }
 
-    // ─── 2. Propose + execute end-to-end (AddOwner) ───────────────────
+    // ─── 2. Propose + execute end-to-end (AddCustodian) ───────────────────
 
     function test_propose_execute_addOwner_round_trip() public {
         uint8[7] memory thresholds; thresholds[4] = 1;   // T4 = 1-of-N
@@ -171,18 +171,18 @@ contract CustodyPolicyTest is Test {
         uint64 eta   = nowTs;
         uint256 proposalId = 1;  // first proposal
 
-        bytes32 proposeHash = _hashPropose(proposalId, CustodyPolicy.AdminAction.AddOwner, args);
+        bytes32 proposeHash = _hashPropose(proposalId, CustodyPolicy.CustodyAction.AddCustodian, args);
         bytes memory sigs = _signRaw(OWNER_PK, proposeHash);
 
         uint256 retId = validator.proposeAdmin(
             address(acct),
-            CustodyPolicy.AdminAction.AddOwner,
+            CustodyPolicy.CustodyAction.AddCustodian,
             args,
             sigs
         );
         assertEq(retId, proposalId);
 
-        bytes32 execHash = _hashExecute(proposalId, CustodyPolicy.AdminAction.AddOwner, args, eta);
+        bytes32 execHash = _hashExecute(proposalId, CustodyPolicy.CustodyAction.AddCustodian, args, eta);
         bytes memory execSigs = _signRaw(OWNER_PK, execHash);
 
         assertFalse(acct.isOwner(owner2), "pre: owner2 not yet on account");
@@ -200,7 +200,7 @@ contract CustodyPolicyTest is Test {
         vm.expectRevert(abi.encodeWithSelector(CustodyPolicy.NotInstalledOn.selector, address(fresh)));
         validator.proposeAdmin(
             address(fresh),
-            CustodyPolicy.AdminAction.AddOwner,
+            CustodyPolicy.CustodyAction.AddCustodian,
             abi.encode(owner2),
             hex""
         );
@@ -214,7 +214,7 @@ contract CustodyPolicyTest is Test {
         _installValidator(1, thresholds, timelocks);
 
         bytes memory args = abi.encode(owner2);
-        bytes32 proposeHash = _hashPropose(1, CustodyPolicy.AdminAction.AddOwner, args);
+        bytes32 proposeHash = _hashPropose(1, CustodyPolicy.CustodyAction.AddCustodian, args);
         // Stranger signs.
         bytes memory sigs = _signRaw(0xDEAD, proposeHash);
 
@@ -224,7 +224,7 @@ contract CustodyPolicyTest is Test {
         ));
         validator.proposeAdmin(
             address(acct),
-            CustodyPolicy.AdminAction.AddOwner,
+            CustodyPolicy.CustodyAction.AddCustodian,
             args,
             sigs
         );

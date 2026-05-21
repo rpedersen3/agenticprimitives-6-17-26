@@ -29,7 +29,7 @@ import {SignatureSlotRecovery} from "../libraries/SignatureSlotRecovery.sol";
  *         Spec 207 § 5 tier matrix (T1 Read / T2 Write / T3 Value /
  *         T4 Admin / T5 Critical / T6 Recovery) is unchanged from the
  *         pre-extraction surface. The custody actions enum is in
- *         phase 6g.1 renamed from AdminAction → CustodyAction (this
+ *         phase 6g.1 renamed from CustodyAction → CustodyAction (this
  *         phase) but the enum VALUES are kept temporarily for safer
  *         migration; phase 6g.1-b renames the values + state-vars +
  *         function names + EIP-712 typehashes.
@@ -38,28 +38,28 @@ contract CustodyPolicy {
     // ─── ERC-7579 marker constants (mirror of the account-side ids) ──
     uint256 internal constant MODULE_TYPE_EXECUTOR = 2;
 
-    // ─── AdminAction enum + structs (moved from AgentAccount) ────────
+    // ─── CustodyAction enum + structs (moved from AgentAccount) ────────
 
-    enum AdminAction {
-        AddOwner,                  // 0  — T4
-        RemoveOwner,               // 1  — T4
-        AddPasskey,                // 2  — T4
-        RemovePasskey,             // 3  — T4
-        AddGuardian,               // 4  — T4
-        RemoveGuardian,            // 5  — T4
-        ChangeMode,                // 6  — T4
-        UpgradeImpl,               // 7  — T5
-        ChangeDelegationManager,   // 8  — T5
-        ChangePaymaster,           // 9  — T5 (stubbed; reverts on execute)
-        ChangeSessionIssuer,       // 10 — T5 (stubbed)
-        RotateAllOwners,           // 11 — T4
-        ChangeT3Ceiling,           // 12 — T4
-        SetRecoveryThreshold,      // 13 — T4
+    enum CustodyAction {
+        AddCustodian,                  // 0  — T4
+        RemoveCustodian,               // 1  — T4
+        AddPasskeyCredential,                // 2  — T4
+        RemovePasskeyCredential,             // 3  — T4
+        AddTrustee,               // 4  — T4
+        RemoveTrustee,            // 5  — T4
+        ChangeCustodyMode,                // 6  — T4
+        ApplySystemUpdate,               // 7  — T5
+        RotateDelegationManager,   // 8  — T5
+        RotatePaymaster,           // 9  — T5 (stubbed; reverts on execute)
+        RotateSessionIssuer,       // 10 — T5 (stubbed)
+        RotateAllCustodians,           // 11 — T4
+        ChangeValueCeiling,           // 12 — T4
+        SetRecoveryApprovals,      // 13 — T4
         RecoverAccount             // 14 — T6
     }
 
     struct AdminProposal {
-        AdminAction action;
+        CustodyAction action;
         bytes args;
         uint64 proposedAt;
         uint64 eta;
@@ -146,7 +146,7 @@ contract CustodyPolicy {
 
     function _hashProposeRequest(
         address account,
-        AdminAction action,
+        CustodyAction action,
         bytes memory args,
         uint256 proposalId
     ) internal view returns (bytes32) {
@@ -157,7 +157,7 @@ contract CustodyPolicy {
 
     function _hashExecuteRequest(
         address account,
-        AdminAction action,
+        CustodyAction action,
         bytes memory args,
         uint256 proposalId,
         uint64 eta
@@ -169,7 +169,7 @@ contract CustodyPolicy {
 
     function _hashCancelRequest(
         address account,
-        AdminAction action,
+        CustodyAction action,
         bytes memory args,
         uint256 proposalId,
         uint64 eta
@@ -188,7 +188,7 @@ contract CustodyPolicy {
     event CustodyPolicyInstalled(address indexed account, uint8 mode, uint8 recoveryThreshold);
     event CustodyPolicyUninstalled(address indexed account);
 
-    event AdminProposed(address indexed account, uint256 indexed proposalId, AdminAction indexed action, uint64 eta, address proposer);
+    event AdminProposed(address indexed account, uint256 indexed proposalId, CustodyAction indexed action, uint64 eta, address proposer);
     event AdminExecuted(address indexed account, uint256 indexed proposalId);
     event AdminCancelled(address indexed account, uint256 indexed proposalId);
     event GuardianAdded(address indexed account, address indexed guardian);
@@ -303,7 +303,7 @@ contract CustodyPolicy {
 
     function proposeAdmin(
         address account,
-        AdminAction action,
+        CustodyAction action,
         bytes calldata args,
         bytes calldata quorumSigs
     ) external returns (uint256 proposalId) {
@@ -317,7 +317,7 @@ contract CustodyPolicy {
             revert TimelockRequiredForTier(tier);
         }
 
-        bool isRecovery = (action == AdminAction.RecoverAccount);
+        bool isRecovery = (action == CustodyAction.RecoverAccount);
         uint8 reqThreshold;
         if (isRecovery) {
             if (c.guardianCount == 0 || c.recoveryThreshold == 0) {
@@ -361,7 +361,7 @@ contract CustodyPolicy {
         if (p.cancelled) revert ProposalAlreadyCancelled(proposalId);
         if (block.timestamp < p.eta) revert ProposalNotReady(proposalId, p.eta);
 
-        bool isRecovery = (p.action == AdminAction.RecoverAccount);
+        bool isRecovery = (p.action == CustodyAction.RecoverAccount);
         uint8 tier = _tierFor(p.action);
         uint8 reqThreshold = isRecovery ? c.recoveryThreshold : _thresholdValue(c, tier);
         bytes32 payloadHash = _hashExecuteRequest(account, p.action, p.args, proposalId, p.eta);
@@ -391,7 +391,7 @@ contract CustodyPolicy {
 
         bytes32 payloadHash = _hashCancelRequest(account, p.action, p.args, proposalId, p.eta);
 
-        if (p.action == AdminAction.RecoverAccount) {
+        if (p.action == CustodyAction.RecoverAccount) {
             uint64 cancelWindowEnds = p.proposedAt + RECOVERY_PRIMARY_CANCEL_WINDOW;
             bool inOwnerCancelWindow = block.timestamp < cancelWindowEnds;
             uint8 reqThreshold = inOwnerCancelWindow
@@ -451,7 +451,7 @@ contract CustodyPolicy {
     }
 
     function getPendingAdmin(address account, uint256 proposalId) external view returns (
-        AdminAction action,
+        CustodyAction action,
         bytes memory args,
         uint64 proposedAt,
         uint64 eta,
@@ -471,13 +471,13 @@ contract CustodyPolicy {
 
     // ─── Internal helpers ──────────────────────────────────────────
 
-    function _tierFor(AdminAction action) internal pure returns (uint8) {
-        if (action == AdminAction.RecoverAccount) return 6;
+    function _tierFor(CustodyAction action) internal pure returns (uint8) {
+        if (action == CustodyAction.RecoverAccount) return 6;
         if (
-            action == AdminAction.UpgradeImpl ||
-            action == AdminAction.ChangeDelegationManager ||
-            action == AdminAction.ChangePaymaster ||
-            action == AdminAction.ChangeSessionIssuer
+            action == CustodyAction.ApplySystemUpdate ||
+            action == CustodyAction.RotateDelegationManager ||
+            action == CustodyAction.RotatePaymaster ||
+            action == CustodyAction.RotateSessionIssuer
         ) return 5;
         return 4;
     }
@@ -528,51 +528,51 @@ contract CustodyPolicy {
     function _applyAdminAction(
         address account,
         Config storage c,
-        AdminAction action,
+        CustodyAction action,
         bytes memory args
     ) internal {
-        if (action == AdminAction.AddOwner) {
+        if (action == CustodyAction.AddCustodian) {
             (address newOwner) = abi.decode(args, (address));
             _execute(account, abi.encodeCall(IAgentAccount.addOwner, (newOwner)));
-        } else if (action == AdminAction.RemoveOwner) {
+        } else if (action == CustodyAction.RemoveCustodian) {
             (address oldOwner) = abi.decode(args, (address));
             _execute(account, abi.encodeCall(IAgentAccount.removeOwner, (oldOwner)));
-        } else if (action == AdminAction.AddPasskey) {
+        } else if (action == CustodyAction.AddPasskeyCredential) {
             (bytes32 cid, uint256 x, uint256 y) = abi.decode(args, (bytes32, uint256, uint256));
             _execute(account, abi.encodeWithSignature("addPasskey(bytes32,uint256,uint256)", cid, x, y));
-        } else if (action == AdminAction.RemovePasskey) {
+        } else if (action == CustodyAction.RemovePasskeyCredential) {
             (bytes32 cid) = abi.decode(args, (bytes32));
             _execute(account, abi.encodeWithSignature("removePasskey(bytes32)", cid));
-        } else if (action == AdminAction.AddGuardian) {
+        } else if (action == CustodyAction.AddTrustee) {
             (address g) = abi.decode(args, (address));
             _applyAddGuardian(account, c, g);
-        } else if (action == AdminAction.RemoveGuardian) {
+        } else if (action == CustodyAction.RemoveTrustee) {
             (address g) = abi.decode(args, (address));
             _applyRemoveGuardian(account, c, g);
-        } else if (action == AdminAction.ChangeMode) {
+        } else if (action == CustodyAction.ChangeCustodyMode) {
             (uint8 newMode) = abi.decode(args, (uint8));
             _applyChangeMode(account, c, newMode);
-        } else if (action == AdminAction.RotateAllOwners) {
+        } else if (action == CustodyAction.RotateAllCustodians) {
             (address[] memory newOwners) = abi.decode(args, (address[]));
             _applyRotateAllOwners(account, newOwners);
-        } else if (action == AdminAction.ChangeT3Ceiling) {
+        } else if (action == CustodyAction.ChangeValueCeiling) {
             (uint256 newCeiling) = abi.decode(args, (uint256));
             _applyChangeT3Ceiling(account, c, newCeiling);
-        } else if (action == AdminAction.SetRecoveryThreshold) {
+        } else if (action == CustodyAction.SetRecoveryApprovals) {
             (uint8 newThr) = abi.decode(args, (uint8));
             _applySetRecoveryThreshold(account, c, newThr);
-        } else if (action == AdminAction.RecoverAccount) {
+        } else if (action == CustodyAction.RecoverAccount) {
             AgentAccountRecoveryArgs memory r = abi.decode(args, (AgentAccountRecoveryArgs));
             _applyRecoverAccount(account, r);
-        } else if (action == AdminAction.UpgradeImpl) {
+        } else if (action == CustodyAction.ApplySystemUpdate) {
             (address newImpl) = abi.decode(args, (address));
             _execute(account, abi.encodeWithSignature("upgradeToAndCall(address,bytes)", newImpl, ""));
-        } else if (action == AdminAction.ChangeDelegationManager) {
+        } else if (action == CustodyAction.RotateDelegationManager) {
             (address newDm) = abi.decode(args, (address));
             _execute(account, abi.encodeWithSignature("setDelegationManager(address)", newDm));
         } else if (
-            action == AdminAction.ChangePaymaster ||
-            action == AdminAction.ChangeSessionIssuer
+            action == CustodyAction.RotatePaymaster ||
+            action == CustodyAction.RotateSessionIssuer
         ) {
             revert AdminActionNotYetImplemented(uint8(action));
         } else {

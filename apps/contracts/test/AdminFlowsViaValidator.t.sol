@@ -107,7 +107,7 @@ contract AdminFlowsViaValidatorTest is Test {
     function _payloadHash(
         bytes32 verb,
         uint256 proposalId,
-        CustodyPolicy.AdminAction action,
+        CustodyPolicy.CustodyAction action,
         bytes memory args,
         uint64 eta
     ) internal view returns (bytes32) {
@@ -127,20 +127,20 @@ contract AdminFlowsViaValidatorTest is Test {
         )));
     }
 
-    function _timelockFor(CustodyPolicy.AdminAction action) internal pure returns (uint32) {
-        if (action == CustodyPolicy.AdminAction.RecoverAccount) return 48 hours;
+    function _timelockFor(CustodyPolicy.CustodyAction action) internal pure returns (uint32) {
+        if (action == CustodyPolicy.CustodyAction.RecoverAccount) return 48 hours;
         if (
-            action == CustodyPolicy.AdminAction.UpgradeImpl ||
-            action == CustodyPolicy.AdminAction.ChangeDelegationManager ||
-            action == CustodyPolicy.AdminAction.ChangePaymaster ||
-            action == CustodyPolicy.AdminAction.ChangeSessionIssuer
+            action == CustodyPolicy.CustodyAction.ApplySystemUpdate ||
+            action == CustodyPolicy.CustodyAction.RotateDelegationManager ||
+            action == CustodyPolicy.CustodyAction.RotatePaymaster ||
+            action == CustodyPolicy.CustodyAction.RotateSessionIssuer
         ) return 24 hours;
         return 1 hours;
     }
 
     /// @notice Run the propose → warp → execute flow as owner1 (N=1, T4=1).
     function _proposeAndExecuteByOwner(
-        CustodyPolicy.AdminAction action,
+        CustodyPolicy.CustodyAction action,
         bytes memory args
     ) internal returns (uint256 proposalId) {
         uint64 nowTs = uint64(block.timestamp);
@@ -169,29 +169,29 @@ contract AdminFlowsViaValidatorTest is Test {
         r = new address[](1); r[0] = a;
     }
 
-    // ─── 1. AddOwner round-trip (N=1, T4 threshold = 1, T4 timelock 1h) ──
+    // ─── 1. AddCustodian round-trip (N=1, T4 threshold = 1, T4 timelock 1h) ──
 
     function test_admin_addOwner_executes_via_validator() public {
-        _proposeAndExecuteByOwner(CustodyPolicy.AdminAction.AddOwner, abi.encode(newOwner));
+        _proposeAndExecuteByOwner(CustodyPolicy.CustodyAction.AddCustodian, abi.encode(newOwner));
         assertTrue(acct.isOwner(newOwner));
         assertEq(acct.ownerCount(), 2);
     }
 
-    // ─── 2. AddGuardian writes to validator's per-account state ─────
+    // ─── 2. AddTrustee writes to validator's per-account state ─────
 
     function test_admin_addGuardian_writes_to_validator_storage() public {
         _proposeAndExecuteByOwner(
-            CustodyPolicy.AdminAction.AddGuardian, abi.encode(newGuardian)
+            CustodyPolicy.CustodyAction.AddTrustee, abi.encode(newGuardian)
         );
         assertTrue(validator.isGuardian(address(acct), newGuardian));
         assertEq(validator.guardianCount(address(acct)), 1);
     }
 
-    // ─── 3. ChangeMode writes to validator's per-account state ──────
+    // ─── 3. ChangeCustodyMode writes to validator's per-account state ──────
 
     function test_admin_changeMode_hybrid_to_threshold() public {
         _proposeAndExecuteByOwner(
-            CustodyPolicy.AdminAction.ChangeMode, abi.encode(uint8(2))
+            CustodyPolicy.CustodyAction.ChangeCustodyMode, abi.encode(uint8(2))
         );
         assertEq(validator.mode(address(acct)), 2);
     }
@@ -205,20 +205,20 @@ contract AdminFlowsViaValidatorTest is Test {
         uint256 proposalId = 1;
 
         bytes32 ph = _payloadHash(
-            bytes32("ADMIN_PROPOSE"), proposalId, CustodyPolicy.AdminAction.AddOwner, args, eta
+            bytes32("ADMIN_PROPOSE"), proposalId, CustodyPolicy.CustodyAction.AddCustodian, args, eta
         );
         validator.proposeAdmin(
-            address(acct), CustodyPolicy.AdminAction.AddOwner, args, _signRaw(OWNER1_PK, ph)
+            address(acct), CustodyPolicy.CustodyAction.AddCustodian, args, _signRaw(OWNER1_PK, ph)
         );
 
         bytes32 ch = _payloadHash(
-            bytes32("ADMIN_CANCEL"), proposalId, CustodyPolicy.AdminAction.AddOwner, args, eta
+            bytes32("ADMIN_CANCEL"), proposalId, CustodyPolicy.CustodyAction.AddCustodian, args, eta
         );
         validator.cancelAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, ch));
 
         vm.warp(nowTs + 1 hours + 1);
         bytes32 eh = _payloadHash(
-            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.AdminAction.AddOwner, args, eta
+            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.CustodyAction.AddCustodian, args, eta
         );
         vm.expectRevert(abi.encodeWithSelector(
             CustodyPolicy.ProposalAlreadyCancelled.selector, proposalId
@@ -231,14 +231,14 @@ contract AdminFlowsViaValidatorTest is Test {
     function test_admin_double_execute_reverts() public {
         bytes memory args = abi.encode(newOwner);
         uint256 proposalId = _proposeAndExecuteByOwner(
-            CustodyPolicy.AdminAction.AddOwner, args
+            CustodyPolicy.CustodyAction.AddCustodian, args
         );
 
         // Re-sign + try again with the same eta (proposal stored its eta).
         uint64 storedEta;
         (, , , storedEta, , ,) = validator.getPendingAdmin(address(acct), proposalId);
         bytes32 eh = _payloadHash(
-            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.AdminAction.AddOwner, args, storedEta
+            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.CustodyAction.AddCustodian, args, storedEta
         );
         vm.expectRevert(abi.encodeWithSelector(
             CustodyPolicy.ProposalAlreadyExecuted.selector, proposalId
@@ -252,14 +252,14 @@ contract AdminFlowsViaValidatorTest is Test {
         bytes memory args = abi.encode(newOwner);
         uint64 eta = uint64(block.timestamp) + 1 hours;
         bytes32 ph = _payloadHash(
-            bytes32("ADMIN_PROPOSE"), 1, CustodyPolicy.AdminAction.AddOwner, args, eta
+            bytes32("ADMIN_PROPOSE"), 1, CustodyPolicy.CustodyAction.AddCustodian, args, eta
         );
         bytes memory sigs = _signRaw(0xDEADBEEF, ph);
         vm.expectRevert(abi.encodeWithSelector(
             CustodyPolicy.AdminUnauthorizedSigner.selector, vm.addr(0xDEADBEEF)
         ));
         validator.proposeAdmin(
-            address(acct), CustodyPolicy.AdminAction.AddOwner, args, sigs
+            address(acct), CustodyPolicy.CustodyAction.AddCustodian, args, sigs
         );
     }
 
@@ -268,13 +268,13 @@ contract AdminFlowsViaValidatorTest is Test {
     function test_admin_recoverAccount_via_guardians() public {
         // Add 2 guardians, set recoveryThreshold = 2.
         _proposeAndExecuteByOwner(
-            CustodyPolicy.AdminAction.AddGuardian, abi.encode(guardian1)
+            CustodyPolicy.CustodyAction.AddTrustee, abi.encode(guardian1)
         );
         _proposeAndExecuteByOwner(
-            CustodyPolicy.AdminAction.AddGuardian, abi.encode(guardian2)
+            CustodyPolicy.CustodyAction.AddTrustee, abi.encode(guardian2)
         );
         _proposeAndExecuteByOwner(
-            CustodyPolicy.AdminAction.SetRecoveryThreshold, abi.encode(uint8(2))
+            CustodyPolicy.CustodyAction.SetRecoveryApprovals, abi.encode(uint8(2))
         );
 
         // Now T6 RecoverAccount.
@@ -291,17 +291,17 @@ contract AdminFlowsViaValidatorTest is Test {
         uint256 proposalId = validator.proposalCount(address(acct)) + 1;
 
         bytes32 ph = _payloadHash(
-            bytes32("ADMIN_PROPOSE"), proposalId, CustodyPolicy.AdminAction.RecoverAccount, args, eta
+            bytes32("ADMIN_PROPOSE"), proposalId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
         );
         validator.proposeAdmin(
-            address(acct), CustodyPolicy.AdminAction.RecoverAccount, args,
+            address(acct), CustodyPolicy.CustodyAction.RecoverAccount, args,
             _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, ph)
         );
 
         vm.warp(nowTs + 48 hours + 1);
 
         bytes32 eh = _payloadHash(
-            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.AdminAction.RecoverAccount, args, eta
+            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
         );
         validator.executeAdmin(
             address(acct), proposalId, _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, eh)
@@ -314,13 +314,13 @@ contract AdminFlowsViaValidatorTest is Test {
 
     function test_admin_recoverAccount_primaryOwner_can_cancel_in_24h_window() public {
         _proposeAndExecuteByOwner(
-            CustodyPolicy.AdminAction.AddGuardian, abi.encode(guardian1)
+            CustodyPolicy.CustodyAction.AddTrustee, abi.encode(guardian1)
         );
         _proposeAndExecuteByOwner(
-            CustodyPolicy.AdminAction.AddGuardian, abi.encode(guardian2)
+            CustodyPolicy.CustodyAction.AddTrustee, abi.encode(guardian2)
         );
         _proposeAndExecuteByOwner(
-            CustodyPolicy.AdminAction.SetRecoveryThreshold, abi.encode(uint8(2))
+            CustodyPolicy.CustodyAction.SetRecoveryApprovals, abi.encode(uint8(2))
         );
 
         AgentAccountRecoveryArgs memory r = AgentAccountRecoveryArgs({
@@ -335,22 +335,22 @@ contract AdminFlowsViaValidatorTest is Test {
         uint256 proposalId = validator.proposalCount(address(acct)) + 1;
 
         bytes32 ph = _payloadHash(
-            bytes32("ADMIN_PROPOSE"), proposalId, CustodyPolicy.AdminAction.RecoverAccount, args, eta
+            bytes32("ADMIN_PROPOSE"), proposalId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
         );
         validator.proposeAdmin(
-            address(acct), CustodyPolicy.AdminAction.RecoverAccount, args,
+            address(acct), CustodyPolicy.CustodyAction.RecoverAccount, args,
             _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, ph)
         );
 
         // Within 24h, owner cancels with T4 threshold (1).
         bytes32 ch = _payloadHash(
-            bytes32("ADMIN_CANCEL"), proposalId, CustodyPolicy.AdminAction.RecoverAccount, args, eta
+            bytes32("ADMIN_CANCEL"), proposalId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
         );
         validator.cancelAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, ch));
 
         vm.warp(nowTs + 48 hours + 1);
         bytes32 eh = _payloadHash(
-            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.AdminAction.RecoverAccount, args, eta
+            bytes32("ADMIN_EXECUTE"), proposalId, CustodyPolicy.CustodyAction.RecoverAccount, args, eta
         );
         vm.expectRevert(abi.encodeWithSelector(
             CustodyPolicy.ProposalAlreadyCancelled.selector, proposalId
