@@ -56,8 +56,8 @@ contract AdminFlowsViaValidatorTest is Test {
         owners[0] = owner1;
         AgentAccountInitParams memory p = AgentAccountInitParams({
             mode: 1,
-            owners: owners,
-            guardians: new address[](0),
+           custodians: owners,
+           trustees: new address[](0),
             initialPasskeyCredentialIdDigest: bytes32(0),
             initialPasskeyX: 0,
             initialPasskeyY: 0

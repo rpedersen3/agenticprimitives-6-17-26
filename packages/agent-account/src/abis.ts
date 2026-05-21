@@ -66,8 +66,8 @@ export const agentAccountFactoryAbi = [
         type: 'tuple',
         components: [
           { name: 'mode', type: 'uint8' },
-          { name: 'owners', type: 'address[]' },
-          { name: 'guardians', type: 'address[]' },
+          { name: 'custodians', type: 'address[]' },
+          { name: 'trustees', type: 'address[]' },
           { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
           { name: 'initialPasskeyX', type: 'uint256' },
           { name: 'initialPasskeyY', type: 'uint256' },
@@ -84,7 +84,7 @@ export const agentAccountFactoryAbi = [
   // spec defaults regardless (24h / 48h).
   {
     type: 'function',
-    name: 'createAccountWithModeCustomT4',
+    name: 'createAccountWithModeCustomSafetyDelay',
     stateMutability: 'nonpayable',
     inputs: [
       {
@@ -92,15 +92,15 @@ export const agentAccountFactoryAbi = [
         type: 'tuple',
         components: [
           { name: 'mode', type: 'uint8' },
-          { name: 'owners', type: 'address[]' },
-          { name: 'guardians', type: 'address[]' },
+          { name: 'custodians', type: 'address[]' },
+          { name: 'trustees', type: 'address[]' },
           { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
           { name: 'initialPasskeyX', type: 'uint256' },
           { name: 'initialPasskeyY', type: 'uint256' },
         ],
       },
       { name: 'validator', type: 'address' },
-      { name: 't4TimelockSeconds', type: 'uint32' },
+      { name: 'safetyDelaySeconds', type: 'uint32' },
       { name: 'salt', type: 'uint256' },
     ],
     outputs: [{ name: 'account', type: 'address' }],
@@ -115,8 +115,8 @@ export const agentAccountFactoryAbi = [
         type: 'tuple',
         components: [
           { name: 'mode', type: 'uint8' },
-          { name: 'owners', type: 'address[]' },
-          { name: 'guardians', type: 'address[]' },
+          { name: 'custodians', type: 'address[]' },
+          { name: 'trustees', type: 'address[]' },
           { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
           { name: 'initialPasskeyX', type: 'uint256' },
           { name: 'initialPasskeyY', type: 'uint256' },
@@ -133,8 +133,8 @@ export const agentAccountFactoryAbi = [
       { name: 'account', type: 'address', indexed: true },
       { name: 'validator', type: 'address', indexed: true },
       { name: 'mode', type: 'uint8', indexed: true },
-      { name: 'nOwners', type: 'uint256', indexed: false },
-      { name: 'nGuardians', type: 'uint256', indexed: false },
+      { name: 'nCustodians', type: 'uint256', indexed: false },
+      { name: 'nTrustees', type: 'uint256', indexed: false },
       { name: 'salt', type: 'uint256', indexed: false },
     ],
   },
@@ -217,7 +217,7 @@ export const custodyPolicyAbi = [
   { type: 'function', name: 'isTrustee', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'signer', type: 'address' }], outputs: [{ type: 'bool' }] },
   { type: 'function', name: 'trusteeCount', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'scheduledChangeCount', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'defaultThreshold', stateMutability: 'pure', inputs: [{ name: 'nOwners', type: 'uint8' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'defaultApprovals', stateMutability: 'pure', inputs: [{ name: 'nCustodians', type: 'uint8' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
   {
     type: 'function',
     name: 'getScheduledChange',

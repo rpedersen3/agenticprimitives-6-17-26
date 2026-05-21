@@ -466,8 +466,8 @@ contract CustodyPolicy {
 
     /// @notice Pure helper exposing the default-threshold matrix from
     ///         spec § 5.1 — owners over n=1..N produce per-tier defaults.
-    function defaultThreshold(uint8 nOwners, uint8 tier) external pure returns (uint8) {
-        return _defaultThreshold(nOwners, tier);
+    function defaultApprovals(uint8 nCustodians, uint8 tier) external pure returns (uint8) {
+        return _defaultApprovals(nCustodians, tier);
     }
 
     // ─── Internal helpers ──────────────────────────────────────────
@@ -698,16 +698,16 @@ contract CustodyPolicy {
     }
 
     /// @dev Spec § 5.1 default-threshold matrix.
-    function _defaultThreshold(uint8 nOwners, uint8 tier) internal pure returns (uint8) {
-        if (nOwners == 0) return 0;
+    function _defaultApprovals(uint8 nCustodians, uint8 tier) internal pure returns (uint8) {
+        if (nCustodians == 0) return 0;
         if (tier == 4) {
-            if (nOwners <= 3) return nOwners;
-            if (nOwners <= 6) return nOwners - 1;
-            return nOwners - 2;
+            if (nCustodians <= 3) return nCustodians;
+            if (nCustodians <= 6) return nCustodians - 1;
+            return nCustodians - 2;
         }
         if (tier == 5) {
-            if (nOwners <= 5) return nOwners;
-            return nOwners - 1;
+            if (nCustodians <= 5) return nCustodians;
+            return nCustodians - 1;
         }
         return 0;
     }

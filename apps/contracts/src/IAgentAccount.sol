@@ -19,8 +19,8 @@ import "account-abstraction/interfaces/IAccount.sol";
  */
 struct AgentAccountInitParams {
     uint8 mode;
-    address[] owners;
-    address[] guardians;
+    address[] custodians;
+    address[] trustees;
     bytes32 initialPasskeyCredentialIdDigest; // 0x0 to skip the passkey
     uint256 initialPasskeyX;
     uint256 initialPasskeyY;

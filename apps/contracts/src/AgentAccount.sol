@@ -282,13 +282,13 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
 
     // ─── Threshold-policy initializer (relocated) ────────────────────
     //
-    // `initializeWithThresholdPolicy` + `_defaultThreshold` +
-    // `defaultThreshold` were relocated in phase 6c.5-d.1. The
+    // `initializeWithThresholdPolicy` + `_defaultApprovals` +
+    // `defaultApprovals` were relocated in phase 6c.5-d.1. The
     // ThresholdValidator module's `onInstall` is now the per-account
     // init path: factory deploys account → installs validator with
     // ABI-encoded init data (mode, guardians, thresholds, timelocks,
     // T3 ceiling, ApprovedHashRegistry address). The default-threshold
-    // matrix from spec § 5.1 is exposed by `ThresholdValidator.defaultThreshold`.
+    // matrix from spec § 5.1 is exposed by `ThresholdValidator.defaultApprovals`.
     // ─── UUPS Upgrade ──────────────────────────────────────────────
 
     /**

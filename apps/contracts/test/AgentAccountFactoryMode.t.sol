@@ -48,8 +48,8 @@ contract AgentAccountFactoryModeTest is Test {
     {
         return AgentAccountInitParams({
             mode: mode_,
-            owners: owners,
-            guardians: guardians,
+           custodians: owners,
+           trustees: guardians,
             initialPasskeyCredentialIdDigest: bytes32(0),
             initialPasskeyX: 0,
             initialPasskeyY: 0
@@ -147,7 +147,7 @@ contract AgentAccountFactoryModeTest is Test {
 
     function test_createAccountWithMode_rejects_zeroOwners() public {
         AgentAccountInitParams memory p = _params(1, new address[](0), new address[](0));
-        vm.expectRevert(AgentAccountFactory.NoPrimarySigner.selector);
+        vm.expectRevert(AgentAccountFactory.NoPrimaryCustodian.selector);
         factory.createAccountWithMode(p, address(validator), 8);
     }
 
@@ -158,7 +158,7 @@ contract AgentAccountFactoryModeTest is Test {
         owners[0] = owner1; owners[1] = owner2;
         AgentAccountInitParams memory p = _params(2, owners, _guardians(1, guardian1, address(0), address(0)));
         vm.expectRevert(abi.encodeWithSelector(
-            AgentAccountFactory.InsufficientGuardiansForMode.selector, uint8(2), uint256(1), uint256(2)
+            AgentAccountFactory.InsufficientTrusteesForMode.selector, uint8(2), uint256(1), uint256(2)
         ));
         factory.createAccountWithMode(p, address(validator), 9);
     }
@@ -170,7 +170,7 @@ contract AgentAccountFactoryModeTest is Test {
         owners[0] = owner1; owners[1] = owner2; owners[2] = owner3;
         AgentAccountInitParams memory p = _params(3, owners, _guardians(2, guardian1, guardian2, address(0)));
         vm.expectRevert(abi.encodeWithSelector(
-            AgentAccountFactory.InsufficientGuardiansForMode.selector, uint8(3), uint256(2), uint256(3)
+            AgentAccountFactory.InsufficientTrusteesForMode.selector, uint8(3), uint256(2), uint256(3)
         ));
         factory.createAccountWithMode(p, address(validator), 10);
     }

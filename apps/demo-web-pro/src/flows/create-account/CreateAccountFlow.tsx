@@ -63,7 +63,7 @@ export function CreateAccountFlow() {
   const [extraOwners, setExtraOwners] = useState<Address[]>([]);
   const [guardians, setGuardians] = useState<Address[]>([]);
   // T4 admin-action timelock. 0 = spec default (1h). The factory's
-  // createAccountWithModeCustomT4 entry lets us override at install time.
+  // createAccountWithModeCustomSafetyDelay entry lets us override at install time.
   const [t4Timelock, setT4Timelock] = useState<number>(0);
 
   const factoryAddress = deploymentConfig.factoryAddress;
@@ -83,8 +83,8 @@ export function CreateAccountFlow() {
       connectedAddress
         ? ({
             mode,
-            owners,
-            guardians,
+            custodians: owners,
+            trustees: guardians,
             initialPasskeyCredentialIdDigest: ZERO_BYTES32,
             initialPasskeyX: 0n,
             initialPasskeyY: 0n,
@@ -142,12 +142,12 @@ export function CreateAccountFlow() {
     if (!ready || !params || !factoryAddress || !validatorAddress || saltBigInt === null) return;
     resetWrite();
     // Always route through the custom-T4 entry; the contract treats
-    // t4TimelockSeconds=0 as "use spec default (1h)" so passing 0 from
+    // safetyDelaySeconds=0 as "use spec default (1h)" so passing 0 from
     // the dropdown is equivalent to the simple createAccountWithMode path.
     writeContract({
       address: factoryAddress,
       abi: agentAccountFactoryAbi,
-      functionName: 'createAccountWithModeCustomT4',
+      functionName: 'createAccountWithModeCustomSafetyDelay',
       args: [params, validatorAddress, t4Timelock, saltBigInt],
     });
   };

@@ -230,8 +230,8 @@ contract AgentAccountFactory is GovernanceManaged {
     // ─── Threshold-policy deployment (spec 207 + 209) ─────────────────
 
     error InvalidMode(uint8 mode);
-    error NoPrimarySigner();
-    error InsufficientGuardiansForMode(uint8 mode, uint256 actual, uint256 required);
+    error NoPrimaryCustodian();
+    error InsufficientTrusteesForMode(uint8 mode, uint256 actual, uint256 required);
 
     /// @notice Emitted when an AgentAccount is deployed via the
     ///         threshold-policy factory entry. Carries the mode + N
@@ -240,8 +240,8 @@ contract AgentAccountFactory is GovernanceManaged {
         address indexed account,
         address indexed validator,
         uint8 indexed mode,
-        uint256 nOwners,
-        uint256 nGuardians,
+        uint256 nCustodians,
+        uint256 nTrustees,
         uint256 salt
     );
 
@@ -263,7 +263,7 @@ contract AgentAccountFactory is GovernanceManaged {
      *         At least one owner MUST be supplied (passkey-only init is
      *         a phase 7 follow-on through this path; for v0 use
      *         `createAccountWithPasskey` for passkey-only accounts).
-     *         For multi-owner accounts (params.owners.length > 1) only
+     *         For multi-owner accounts (params.custodians.length > 1) only
      *         the first owner is set at deploy; additional owners are
      *         added post-deploy via the validator's AddOwner action
      *         (T4, immediate since the default T4 timelock is 0). For
@@ -271,7 +271,7 @@ contract AgentAccountFactory is GovernanceManaged {
      *
      * @param params  See `AgentAccountInitParams` in `IAgentAccount.sol`.
      * @param validator CustodyPolicy module address (callable; the
-     *                  factory queries `defaultThreshold(N, t)` to
+     *                  factory queries `defaultApprovals(N, t)` to
      *                  compute the spec § 5.1 matrix).
      * @param salt    CREATE2 deployment salt.
      */
@@ -280,7 +280,7 @@ contract AgentAccountFactory is GovernanceManaged {
         address validator,
         uint256 salt
     ) external returns (AgentAccount account) {
-        return createAccountWithModeCustomT4(params, validator, 0, salt);
+        return createAccountWithModeCustomSafetyDelay(params, validator, 0, salt);
     }
 
     /// @notice Same as `createAccountWithMode` but lets the caller pick the
@@ -289,16 +289,16 @@ contract AgentAccountFactory is GovernanceManaged {
     ///         propose and execute is friction. T5 (24h) and T6 (48h)
     ///         stay at spec defaults because spec 207 § 5 invariant
     ///         requires them to be > 0.
-    function createAccountWithModeCustomT4(
+    function createAccountWithModeCustomSafetyDelay(
         AgentAccountInitParams calldata params,
         address validator,
-        uint32 t4TimelockSeconds,
+        uint32 safetyDelaySeconds,
         uint256 salt
     ) public returns (AgentAccount account) {
         _validateInitParams(params);
         if (validator == address(0)) revert ZeroAddress();
 
-        address initialOwner = params.owners[0];
+        address initialOwner = params.custodians[0];
 
         address addr = getAddress(initialOwner, salt);
         if (addr.code.length > 0) {
@@ -315,15 +315,15 @@ contract AgentAccountFactory is GovernanceManaged {
         );
         account = AgentAccount(payable(address(proxy)));
 
-        bytes memory validatorInit = _buildValidatorInitData(params, validator, t4TimelockSeconds);
+        bytes memory validatorInit = _buildValidatorInitData(params, validator, safetyDelaySeconds);
         account.installModule(2 /* MODULE_TYPE_EXECUTOR */, validator, validatorInit);
 
         emit AgentAccountCreatedWithMode(
             address(account),
             validator,
             params.mode,
-            params.owners.length,
-            params.guardians.length,
+            params.custodians.length,
+            params.trustees.length,
             salt
         );
     }
@@ -337,21 +337,21 @@ contract AgentAccountFactory is GovernanceManaged {
         uint256 salt
     ) external view returns (address) {
         _validateInitParams(params);
-        return getAddress(params.owners[0], salt);
+        return getAddress(params.custodians[0], salt);
     }
 
     /// @dev Shared validation for deploy + counterfactual paths so
     ///      preflight reverts identically to the real deploy.
     function _validateInitParams(AgentAccountInitParams calldata params) internal pure {
         if (params.mode > 3) revert InvalidMode(params.mode);
-        if (params.owners.length == 0) revert NoPrimarySigner();
+        if (params.custodians.length == 0) revert NoPrimaryCustodian();
 
-        uint256 nGuardians = params.guardians.length;
-        if (params.mode == 2 /* threshold */ && nGuardians < 2) {
-            revert InsufficientGuardiansForMode(params.mode, nGuardians, 2);
+        uint256 nTrustees = params.trustees.length;
+        if (params.mode == 2 /* threshold */ && nTrustees < 2) {
+            revert InsufficientTrusteesForMode(params.mode, nTrustees, 2);
         }
-        if (params.mode == 3 /* org */ && nGuardians < 3) {
-            revert InsufficientGuardiansForMode(params.mode, nGuardians, 3);
+        if (params.mode == 3 /* org */ && nTrustees < 3) {
+            revert InsufficientTrusteesForMode(params.mode, nTrustees, 3);
         }
     }
 
@@ -364,28 +364,28 @@ contract AgentAccountFactory is GovernanceManaged {
     function _buildValidatorInitData(
         AgentAccountInitParams calldata params,
         address validator,
-        uint32 t4TimelockSeconds
+        uint32 safetyDelaySeconds
     ) internal view returns (bytes memory) {
-        uint8 n = uint8(params.owners.length);
+        uint8 n = uint8(params.custodians.length);
         uint8[7] memory thresholds;
         for (uint8 t = 1; t <= 5; t++) {
-            thresholds[t] = CustodyPolicy(validator).defaultThreshold(n, t);
+            thresholds[t] = CustodyPolicy(validator).defaultApprovals(n, t);
         }
         // T6 governed by recoveryThreshold below, not the matrix.
 
         uint32[7] memory timelocks;
-        timelocks[4] = t4TimelockSeconds == 0 ? uint32(1 hours) : t4TimelockSeconds;
+        timelocks[4] = safetyDelaySeconds == 0 ? uint32(1 hours) : safetyDelaySeconds;
         timelocks[5] = 24 hours;
         timelocks[6] = 48 hours;
 
-        uint8 recThr = params.guardians.length > 0
-            ? uint8(params.guardians.length / 2 + 1)
+        uint8 recThr = params.trustees.length > 0
+            ? uint8(params.trustees.length / 2 + 1)
             : 0;
 
         return abi.encode(
             params.mode,
             recThr,
-            params.guardians,
+            params.trustees,
             thresholds,
             timelocks,
             uint256(0.01 ether),       // t3 ceiling default
