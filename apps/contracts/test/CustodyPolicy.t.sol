@@ -6,8 +6,8 @@ import {EntryPoint} from "account-abstraction/core/EntryPoint.sol";
 import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import "../src/AgentAccountFactory.sol";
 import "../src/AgentAccount.sol";
-import "../src/DelegationManager.sol";
-import {CustodyPolicy} from "../src/modules/CustodyPolicy.sol";
+import "../src/agency/DelegationManager.sol";
+import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
 
 /// @dev Phase 6c.5-d.1 smoke-test suite for the CustodyPolicy
 ///      module. Verifies end-to-end: install → propose → execute (with

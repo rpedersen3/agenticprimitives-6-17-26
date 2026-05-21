@@ -172,8 +172,8 @@ export const agentAccountAbi = [
 ] as const;
 
 export const custodyPolicyAbi = [
-  // Spec 207 threshold-policy admin surface extracted to
-  // apps/contracts/src/modules/CustodyPolicy.sol (spec 209).
+  // Spec 207 custody-policy surface extracted to
+  // apps/contracts/src/custody/CustodyPolicy.sol (spec 209 / 213).
   {
     type: 'function',
     name: 'scheduleCustodyChange',

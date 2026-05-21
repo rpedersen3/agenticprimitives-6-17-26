@@ -6,7 +6,7 @@ import {EntryPoint} from "account-abstraction/core/EntryPoint.sol";
 import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 
 import {AgentAccountFactory} from "../src/AgentAccountFactory.sol";
-import {DelegationManager} from "../src/DelegationManager.sol";
+import {DelegationManager} from "../src/agency/DelegationManager.sol";
 import {TimestampEnforcer} from "../src/enforcers/TimestampEnforcer.sol";
 import {AllowedTargetsEnforcer} from "../src/enforcers/AllowedTargetsEnforcer.sol";
 import {AllowedMethodsEnforcer} from "../src/enforcers/AllowedMethodsEnforcer.sol";
@@ -15,7 +15,7 @@ import {SmartAgentPaymaster} from "../src/SmartAgentPaymaster.sol";
 import {UniversalSignatureValidator} from "../src/UniversalSignatureValidator.sol";
 import {QuorumEnforcer} from "../src/enforcers/QuorumEnforcer.sol";
 import {ApprovedHashRegistry} from "../src/ApprovedHashRegistry.sol";
-import {CustodyPolicy} from "../src/modules/CustodyPolicy.sol";
+import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
 // Local var renamed below; deployment JSON key kept as
 // `thresholdValidator` until phase 6g.4 redeploys + updates the
 // deployments JSON canonical key (separate ops concern).

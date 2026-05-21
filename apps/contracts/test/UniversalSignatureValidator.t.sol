@@ -7,7 +7,7 @@ import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import "../src/UniversalSignatureValidator.sol";
 import "../src/AgentAccount.sol";
 import "../src/AgentAccountFactory.sol";
-import "../src/DelegationManager.sol";
+import "../src/agency/DelegationManager.sol";
 
 contract UniversalSignatureValidatorTest is Test {
     UniversalSignatureValidator validator;

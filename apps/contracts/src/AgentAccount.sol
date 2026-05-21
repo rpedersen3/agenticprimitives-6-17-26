@@ -280,15 +280,16 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         _factory = factory_;
     }
 
-    // ─── Threshold-policy initializer (relocated) ────────────────────
+    // ─── Custody-policy initializer (relocated) ──────────────────────
     //
-    // `initializeWithThresholdPolicy` + `_defaultApprovals` +
-    // `defaultApprovals` were relocated in phase 6c.5-d.1. The
-    // ThresholdValidator module's `onInstall` is now the per-account
-    // init path: factory deploys account → installs validator with
-    // ABI-encoded init data (mode, guardians, thresholds, timelocks,
-    // T3 ceiling, ApprovedHashRegistry address). The default-threshold
-    // matrix from spec § 5.1 is exposed by `ThresholdValidator.defaultApprovals`.
+    // `initializeWithThresholdPolicy` + the default-approvals matrix
+    // were relocated in phase 6c.5-d.1 and renamed in phase 6g.1. The
+    // CustodyPolicy module's `onInstall` is now the per-account init
+    // path: factory deploys account → installs the policy with
+    // ABI-encoded init data (mode, trustees, approvalsRequiredByTier,
+    // safetyDelayByTier, T3 ceiling, ApprovedHashRegistry address). The
+    // default-approvals matrix from spec § 5.1 is exposed by
+    // `CustodyPolicy.defaultApprovals`.
     // ─── UUPS Upgrade ──────────────────────────────────────────────
 
     /**
@@ -782,7 +783,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      * @dev Only an installed executor module may call. The
      *      install-permission model IS the gate: install is
      *      `onlyOwnerOrSelf` today and migrates to T5 (quorum + timelock)
-     *      in phase 6c.5-d.1 once `ThresholdValidator` lands.
+     *      in phase 6c.5-d.1 once `CustodyPolicy` lands.
      *
      *      `nonReentrant` guards against an executor calling this
      *      function twice in a single call frame. It shares the
@@ -1160,20 +1161,20 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         return _passkeyStorage().count;
     }
 
-    // ─── Threshold policy + admin actions ────────────────────────────
+    // ─── Custody policy + scheduled changes ───────────────────────────
     //
-    // The propose / execute / cancel admin surface, AdminAction enum,
-    // ThresholdPolicyStorage, _verifyQuorum, _adminPayloadHash, and the
-    // 13 action handlers were relocated in phase 6c.5-d.1 to
-    // `src/modules/ThresholdValidator.sol` — an ERC-7579 module
+    // The schedule / apply / cancel custody-change surface, CustodyAction
+    // enum, per-account Config struct, _verifyQuorum, and action handlers
+    // live in `src/custody/CustodyPolicy.sol` — an ERC-7579 module
     // installed as MODULE_TYPE_EXECUTOR. Per spec 209 (ERC-7579 module
-    // taxonomy), AgentAccount is the thin core; the threshold-policy
-    // product surface is a module. The validator calls back via
-    // `executeFromModule` (shipped in phase 6c.5-d.0) to apply actions.
+    // taxonomy) AgentAccount is the thin core; per spec 213 the module
+    // owns the custody-layer surface. The policy calls back via
+    // `executeFromModule` to apply changes.
     //
-    // Views (mode / threshold / recoveryThreshold / guardianCount /
-    // proposalCount / etc.) now live on the validator and are queried
-    // through it: `ThresholdValidator(modAddr).mode(account)` etc.
+    // Views (custodyMode / approvalsRequired / recoveryApprovals /
+    // trusteeCount / scheduledChangeCount / etc.) live on the policy
+    // module and are queried through it: `CustodyPolicy(modAddr)
+    // .custodyMode(account)` etc.
     // ─── Receive ETH ────────────────────────────────────────────────
 
     receive() external payable {}

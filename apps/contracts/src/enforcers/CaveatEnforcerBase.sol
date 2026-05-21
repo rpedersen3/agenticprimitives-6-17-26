@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "../ICaveatEnforcer.sol";
-import "../modules/IERC7579Module.sol";
+import "../agency/ICaveatEnforcer.sol";
+import "../custody/IERC7579Module.sol";
 
 /**
  * @title CaveatEnforcerBase

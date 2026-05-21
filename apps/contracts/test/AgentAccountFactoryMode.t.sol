@@ -6,8 +6,8 @@ import {EntryPoint} from "account-abstraction/core/EntryPoint.sol";
 import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import "../src/AgentAccountFactory.sol";
 import "../src/AgentAccount.sol";
-import "../src/DelegationManager.sol";
-import {CustodyPolicy} from "../src/modules/CustodyPolicy.sol";
+import "../src/agency/DelegationManager.sol";
+import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
 import {AgentAccountInitParams} from "../src/IAgentAccount.sol";
 
 /// @dev Phase 6c.5-d.1.c — factory createAccountWithMode tests, restored

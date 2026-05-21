@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./AgentAccount.sol";
 import {AgentAccountInitParams} from "./IAgentAccount.sol";
-import {CustodyPolicy} from "./modules/CustodyPolicy.sol";
+import {CustodyPolicy} from "./custody/CustodyPolicy.sol";
 import "./governance/GovernanceManaged.sol";
 
 /**

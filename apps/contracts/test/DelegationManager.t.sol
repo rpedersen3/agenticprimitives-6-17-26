@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "forge-std/Test.sol";
-import "../src/DelegationManager.sol";
+import "../src/agency/DelegationManager.sol";
 import "../src/enforcers/TimestampEnforcer.sol";
 
 contract DelegationManagerTest is Test {

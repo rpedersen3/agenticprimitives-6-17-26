@@ -6,7 +6,7 @@ import {EntryPoint} from "account-abstraction/core/EntryPoint.sol";
 import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import "../src/AgentAccountFactory.sol";
 import "../src/AgentAccount.sol";
-import "../src/DelegationManager.sol";
+import "../src/agency/DelegationManager.sol";
 
 contract AgentAccountTest is Test {
     AgentAccountFactory factory;
