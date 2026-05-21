@@ -1,6 +1,6 @@
 # Spec 207 — Smart-account threshold policy
 
-**Status:** v0 mostly implemented · 2026-05-20 — contract + SDK + runtime layers shipped end-to-end (Forge 181/181 + workspace tests green); live wiring + Playwright e2e for § 9 rows 1/2/3/12 pending. See `docs/architecture/cross-cutting-capabilities.md` for the current row.
+**Status:** v0 mostly implemented · 2026-05-20 — contract + SDK + runtime layers shipped end-to-end (Forge 181/181 + workspace tests green); live wiring + Playwright e2e for § 9 rows 1/2/3/12 pending. **Open blocker (phase 6c.5-d):** `AgentAccount` runtime bytecode is 26,876 bytes — 2,300 over the EIP-170 deploy ceiling — so the impl can't deploy to Base Sepolia (or any EIP-170-enforcing chain). Live wiring blocked on the AdminModule split documented in § 14. See `docs/architecture/cross-cutting-capabilities.md` for the current row.
 **Closes:** new audit finding **N16** (smart-account multi-sig and recovery policy is not productized).
 **Builds on:** spec 201 (`agent-account`), spec 202 (`delegation`), spec 204 (`tool-policy`), spec 130 (`passkey-flow`), the multi-sig contracts shipped in pass 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`).
 **Reference: smart-agent patterns to port:** `packages/contracts/src/AgentAccount.sol` (multi-owner mapping shape), `packages/contracts/src/enforcers/QuorumEnforcer.sol` (Safe-compatible signature aggregation — ported in 6c.1), `packages/contracts/src/ApprovedHashRegistry.sol` (pre-approval registry — ported in 6c.1). Deliberate divergence: smart-agent does not productize risk-tier thresholds at the account layer — that pattern is original here, modeled after Safe's owner+threshold+modules+guards architecture and MetaMask's Hybrid / Multisig account modes.
@@ -445,3 +445,141 @@ Open follow-ups (tracked separately):
 - **Permission-UX spec (phase 7 prerequisite).** Define the human-readable card schema: who / what / where / when / how much / how often / how to revoke. Maps onto the caveat-builder output so SDK can render cards directly from the issued `Delegation`.
 - **Cross-account guardian semantics.** Open question in § 11 — a guardian whose kind is "smart account" votes via ERC-1271 (v=0 path already supported by `SignatureSlotRecovery`). Demo doesn't exercise this in v0; document the pattern when a real consumer asks.
 - **Threshold-class language mapping.** SDK + UI surface uses "daily threshold," "admin threshold," "high-risk delegation threshold," "recovery threshold" (per the safety+recovery doctrine memory); spec text keeps the T1–T6 tier IDs as the canonical names. The mapping doc is a phase 7 deliverable alongside the permission-UX spec.
+
+---
+
+## 14. Phase 6c.5-d — AdminModule split (deploy-size unblock)
+
+**Discovered 2026-05-20 during phase 6c.5-c (live wiring):** the `AgentAccount`
+implementation's runtime bytecode is **26,876 bytes** — 2,300 bytes over the
+EIP-170 deploy ceiling (24,576). The bloat is concentrated in the propose /
+execute / cancel surface added across 6c.2-b/c/e: the `AdminAction` dispatcher
+(15 cases), per-action `_apply*` handlers, `_verifyQuorum` body,
+`_adminPayloadHash`, and `_applyRecoverAccount`. Solidity compiler tuning
+(`optimizer_runs = 1`, `via_ir = true`) only recovers 943 bytes — the surface
+fundamentally doesn't fit in one EIP-170-compliant contract.
+
+This section pins the unblock design. It is a follow-on to spec 207 v0, not a
+re-design — the on-chain ABI, storage layout, and threat model are preserved.
+
+### 14.1 Approach
+
+**Split `AgentAccount` into two contracts:**
+
+- **`AgentAccount`** (the proxy implementation, still ~16-18KB): all
+  EIP-4337 surface, owners + passkeys + sessions storage, signature
+  validation (ERC-1271 + 6492), execute / executeBatch, modules surface,
+  upgrade surface, all view functions exposed by the admin surface
+  (`mode()`, `threshold(tier)`, `recoveryThreshold()`, `guardianCount()`,
+  `proposalCount()`, `getPendingAdmin(id)`, `isGuardian(addr)`,
+  `approvedHashRegistry()`).
+- **`AgentAccountAdminModule`** (new singleton, ~10-12KB): the
+  state-mutating admin path — `proposeAdmin` / `executeAdmin` /
+  `cancelAdmin` bodies + the 13 `_apply*` action handlers +
+  `_verifyQuorum` + `_adminPayloadHash` + `_applyRecoverAccount`.
+
+**`AgentAccount`'s 3 external admin functions become delegatecall forwarders.**
+The function selectors + arg shapes + return shapes are unchanged — the body
+becomes a one-liner that `delegatecall`s into the module. Storage writes from
+the module land on the account's storage because that's how `delegatecall`
+works. The module contract itself never holds account state.
+
+### 14.2 Storage invariant
+
+`ThresholdPolicyStorage` (ERC-7201 namespaced at slot
+`0x9bf0...6f00`) is **shared between** `AgentAccount` and `AgentAccountAdminModule`.
+Both contracts declare the struct + the slot constant + the
+`_thresholdPolicyStorage()` accessor; **the layout MUST be byte-identical**
+or delegatecall reads/writes will corrupt state. Same applies to the
+non-namespaced storage the admin path touches: `_owners`, `_ownerCount`,
+`_modulesStorage`, `_passkeyStorage`. Phase 6c.5-d adds a single Forge
+invariant test (`AdminModuleStorageLayout.t.sol`) that pins the slot
+positions of every field touched by the module + fails if `AgentAccount`'s
+shape drifts.
+
+### 14.3 Trust binding
+
+`AgentAccount` adds a single immutable: `address public immutable adminModule`.
+Set in the constructor; the factory deploys the module first, then passes
+its address into the `AgentAccount` constructor. The module address cannot
+change without an `UpgradeImpl` admin action (which re-deploys the whole
+impl). Per-account rotation of the module is out of scope for v0 — same
+substrate doctrine as the rest of spec 207.
+
+### 14.4 Forwarder shape
+
+```solidity
+function proposeAdmin(AdminAction action, bytes calldata args, bytes calldata sigs)
+    external returns (uint256 proposalId)
+{
+    (bool ok, bytes memory ret) = adminModule.delegatecall(msg.data);
+    if (!ok) {
+        assembly { revert(add(ret, 32), mload(ret)) }
+    }
+    return abi.decode(ret, (uint256));
+}
+```
+
+`executeAdmin` + `cancelAdmin` follow the same shape. `msg.data` forwarding
+preserves arg layout exactly; the bubbled revert preserves the original
+error selector so external callers see the same error shape as before the
+split.
+
+### 14.5 What the module does NOT have
+
+- **No constructor args.** The module is a code-only contract; it reads no
+  storage that's not delegate-called into.
+- **No `selfdestruct`.** Phase 6c.5-d adds a Forge static check.
+- **No external state.** No mappings, no slots, no fallback. Code only.
+- **No `address(this)` semantics.** Inside delegatecall, `address(this)` is
+  the account, never the module — the module's code MUST NOT branch on
+  `address(this) == <module-address>` or read any module-side state.
+
+### 14.6 Live-deploy sequence (phase 6c.5-c resumes after 6c.5-d lands)
+
+1. `forge create AgentAccountAdminModule` (deployer EOA, single tx)
+2. `forge create AgentAccountFactory(EP, DM, deployer, deployer, deployer,
+   adminModuleAddr)` — factory constructor signature gets a 6th arg.
+   Factory deploys new `AgentAccount` impl as a side-effect, passing
+   `adminModuleAddr` into the AgentAccount constructor.
+3. Merge `agentAccountAdminModule` + new `agentAccountFactory` +
+   `agentAccountImplementation` addresses into
+   `deployments-base-sepolia.json`.
+4. `pnpm deploy:cloudflare` → workers + demo-web-pro pick up new addresses.
+
+The 2 enforcers already on-chain from phase 6c.5-c (QuorumEnforcer +
+ApprovedHashRegistry) stay — they're independent of the AdminModule split.
+
+### 14.7 Test posture for the split
+
+181 existing Forge tests MUST still pass without modification — the
+external ABI is unchanged. Tests that subclass `AgentAccount` to seed
+internal state (`TestAgentAccount`) keep working because the
+`_thresholdPolicyStorage()` accessor stays `internal` in both contracts.
+
+New tests:
+
+- `AdminModuleStorageLayout.t.sol` — invariant: every field touched by the
+  module has the same `keccak`-derived slot in `AgentAccount` and in
+  `AgentAccountAdminModule`.
+- `AdminModuleDelegatecall.t.sol` — three rows: each forwarder selector
+  delegates into the module + the module's revert selectors bubble
+  identically + the module address is the impl's `adminModule()` view.
+- `AdminModuleStateless.t.sol` — fuzz: the module's storage layout is
+  empty (no slots written when called as a top-level contract).
+
+### 14.8 Size targets
+
+Post-split, expected sizes (10% slack vs EIP-170 ceiling):
+
+| Contract | Target | Headroom vs 24,576 |
+| --- | --- | --- |
+| `AgentAccount` | ≤ 22,000 | ≥ 2,576 |
+| `AgentAccountAdminModule` | ≤ 14,000 | ≥ 10,576 |
+| `AgentAccountFactory` | ≤ 6,000 (no change from current) | ≥ 18,576 |
+
+If the post-split `AgentAccount` is still over 22KB, the next lever is
+moving `addPasskey` / `removePasskey` / `setUpgradeTimelock` / module
+install/uninstall onto the AdminModule too (currently
+`onlySelf`-gated; the threat model is compatible with a delegatecall
+forwarder). Document that as 6c.5-d.alt if needed.
