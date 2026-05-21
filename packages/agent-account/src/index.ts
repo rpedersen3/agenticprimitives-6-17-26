@@ -7,7 +7,13 @@ export type { AgentAccountClientOpts, CreateAgentAccountParams } from './client'
 export type { UserOperation, Address, Hex } from './types';
 export { BundlerClient, packGasLimits, unpackGasLimits } from './bundler-client';
 export type { BundlerClientOpts, PackedUserOperation } from './bundler-client';
-export { entryPointAbi } from './abis';
+export {
+  agentAccountAbi,
+  agentAccountFactoryAbi,
+  approvedHashRegistryAbi,
+  entryPointAbi,
+  thresholdValidatorAbi,
+} from './abis';
 
 // Spec 207 threshold-policy + quorum utilities (6c.3-c).
 export {

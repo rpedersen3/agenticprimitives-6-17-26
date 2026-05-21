@@ -17,68 +17,9 @@
 import { useMemo, useState } from 'react';
 import { useAccount, useChainId, useReadContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import { decodeEventLog, type Address } from 'viem';
+import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
 import { config as deploymentConfig } from '../../config';
-
-// Minimal ABI — only the surfaces this flow touches. Keeps the bundle
-// small + makes the dependency on `apps/contracts/src/AgentAccountFactory.sol`
-// readable.
-const factoryAbi = [
-  {
-    type: 'function',
-    name: 'createAccountWithMode',
-    stateMutability: 'nonpayable',
-    inputs: [
-      {
-        name: 'params',
-        type: 'tuple',
-        components: [
-          { name: 'mode', type: 'uint8' },
-          { name: 'owners', type: 'address[]' },
-          { name: 'guardians', type: 'address[]' },
-          { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
-          { name: 'initialPasskeyX', type: 'uint256' },
-          { name: 'initialPasskeyY', type: 'uint256' },
-        ],
-      },
-      { name: 'validator', type: 'address' },
-      { name: 'salt', type: 'uint256' },
-    ],
-    outputs: [{ name: 'account', type: 'address' }],
-  },
-  {
-    type: 'function',
-    name: 'getAddressForMode',
-    stateMutability: 'view',
-    inputs: [
-      {
-        name: 'params',
-        type: 'tuple',
-        components: [
-          { name: 'mode', type: 'uint8' },
-          { name: 'owners', type: 'address[]' },
-          { name: 'guardians', type: 'address[]' },
-          { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
-          { name: 'initialPasskeyX', type: 'uint256' },
-          { name: 'initialPasskeyY', type: 'uint256' },
-        ],
-      },
-      { name: 'salt', type: 'uint256' },
-    ],
-    outputs: [{ name: '', type: 'address' }],
-  },
-  {
-    type: 'event',
-    name: 'AgentAccountCreatedWithMode',
-    inputs: [
-      { name: 'account', type: 'address', indexed: true },
-      { name: 'validator', type: 'address', indexed: true },
-      { name: 'mode', type: 'uint8', indexed: true },
-      { name: 'nOwners', type: 'uint256', indexed: false },
-      { name: 'nGuardians', type: 'uint256', indexed: false },
-      { name: 'salt', type: 'uint256', indexed: false },
-    ],
-  },
-] as const;
+import { AddressChipInput, ModePill, shortAddress } from '../../components';
 
 const ZERO_BYTES32 = ('0x' + '0'.repeat(64)) as `0x${string}`;
 
@@ -92,20 +33,11 @@ export function HybridRecoveryFlow() {
     useWaitForTransactionReceipt({ hash: txHash });
 
   const [salt, setSalt] = useState<string>(() => String(Math.floor(Math.random() * 1_000_000)));
-  const [guardiansInput, setGuardiansInput] = useState<string>('');
+  const [guardians, setGuardians] = useState<Address[]>([]);
 
   const factoryAddress = deploymentConfig.factoryAddress;
   const validatorAddress = deploymentConfig.thresholdValidator;
   const expectedChainId = deploymentConfig.chainId;
-
-  const guardianList = useMemo<Address[]>(
-    () =>
-      guardiansInput
-        .split(',')
-        .map((g) => g.trim())
-        .filter((g): g is Address => /^0x[0-9a-fA-F]{40}$/.test(g)),
-    [guardiansInput],
-  );
 
   const params = useMemo(
     () =>
@@ -113,13 +45,13 @@ export function HybridRecoveryFlow() {
         ? ({
             mode: 1,
             owners: [connectedAddress],
-            guardians: guardianList,
+            guardians,
             initialPasskeyCredentialIdDigest: ZERO_BYTES32,
             initialPasskeyX: 0n,
             initialPasskeyY: 0n,
           } as const)
         : null,
-    [connectedAddress, guardianList],
+    [connectedAddress, guardians],
   );
 
   const saltBigInt = useMemo(() => {
@@ -133,7 +65,7 @@ export function HybridRecoveryFlow() {
   // Counterfactual address preview — cheap, doesn't require a write.
   const { data: predictedAddress } = useReadContract({
     address: factoryAddress,
-    abi: factoryAbi,
+    abi: agentAccountFactoryAbi,
     functionName: 'getAddressForMode',
     args: params && saltBigInt !== null ? [params, saltBigInt] : undefined,
     query: { enabled: !!params && saltBigInt !== null && !!factoryAddress },
@@ -145,7 +77,7 @@ export function HybridRecoveryFlow() {
     for (const log of receipt.logs) {
       try {
         const decoded = decodeEventLog({
-          abi: factoryAbi,
+          abi: agentAccountFactoryAbi,
           data: log.data,
           topics: log.topics,
         });
@@ -167,32 +99,48 @@ export function HybridRecoveryFlow() {
     resetWrite();
     writeContract({
       address: factoryAddress,
-      abi: factoryAbi,
+      abi: agentAccountFactoryAbi,
       functionName: 'createAccountWithMode',
       args: [params, validatorAddress, saltBigInt],
     });
   };
 
   return (
-    <section style={{ margin: '2rem 0' }}>
-      <h2>Hybrid recovery</h2>
-      <p className="muted">
-        Spec 207 use case #1: create a <code>hybrid</code>-mode account with the connected EOA
-        as the primary signer + optional guardians. Default install: T4 = 1h timelock, T5 = 24h,
-        T6 = 48h; T3 ceiling = 0.01 ETH; recovery threshold ={' '}
-        <code>floor(guardians/2)+1</code> when guardians &gt; 0.
-      </p>
+    <section>
+      <div className="hero">
+        <p className="eyebrow">Works now</p>
+        <h1>Deploy a hybrid AgentAccount</h1>
+        <p>
+          This is the one live demo path. It calls the factory to deploy an account in `hybrid`
+          mode, installs `ThresholdValidator`, and records optional guardians at install time.
+        </p>
+      </div>
+
+      <section className="card" style={{ marginBottom: '1rem' }}>
+        <p className="eyebrow">What you are doing</p>
+        <h2>One chain write</h2>
+        <ul className="status-list">
+          <li className="approved"><span>✓</span>Use your connected wallet as the first owner.</li>
+          <li className="approved"><span>✓</span>Optionally add guardian addresses for future recovery policy.</li>
+          <li className="approved"><span>✓</span>Preview the deterministic CREATE2 account address.</li>
+          <li className="approved"><span>✓</span>Submit `createAccountWithMode` to the configured factory.</li>
+        </ul>
+        <p className="muted">
+          Not included yet: backup passkey registration, live recovery execution, high-risk agent
+          delegation approval, org treasury execution.
+        </p>
+      </section>
 
       {!factoryAddress && (
         <p className="err">
-          ⚠️ <code>VITE_FACTORY_ADDRESS</code> not set in this build. Redeploy via{' '}
+          <code>VITE_FACTORY_ADDRESS</code> not set in this build. Redeploy via{' '}
           <code>pnpm deploy:cloudflare</code> from a checkout that has{' '}
           <code>deployments-base-sepolia.json</code>.
         </p>
       )}
       {!validatorAddress && factoryAddress && (
         <p className="err">
-          ⚠️ <code>VITE_THRESHOLD_VALIDATOR</code> not set in this build.
+          <code>VITE_THRESHOLD_VALIDATOR</code> not set in this build.
         </p>
       )}
 
@@ -204,7 +152,7 @@ export function HybridRecoveryFlow() {
 
       {isConnected && wrongChain && (
         <p className="err">
-          ⚠️ Wallet is on chain <code>{chainId}</code>. This demo targets chain{' '}
+          Wallet is on chain <code>{chainId}</code>. This demo targets chain{' '}
           <code>{expectedChainId}</code> (Base Sepolia).{' '}
           <button
             onClick={() => expectedChainId && switchChain({ chainId: expectedChainId })}
@@ -216,88 +164,97 @@ export function HybridRecoveryFlow() {
         </p>
       )}
 
-      <div className="card">
-        <h3>Account configuration</h3>
-        <label style={{ display: 'block', marginBottom: 8 }}>
-          Primary owner (your connected wallet)
+      <div className="split">
+        <section className="card">
+          <p className="eyebrow">Account configuration</p>
+          <h2>Me plus backups</h2>
+          <ModePill mode="hybrid" detail="T4 1h · T5 24h · T6 48h" />
+          <p className="muted">
+            Guardians are stored on the validator config. The full recovery UI is future work; this
+            screen only deploys the account with those guardians.
+          </p>
+        <label className="field">
+          <span>Primary owner</span>
           <input
             value={connectedAddress ?? '— not connected —'}
             readOnly
-            style={{ width: '100%', fontFamily: 'monospace', padding: '0.25rem' }}
             data-testid="hybrid-recovery-owner"
           />
         </label>
-        <label style={{ display: 'block', marginBottom: 8 }}>
-          Salt
+        <label className="field">
+          <span>Salt</span>
           <input
             value={salt}
             onChange={(e) => setSalt(e.target.value)}
-            style={{ width: '100%', padding: '0.25rem' }}
             data-testid="hybrid-recovery-salt"
           />
+          {saltBigInt === null && <small className="err">Salt must be a decimal integer.</small>}
         </label>
-        <label style={{ display: 'block', marginBottom: 8 }}>
-          Guardians (comma-separated 0x addresses; optional for <code>hybrid</code>)
-          <textarea
-            value={guardiansInput}
-            onChange={(e) => setGuardiansInput(e.target.value)}
-            rows={3}
-            style={{ width: '100%', padding: '0.25rem', fontFamily: 'monospace' }}
-            data-testid="hybrid-recovery-guardians"
-          />
-          <small className="muted">
-            Parsed: {guardianList.length} valid guardian(s)
-            {guardianList.length === 0 && ' — none, account is hybrid-without-recovery'}
-          </small>
-        </label>
-        {predictedAddress && (
-          <p className="muted" style={{ marginTop: 8 }}>
-            Predicted address: <code>{predictedAddress}</code>
-          </p>
-        )}
-        <button
-          onClick={handleDeploy}
-          disabled={!ready || isWriting || isConfirming}
-          data-testid="hybrid-recovery-deploy"
-        >
-          {isWriting
-            ? 'Confirm in wallet…'
-            : isConfirming
-              ? 'Waiting for confirmation…'
-              : 'Deploy hybrid account'}
-        </button>
+        <AddressChipInput
+          label="Guardians"
+          value={guardians}
+          onChange={setGuardians}
+          help={`${guardians.length} guardian(s). ${guardians.length >= 2 ? 'Recovery quorum is available.' : 'Add two or more for recovery quorum.'}`}
+        />
+        </section>
+
+        <section className="card">
+          <p className="eyebrow">Review</p>
+          <h2>Account will deploy with</h2>
+          <ul className="status-list">
+            <li className="approved"><span>✓</span>Primary owner {connectedAddress ? shortAddress(connectedAddress) : 'not connected'}</li>
+            <li className={guardians.length >= 2 ? 'approved' : 'pending'}><span>{guardians.length >= 2 ? '✓' : '○'}</span>{guardians.length} guardian(s)</li>
+            <li className="approved"><span>✓</span>ThresholdValidator installed as executor module</li>
+            <li className="pending"><span>○</span>Backup passkey registration is not live in this app</li>
+          </ul>
+          {predictedAddress && (
+            <p className="muted">
+              Your account will live at <code>{predictedAddress}</code>
+            </p>
+          )}
+          <div className="actions">
+            <button
+              className="primary"
+              onClick={handleDeploy}
+              disabled={!ready || isWriting || isConfirming}
+              data-testid="hybrid-recovery-deploy"
+            >
+              {isWriting ? 'Confirm in wallet…' : isConfirming ? 'Waiting for chain…' : isConfirmed ? 'Account ready' : 'Deploy account'}
+            </button>
+          </div>
+          {txHash && (
+            <p className="muted">
+              Transaction: <code>{txHash}</code>
+            </p>
+          )}
+          {writeError && (
+            <p className="err" data-testid="hybrid-recovery-error">
+              {writeError.message}
+            </p>
+          )}
+        </section>
       </div>
 
-      {writeError && (
-        <p className="err" data-testid="hybrid-recovery-error">
-          {writeError.message}
-        </p>
-      )}
-      {txHash && !isConfirmed && (
-        <p className="muted" data-testid="hybrid-recovery-tx-pending">
-          Tx submitted: <code>{txHash}</code>
-        </p>
-      )}
-      {isConfirmed && deployedAddress && (
-        <div className="card">
-          <h3 className="ok">✓ Account deployed</h3>
+      {isConfirmed && (
+        <section className="card" style={{ marginTop: '1rem' }} data-testid="hybrid-recovery-success">
+          <p className="eyebrow">Next best action</p>
+          <h2 className="ok">Account ready</h2>
           <p>
-            Address: <code>{deployedAddress}</code>
+            {deployedAddress ? (
+              <>Deployed account <code>{deployedAddress}</code>.</>
+            ) : (
+              <>Transaction confirmed. Could not parse the account event, but the write succeeded.</>
+            )}
           </p>
           <p>
-            Tx: <code>{txHash}</code>
+            This demo stops here. Backup passkey registration and recovery execution are not wired in
+            this app yet.
           </p>
-          <p className="muted">
-            <strong>Next step (recommended):</strong> add a backup passkey so this account isn't
-            bound to a single device. See spec § 8 for the recovery threshold + 48h timelock
-            semantics.
-          </p>
-        </div>
+          <div className="actions">
+            <a href="#/">Back to what works now</a>
+          </div>
+        </section>
       )}
-
-      <p className="muted" style={{ marginTop: '2rem', fontSize: '0.85rem' }}>
-        Walkthrough: <code>docs/multi-sig/flows/hybrid-recovery.md</code>
-      </p>
     </section>
   );
 }

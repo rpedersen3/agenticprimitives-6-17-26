@@ -1,8 +1,6 @@
 # Use case 3 — Org treasury
 
-> **Status:** stub. Implementation lands in phase 6c.5 (`org` mode
-> frontend) + phase 6e (treasury contract + caveats) + phase 7
-> (admin panel UX).
+> **Status:** preview. The route now shows org-mode threshold defaults, a proposal draft, pending approvals, and audit preview. Writes stay disabled until a live org account is connected.
 
 Maps to spec 207 § 4.1 use case #3. Org creates an `org`-mode
 account with 3 admins. Threshold: 2-of-3 for treasury actions;
@@ -22,7 +20,5 @@ This walkthrough will cover:
 5. The audit trail: every propose / approve / execute / cancel
   visible by correlation ID.
 
-Code: `apps/demo-web-pro/src/flows/org-treasury/` (lands with 6c.5
-
-- 6e).
+Code: `apps/demo-web-pro/src/flows/org-treasury/`.
 

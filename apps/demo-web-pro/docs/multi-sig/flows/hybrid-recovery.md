@@ -1,8 +1,6 @@
 # Use case 1 — Individual user, seamless recovery
 
-> **Status:** stub. Implementation lands in phase 6c.5 (frontend) +
-> phase 7 (UX panel). Mark the corresponding § 9 launch-gate tests as
-> covered once this flow is end-to-end.
+> **Status:** live baseline. The route deploys a `hybrid` account via `createAccountWithMode`, previews the deterministic address, accepts guardian chips, parses the deployment event, and prompts a backup passkey next step.
 
 Maps to spec 207 § 4.1 use case #1. User creates a `single`-mode
 account, then the very next step prompts: *"Add a backup so you don't
@@ -20,4 +18,4 @@ This walkthrough will cover:
 5. Verifying the recovery threshold is sane (≥ 1 guardian OR ≥ 2
    passkeys per spec § 8).
 
-Code: `apps/demo-web-pro/src/flows/hybrid-recovery/` (lands with 6c.5).
+Code: `apps/demo-web-pro/src/flows/hybrid-recovery/`.

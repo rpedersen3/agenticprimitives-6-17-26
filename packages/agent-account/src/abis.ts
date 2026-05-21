@@ -54,6 +54,63 @@ export const agentAccountFactoryAbi = [
     ],
     outputs: [{ name: '', type: 'address' }],
   },
+  // Spec 207 / 209 mode-aware deploy path. Source:
+  // apps/contracts/src/AgentAccountFactory.sol#createAccountWithMode.
+  {
+    type: 'function',
+    name: 'createAccountWithMode',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'params',
+        type: 'tuple',
+        components: [
+          { name: 'mode', type: 'uint8' },
+          { name: 'owners', type: 'address[]' },
+          { name: 'guardians', type: 'address[]' },
+          { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
+          { name: 'initialPasskeyX', type: 'uint256' },
+          { name: 'initialPasskeyY', type: 'uint256' },
+        ],
+      },
+      { name: 'validator', type: 'address' },
+      { name: 'salt', type: 'uint256' },
+    ],
+    outputs: [{ name: 'account', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'getAddressForMode',
+    stateMutability: 'view',
+    inputs: [
+      {
+        name: 'params',
+        type: 'tuple',
+        components: [
+          { name: 'mode', type: 'uint8' },
+          { name: 'owners', type: 'address[]' },
+          { name: 'guardians', type: 'address[]' },
+          { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
+          { name: 'initialPasskeyX', type: 'uint256' },
+          { name: 'initialPasskeyY', type: 'uint256' },
+        ],
+      },
+      { name: 'salt', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'event',
+    name: 'AgentAccountCreatedWithMode',
+    inputs: [
+      { name: 'account', type: 'address', indexed: true },
+      { name: 'validator', type: 'address', indexed: true },
+      { name: 'mode', type: 'uint8', indexed: true },
+      { name: 'nOwners', type: 'uint256', indexed: false },
+      { name: 'nGuardians', type: 'uint256', indexed: false },
+      { name: 'salt', type: 'uint256', indexed: false },
+    ],
+  },
 ] as const;
 
 export const agentAccountAbi = [
@@ -67,12 +124,35 @@ export const agentAccountAbi = [
     ],
     outputs: [{ name: '', type: 'bytes4' }],
   },
-  // Spec 207 threshold-policy admin surface (6c.2-b/c/e).
+  {
+    type: 'function',
+    name: 'acceptSessionDelegation',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'sessionDelegationHash', type: 'bytes32' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'hasAcceptedSessionDelegation',
+    stateMutability: 'view',
+    inputs: [{ name: 'sessionDelegationHash', type: 'bytes32' }],
+    outputs: [{ type: 'bool' }],
+  },
+  { type: 'function', name: 'isOwner', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'ownerCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'factory', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'delegationManager', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+] as const;
+
+export const thresholdValidatorAbi = [
+  // Spec 207 threshold-policy admin surface extracted to
+  // apps/contracts/src/modules/ThresholdValidator.sol (spec 209).
   {
     type: 'function',
     name: 'proposeAdmin',
     stateMutability: 'nonpayable',
     inputs: [
+      { name: 'account', type: 'address' },
       { name: 'action', type: 'uint8' },
       { name: 'args', type: 'bytes' },
       { name: 'quorumSigs', type: 'bytes' },
@@ -84,6 +164,7 @@ export const agentAccountAbi = [
     name: 'executeAdmin',
     stateMutability: 'nonpayable',
     inputs: [
+      { name: 'account', type: 'address' },
       { name: 'proposalId', type: 'uint256' },
       { name: 'quorumSigs', type: 'bytes' },
     ],
@@ -94,25 +175,27 @@ export const agentAccountAbi = [
     name: 'cancelAdmin',
     stateMutability: 'nonpayable',
     inputs: [
+      { name: 'account', type: 'address' },
       { name: 'proposalId', type: 'uint256' },
       { name: 'quorumSigs', type: 'bytes' },
     ],
     outputs: [],
   },
   // Threshold-policy view methods.
-  { type: 'function', name: 'mode', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
-  { type: 'function', name: 'threshold', stateMutability: 'view', inputs: [{ name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
-  { type: 'function', name: 'recoveryThreshold', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
-  { type: 'function', name: 't3HighValueCeiling', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'timelockDuration', stateMutability: 'view', inputs: [{ name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint32' }] },
-  { type: 'function', name: 'isGuardian', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'bool' }] },
-  { type: 'function', name: 'guardianCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'proposalCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'mode', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'threshold', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 'recoveryThreshold', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint8' }] },
+  { type: 'function', name: 't3HighValueCeiling', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'timelockDuration', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint32' }] },
+  { type: 'function', name: 'isGuardian', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'signer', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'guardianCount', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'proposalCount', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'defaultThreshold', stateMutability: 'pure', inputs: [{ name: 'nOwners', type: 'uint8' }, { name: 'tier', type: 'uint8' }], outputs: [{ type: 'uint8' }] },
   {
     type: 'function',
     name: 'getPendingAdmin',
     stateMutability: 'view',
-    inputs: [{ name: 'proposalId', type: 'uint256' }],
+    inputs: [{ name: 'account', type: 'address' }, { name: 'proposalId', type: 'uint256' }],
     outputs: [
       { name: 'action', type: 'uint8' },
       { name: 'args', type: 'bytes' },
@@ -122,22 +205,9 @@ export const agentAccountAbi = [
       { name: 'cancelled', type: 'bool' },
     ],
   },
-  { type: 'function', name: 'chainId', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
-  // The 6c.2-b acceptSessionDelegation hook used by the spec § 6 T3+ blessing path.
-  {
-    type: 'function',
-    name: 'acceptSessionDelegation',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: 'sessionDelegationHash', type: 'bytes32' }],
-    outputs: [],
-  },
-  {
-    type: 'function',
-    name: 'isAcceptedSessionDelegation',
-    stateMutability: 'view',
-    inputs: [{ name: 'sessionDelegationHash', type: 'bytes32' }],
-    outputs: [{ type: 'bool' }],
-  },
+  { type: 'event', name: 'AdminProposed', inputs: [{ name: 'account', type: 'address', indexed: true }, { name: 'proposalId', type: 'uint256', indexed: true }, { name: 'action', type: 'uint8', indexed: true }, { name: 'eta', type: 'uint64', indexed: false }, { name: 'proposer', type: 'address', indexed: false }] },
+  { type: 'event', name: 'AdminExecuted', inputs: [{ name: 'account', type: 'address', indexed: true }, { name: 'proposalId', type: 'uint256', indexed: true }] },
+  { type: 'event', name: 'AdminCancelled', inputs: [{ name: 'account', type: 'address', indexed: true }, { name: 'proposalId', type: 'uint256', indexed: true }] },
 ] as const;
 
 /**

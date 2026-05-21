@@ -1,9 +1,6 @@
 # Use case 4 — Steward → delegate → agent chain
 
-> **Status:** stub. Cross-delegation substrate (`verifyCrossDelegation`)
-> is open as system audit finding H5 in
-> `docs/architecture/product-readiness-audit.md`. This flow lands
-> after H5 closes; spec 207 § 11 references it as an open question.
+> **Status:** preview / blocked by H5. The route now visualizes the parent -> steward -> agent chain and marks runtime subset verification as the remaining blocker.
 
 Maps to spec 207 § 4.1 use case #4. User grants a steward primary
 role with profile-read + limited-write authority. Steward
@@ -19,5 +16,4 @@ This walkthrough will cover:
    (no caveat removal, no widened bounds).
 4. The audit trail showing the delegation chain.
 
-Code: `apps/demo-web-pro/src/flows/steward-attenuation/` (lands
-post-H5).
+Code: `apps/demo-web-pro/src/flows/steward-attenuation/`.

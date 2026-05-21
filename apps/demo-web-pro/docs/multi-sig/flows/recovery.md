@@ -1,7 +1,6 @@
 # Use case 5 — Lost device recovery
 
-> **Status:** stub. Implementation lands in phase 6c.2-e (T6
-> Recovery flow) + 6c.5 (frontend) + phase 7 (recovery UX panel).
+> **Status:** preview. The route now shows guardian quorum, 48h timelock, 24h primary-owner cancel window, pending approvals, and audit preview. Execution remains disabled in the demo.
 
 Maps to spec 207 § 4.1 use case #5. User loses laptop passkey, signs
 in with phone passkey. Initiates `T6 Recovery` proposing removal of
@@ -20,4 +19,4 @@ This walkthrough will cover:
 5. The "recovery wins" precedence rule: a T6 recovery executing
    invalidates any in-flight T5 admin proposal (spec § 9 row 13).
 
-Code: `apps/demo-web-pro/src/flows/recovery/` (lands post-6c.2-e).
+Code: `apps/demo-web-pro/src/flows/recovery/`.

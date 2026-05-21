@@ -11,55 +11,10 @@
  * mounts a sub-component for its `#/flows/<name>` hash.
  */
 
-import { useEffect, useState } from 'react';
-import { ConnectButton } from './connect-button';
+import { useEffect, useMemo, useState } from 'react';
+import { AppShell, RiskBadge, StatusBadge } from './components';
+import { FLOWS, flowBySlug } from './flows';
 import { HybridRecoveryFlow } from './flows/hybrid-recovery/HybridRecoveryFlow';
-
-interface UseCase {
-  slug: string;          // hash route, e.g. 'hybrid-recovery'
-  title: string;
-  oneLiner: string;
-  badge?: 'stub' | 'in-flight' | 'live';
-  guidePath: string;     // relative path to the markdown walkthrough
-}
-
-const USE_CASES: UseCase[] = [
-  {
-    slug: 'hybrid-recovery',
-    title: 'Individual user, seamless recovery',
-    oneLiner: 'Single primary passkey → prompt to add a backup → mode flips single→hybrid.',
-    badge: 'in-flight',
-    guidePath: 'docs/multi-sig/flows/hybrid-recovery.md',
-  },
-  {
-    slug: 'threshold-approval',
-    title: 'High-risk agent delegation',
-    oneLiner: 'T3 Value grant with permission card + threshold approval + on-chain acceptSessionDelegation blessing.',
-    badge: 'stub',
-    guidePath: 'docs/multi-sig/flows/threshold-approval.md',
-  },
-  {
-    slug: 'org-treasury',
-    title: 'Org treasury',
-    oneLiner: 'org mode with 3 admins · 2-of-3 routine · 3-of-3 trust-root · timelocked admin actions.',
-    badge: 'stub',
-    guidePath: 'docs/multi-sig/flows/org-treasury.md',
-  },
-  {
-    slug: 'steward-attenuation',
-    title: 'Steward → delegate → agent',
-    oneLiner: 'Cross-delegation chain — child caveats must be a subset of parent.',
-    badge: 'stub',
-    guidePath: 'docs/multi-sig/flows/steward-attenuation.md',
-  },
-  {
-    slug: 'recovery',
-    title: 'Lost device recovery',
-    oneLiner: 'Multi-passkey + guardian quorum + 48h timelock + 24h primary-owner cancel window.',
-    badge: 'stub',
-    guidePath: 'docs/multi-sig/flows/recovery.md',
-  },
-];
 
 export function App() {
   const [hash, setHash] = useState<string>(typeof window !== 'undefined' ? window.location.hash : '');
@@ -70,79 +25,142 @@ export function App() {
     return () => window.removeEventListener('hashchange', handler);
   }, []);
 
-  // No flow components are mounted yet — the hash route is rendered as a
-  // "this flow lands in 6c.5" notice. Each flow ships its sub-component
-  // as 6c.5 progresses.
   const flowMatch = hash.match(/^#\/flows\/([\w-]+)/);
   const activeFlow = flowMatch?.[1];
+  const flow = useMemo(() => flowBySlug(activeFlow), [activeFlow]);
+
+  return (
+    <AppShell activeFlow={flow}>
+      {!flow ? <Gallery /> : <FlowRouter slug={flow.slug} />}
+    </AppShell>
+  );
+}
+
+function Gallery() {
+  const liveFlows = FLOWS.filter((flow) => flow.availableNow);
+  const futureFlows = FLOWS.filter((flow) => !flow.availableNow);
 
   return (
     <>
-      <h1>agenticprimitives — capability showcase</h1>
-      <p>
-        Five cross-cutting use cases from{' '}
-        <a href="../specs/207-smart-account-threshold-policy.md">spec 207 § 4.1</a>. Each card links
-        to the developer guide; live implementation lands incrementally as phase 6c progresses.
-      </p>
-      <p className="muted">
-        For the simple "EOA SIWE → read profile" flow, see{' '}
-        <a href="http://localhost:5173">demo-web</a> (dev) or{' '}
-        <a href="https://agenticprimitives-demo.pages.dev">agenticprimitives-demo.pages.dev</a> (prod).
-      </p>
+      <section className="hero">
+        <p className="eyebrow">Demo Web Pro</p>
+        <h1>What works now: deploy a hybrid smart account.</h1>
+        <p>
+          This app is not a full multi-sig product yet. Today it has one live contract-backed path:
+          connect a wallet, configure optional guardians, preview the deterministic account address,
+          and call `AgentAccountFactory.createAccountWithMode`.
+        </p>
+      </section>
 
-      {activeFlow && (
-        <>
-          <section style={{ marginTop: '1.5rem' }}>
-            <h2>Wallet</h2>
-            <ConnectButton />
-          </section>
-          {activeFlow === 'hybrid-recovery' ? (
-            <HybridRecoveryFlow />
-          ) : (
-            <section style={{ margin: '2rem 0', padding: '1rem', border: '1px solid #f0c87f', background: '#fffbeb', borderRadius: 6 }}>
-              <h2 style={{ marginTop: 0 }}>{activeFlow}</h2>
-              <p>
-                This flow's interactive implementation lands in a future sub-phase. Until then, read
-                the walkthrough at <code>docs/multi-sig/flows/{activeFlow}.md</code>.
-              </p>
-            </section>
-          )}
-          <p style={{ marginTop: '2rem' }}>
-            <a href="#/">← back to gallery</a>
-          </p>
-        </>
-      )}
+      <section className="card" data-testid="what-works-now">
+        <p className="eyebrow">Supported now</p>
+        <h2>Hybrid account setup</h2>
+        <p>
+          Creates a `hybrid` mode `AgentAccount` with the connected wallet as the primary owner and
+          optional guardian addresses. This is the only flow here that attempts a chain write.
+        </p>
+        <div className="actions">
+          <a className="button-link primary" href="#/flows/hybrid-recovery" data-testid="start-live-flow">
+            Start hybrid account setup
+          </a>
+          <RiskBadge risk="T4 Admin" />
+          <StatusBadge status="live" />
+        </div>
+        <p className="muted">
+          Needs local env/deployment addresses: <code>VITE_FACTORY_ADDRESS</code>,{' '}
+          <code>VITE_THRESHOLD_VALIDATOR</code>, and <code>VITE_CHAIN_ID</code>.
+        </p>
+      </section>
 
-      {!activeFlow && (
-        <section>
-          <h2>Use cases</h2>
-          {USE_CASES.map((uc) => (
-            <a key={uc.slug} className="card" href={`#/flows/${uc.slug}`}>
-              <h3>
-                {uc.title}
-                {uc.badge && <span className={`badge ${uc.badge}`}>{uc.badge}</span>}
-              </h3>
+      <section style={{ marginTop: '1rem' }}>
+        <p className="eyebrow">Live path</p>
+        <div className="grid" aria-label="Available now">
+          {liveFlows.map((uc) => (
+            <a key={uc.slug} className="card" href={`#/flows/${uc.slug}`} data-testid={`flow-card-${uc.slug}`}>
+              <div className="card-header">
+                <div>
+                  <p className="eyebrow">{uc.mode} mode</p>
+                  <h2>{uc.title}</h2>
+                </div>
+                <StatusBadge status={uc.status} />
+              </div>
               <p>{uc.oneLiner}</p>
+              <div className="actions">
+                <RiskBadge risk={uc.risk} />
+                <span className="muted">{uc.steps.join(' -> ')}</span>
+              </div>
             </a>
           ))}
-        </section>
-      )}
+        </div>
+      </section>
 
-      <h2>What is this app?</h2>
-      <p>
-        <code>demo-web-pro</code> is the canonical home for cross-cutting capability demos —
-        anything that threads through ≥ 3 packages and carries its own threat model. Today: multi-sig.
-        Queued: treasury, recovery UX, argument-level caveats.
-      </p>
-      <p>
-        Each capability has a guide co-located in <code>docs/&lt;capability&gt;/</code>. The doc + code
-        are designed to be read together — open the source for any flow and the matching walkthrough
-        is a sibling file. See <code>CLAUDE.md</code> for the app-level navigation.
-      </p>
-      <p className="muted">
-        Index of all cross-cutting capabilities (across the whole monorepo):{' '}
-        <code>docs/architecture/cross-cutting-capabilities.md</code>.
-      </p>
+      <section className="card" style={{ marginTop: '1rem' }} data-testid="future-capabilities">
+        <p className="eyebrow">Future, not supported in this UI yet</p>
+        <h2>Capabilities that still need on-chain/runtime support</h2>
+        <p>
+          These are intentionally not primary buttons. They describe where the product is going and
+          what must land before the UI should claim they work.
+        </p>
+        <div className="roadmap-list">
+          {futureFlows.map((uc) => (
+            <article key={uc.slug} className="roadmap-item" data-testid={`future-${uc.slug}`}>
+            <div className="card-header">
+              <div>
+                <p className="eyebrow">Not live · {uc.mode} mode</p>
+                <h2>{uc.title}</h2>
+              </div>
+              <StatusBadge status={uc.status} />
+            </div>
+            <p>{uc.oneLiner}</p>
+            <strong>Needed before this becomes a real demo:</strong>
+            <ul>
+              {(uc.requires ?? []).map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            </article>
+          ))}
+        </div>
+      </section>
     </>
+  );
+}
+
+function FlowRouter({ slug }: { slug: string }) {
+  if (slug === 'hybrid-recovery') return <HybridRecoveryFlow />;
+  const future = flowBySlug(slug);
+  if (future) return <FutureCapability flowTitle={future.title} requirements={future.requires ?? []} />;
+  return (
+    <section className="card">
+      <h1>Unknown flow</h1>
+      <p className="muted">Return to the gallery and choose a supported capability.</p>
+      <a href="#/">Back to gallery</a>
+    </section>
+  );
+}
+
+function FutureCapability({
+  flowTitle,
+  requirements,
+}: {
+  flowTitle: string;
+  requirements: string[];
+}) {
+  return (
+    <section className="card">
+      <p className="eyebrow">Not supported yet</p>
+      <h1>{flowTitle}</h1>
+      <p>
+        This screen is intentionally not interactive. It needs more on-chain/runtime capability
+        before it should be presented as a working demo.
+      </p>
+      <h2>Needed first</h2>
+      <ul>
+        {requirements.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+      <a href="#/">Back to what works now</a>
+    </section>
   );
 }

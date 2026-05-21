@@ -1,7 +1,6 @@
 # Use case 2 — High-risk agent delegation
 
-> **Status:** stub. Implementation lands in phase 6c.3 (SDK) + 6c.5
-> (frontend) + phase 7 (permission-card UX).
+> **Status:** preview. The route now renders the permission card, threshold meter, technical hash details, and explicit blocker copy. The final `acceptSessionDelegation` write waits for session package hardening.
 
 Maps to spec 207 § 4.1 use case #2. Agent requests permission to
 transfer up to 10 USDC/day to approved vendors. Because it's T3
@@ -23,4 +22,4 @@ This walkthrough will cover:
 5. The audit-row trail produced: `delegation.mint` →
    `delegation.verify.accept` with `acceptedOnChain: true`.
 
-Code: `apps/demo-web-pro/src/flows/threshold-approval/` (lands with 6c.5).
+Code: `apps/demo-web-pro/src/flows/threshold-approval/`.
