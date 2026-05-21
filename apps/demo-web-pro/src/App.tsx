@@ -12,6 +12,7 @@ import { AppShell, RiskBadge, StatusBadge } from './components';
 import { FLOWS, flowBySlug } from './flows';
 import { CreateAccountFlow } from './flows/create-account/CreateAccountFlow';
 import { ViewAccountFlow } from './flows/view-account/ViewAccountFlow';
+import { AdminActionsFlow } from './flows/admin-actions/AdminActionsFlow';
 
 export function App() {
   const [hash, setHash] = useState<string>(typeof window !== 'undefined' ? window.location.hash : '');
@@ -81,17 +82,13 @@ function Gallery() {
         </p>
         <ul>
           <li>
-            <strong>Add owner / guardian / change mode via admin path</strong> — blocked on the
-            ThresholdValidator <code>proposeAdmin</code> eta-coupling fix (task #101).
-          </li>
-          <li>
             <strong>Add backup passkey to an existing account</strong> — blocked on
             <code> AgentAccountClient.buildUserOp</code> SDK implementation and a corresponding
             demo-a2a relayer endpoint.
           </li>
           <li>
-            <strong>T6 Recovery via guardian quorum</strong> — same dependencies as above + 48h
-            timelock UX (the contract surface is shipped + tested).
+            <strong>T6 Recovery via guardian quorum</strong> — contract surface shipped + tested;
+            UI needs the 48h timelock UX and guardian-quorum signature collection.
           </li>
           <li>
             <strong>Delegation issuance / redemption</strong> — <code>@agenticprimitives/delegation</code>{' '}
@@ -106,6 +103,7 @@ function Gallery() {
 function FlowRouter({ slug }: { slug: string }) {
   if (slug === 'create-account') return <CreateAccountFlow />;
   if (slug === 'view-account') return <ViewAccountFlow />;
+  if (slug === 'admin-actions') return <AdminActionsFlow />;
   return (
     <section className="card">
       <h1>Unknown capability</h1>

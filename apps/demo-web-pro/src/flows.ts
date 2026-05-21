@@ -15,7 +15,7 @@
 
 export type FlowStatus = 'live' | 'in-flight';
 
-export type FlowSlug = 'create-account' | 'view-account';
+export type FlowSlug = 'create-account' | 'view-account' | 'admin-actions';
 
 export interface FlowMeta {
   slug: FlowSlug;
@@ -51,6 +51,16 @@ export const FLOWS: FlowMeta[] = [
     risk: 'T1 Read',
     guidePath: 'docs/multi-sig/flows/view-account.md',
     steps: ['Enter address', 'Read state'],
+  },
+  {
+    slug: 'admin-actions',
+    title: 'Admin action (T4)',
+    oneLiner:
+      'Propose + execute an owner / guardian / mode change through the ThresholdValidator. EIP-712 signed (MetaMask shows structured fields). T4 timelock = 1h by default.',
+    status: 'live',
+    risk: 'T4 Admin',
+    guidePath: 'docs/multi-sig/flows/admin-actions.md',
+    steps: ['Configure', 'Propose', 'Wait timelock', 'Execute'],
   },
 ];
 
