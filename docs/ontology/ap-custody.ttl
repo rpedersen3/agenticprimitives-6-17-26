@@ -1,0 +1,135 @@
+@prefix ap:   <https://agenticprimitives.dev/ontology#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+#
+# agenticprimitives — Custody-layer ontology
+#
+# Per spec 213, this ontology formalizes the CUSTODY LAYER of the
+# agenticprimitives architecture. Custody-layer concepts are about
+# m-of-n authority OVER a Smart Agent's own configuration: who can
+# add/remove other custodians, change policy, trigger recovery, etc.
+# These concepts are distinct from agency-layer concepts (Delegation,
+# Stewardship, ServiceAgent) which deal with agent-to-agent authority.
+#
+# The vocabulary firewall pinned in spec 212 § 2.2:
+#   - Custody surfaces use: Custodian, Trustee, CustodyPolicy, CustodyCouncil
+#   - Agency surfaces use:  Delegation, Caveat, Enforcer, Steward, ServiceAgent
+#
+
+# ─── Classes ────────────────────────────────────────────────────
+
+ap:Custodian
+    a owl:Class ;
+    rdfs:subClassOf prov:Agent ;
+    rdfs:label "Custodian" ;
+    rdfs:comment "A Smart Agent (typically a Person Smart Agent) that holds custody authority over another Smart Agent. Member of a CustodyCouncil. Authorizes scheduled custody changes via m-of-n approvals. Distinct from Trustee (which holds recovery-only authority) and from Steward (an agency-layer concept for routine delegation)." .
+
+ap:Trustee
+    a owl:Class ;
+    rdfs:subClassOf prov:Agent ;
+    rdfs:label "Trustee" ;
+    rdfs:comment "A Smart Agent that holds recovery authority. Distinct from Custodian — trustees only act when the routine custody council is unavailable (lost passkeys, compromised custodians). Recovery actions require m-of-n trustee approvals plus a recovery-specific safety delay." .
+
+ap:CustodyCouncil
+    a owl:Class ;
+    rdfs:subClassOf prov:Collection ;
+    rdfs:label "Custody Council" ;
+    rdfs:comment "The set of Custodians for a given Smart Agent. Has an `approvalsRequired` count and per-tier CustodyPolicy. Custody changes require this council's m-of-n approval. A council with one member is single-custodian custody; a council with N members and approvalsRequired=N is unanimous custody; N members with approvalsRequired=M is M-of-N custody." .
+
+ap:CustodyPolicy
+    a owl:Class ;
+    rdfs:subClassOf prov:Plan ;
+    rdfs:label "Custody Policy" ;
+    rdfs:comment "The plan that governs how a Smart Agent's CustodyCouncil makes changes: approvals required per tier, safety delay per tier, recovery approvals required, separation-of-duties rules. Implemented on-chain by the CustodyPolicy contract (apps/contracts/src/custody/CustodyPolicy.sol). Tiers: T1 Read (no policy) / T2 Write / T3 Value / T4 Admin / T5 Critical / T6 Recovery." .
+
+ap:ScheduledCustodyChange
+    a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    rdfs:label "Scheduled Custody Change" ;
+    rdfs:comment "An Activity representing a queued custody change awaiting its safety delay + approvals. Has an `eta`, a `changeId`, and a `proposerCustodian` set (the custodians that scheduled it; relevant for separation-of-duties checks at apply time)." .
+
+ap:AppliedCustodyChange
+    a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    rdfs:label "Applied Custody Change" ;
+    rdfs:comment "An Activity representing a custody change that was scheduled, waited out its safety delay, received its m-of-n approvals, and was applied to the Smart Agent's state." .
+
+ap:CustodyMode
+    a owl:Class ;
+    rdfs:label "Custody Mode" ;
+    rdfs:comment "Custody-policy posture: single / hybrid / threshold / org. See specs/207 § 4 for the calibration of approvals-required and safety-delays per mode." .
+
+# ─── Object properties ───────────────────────────────────────────
+
+ap:hasCustodian
+    a owl:ObjectProperty ;
+    rdfs:domain prov:Agent ;
+    rdfs:range ap:Custodian ;
+    rdfs:label "has custodian" ;
+    rdfs:comment "The Smart Agent has the given Custodian in its CustodyCouncil." .
+
+ap:hasTrustee
+    a owl:ObjectProperty ;
+    rdfs:domain prov:Agent ;
+    rdfs:range ap:Trustee ;
+    rdfs:label "has trustee" ;
+    rdfs:comment "The Smart Agent has the given Trustee in its recovery quorum." .
+
+ap:hasCustodyPolicy
+    a owl:ObjectProperty ;
+    rdfs:domain prov:Agent ;
+    rdfs:range ap:CustodyPolicy ;
+    rdfs:label "has custody policy" ;
+    rdfs:comment "The Smart Agent is governed by this CustodyPolicy plan." .
+
+ap:hasCustodyMode
+    a owl:ObjectProperty ;
+    rdfs:domain ap:CustodyPolicy ;
+    rdfs:range ap:CustodyMode .
+
+ap:scheduledBy
+    a owl:ObjectProperty ;
+    rdfs:domain ap:ScheduledCustodyChange ;
+    rdfs:range ap:Custodian ;
+    rdfs:comment "The custodian(s) that scheduled this change. Relevant for separation-of-duties checks at apply time (org mode: apply signers must not overlap with schedule signers)." .
+
+ap:appliedBy
+    a owl:ObjectProperty ;
+    rdfs:domain ap:AppliedCustodyChange ;
+    rdfs:range ap:Custodian ;
+    rdfs:comment "The custodian(s) that applied this change after the safety delay." .
+
+# ─── Datatype properties ────────────────────────────────────────
+
+ap:approvalsRequired
+    a owl:DatatypeProperty ;
+    rdfs:domain ap:CustodyPolicy ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "M-of-N count: how many custodians must approve a custody change at this tier. Spec 212 forbids exposing this as 'threshold' or 'quorum' in custody surfaces." .
+
+ap:safetyDelay
+    a owl:DatatypeProperty ;
+    rdfs:domain ap:CustodyPolicy ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Seconds between scheduling a custody change and being able to apply it. Spec 212 forbids exposing this as 'timelock' in custody surfaces." .
+
+ap:recoveryApprovals
+    a owl:DatatypeProperty ;
+    rdfs:domain ap:CustodyPolicy ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "M-of-N count for recovery (Trustee quorum). Distinct from the custodian approvalsRequired." .
+
+# ─── Notes ──────────────────────────────────────────────────────
+
+# This file deliberately does NOT define agency-layer classes (Delegation,
+# Caveat, Enforcer, Steward, ServiceAgent). Those have their own ontology
+# file (forthcoming: docs/ontology/ap-agency.ttl).
+#
+# When a single Smart Agent is BOTH a Custodian (of another agent) AND a
+# Steward (acting via delegations), it inherits from BOTH `ap:Custodian`
+# and `ap:ServiceAgent` (or `prov:Person` if it's a Person Smart Agent).
+# These are not mutually exclusive — they're orthogonal roles in different
+# layers of the architecture.
