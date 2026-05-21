@@ -1,0 +1,319 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+import "forge-std/Test.sol";
+import {EntryPoint} from "account-abstraction/core/EntryPoint.sol";
+import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
+import "../src/AgentAccountFactory.sol";
+import "../src/AgentAccount.sol";
+import "../src/DelegationManager.sol";
+import {ThresholdValidator} from "../src/modules/ThresholdValidator.sol";
+import {AgentAccountInitParams, AgentAccountRecoveryArgs, AgentAccountRecoveryPasskeyAdd} from "../src/IAgentAccount.sol";
+
+/// @dev Phase 6c.5-d.1.c — admin + recovery behavioral coverage targeting
+///      the ThresholdValidator module. Replaces the pre-d.1 files
+///      AgentAccountAdmin.t.sol + AgentAccountRecovery.t.sol which drove
+///      the now-removed admin surface on AgentAccount itself.
+///
+///      Factory defaults T4=1h / T5=24h / T6=48h timelocks per spec 207
+///      § 5, so each propose → warp → execute pair waits the right
+///      window. The signature scheme is unchanged from the pre-d.1
+///      contract — Safe-compatible packed slots, sorted-ascending.
+contract AdminFlowsViaValidatorTest is Test {
+    AgentAccountFactory factory;
+    DelegationManager   dm;
+    ThresholdValidator  validator;
+    AgentAccount        acct;
+
+    uint256 internal constant OWNER1_PK    = 0xA11CE;
+    uint256 internal constant GUARDIAN1_PK = 0x60AD1A1;
+    uint256 internal constant GUARDIAN2_PK = 0x60AD1A2;
+
+    address internal owner1;
+    address internal guardian1;
+    address internal guardian2;
+
+    address internal newOwner    = address(0xC0DE);
+    address internal newGuardian = address(0xDADA);
+
+    function setUp() public {
+        EntryPoint ep = new EntryPoint();
+        dm = new DelegationManager();
+        factory = new AgentAccountFactory(
+            IEntryPoint(address(ep)),
+            address(dm),
+            address(0xBB),
+            address(0xCC),
+            address(0xDD)
+        );
+        validator = new ThresholdValidator();
+
+        owner1    = vm.addr(OWNER1_PK);
+        guardian1 = vm.addr(GUARDIAN1_PK);
+        guardian2 = vm.addr(GUARDIAN2_PK);
+
+        address[] memory owners = new address[](1);
+        owners[0] = owner1;
+        AgentAccountInitParams memory p = AgentAccountInitParams({
+            mode: 1,
+            owners: owners,
+            guardians: new address[](0),
+            initialPasskeyCredentialIdDigest: bytes32(0),
+            initialPasskeyX: 0,
+            initialPasskeyY: 0
+        });
+        acct = factory.createAccountWithMode(p, address(validator), 1);
+    }
+
+    // ─── Helpers ─────────────────────────────────────────────────────
+
+    function _signRaw(uint256 pk, bytes32 hash) internal pure returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, hash);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _payloadHash(
+        bytes32 verb,
+        uint256 proposalId,
+        ThresholdValidator.AdminAction action,
+        bytes memory args,
+        uint64 eta
+    ) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(verb, proposalId, action, keccak256(args), eta, address(acct), block.chainid)
+        );
+    }
+
+    function _timelockFor(ThresholdValidator.AdminAction action) internal pure returns (uint32) {
+        if (action == ThresholdValidator.AdminAction.RecoverAccount) return 48 hours;
+        if (
+            action == ThresholdValidator.AdminAction.UpgradeImpl ||
+            action == ThresholdValidator.AdminAction.ChangeDelegationManager ||
+            action == ThresholdValidator.AdminAction.ChangePaymaster ||
+            action == ThresholdValidator.AdminAction.ChangeSessionIssuer
+        ) return 24 hours;
+        return 1 hours;
+    }
+
+    /// @notice Run the propose → warp → execute flow as owner1 (N=1, T4=1).
+    function _proposeAndExecuteByOwner(
+        ThresholdValidator.AdminAction action,
+        bytes memory args
+    ) internal returns (uint256 proposalId) {
+        uint64 nowTs = uint64(block.timestamp);
+        uint32 timelock = _timelockFor(action);
+        uint64 eta = nowTs + timelock;
+        proposalId = validator.proposalCount(address(acct)) + 1;
+
+        bytes32 ph = _payloadHash(bytes32("ADMIN_PROPOSE"), proposalId, action, args, eta);
+        validator.proposeAdmin(address(acct), action, args, _signRaw(OWNER1_PK, ph));
+
+        vm.warp(nowTs + timelock + 1);
+
+        bytes32 eh = _payloadHash(bytes32("ADMIN_EXECUTE"), proposalId, action, args, eta);
+        validator.executeAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, eh));
+    }
+
+    function _twoSigsSorted(uint256 pk1, uint256 pk2, bytes32 hash) internal pure returns (bytes memory) {
+        address a1 = vm.addr(pk1);
+        address a2 = vm.addr(pk2);
+        bytes memory s1 = _signRaw(pk1, hash);
+        bytes memory s2 = _signRaw(pk2, hash);
+        return a1 < a2 ? bytes.concat(s1, s2) : bytes.concat(s2, s1);
+    }
+
+    function _arr(address a) internal pure returns (address[] memory r) {
+        r = new address[](1); r[0] = a;
+    }
+
+    // ─── 1. AddOwner round-trip (N=1, T4 threshold = 1, T4 timelock 1h) ──
+
+    function test_admin_addOwner_executes_via_validator() public {
+        _proposeAndExecuteByOwner(ThresholdValidator.AdminAction.AddOwner, abi.encode(newOwner));
+        assertTrue(acct.isOwner(newOwner));
+        assertEq(acct.ownerCount(), 2);
+    }
+
+    // ─── 2. AddGuardian writes to validator's per-account state ─────
+
+    function test_admin_addGuardian_writes_to_validator_storage() public {
+        _proposeAndExecuteByOwner(
+            ThresholdValidator.AdminAction.AddGuardian, abi.encode(newGuardian)
+        );
+        assertTrue(validator.isGuardian(address(acct), newGuardian));
+        assertEq(validator.guardianCount(address(acct)), 1);
+    }
+
+    // ─── 3. ChangeMode writes to validator's per-account state ──────
+
+    function test_admin_changeMode_hybrid_to_threshold() public {
+        _proposeAndExecuteByOwner(
+            ThresholdValidator.AdminAction.ChangeMode, abi.encode(uint8(2))
+        );
+        assertEq(validator.mode(address(acct)), 2);
+    }
+
+    // ─── 4. Cancel blocks subsequent execute ────────────────────────
+
+    function test_admin_cancel_blocks_subsequent_execute() public {
+        bytes memory args = abi.encode(newOwner);
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 eta = nowTs + 1 hours;
+        uint256 proposalId = 1;
+
+        bytes32 ph = _payloadHash(
+            bytes32("ADMIN_PROPOSE"), proposalId, ThresholdValidator.AdminAction.AddOwner, args, eta
+        );
+        validator.proposeAdmin(
+            address(acct), ThresholdValidator.AdminAction.AddOwner, args, _signRaw(OWNER1_PK, ph)
+        );
+
+        bytes32 ch = _payloadHash(
+            bytes32("ADMIN_CANCEL"), proposalId, ThresholdValidator.AdminAction.AddOwner, args, eta
+        );
+        validator.cancelAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, ch));
+
+        vm.warp(nowTs + 1 hours + 1);
+        bytes32 eh = _payloadHash(
+            bytes32("ADMIN_EXECUTE"), proposalId, ThresholdValidator.AdminAction.AddOwner, args, eta
+        );
+        vm.expectRevert(abi.encodeWithSelector(
+            ThresholdValidator.ProposalAlreadyCancelled.selector, proposalId
+        ));
+        validator.executeAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, eh));
+    }
+
+    // ─── 5. Re-execute idempotent guard ─────────────────────────────
+
+    function test_admin_double_execute_reverts() public {
+        bytes memory args = abi.encode(newOwner);
+        uint256 proposalId = _proposeAndExecuteByOwner(
+            ThresholdValidator.AdminAction.AddOwner, args
+        );
+
+        // Re-sign + try again with the same eta (proposal stored its eta).
+        uint64 storedEta;
+        (, , , storedEta, , ,) = validator.getPendingAdmin(address(acct), proposalId);
+        bytes32 eh = _payloadHash(
+            bytes32("ADMIN_EXECUTE"), proposalId, ThresholdValidator.AdminAction.AddOwner, args, storedEta
+        );
+        vm.expectRevert(abi.encodeWithSelector(
+            ThresholdValidator.ProposalAlreadyExecuted.selector, proposalId
+        ));
+        validator.executeAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, eh));
+    }
+
+    // ─── 6. Unauthorized signer rejected ────────────────────────────
+
+    function test_admin_propose_rejectsNonOwnerSigner() public {
+        bytes memory args = abi.encode(newOwner);
+        uint64 eta = uint64(block.timestamp) + 1 hours;
+        bytes32 ph = _payloadHash(
+            bytes32("ADMIN_PROPOSE"), 1, ThresholdValidator.AdminAction.AddOwner, args, eta
+        );
+        bytes memory sigs = _signRaw(0xDEADBEEF, ph);
+        vm.expectRevert(abi.encodeWithSelector(
+            ThresholdValidator.AdminUnauthorizedSigner.selector, vm.addr(0xDEADBEEF)
+        ));
+        validator.proposeAdmin(
+            address(acct), ThresholdValidator.AdminAction.AddOwner, args, sigs
+        );
+    }
+
+    // ─── 7. T6 RecoverAccount via guardians (full round-trip) ───────
+
+    function test_admin_recoverAccount_via_guardians() public {
+        // Add 2 guardians, set recoveryThreshold = 2.
+        _proposeAndExecuteByOwner(
+            ThresholdValidator.AdminAction.AddGuardian, abi.encode(guardian1)
+        );
+        _proposeAndExecuteByOwner(
+            ThresholdValidator.AdminAction.AddGuardian, abi.encode(guardian2)
+        );
+        _proposeAndExecuteByOwner(
+            ThresholdValidator.AdminAction.SetRecoveryThreshold, abi.encode(uint8(2))
+        );
+
+        // Now T6 RecoverAccount.
+        AgentAccountRecoveryArgs memory r = AgentAccountRecoveryArgs({
+            addOwners: _arr(newOwner),
+            removeOwners: new address[](0),
+            addPasskeys: new AgentAccountRecoveryPasskeyAdd[](0),
+            removePasskeyCredentialIdDigests: new bytes32[](0)
+        });
+        bytes memory args = abi.encode(r);
+
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 eta = nowTs + 48 hours;
+        uint256 proposalId = validator.proposalCount(address(acct)) + 1;
+
+        bytes32 ph = _payloadHash(
+            bytes32("ADMIN_PROPOSE"), proposalId, ThresholdValidator.AdminAction.RecoverAccount, args, eta
+        );
+        validator.proposeAdmin(
+            address(acct), ThresholdValidator.AdminAction.RecoverAccount, args,
+            _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, ph)
+        );
+
+        vm.warp(nowTs + 48 hours + 1);
+
+        bytes32 eh = _payloadHash(
+            bytes32("ADMIN_EXECUTE"), proposalId, ThresholdValidator.AdminAction.RecoverAccount, args, eta
+        );
+        validator.executeAdmin(
+            address(acct), proposalId, _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, eh)
+        );
+
+        assertTrue(acct.isOwner(newOwner), "recovery added newOwner");
+    }
+
+    // ─── 8. T6 dual cancel window — primary owner short-circuit ─────
+
+    function test_admin_recoverAccount_primaryOwner_can_cancel_in_24h_window() public {
+        _proposeAndExecuteByOwner(
+            ThresholdValidator.AdminAction.AddGuardian, abi.encode(guardian1)
+        );
+        _proposeAndExecuteByOwner(
+            ThresholdValidator.AdminAction.AddGuardian, abi.encode(guardian2)
+        );
+        _proposeAndExecuteByOwner(
+            ThresholdValidator.AdminAction.SetRecoveryThreshold, abi.encode(uint8(2))
+        );
+
+        AgentAccountRecoveryArgs memory r = AgentAccountRecoveryArgs({
+            addOwners: _arr(newOwner),
+            removeOwners: new address[](0),
+            addPasskeys: new AgentAccountRecoveryPasskeyAdd[](0),
+            removePasskeyCredentialIdDigests: new bytes32[](0)
+        });
+        bytes memory args = abi.encode(r);
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 eta = nowTs + 48 hours;
+        uint256 proposalId = validator.proposalCount(address(acct)) + 1;
+
+        bytes32 ph = _payloadHash(
+            bytes32("ADMIN_PROPOSE"), proposalId, ThresholdValidator.AdminAction.RecoverAccount, args, eta
+        );
+        validator.proposeAdmin(
+            address(acct), ThresholdValidator.AdminAction.RecoverAccount, args,
+            _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, ph)
+        );
+
+        // Within 24h, owner cancels with T4 threshold (1).
+        bytes32 ch = _payloadHash(
+            bytes32("ADMIN_CANCEL"), proposalId, ThresholdValidator.AdminAction.RecoverAccount, args, eta
+        );
+        validator.cancelAdmin(address(acct), proposalId, _signRaw(OWNER1_PK, ch));
+
+        vm.warp(nowTs + 48 hours + 1);
+        bytes32 eh = _payloadHash(
+            bytes32("ADMIN_EXECUTE"), proposalId, ThresholdValidator.AdminAction.RecoverAccount, args, eta
+        );
+        vm.expectRevert(abi.encodeWithSelector(
+            ThresholdValidator.ProposalAlreadyCancelled.selector, proposalId
+        ));
+        validator.executeAdmin(
+            address(acct), proposalId, _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, eh)
+        );
+    }
+}

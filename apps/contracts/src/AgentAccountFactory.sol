@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "./AgentAccount.sol";
 import {AgentAccountInitParams} from "./IAgentAccount.sol";
+import {ThresholdValidator} from "./modules/ThresholdValidator.sol";
 import "./governance/GovernanceManaged.sol";
 
 /**
@@ -226,19 +227,167 @@ contract AgentAccountFactory is GovernanceManaged {
         emit AgentAccountCreatedWithPasskey(address(account), credentialIdDigest, salt);
     }
 
-    // ─── Threshold-policy deployment (relocated) ──────────────────────
-    //
-    // `createAccountWithMode`, `getAddressForMode`, and `_validateInitParams`
-    // were relocated in phase 6c.5-d.1. The new path:
-    //   1. caller invokes `createAccount(owner, salt)` (single-owner happy path)
-    //   2. caller invokes `account.installModule(MODULE_TYPE_EXECUTOR,
-    //      thresholdValidatorAddr, abi.encode(mode, ...))` with the
-    //      mode + guardians + thresholds + timelocks payload.
-    //
-    // Phase 6c.5-d.1 (next commit) wires this into a factory helper
-    // that takes the validator address + does both steps atomically.
-    // For d.1.b the factory exposes only the base `createAccount` path;
-    // mode setup is caller-driven.
+    // ─── Threshold-policy deployment (spec 207 + 209) ─────────────────
+
+    error InvalidMode(uint8 mode);
+    error NoPrimarySigner();
+    error InsufficientGuardiansForMode(uint8 mode, uint256 actual, uint256 required);
+
+    /// @notice Emitted when an AgentAccount is deployed via the
+    ///         threshold-policy factory entry. Carries the mode + N
+    ///         owners + N guardians for off-chain indexers.
+    event AgentAccountCreatedWithMode(
+        address indexed account,
+        address indexed validator,
+        uint8 indexed mode,
+        uint256 nOwners,
+        uint256 nGuardians,
+        uint256 salt
+    );
+
+    /**
+     * @notice Deploy an `AgentAccount` configured per spec 207's
+     *         threshold-policy surface + install the `ThresholdValidator`
+     *         module atomically. Replaces the per-mode entry points
+     *         (`createAccount` / `createAccountWithPasskey`) with a
+     *         single API that handles all four modes from spec 207 § 4 —
+     *         `single` / `hybrid` / `threshold` / `org`.
+     *
+     *         Per spec § 8, the factory refuses to deploy accounts in
+     *         the higher-coordination modes without enough guardians:
+     *           - `single` (0): no guardian requirement.
+     *           - `hybrid` (1): no factory-level requirement.
+     *           - `threshold` (2): ≥ 2 guardians required.
+     *           - `org` (3): ≥ 3 guardians required.
+     *
+     *         At least one owner MUST be supplied (passkey-only init is
+     *         a phase 7 follow-on through this path; for v0 use
+     *         `createAccountWithPasskey` for passkey-only accounts).
+     *         For multi-owner accounts (params.owners.length > 1) only
+     *         the first owner is set at deploy; additional owners are
+     *         added post-deploy via the validator's AddOwner action
+     *         (T4, immediate since the default T4 timelock is 0). For
+     *         passkey enrollment use AddPasskey via the validator.
+     *
+     * @param params  See `AgentAccountInitParams` in `IAgentAccount.sol`.
+     * @param validator ThresholdValidator module address (callable; the
+     *                  factory queries `defaultThreshold(N, t)` to
+     *                  compute the spec § 5.1 matrix).
+     * @param salt    CREATE2 deployment salt.
+     */
+    function createAccountWithMode(
+        AgentAccountInitParams calldata params,
+        address validator,
+        uint256 salt
+    ) external returns (AgentAccount account) {
+        _validateInitParams(params);
+        if (validator == address(0)) revert ZeroAddress();
+
+        address initialOwner = params.owners[0];
+
+        address addr = getAddress(initialOwner, salt);
+        if (addr.code.length > 0) {
+            // Idempotent return — but DO NOT re-install the validator
+            // on an already-deployed account (would revert
+            // ModuleAlreadyInstalled). Caller is expected to query
+            // first.
+            return AgentAccount(payable(addr));
+        }
+
+        bytes memory accountInit = abi.encodeCall(
+            AgentAccount.initialize,
+            (initialOwner, delegationManager, address(this))
+        );
+        ERC1967Proxy proxy = new ERC1967Proxy{salt: bytes32(salt)}(
+            address(accountImplementation),
+            accountInit
+        );
+        account = AgentAccount(payable(address(proxy)));
+
+        // Build validator init data using the spec § 5.1 default
+        // threshold matrix sized to the FINAL owner count (the matrix
+        // expects N = total owners — even though we only seed owner[0]
+        // here, the validator's thresholds should reflect the intended N
+        // because the SDK will add the rest post-deploy via T4 actions
+        // signed by owner[0] alone, which is permitted while N=1).
+        bytes memory validatorInit = _buildValidatorInitData(params, validator);
+        account.installModule(2 /* MODULE_TYPE_EXECUTOR */, validator, validatorInit);
+
+        emit AgentAccountCreatedWithMode(
+            address(account),
+            validator,
+            params.mode,
+            params.owners.length,
+            params.guardians.length,
+            salt
+        );
+    }
+
+    /// @notice Counterfactual address for a threshold-policy account.
+    /// @dev    Same derivation as `getAddress(owners[0], salt)` since the
+    ///         proxy is initialized with the first owner. The validator
+    ///         install happens post-deploy + doesn't change the address.
+    function getAddressForMode(
+        AgentAccountInitParams calldata params,
+        uint256 salt
+    ) external view returns (address) {
+        _validateInitParams(params);
+        return getAddress(params.owners[0], salt);
+    }
+
+    /// @dev Shared validation for deploy + counterfactual paths so
+    ///      preflight reverts identically to the real deploy.
+    function _validateInitParams(AgentAccountInitParams calldata params) internal pure {
+        if (params.mode > 3) revert InvalidMode(params.mode);
+        if (params.owners.length == 0) revert NoPrimarySigner();
+
+        uint256 nGuardians = params.guardians.length;
+        if (params.mode == 2 /* threshold */ && nGuardians < 2) {
+            revert InsufficientGuardiansForMode(params.mode, nGuardians, 2);
+        }
+        if (params.mode == 3 /* org */ && nGuardians < 3) {
+            revert InsufficientGuardiansForMode(params.mode, nGuardians, 3);
+        }
+    }
+
+    /// @dev Composes the ABI-encoded init blob the validator's
+    ///      `onInstall` expects. Pulls per-tier thresholds from the
+    ///      validator's spec § 5.1 matrix (so we don't duplicate the
+    ///      calibration here) + sets default timelocks T4=1h / T5=24h /
+    ///      T6=48h + default T3 ceiling of 0.01 ETH + recovery
+    ///      threshold = floor(N/2)+1 when guardians > 0.
+    function _buildValidatorInitData(
+        AgentAccountInitParams calldata params,
+        address validator
+    ) internal view returns (bytes memory) {
+        uint8 n = uint8(params.owners.length);
+        uint8[7] memory thresholds;
+        for (uint8 t = 1; t <= 5; t++) {
+            thresholds[t] = ThresholdValidator(validator).defaultThreshold(n, t);
+        }
+        // T6 governed by recoveryThreshold below, not the matrix.
+
+        uint32[7] memory timelocks;
+        timelocks[4] = 1 hours;
+        timelocks[5] = 24 hours;
+        timelocks[6] = 48 hours;
+
+        uint8 recThr = params.guardians.length > 0
+            ? uint8(params.guardians.length / 2 + 1)
+            : 0;
+
+        return abi.encode(
+            params.mode,
+            recThr,
+            params.guardians,
+            thresholds,
+            timelocks,
+            uint256(0.01 ether),       // t3 ceiling default
+            address(0)                  // approvedHashRegistry default
+        );
+    }
+
+    error ZeroAddress();
 
 
     // ─── Counterfactual derivation for legacy entry points ────────────

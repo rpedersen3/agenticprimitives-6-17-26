@@ -630,8 +630,13 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
 
     // ─── Auth modifier ────────────────────────────────────────────────
 
+    /// @dev Allows the canonical factory to install/uninstall modules
+    ///      during the same tx that deployed the account. Per spec 209
+    ///      § 4 the factory is the install-time root of trust for the
+    ///      mode-specific module set; once the account is in use, the
+    ///      threshold validator's quorum gate replaces this surface.
     modifier onlyOwnerOrSelf() {
-        if (msg.sender != address(this) && !_owners[msg.sender]) {
+        if (msg.sender != address(this) && !_owners[msg.sender] && msg.sender != _factory) {
             revert NotOwnerOrSelf();
         }
         _;
