@@ -13,6 +13,7 @@ import { FLOWS, flowBySlug } from './flows';
 import { CreateAccountFlow } from './flows/create-account/CreateAccountFlow';
 import { ViewAccountFlow } from './flows/view-account/ViewAccountFlow';
 import { AdminActionsFlow } from './flows/admin-actions/AdminActionsFlow';
+import { EnrollPasskeyFlow } from './flows/enroll-passkey/EnrollPasskeyFlow';
 
 export function App() {
   const [hash, setHash] = useState<string>(typeof window !== 'undefined' ? window.location.hash : '');
@@ -82,17 +83,16 @@ function Gallery() {
         </p>
         <ul>
           <li>
-            <strong>Add backup passkey to an existing account</strong> — blocked on
-            <code> AgentAccountClient.buildUserOp</code> SDK implementation and a corresponding
-            demo-a2a relayer endpoint.
-          </li>
-          <li>
             <strong>T6 Recovery via guardian quorum</strong> — contract surface shipped + tested;
             UI needs the 48h timelock UX and guardian-quorum signature collection.
           </li>
           <li>
             <strong>Delegation issuance / redemption</strong> — <code>@agenticprimitives/delegation</code>{' '}
             is built and tested; no demo-web-pro flow wires it yet.
+          </li>
+          <li>
+            <strong>Sign with passkey</strong> — once enrolled, a passkey can sign userOps too.
+            The signing-side flow (a passkey actually authorizes a tx) is queued (phase 6c.5-j).
           </li>
         </ul>
       </section>
@@ -104,6 +104,7 @@ function FlowRouter({ slug }: { slug: string }) {
   if (slug === 'create-account') return <CreateAccountFlow />;
   if (slug === 'view-account') return <ViewAccountFlow />;
   if (slug === 'admin-actions') return <AdminActionsFlow />;
+  if (slug === 'enroll-passkey') return <EnrollPasskeyFlow />;
   return (
     <section className="card">
       <h1>Unknown capability</h1>

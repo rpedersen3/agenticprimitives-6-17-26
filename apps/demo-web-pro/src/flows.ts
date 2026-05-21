@@ -15,7 +15,7 @@
 
 export type FlowStatus = 'live' | 'in-flight';
 
-export type FlowSlug = 'create-account' | 'view-account' | 'admin-actions';
+export type FlowSlug = 'create-account' | 'view-account' | 'admin-actions' | 'enroll-passkey';
 
 export interface FlowMeta {
   slug: FlowSlug;
@@ -61,6 +61,16 @@ export const FLOWS: FlowMeta[] = [
     risk: 'T4 Admin',
     guidePath: 'docs/multi-sig/flows/admin-actions.md',
     steps: ['Configure', 'Propose', 'Wait timelock', 'Execute'],
+  },
+  {
+    slug: 'enroll-passkey',
+    title: 'Enroll backup passkey',
+    oneLiner:
+      'Add a WebAuthn passkey (TouchID / FaceID / security key) as a second signer on an existing account. Gasless — your EOA pays nothing; the paymaster sponsors the userOp.',
+    status: 'live',
+    risk: 'T4 Admin',
+    guidePath: 'docs/multi-sig/flows/enroll-passkey.md',
+    steps: ['Configure', 'WebAuthn ceremony', 'Sign userOp', 'Submit'],
   },
 ];
 
