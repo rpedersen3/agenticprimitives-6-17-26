@@ -46,11 +46,14 @@ Every UI string + every code identifier honors the table below. Implementation p
 | Concept | UI label | Identifier convention | Tech mapping |
 | --- | --- | --- | --- |
 | Shared funds container, has agency | **Treasury service agent** | `treasury`, `TreasuryServiceAgent` | AgentAccount in org mode + ThresholdValidator |
-| Per-user on-chain identity | **Person smart account** | `personSmartAccount`, `PersonSmartAccount` | AgentAccount in hybrid mode, passkey-owned |
+| Company organization | **Acme Construction (organization)** | `org`, `OrgSmartAgent`, `acmeConstruction` | AgentAccount in org mode + ThresholdValidator |
+| Per-user on-chain identity | **Person smart agent** | `personSmartAgent`, `PersonSmartAgent` | AgentAccount in hybrid mode, passkey-owned |
 | Per-user delegated agent identity | **Person agent** | `personAgent`, `PersonAgent` | Session-bound identity (smart-agent's a2a pattern) |
 | ThresholdValidator module | **Account safety policy** | `accountSafetyPolicy` | (do not surface module/validator) |
 | Pending admin action | **Scheduled admin change** | `scheduledChange` | (do not surface "proposal") |
 | M-of-N threshold | **Approvals required** | `approvalsRequired` | |
+| **Admin** authority (m-of-n on Smart Agent itself) | **Admin** ("admin change", "admin action") | `admin*`, `adminAction*` | ThresholdValidator.proposeAdmin/executeAdmin; per spec 212 § 2.2 |
+| **Stewardship** authority (agent-to-agent delegation, no fresh m-of-n) | **Permission**, **authority grant**, **treasury permission card** | `steward*`, `stewardship*`, `permissionGrant*` | Delegation tokens; caveats; per spec 212 § 2.2 |
 
 ---
 
@@ -180,14 +183,21 @@ The seat-picker disappears after both seats claimed (the demo state is now "two-
 
 Linear progression with the onboarding loop above as a prerequisite. Acts 2 + 3 are MORE INVOLVED than spec v1 because the Org has its own on-chain identity now.
 
-### Act 1 — Create Alice Person Smart Agent
+**Modality legend** (per spec 212 § 2.2):
+- **[Admin]** — requires m-of-n approval from a Smart Agent's owner quorum (passkey ceremony per signing owner)
+- **[Stewardship]** — uses pre-issued delegation; single signer (delegate's session key); no fresh m-of-n
+- **[Bootstrap]** — onboarding-time deploy; not yet under m-of-n control (the Smart Agent has just been created)
+
+Every act below is labeled. The "wow moment" that EXERCISES stewardship is currently missing from this ladder — see § 10 for the proposed Act 7 (real payment via stewardship delegation).
+
+### Act 1 — Create Alice Person Smart Agent **[Bootstrap]**
 - WebAuthn registration → store Alice's credentialId + (x, y) locally.
 - Counterfactual address preview from `factory.getAddressForPasskey`.
 - Deploy via `factory.createAccountWithPasskey` (gasless via existing paymaster).
 - Display Alice's person smart account address + a generated `.agent`-style label.
 - Live status: 🟢 LIVE on Base Sepolia.
 
-### Act 2 — Create Acme Construction (Org Smart Agent)
+### Act 2 — Create Acme Construction (Org Smart Agent) **[Bootstrap]**
 - Alice (now the founder via Act 1) creates the Org on-chain.
 - `factory.createAccountWithModeCustomT4` with `mode=org`, owner = Alice's Person Smart Agent.
 - The Org's AgentAccount becomes "Acme Construction" on-chain. Alice is its sole member initially.
@@ -196,7 +206,8 @@ Linear progression with the onboarding loop above as a prerequisite. Acts 2 + 3 
 - The Org's a2a + MCP servers come up tenant-scoped to this Org address.
 - Live status: 🟢 LIVE.
 
-### Act 2.5 — Create Acme Treasury (Service Smart Agent)
+### Act 2.5 — Create Acme Treasury (Service Smart Agent) **[Admin]**
+(The Org issues the deploy + initial Treasury setup via an Admin action — Org has only 1 owner at this point, so "approvals required" = 1; still admin-shaped, not bootstrap-shaped, because it's the Org Smart Agent acting.)
 - Treasury is created with the ORG (not Alice directly) as its owner.
 - `factory.createAccountWithModeCustomT4`, owner = Acme Construction's AgentAccount address.
 - Treasury's `ap:hasSteward` set is empty initially (admins are added in Act 4); Org is the sole authority.
@@ -204,7 +215,7 @@ Linear progression with the onboarding loop above as a prerequisite. Acts 2 + 3 
 - Org issues its FIRST delegation: "Acme Construction authorizes Acme Treasury to hold + custody assets on its behalf" — establishes the `prov:actedOnBehalfOf` relationship on chain.
 - Live status: 🟢 LIVE for account + module deploy; 🟡 SIMULATED for the Org→Treasury initial delegation enforcement (delegation OBJECT exists; redemption path lights up in phase 6f.7).
 
-### Act 3 — Bob joins as Org member
+### Act 3 — Bob joins as Org member **[Admin]**
 - Visitor takes Bob's seat (passkey ceremony, deploy Bob's Person Smart Agent).
 - Alice (acting as Org's sole admin) proposes `AddMember(Bob's Person Smart Agent)` as an Org T4 admin action.
 - T4 timelock elapses (configurable via the same dropdown from Act 2).
@@ -213,7 +224,7 @@ Linear progression with the onboarding loop above as a prerequisite. Acts 2 + 3 
 - Detect same-credential collision; mark as 🟡 SIMULATED if Bob's passkey isn't distinct.
 - Live status: 🟢 LIVE.
 
-### Act 4 — Set 2-Person Org Control (and thus Treasury)
+### Act 4 — Set 2-Person Org Control (and thus Treasury) **[Admin × 2]**
 - Org's "approvals required" goes from 1 to 2.
 - Two T4 admin actions executed in sequence:
   1. `AddSteward(Bob's Person Smart Agent)` on the Treasury — Bob joins the steward set
@@ -222,7 +233,8 @@ Linear progression with the onboarding loop above as a prerequisite. Acts 2 + 3 
 - After execution: any future Org admin change OR Treasury action (per Org's policy) requires both Alice + Bob.
 - Live status: 🟢 LIVE for both AddSteward and ChangeApprovalsRequired. The downstream "now 2-of-2 enforcement actually applies" 🟡 IN-FLIGHT until packed multi-sig signature collection is hardened (phase 6f.7).
 
-### Act 5 — Delegate Treasury Management to Person Agents
+### Act 5 — Delegate Treasury Management to Person Agents **[Admin → creates Stewardship]**
+(Issuing the delegations is an Admin action — needs Org's 2-of-2 quorum to sign each delegation. The OUTPUT is stewardship grants the Person Agents will USE in Act 7+ without further m-of-n.)
 - Treasury (signed by Org's 2-of-2 quorum, since Acme Construction owns Treasury) issues two delegations:
   - **Alice's Person Agent**: standing draft-payment + read-balance authority, limited by recipient allowlist + amount cap + 90-day expiry
   - **Bob's Person Agent**: same shape, separately issued
@@ -232,7 +244,7 @@ Linear progression with the onboarding loop above as a prerequisite. Acts 2 + 3 
 - "What this delegation does NOT permit": add owners, change policy, bypass approvals, drain arbitrary assets.
 - Live status: 🟡 SIMULATED for runtime enforcement. The delegation OBJECTS are built live + signed + hashed by the Org Smart Agent; the ENFORCEMENT story is paragraph copy with a clear "this enforcement lights up in phase 6f.7" badge.
 
-### Act 6 — Acme Construction Control Dashboard
+### Act 6 — Acme Construction Control Dashboard **[read-only]**
 - Persistent dashboard for the rest of the demo.
 - Top of dashboard: **Acme Construction** (the Org) is the focal entity. Treasury + Persons are arrayed as relationships.
 - Panels:
@@ -352,11 +364,12 @@ The demo MUST NOT lie about what it does. If a delegation is constructed but its
 
 ## 10. Open questions
 
-- **Org as on-chain agent.** Does the Organization itself manifest as an AgentAccount, or only as the conceptual aggregate of {Alice's PSA, Bob's PSA}? Spec 210 leans on prov:Organization having agency; v0 demo can collapse it to "just the set of owners on the Treasury" and revisit if a future demo needs an explicit Org AgentAccount.
+- **Act 7 — the WOW moment.** Acts 1-6 are all setup + read-only. The DEMO'S VALUE is the moment a Person Agent USES its stewardship delegation to actually move money. Proposed Act 7: "Alice's Person Agent drafts a payment to a vendor; the standing delegation enforces caveats; Bob's Person Agent approves (or auto-approves within bounds); Treasury executes." This is the first **Stewardship** act and the demo's emotional peak. Should be added.
 - **Distinct browsers vs single browser.** Most evaluators will run the demo in one browser. Single-browser Alice+Bob means the same physical authenticator backs both passkeys — fine for demo, less realistic. Document the limitation per-act with the simulated badge.
 - **Treasury → person-agent delegation shape.** Standing delegation with caveats? Or per-action approval? v0 plan = standing delegation issued in Act 5 with explicit limit caveats; per-action approval is a future Treasury type.
-- **Recovery in v0.** Treasury recovery (T6 guardian quorum) is not in the act ladder. Add as Act 7 / phase 6f.8 if + when the user wants it.
+- **Recovery in v0.** Treasury recovery (T6 guardian quorum) is not in the act ladder. Add as Act 8 (after Act 7) if + when the user wants it. Recovery is **[Admin]** — guardian-quorum signature, T6 timelock.
 - **Multi-browser demo orchestration.** Could ship a "share a link with Bob" deeplink + cross-browser handoff. Out of scope for v0 — single-browser flow is enough.
+- **Session-key lifecycle.** When does a Person Smart Agent issue a session-key delegation to its Person Agent (a2a-server)? On every login (passkey re-ceremony each time)? Once per device with refresh-on-expiry? Time-bounded? Affects how Stewardship flows feel ergonomically: every action prompting a passkey ceremony defeats the point of stewardship. Probably: once per device, 30-day expiry, refresh-on-expiry. Needs its own spec.
 
 ---
 
@@ -369,6 +382,10 @@ The demo MUST NOT lie about what it does. If a delegation is constructed but its
 - Live vs simulated is surfaced explicitly per-act + never papered over.
 - Per-agent-class server separation (person-a2a, org-a2a, treasury-a2a + their MCPs) is the LONG-TERM shape, but v0 can use the existing demo-a2a for all roles. The act ladder doesn't depend on the separation; the separation depends on the act ladder being valuable enough to warrant the work.
 - Treasury never talks to humans directly. The chain goes: user → person smart account → person agent → treasury service agent.
+- **Two authority modalities** are pinned per spec 212 § 2.2:
+  - **Admin**: m-of-n owner-quorum signs; routed through ThresholdValidator's propose/execute machinery. Covers setup, key control, policy, owner changes, recovery, upgrades, AND issuing delegations. Acts 2-5 in this demo are Admin.
+  - **Stewardship**: a delegate USES a delegation that was previously issued by Admin. Single signer (delegate's session key). Acts 7+ are Stewardship (currently queued; not yet in the act ladder).
+- UI vocabulary: "admin"/"admin change" for Admin authority surfaces; "permission"/"authority grant"/"treasury permission card" for Stewardship surfaces. Code identifiers: `admin*` and `steward*` / `stewardship*`.
 
 ---
 

@@ -39,7 +39,7 @@ Every public API surface in `@agenticprimitives/*` takes Smart Agent addresses, 
 
 If we need to talk about EOAs, the type is `Address` with a NAMED purpose ("p256VerifyingSigner", "bundlerSigner") — never "the user."
 
-### 2.2 Authority modeling
+### 2.2 Authority modeling — two modalities
 
 The ONLY user-to-agent authority link is **passkey owns Person Smart Agent**. This link:
 - is established at onboarding (passkey ceremony + AgentAccount deploy)
@@ -47,7 +47,37 @@ The ONLY user-to-agent authority link is **passkey owns Person Smart Agent**. Th
 - requires NO additional caveats / delegations / policies
 - is the LIMITING surface for what a user can directly cause: they can cause their Person Smart Agent to sign userOps. That's it.
 
-Everything beyond that is agent-to-agent. The Person Smart Agent then:
+From there, all authority resolves into ONE of two modalities. Both are agent-centric (between Smart Agents); they differ in WHO signs what:
+
+#### Admin authority
+
+A Smart Agent's authority OVER ITSELF: setup, key control, policy changes, owner / member changes, recovery, upgrades, **and issuing delegations**.
+
+- **Signed by**: M-of-N quorum of the Smart Agent's own owners (each owner = a Person Smart Agent ultimately controlled by a passkey).
+- **Routed through**: `ThresholdValidator.proposeAdmin` / `executeAdmin`, with the per-tier timelock and the org-mode SoD invariants from spec 207.
+- **Examples**: Creating an Org (Acme Construction's first member signs Genesis), adding a member (T4 AddMember), changing the org's approvals required (T4 ChangeApprovalsRequired), upgrading the impl (T5 UpgradeImpl), recovering from lost signers (T6 RecoverAccount), AND issuing a delegation from this Smart Agent to another.
+- **Use shape**: rare, friction-heavy (multiple owners must do a passkey ceremony to sign), audit-heavy (every admin change emits a PROV-O Activity attributed to the owner-quorum).
+
+#### Stewardship
+
+Authority that has been DELEGATED from one Smart Agent to another — exercised by the delegate WITHOUT requiring fresh m-of-n approval.
+
+- **Signed by**: A single signature from the delegate's session key (which itself is rooted in the delegate Smart Agent's ownership chain, but the *use* of the delegation doesn't re-invoke the chain).
+- **Caveats**: What the delegate can do is bounded by the caveats on the delegation (`AllowedTargetsEnforcer`, `ValueEnforcer`, `ArgumentRuleEnforcer`, expiry, usage limits, etc.). Caveat compliance is checked at redeem time, not at issue time.
+- **Examples**: Alice's Person Agent drafts a payment using a standing delegation from the Treasury; Treasury Agent settles an approved scheduled payment; future Service Agents (Trading, Compliance) acting within their pre-issued scopes.
+- **Use shape**: routine, low-friction (single signature, no passkey ceremony for daily acts), composable (multiple stewardship delegations chain into a delegate's effective authority).
+
+**The flow between them** is: Admin authority ISSUES stewardship delegations. Stewardship delegations are then USED. Setting up a real Treasury demo requires several Admin actions (to deploy + configure the agents + issue the standing delegations); operating that Treasury day-to-day is Stewardship.
+
+#### Vocabulary
+
+- "Admin" is the right user-facing term for the first modality. Existing UI surfaces ("schedule admin change", "approvals required", "account safety policy") align with this.
+- "Stewardship" is the agent-centric term for the second modality. User-facing variants by function: "treasury permission card", "agent authority grant", "draft-payment authority". Avoid "session" or "delegation" alone in UI copy — both are loaded.
+- In code identifiers, use `admin*` and `steward*` / `stewardship*` to disambiguate intent. E.g., `adminActionFlow.tsx` vs `stewardshipPermissionCard.tsx`.
+
+### 2.3 Authority modeling (continued)
+
+Everything beyond user→Person-Smart-Agent is agent-to-agent. The Person Smart Agent then:
 - issues delegations to other Smart Agents (Org, Treasury, etc.) to bestow authority
 - issues a session-key delegation to its own Person Agent (a2a-server-side identity) for routine actions
 - receives delegations from other Smart Agents to act on their behalf
