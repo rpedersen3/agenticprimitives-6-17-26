@@ -18,15 +18,18 @@
 
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
+import { config as deploymentConfig } from '../../config';
 
 interface HybridRecoveryConfig {
   factoryAddress?: `0x${string}`;
   defaultGuardians?: `0x${string}`[];
 }
 
+// Wired from VITE_FACTORY_ADDRESS (phase 6c.5-c). `deploy-cloudflare.ts`
+// reads apps/contracts/deployments-<network>.json + passes it into
+// `vite build` so the deployed Pages bundle carries the address.
 const DEFAULT_CONFIG: HybridRecoveryConfig = {
-  // Wired from VITE_FACTORY_ADDRESS or deployments JSON in 6c.5-c.
-  factoryAddress: undefined,
+  factoryAddress: deploymentConfig.factoryAddress,
   defaultGuardians: [],
 };
 

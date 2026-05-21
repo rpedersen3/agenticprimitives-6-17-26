@@ -19,11 +19,15 @@
  *   5. Write cloudflare-urls.json (gitignored deploy state)
  *   6. Build demo-web → inject demo-a2a URL into dist/_redirects
  *   7. Deploy demo-web (Pages)
+ *   8. Build demo-web-pro with VITE_* env vars from deployments JSON
+ *   9. Deploy demo-web-pro to a separate Pages project
  *
  * Override via env:
- *   DEPLOY_NETWORK=base-sepolia    (must match deployments-<NETWORK>.json)
+ *   DEPLOY_NETWORK=base-sepolia        (must match deployments-<NETWORK>.json)
  *   PAGES_PROJECT=agenticprimitives-demo
- *   DEMO_WEB_URL=https://<custom>.pages.dev  (override predicted URL)
+ *   DEMO_WEB_URL=https://<custom>.pages.dev
+ *   PAGES_PROJECT_PRO=agenticprimitives-demo-pro
+ *   DEMO_WEB_PRO_URL=https://<custom>.pages.dev
  */
 
 import { execSync } from 'node:child_process';
@@ -34,11 +38,13 @@ const REPO_ROOT = join(import.meta.dirname ?? __dirname, '..');
 const NETWORK = process.env.DEPLOY_NETWORK ?? 'base-sepolia';
 const PAGES_PROJECT = process.env.PAGES_PROJECT ?? 'agenticprimitives-demo';
 const DEMO_WEB_URL = process.env.DEMO_WEB_URL ?? `https://${PAGES_PROJECT}.pages.dev`;
+const PAGES_PROJECT_PRO = process.env.PAGES_PROJECT_PRO ?? 'agenticprimitives-demo-pro';
+const DEMO_WEB_PRO_URL = process.env.DEMO_WEB_PRO_URL ?? `https://${PAGES_PROJECT_PRO}.pages.dev`;
 
 const DEPLOYMENTS_PATH = join(REPO_ROOT, 'apps', 'contracts', `deployments-${NETWORK}.json`);
 const STATE_PATH = join(REPO_ROOT, 'cloudflare-urls.json');
 
-const TOTAL = 7;
+const TOTAL = 9;
 function step(n: number, msg: string): void {
   console.log(`\n[${n}/${TOTAL}] ${msg}`);
 }
@@ -256,9 +262,11 @@ const state = {
   network: NETWORK,
   deployedAt: new Date().toISOString(),
   pagesProject: PAGES_PROJECT,
+  pagesProjectPro: PAGES_PROJECT_PRO,
   demoMcpUrl,
   demoA2aUrl,
   demoWebUrl: DEMO_WEB_URL,
+  demoWebProUrl: DEMO_WEB_PRO_URL,
   contracts: d,
 };
 writeFileSync(STATE_PATH, JSON.stringify(state, null, 2) + '\n', 'utf8');
@@ -302,10 +310,56 @@ run(
   { cwd: join(REPO_ROOT, 'apps', 'demo-web') },
 );
 
+// 8. Build demo-web-pro with VITE_* env vars from deployments JSON.
+//    Vite inlines these at build time — the deployed bundle carries
+//    one chain's addresses. To rotate addresses, redeploy.
+step(8, 'Building demo-web-pro with deployment addresses…');
+const proBuildEnv: Record<string, string> = {
+  ...process.env as Record<string, string>,
+  VITE_CHAIN_ID:               String(d.chainId),
+  VITE_FACTORY_ADDRESS:        d.agentAccountFactory,
+  VITE_DELEGATION_MANAGER:     d.delegationManager,
+  VITE_DEMO_A2A_URL:           demoA2aUrl,
+  VITE_DEMO_MCP_URL:           demoMcpUrl,
+};
+if (d.thresholdValidator)   proBuildEnv.VITE_THRESHOLD_VALIDATOR    = d.thresholdValidator;
+if (d.quorumEnforcer)       proBuildEnv.VITE_QUORUM_ENFORCER        = d.quorumEnforcer;
+if (d.approvedHashRegistry) proBuildEnv.VITE_APPROVED_HASH_REGISTRY = d.approvedHashRegistry;
+execSync('pnpm --filter @agenticprimitives-demo/web-pro build', {
+  cwd: REPO_ROOT,
+  stdio: 'inherit',
+  env: proBuildEnv,
+});
+
+// Ensure the demo-web-pro Pages project exists.
+try {
+  execSync(
+    `wrangler pages project create ${PAGES_PROJECT_PRO} --production-branch=master`,
+    { cwd: REPO_ROOT, stdio: 'pipe' },
+  );
+  console.log(`  ✓ created Pages project ${PAGES_PROJECT_PRO}`);
+} catch (err: unknown) {
+  const msg = (err as { stderr?: Buffer; stdout?: Buffer }).stderr?.toString() ?? '';
+  if (msg.includes('already') || msg.includes('exists')) {
+    console.log(`  ✓ Pages project ${PAGES_PROJECT_PRO} already exists`);
+  } else {
+    process.stderr.write(msg);
+    fail(`wrangler pages project create ${PAGES_PROJECT_PRO} failed (see above).`);
+  }
+}
+
+// 9. Deploy demo-web-pro to Pages.
+step(9, 'Deploying demo-web-pro to Pages…');
+run(
+  `wrangler pages deploy dist --project-name=${PAGES_PROJECT_PRO} --branch=master --commit-dirty=true`,
+  { cwd: join(REPO_ROOT, 'apps', 'demo-web-pro') },
+);
+
 console.log('\n────────────────────────────────────────────────────────────');
-console.log(`demo-web    ${DEMO_WEB_URL}`);
-console.log(`demo-a2a    ${demoA2aUrl}`);
-console.log(`demo-mcp    ${demoMcpUrl}`);
+console.log(`demo-web      ${DEMO_WEB_URL}`);
+console.log(`demo-web-pro  ${DEMO_WEB_PRO_URL}`);
+console.log(`demo-a2a      ${demoA2aUrl}`);
+console.log(`demo-mcp      ${demoMcpUrl}`);
 console.log('────────────────────────────────────────────────────────────\n');
 console.log('Deploy state: cloudflare-urls.json (gitignored)');
 console.log('Rollback:     wrangler deployments list --env production');
