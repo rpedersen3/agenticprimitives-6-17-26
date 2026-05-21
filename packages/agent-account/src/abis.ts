@@ -78,6 +78,33 @@ export const agentAccountFactoryAbi = [
     ],
     outputs: [{ name: 'account', type: 'address' }],
   },
+  // Variant that takes an optional custom T4 timelock (seconds).
+  // Pass 0 for the spec default (1h). Useful for demo accounts that
+  // want immediate execute-after-propose. T5 + T6 timelocks stay at
+  // spec defaults regardless (24h / 48h).
+  {
+    type: 'function',
+    name: 'createAccountWithModeCustomT4',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'params',
+        type: 'tuple',
+        components: [
+          { name: 'mode', type: 'uint8' },
+          { name: 'owners', type: 'address[]' },
+          { name: 'guardians', type: 'address[]' },
+          { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
+          { name: 'initialPasskeyX', type: 'uint256' },
+          { name: 'initialPasskeyY', type: 'uint256' },
+        ],
+      },
+      { name: 'validator', type: 'address' },
+      { name: 't4TimelockSeconds', type: 'uint32' },
+      { name: 'salt', type: 'uint256' },
+    ],
+    outputs: [{ name: 'account', type: 'address' }],
+  },
   {
     type: 'function',
     name: 'getAddressForMode',

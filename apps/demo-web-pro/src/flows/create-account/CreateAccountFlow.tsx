@@ -62,6 +62,9 @@ export function CreateAccountFlow() {
   const [salt, setSalt] = useState<string>(() => String(Math.floor(Math.random() * 1_000_000)));
   const [extraOwners, setExtraOwners] = useState<Address[]>([]);
   const [guardians, setGuardians] = useState<Address[]>([]);
+  // T4 admin-action timelock. 0 = spec default (1h). The factory's
+  // createAccountWithModeCustomT4 entry lets us override at install time.
+  const [t4Timelock, setT4Timelock] = useState<number>(0);
 
   const factoryAddress = deploymentConfig.factoryAddress;
   const validatorAddress = deploymentConfig.thresholdValidator;
@@ -138,11 +141,14 @@ export function CreateAccountFlow() {
   const handleDeploy = () => {
     if (!ready || !params || !factoryAddress || !validatorAddress || saltBigInt === null) return;
     resetWrite();
+    // Always route through the custom-T4 entry; the contract treats
+    // t4TimelockSeconds=0 as "use spec default (1h)" so passing 0 from
+    // the dropdown is equivalent to the simple createAccountWithMode path.
     writeContract({
       address: factoryAddress,
       abi: agentAccountFactoryAbi,
-      functionName: 'createAccountWithMode',
-      args: [params, validatorAddress, saltBigInt],
+      functionName: 'createAccountWithModeCustomT4',
+      args: [params, validatorAddress, t4Timelock, saltBigInt],
     });
   };
 
@@ -247,6 +253,29 @@ export function CreateAccountFlow() {
               {guardianMin === 1 ? '' : 's'}. Add {guardianShortfall} more.
             </small>
           )}
+
+          <label className="field">
+            <span>T4 admin timelock</span>
+            <select
+              value={t4Timelock}
+              onChange={(e) => setT4Timelock(Number(e.target.value))}
+              data-testid="create-account-t4-timelock"
+            >
+              <option value={0}>1h (spec default)</option>
+              <option value={1}>Instant (1s — demo only)</option>
+              <option value={60}>1 minute</option>
+              <option value={300}>5 minutes</option>
+              <option value={3600}>1 hour</option>
+              <option value={21600}>6 hours</option>
+              <option value={86400}>24 hours</option>
+            </select>
+            <small className="muted">
+              Wait time between Propose and Execute on T4 admin actions (AddOwner, AddGuardian,
+              ChangeMode, etc.). Set short for demo speed; longer is more secure (gives co-signers a
+              window to cancel a hostile change). T5 and T6 timelocks stay at spec defaults (24h /
+              48h) regardless.
+            </small>
+          </label>
 
           <label className="field">
             <span>Salt</span>

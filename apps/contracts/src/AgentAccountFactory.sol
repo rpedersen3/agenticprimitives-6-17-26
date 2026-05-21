@@ -280,6 +280,21 @@ contract AgentAccountFactory is GovernanceManaged {
         address validator,
         uint256 salt
     ) external returns (AgentAccount account) {
+        return createAccountWithModeCustomT4(params, validator, 0, salt);
+    }
+
+    /// @notice Same as `createAccountWithMode` but lets the caller pick the
+    ///         T4 timelock (in seconds). Pass `0` for the spec default (1h).
+    ///         Useful for demo / test accounts where the 1h wait between
+    ///         propose and execute is friction. T5 (24h) and T6 (48h)
+    ///         stay at spec defaults because spec 207 § 5 invariant
+    ///         requires them to be > 0.
+    function createAccountWithModeCustomT4(
+        AgentAccountInitParams calldata params,
+        address validator,
+        uint32 t4TimelockSeconds,
+        uint256 salt
+    ) public returns (AgentAccount account) {
         _validateInitParams(params);
         if (validator == address(0)) revert ZeroAddress();
 
@@ -287,10 +302,6 @@ contract AgentAccountFactory is GovernanceManaged {
 
         address addr = getAddress(initialOwner, salt);
         if (addr.code.length > 0) {
-            // Idempotent return — but DO NOT re-install the validator
-            // on an already-deployed account (would revert
-            // ModuleAlreadyInstalled). Caller is expected to query
-            // first.
             return AgentAccount(payable(addr));
         }
 
@@ -304,13 +315,7 @@ contract AgentAccountFactory is GovernanceManaged {
         );
         account = AgentAccount(payable(address(proxy)));
 
-        // Build validator init data using the spec § 5.1 default
-        // threshold matrix sized to the FINAL owner count (the matrix
-        // expects N = total owners — even though we only seed owner[0]
-        // here, the validator's thresholds should reflect the intended N
-        // because the SDK will add the rest post-deploy via T4 actions
-        // signed by owner[0] alone, which is permitted while N=1).
-        bytes memory validatorInit = _buildValidatorInitData(params, validator);
+        bytes memory validatorInit = _buildValidatorInitData(params, validator, t4TimelockSeconds);
         account.installModule(2 /* MODULE_TYPE_EXECUTOR */, validator, validatorInit);
 
         emit AgentAccountCreatedWithMode(
@@ -358,7 +363,8 @@ contract AgentAccountFactory is GovernanceManaged {
     ///      threshold = floor(N/2)+1 when guardians > 0.
     function _buildValidatorInitData(
         AgentAccountInitParams calldata params,
-        address validator
+        address validator,
+        uint32 t4TimelockSeconds
     ) internal view returns (bytes memory) {
         uint8 n = uint8(params.owners.length);
         uint8[7] memory thresholds;
@@ -368,7 +374,7 @@ contract AgentAccountFactory is GovernanceManaged {
         // T6 governed by recoveryThreshold below, not the matrix.
 
         uint32[7] memory timelocks;
-        timelocks[4] = 1 hours;
+        timelocks[4] = t4TimelockSeconds == 0 ? uint32(1 hours) : t4TimelockSeconds;
         timelocks[5] = 24 hours;
         timelocks[6] = 48 hours;
 
