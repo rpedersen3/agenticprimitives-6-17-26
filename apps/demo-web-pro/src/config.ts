@@ -10,7 +10,7 @@
  *
  *   VITE_CHAIN_ID=84532
  *   VITE_FACTORY_ADDRESS=0x880FE0F93a2807838BA6Ad71850ADF0983fc920E
- *   VITE_THRESHOLD_VALIDATOR=0xccfD79BBDfF7126A0B6Ba3F881edccb3998E6554
+ *   VITE_CUSTODY_POLICY=0xccfD79BBDfF7126A0B6Ba3F881edccb3998E6554
  *   ...
  *
  * All fields optional — flows surface a clear error in the UI when they're missing.
@@ -19,7 +19,7 @@
 export interface DeploymentConfig {
   chainId?: number;
   factoryAddress?: `0x${string}`;
-  thresholdValidator?: `0x${string}`;
+  custodyPolicy?: `0x${string}`;
   delegationManager?: `0x${string}`;
   quorumEnforcer?: `0x${string}`;
   approvedHashRegistry?: `0x${string}`;
@@ -41,7 +41,7 @@ function parseChainId(v: string | undefined): number | undefined {
 export const config: DeploymentConfig = {
   chainId:              parseChainId(import.meta.env.VITE_CHAIN_ID),
   factoryAddress:       parseAddr(import.meta.env.VITE_FACTORY_ADDRESS),
-  thresholdValidator:   parseAddr(import.meta.env.VITE_THRESHOLD_VALIDATOR),
+  custodyPolicy:   parseAddr(import.meta.env.VITE_CUSTODY_POLICY),
   delegationManager:    parseAddr(import.meta.env.VITE_DELEGATION_MANAGER),
   quorumEnforcer:       parseAddr(import.meta.env.VITE_QUORUM_ENFORCER),
   approvedHashRegistry: parseAddr(import.meta.env.VITE_APPROVED_HASH_REGISTRY),

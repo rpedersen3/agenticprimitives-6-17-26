@@ -73,7 +73,7 @@ interface Deployments {
    *  cancel admin surface for accounts in non-single modes. Factory's
    *  createAccountWithMode takes it as a per-call arg + installs it on
    *  every new account. Demo-web-pro reads it from worker env vars. */
-  thresholdValidator?: string;
+  custodyPolicy?: string;
   /** Phase 6c.1 — quorum caveat enforcer; T3+ delegations carry it. */
   quorumEnforcer?: string;
   /** Phase 6c.1 — v=1 signature path companion. */
@@ -175,7 +175,7 @@ const contractVars: Record<string, string> = {
 // Phase 6c.5-c — phase 6c multi-sig substrate. Each is optional in
 // the JSON but, when present, propagates to the workers so demo-a2a
 // + demo-mcp + demo-web-pro can find them without bundling addresses.
-if (d.thresholdValidator)   contractVars.THRESHOLD_VALIDATOR    = d.thresholdValidator;
+if (d.custodyPolicy)   contractVars.CUSTODY_POLICY    = d.custodyPolicy;
 if (d.quorumEnforcer)       contractVars.QUORUM_ENFORCER        = d.quorumEnforcer;
 if (d.approvedHashRegistry) contractVars.APPROVED_HASH_REGISTRY = d.approvedHashRegistry;
 
@@ -323,7 +323,7 @@ const proBuildEnv: Record<string, string> = {
   VITE_DEMO_A2A_URL:           demoA2aUrl,
   VITE_DEMO_MCP_URL:           demoMcpUrl,
 };
-if (d.thresholdValidator)   proBuildEnv.VITE_THRESHOLD_VALIDATOR    = d.thresholdValidator;
+if (d.custodyPolicy)   proBuildEnv.VITE_CUSTODY_POLICY    = d.custodyPolicy;
 if (d.quorumEnforcer)       proBuildEnv.VITE_QUORUM_ENFORCER        = d.quorumEnforcer;
 if (d.approvedHashRegistry) proBuildEnv.VITE_APPROVED_HASH_REGISTRY = d.approvedHashRegistry;
 execSync('pnpm --filter @agenticprimitives-demo/web-pro build', {

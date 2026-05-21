@@ -75,7 +75,7 @@ export function ViewAccountFlow() {
     else setActiveAddress(null);
   }, [input]);
 
-  const validatorAddress = deploymentConfig.thresholdValidator;
+  const validatorAddress = deploymentConfig.custodyPolicy;
 
   return (
     <section>
@@ -217,7 +217,7 @@ function AccountInspector({
         <h2>{installed ? `Mode: ${MODE_LABEL[Number(modeQ.data ?? 0)] ?? '?'}` : 'Not installed'}</h2>
         {!validatorAddress ? (
           <p className="err">
-            <code>VITE_THRESHOLD_VALIDATOR</code> not set in this build.
+            <code>VITE_CUSTODY_POLICY</code> not set in this build.
           </p>
         ) : !installed ? (
           <p className="muted">

@@ -122,7 +122,7 @@ export function AdminActionsFlow() {
   const { signTypedDataAsync, error: signError, reset: resetSign } = useSignTypedData();
   const gasless = useGaslessTx();
 
-  const validatorAddress = deploymentConfig.thresholdValidator;
+  const validatorAddress = deploymentConfig.custodyPolicy;
   const expectedChainId = deploymentConfig.chainId;
 
   const [account, setAccount] = useState<string>('');
@@ -384,7 +384,7 @@ export function AdminActionsFlow() {
 
       {!validatorAddress && (
         <p className="err">
-          <code>VITE_THRESHOLD_VALIDATOR</code> not set in this build.
+          <code>VITE_CUSTODY_POLICY</code> not set in this build.
         </p>
       )}
       {!isConnected && <p className="muted">Connect a wallet first — owner signature is required.</p>}

@@ -16,9 +16,11 @@ import {UniversalSignatureValidator} from "../src/UniversalSignatureValidator.so
 import {QuorumEnforcer} from "../src/enforcers/QuorumEnforcer.sol";
 import {ApprovedHashRegistry} from "../src/ApprovedHashRegistry.sol";
 import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
-// Local var renamed below; deployment JSON key kept as
-// `thresholdValidator` until phase 6g.4 redeploys + updates the
-// deployments JSON canonical key (separate ops concern).
+// JSON output key is now "custodyPolicy" (was "thresholdValidator"
+// pre-6g.4). On the next testnet redeploy the existing
+// `deployments-base-sepolia.json` field will be overwritten under the
+// new key; until then, env-var pipeline through gen-dev-vars.ts +
+// deploy-cloudflare.ts speaks the new name end-to-end.
 
 /**
  * Deploys the minimum on-chain surface the demo needs:
@@ -178,7 +180,7 @@ contract Deploy is Script {
         vm.serializeAddress(key, "smartAgentPaymaster", address(paymaster));
         vm.serializeAddress(key, "quorumEnforcer", address(quorumEnforcer));
         vm.serializeAddress(key, "approvedHashRegistry", address(approvedHashRegistry));
-        vm.serializeAddress(key, "thresholdValidator", address(custodyPolicy));
+        vm.serializeAddress(key, "custodyPolicy", address(custodyPolicy));
         string memory out = vm.serializeAddress(key, "universalSignatureValidator", address(universalValidator));
 
         string memory path = string.concat("deployments-", network, ".json");

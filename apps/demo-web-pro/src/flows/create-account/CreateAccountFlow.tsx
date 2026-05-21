@@ -67,7 +67,7 @@ export function CreateAccountFlow() {
   const [t4Timelock, setT4Timelock] = useState<number>(0);
 
   const factoryAddress = deploymentConfig.factoryAddress;
-  const validatorAddress = deploymentConfig.thresholdValidator;
+  const validatorAddress = deploymentConfig.custodyPolicy;
   const expectedChainId = deploymentConfig.chainId;
 
   const owners = useMemo<Address[]>(
@@ -173,7 +173,7 @@ export function CreateAccountFlow() {
       )}
       {!validatorAddress && factoryAddress && (
         <p className="err">
-          <code>VITE_THRESHOLD_VALIDATOR</code> not set in this build.
+          <code>VITE_CUSTODY_POLICY</code> not set in this build.
         </p>
       )}
 
