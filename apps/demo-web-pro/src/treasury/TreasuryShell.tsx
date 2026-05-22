@@ -17,8 +17,10 @@ import { ProgressRail } from './components/ProgressRail';
 import { PrincipalChip } from './components/PrincipalChip';
 import { LiveStatusBadge } from './components/LiveStatusBadge';
 import { SeatPicker } from './components/SeatPicker';
+import { DisconnectMenu } from './components/DisconnectMenu';
 import { Act1AlicePerson } from './acts/Act1AlicePerson';
 import { config } from '../config';
+import type { SeatClaim } from '../lib/seats';
 
 export function TreasuryShell() {
   const [hash, setHash] = useState<string>(typeof window !== 'undefined' ? window.location.hash : '');
@@ -98,7 +100,7 @@ function TopBar({
   seats,
   activeSeatId,
 }: {
-  seats: Record<string, { personAgent: `0x${string}` }>;
+  seats: Record<string, SeatClaim>;
   activeSeatId: string | null;
 }) {
   const seatList = orgConfig.seats;
@@ -129,7 +131,8 @@ function TopBar({
           <span className="dot" />
           {config.chainId === 84532 ? 'Base Sepolia' : `Chain ${config.chainId ?? '?'}`}
         </span>
-        <PrincipalChip activeSeatId={activeSeatId} seats={seats as never} />
+        <PrincipalChip activeSeatId={activeSeatId} seats={seats} />
+        <DisconnectMenu activeSeatId={activeSeatId} seats={seats} />
       </div>
     </header>
   );
