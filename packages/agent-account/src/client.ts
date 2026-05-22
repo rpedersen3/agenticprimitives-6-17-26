@@ -282,12 +282,22 @@ export class AgentAccountClient {
 
     const nonce = await bundler.getNonce(opts.sender);
 
-    // Gas defaults sized for a typical post-deploy call. validateUserOp on a
-    // deployed account is ~30-50k; we leave headroom. callGasLimit varies a
-    // lot with what's being called — 250k is enough for the validator's
-    // propose/execute paths (largest currently-supported actions).
-    const verificationGasLimit = opts.verificationGasLimit ?? 120_000n;
-    const callGasLimit         = opts.callGasLimit         ?? 250_000n;
+    // Gas defaults sized for the WORST-case validateUserOp path: a WebAuthn
+    // signature verified by Daimo's pure-Solidity P-256 verifier (~330k gas
+    // plus sha256s + base64url decode + clientDataJSON parse). On chains with
+    // RIP-7212 deployed at 0x100 the precompile branch costs ~3.5k and the
+    // budget is wildly over-provisioned, which is fine.
+    //
+    // callGasLimit is sized for the most common heavy demo path: an Org or
+    // Treasury AgentAccount deploy dispatched as Account.execute(factory,
+    // 0, createAccountWithMode(...)). Factory deploy + custody-policy
+    // install lands around 600-700k; 800k leaves headroom.
+    //
+    // Callers can override either via opts.verificationGasLimit /
+    // opts.callGasLimit if they know the call is cheaper (saves paymaster
+    // burn) or heavier.
+    const verificationGasLimit = opts.verificationGasLimit ?? 500_000n;
+    const callGasLimit         = opts.callGasLimit         ?? 800_000n;
     const accountGasLimits     = packGasLimits(verificationGasLimit, callGasLimit);
     const preVerificationGas   = opts.preVerificationGas   ?? 60_000n;
 
