@@ -24,7 +24,7 @@ import { useEffect, useState } from 'react';
 import { encodeFunctionData, type Address, type Hex } from 'viem';
 import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
 import { orgConfig } from '../../org-config';
-import { loadActiveSeat, loadSeats } from '../../lib/seats';
+import { loadActiveSeat, loadSeats, setActiveSeat } from '../../lib/seats';
 import { loadOrg, loadTreasury, saveTreasury } from '../../lib/demo-state';
 import { getPasskeyForSeat } from '../../lib/passkey';
 import {
@@ -66,12 +66,13 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
   const org = loadOrg();
   const activeSeatId = loadActiveSeat();
   const seats = loadSeats();
-  const founder =
-    activeSeatId && seats[activeSeatId]
-      ? seats[activeSeatId]
-      : null;
-  const founderName =
-    orgConfig.seats.find((s) => s.id === founder?.seatId)?.name ?? 'the founder';
+  // Same Alice-is-founder discipline as Act 2 — keeps the Treasury\'s
+  // "deployed by" attribution aligned with the founder narrative even
+  // though the deployer doesn\'t enter the Treasury custodian set.
+  const aliceSeat = orgConfig.seats[0]!;
+  const founder = seats[aliceSeat.id] ?? null;
+  const founderName = aliceSeat.name;
+  const aliceIsActive = activeSeatId === aliceSeat.id;
 
   const factoryAddress = config.factoryAddress;
   const custodyPolicyAddress = config.custodyPolicy;
@@ -87,7 +88,7 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
       setError('Preconditions missing — need Act 2 complete (Org deployed), an active seat, factory + custody policy addresses.');
       return;
     }
-    const passkey = getPasskeyForSeat(founder.seatId);
+    const passkey = getPasskeyForSeat(aliceSeat.id);
     if (!passkey) {
       setStage('error');
       setError(`${founderName}\'s passkey is missing. Try disconnecting + reclaiming the seat.`);
@@ -235,6 +236,31 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
           <strong>{unclaimedSeats.map((s) => s.name).join(', ')}</strong>.
         </p>
         <a href="#/" className="primary">← Back to seat picker</a>
+      </section>
+    );
+  }
+
+  if (!aliceIsActive) {
+    return (
+      <section>
+        <div className="hero">
+          <p className="eyebrow">Act 2.5 · Admin · <LiveStatusBadge status="live" /></p>
+          <h1>Switch to {founderName} to deploy the Treasury.</h1>
+          <p>
+            The Treasury is owned by {orgConfig.name}, which only {founderName} can sign for
+            right now (she\'s the sole custodian until Act 3).
+          </p>
+        </div>
+        <section className="card">
+          <button
+            type="button"
+            className="primary"
+            onClick={() => setActiveSeat(aliceSeat.id)}
+            data-testid="act2_5-switch-to-alice"
+          >
+            Act as {founderName} →
+          </button>
+        </section>
       </section>
     );
   }

@@ -21,7 +21,7 @@ import { useEffect, useState } from 'react';
 import { encodeFunctionData, type Address, type Hex } from 'viem';
 import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
 import { orgConfig } from '../../org-config';
-import { loadSeats, loadActiveSeat } from '../../lib/seats';
+import { loadSeats, loadActiveSeat, setActiveSeat } from '../../lib/seats';
 import { loadOrg, saveOrg } from '../../lib/demo-state';
 import { getPasskeyForSeat } from '../../lib/passkey';
 import {
@@ -59,71 +59,26 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [dialogOpen, setDialogOpen] = useState(true);
 
-  // The "founder" is whoever holds the active seat. In a fresh demo
-  // it\'s the first seat-claimer (Alice).
-  const activeSeatId = loadActiveSeat();
+  // Spec 211 § 5 Act 2: Alice is the founder. The "Acting as" chip
+  // doesn\'t matter here — the Org\'s initial custodian is always
+  // Alice\'s PSA. Acts 4+ are where Bob participates in admin actions.
   const seats = loadSeats();
-  const founder =
-    activeSeatId && seats[activeSeatId]
-      ? seats[activeSeatId]
-      : null;
-  const founderName =
-    orgConfig.seats.find((s) => s.id === founder?.seatId)?.name ?? 'the founder';
+  const aliceSeat = orgConfig.seats[0]!;
+  const founder = seats[aliceSeat.id] ?? null;
+  const founderName = aliceSeat.name;
+  const activeSeatId = loadActiveSeat();
+  const aliceIsActive = activeSeatId === aliceSeat.id;
 
   const factoryAddress = config.factoryAddress;
   const custodyPolicyAddress = config.custodyPolicy;
   const demoA2aReady = !!config.demoA2aUrl;
 
-  // If Org already exists, short-circuit. Routing back to seat picker
-  // is the caller\'s job via onComplete.
+  // If Org already exists in local state, short-circuit the dialog.
+  // No silent recovery via on-chain probe — that proved more confusing
+  // than helpful when a stale Org sat at a predictable address. If
+  // demo-state is empty, deploy fresh.
   useEffect(() => {
-    if (loadOrg()) { setDialogOpen(false); return; }
-    // Recovery: if the visitor cancelled mid-flow (e.g. closed tab
-    // before the propagation poll finished but AFTER the chain
-    // confirmed), the Org is on chain but not in demo-state. Detect
-    // by predicting the address with the SAME init params + salt; if
-    // it has code, register it locally and skip the dialog.
-    const recover = async () => {
-      if (!founder || !factoryAddress) return;
-      const initParams = {
-        mode: 1,
-        custodians: [founder.personAgent],
-        trustees: [] as `0x${string}`[],
-        initialPasskeyCredentialIdDigest: ('0x' + '00'.repeat(32)) as `0x${string}`,
-        initialPasskeyX: 0n,
-        initialPasskeyY: 0n,
-      } as const;
-      const SALT_VERSION = 'v3-safety1';
-      const salt = BigInt(
-        '0x' +
-          [...new TextEncoder().encode(`${orgConfig.name}:${founder.personAgent}:${SALT_VERSION}`)]
-            .map((b) => b.toString(16).padStart(2, '0'))
-            .join('')
-            .slice(0, 16),
-      );
-      try {
-        const predicted = await predictAccountAddress({
-          factoryAddress,
-          initParams,
-          salt,
-        });
-        const { hasCode: probe } = await import('../../lib/chain-reads');
-        if (await probe(predicted)) {
-          saveOrg({
-            address: predicted,
-            txHash: ('0x' + '00'.repeat(32)) as `0x${string}`,
-            mode: 1,
-            custodians: [founder.personAgent],
-            createdAt: new Date().toISOString(),
-          });
-          setDialogOpen(false);
-        }
-      } catch {
-        // Ignore probe failures; the visitor can still run Act 2 fresh.
-      }
-    };
-    void recover();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (loadOrg()) setDialogOpen(false);
   }, []);
 
   const runCeremony = async () => {
@@ -132,7 +87,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
       setError('Preconditions missing — need an active seat claim + factory address + custody policy address.');
       return;
     }
-    const passkey = getPasskeyForSeat(founder.seatId);
+    const passkey = getPasskeyForSeat(aliceSeat.id);
     if (!passkey) {
       setStage('error');
       setError(`${founderName}\'s passkey is missing. Try disconnecting + reclaiming the seat.`);
@@ -273,8 +228,8 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     return (
       <section className="card">
         <p className="eyebrow">Act 2 · Bootstrap</p>
-        <h1>No active seat.</h1>
-        <p>Claim at least one seat in Act 1 before creating the Organization.</p>
+        <h1>{founderName} hasn\'t claimed a seat yet.</h1>
+        <p>Per spec 211, {founderName} is the founder. Claim her seat in Act 1 first.</p>
         <a href="#/">← Back to seat picker</a>
       </section>
     );
@@ -292,6 +247,40 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
           Still open: <strong>{unclaimedSeats.map((s) => s.name).join(', ')}</strong>.
         </p>
         <a href="#/" className="primary">← Back to seat picker</a>
+      </section>
+    );
+  }
+
+  // Spec 211 § 5: Alice is the founder. If the active actor is Bob,
+  // surface a switch CTA so the userOp gets dispatched from Alice\'s
+  // PSA. This is enforced server-side too — the userOp\'s sender is
+  // Alice.PSA — but failing fast in the UI avoids a confusing on-chain
+  // revert.
+  if (!aliceIsActive) {
+    return (
+      <section>
+        <div className="hero">
+          <p className="eyebrow">Act 2 · Bootstrap · <LiveStatusBadge status="live" /></p>
+          <h1>Switch to {founderName} to create the Org.</h1>
+          <p>
+            Per spec 211 § 5, {founderName} is the founder of {orgConfig.name}. Her
+            Person Smart Agent dispatches the deploy and becomes the Org\'s initial
+            custodian.
+          </p>
+        </div>
+        <section className="card">
+          <button
+            type="button"
+            className="primary"
+            onClick={() => setActiveSeat(aliceSeat.id)}
+            data-testid="act2-switch-to-alice"
+          >
+            Act as {founderName} →
+          </button>
+          <p className="muted small">
+            (Or use the <strong>Acting as ▾</strong> chip in the top bar.)
+          </p>
+        </section>
       </section>
     );
   }
