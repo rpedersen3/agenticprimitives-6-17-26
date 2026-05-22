@@ -23,6 +23,7 @@ import {
   type SeatClaim,
 } from '../../lib/seats';
 import { clearPasskeyForSeat } from '../../lib/passkey';
+import { clearDemoState } from '../../lib/demo-state';
 
 export function DisconnectMenu({
   activeSeatId,
@@ -70,6 +71,7 @@ export function DisconnectMenu({
       }
     }
     clearActiveSeat();
+    clearDemoState();
     setOpen(false);
     setConfirm(null);
     window.location.hash = '';
