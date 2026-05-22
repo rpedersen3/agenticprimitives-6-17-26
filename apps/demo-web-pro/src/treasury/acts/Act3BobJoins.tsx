@@ -53,6 +53,7 @@ import {
   readScheduledChangeCount,
   readScheduledChange,
   readIsCustodian,
+  readSafetyDelay,
 } from '../../lib/chain-reads';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
@@ -96,6 +97,7 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
   const [applyTx, setApplyTx] = useState<Hex | null>(null);
   const [bobCustodyConfirmed, setBobCustodyConfirmed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(true);
+  const [safetyDelaySeconds, setSafetyDelaySeconds] = useState<number | null>(null);
 
   const seats = loadSeats();
   const activeSeatId = loadActiveSeat();
@@ -114,20 +116,29 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
   const aliceIsActive = aliceClaim && activeSeatId === aliceSeat?.id;
 
   useEffect(() => {
-    // If Bob is already a custodian (e.g. Act 3 already completed),
-    // close the dialog and show the summary card.
-    const checkAlreadyDone = async () => {
-      if (!org || !bobClaim) return;
-      const isCust = await readIsCustodian({
+    const probe = async () => {
+      if (!org || !config.custodyPolicy) return;
+      // Detect Orgs deployed before the 0s-safety-delay fix.
+      const delay = await readSafetyDelay({
+        custodyPolicy: config.custodyPolicy,
         account: org.address,
-        signer: bobClaim.personAgent,
+        tier: 4,
       });
-      if (isCust) {
-        setBobCustodyConfirmed(true);
-        setDialogOpen(false);
+      setSafetyDelaySeconds(delay);
+      // If Bob is already a custodian (e.g. Act 3 already completed),
+      // close the dialog and show the summary card.
+      if (bobClaim) {
+        const isCust = await readIsCustodian({
+          account: org.address,
+          signer: bobClaim.personAgent,
+        });
+        if (isCust) {
+          setBobCustodyConfirmed(true);
+          setDialogOpen(false);
+        }
       }
     };
-    void checkAlreadyDone();
+    void probe();
   }, [org, bobClaim]);
 
   // ─── Pre-flight gates ─────────────────────────────────────────────────
@@ -182,6 +193,38 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
           <p className="muted small">
             Once Bob\'s seat is claimed, come back here (or use the rail) and we\'ll continue.
           </p>
+        </section>
+      </section>
+    );
+  }
+
+  // Stale Org deployed before the 0s-safety-delay fix. The schedule
+  // step would still work but the apply step would revert with
+  // "ProposalNotReady" for an hour. Surface this as a fixable error.
+  if (safetyDelaySeconds !== null && safetyDelaySeconds > 0) {
+    return (
+      <section>
+        <div className="hero">
+          <p className="eyebrow">Act 3 · Admin · <LiveStatusBadge status="live" /></p>
+          <h1>This Org has a non-zero safety delay.</h1>
+          <p>
+            {orgConfig.name} was deployed with a {safetyDelaySeconds}-second T4 safety
+            delay — Act 3 would need to wait that long between schedule and apply, which
+            doesn\'t fit the demo flow.
+          </p>
+        </div>
+        <section className="card">
+          <p>
+            <strong>Fix:</strong> reset the demo (top-bar <code>⋯</code>) and redo
+            Acts 1 + 2 + 2.5. The new code path deploys with 0-second safety delay so
+            Act 3 lands schedule + apply back-to-back.
+          </p>
+          <p className="muted small">
+            On-chain Org and Treasury stay deployed at their current addresses; resetting
+            just forgets the local mapping so the next Act 2 deploys a fresh Org with the
+            corrected safety delay.
+          </p>
+          <a href="#/" className="primary">← Back to seat picker</a>
         </section>
       </section>
     );

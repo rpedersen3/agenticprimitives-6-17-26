@@ -60,6 +60,7 @@ export const custodyPolicyAbi = [
     outputs: [
       { name: 'action', type: 'uint8' },
       { name: 'args', type: 'bytes' },
+      { name: 'proposedAt', type: 'uint64' },
       { name: 'eta', type: 'uint64' },
       { name: 'proposer', type: 'address' },
       { name: 'executed', type: 'bool' },

@@ -71,6 +71,7 @@ export async function readScheduledChange(args: {
 }): Promise<{
   action: number;
   args: Hex;
+  proposedAt: bigint;
   eta: bigint;
   proposer: Address;
   executed: boolean;
@@ -81,15 +82,31 @@ export async function readScheduledChange(args: {
     abi: custodyPolicyAbi,
     functionName: 'getScheduledChange',
     args: [args.account, args.changeId],
-  })) as readonly [number, Hex, bigint, Address, boolean, boolean];
+  })) as readonly [number, Hex, bigint, bigint, Address, boolean, boolean];
   return {
     action: result[0],
     args: result[1],
-    eta: result[2],
-    proposer: result[3],
-    executed: result[4],
-    cancelled: result[5],
+    proposedAt: result[2],
+    eta: result[3],
+    proposer: result[4],
+    executed: result[5],
+    cancelled: result[6],
   };
+}
+
+/** Read the per-tier safety delay from the CustodyPolicy. */
+export async function readSafetyDelay(args: {
+  custodyPolicy: Address;
+  account: Address;
+  tier: number;
+}): Promise<number> {
+  const value = (await publicClient.readContract({
+    address: args.custodyPolicy,
+    abi: custodyPolicyAbi,
+    functionName: 'safetyDelay',
+    args: [args.account, args.tier],
+  })) as unknown as number | bigint;
+  return Number(value);
 }
 
 /** Read isCustodian(signer) on an AgentAccount. */
