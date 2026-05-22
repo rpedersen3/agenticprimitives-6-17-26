@@ -50,6 +50,24 @@ export async function hasCode(address: Address): Promise<boolean> {
   return !!bytecode && bytecode !== '0x';
 }
 
+/**
+ * Poll for `hasCode(address)` to flip true. Useful right after a
+ * userOp submit returns ok — the bundler\'s tx is mined but the public
+ * RPC node may lag by a few hundred ms before getCode reflects it.
+ */
+export async function waitForCode(
+  address: Address,
+  args: { attempts?: number; intervalMs?: number } = {},
+): Promise<boolean> {
+  const attempts = args.attempts ?? 10;
+  const intervalMs = args.intervalMs ?? 750;
+  for (let i = 0; i < attempts; i++) {
+    if (await hasCode(address)) return true;
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return false;
+}
+
 /** Read scheduledChangeCount(account) — the highest issued change id. */
 export async function readScheduledChangeCount(args: {
   custodyPolicy: Address;

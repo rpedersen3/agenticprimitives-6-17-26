@@ -31,7 +31,7 @@ import {
   executeCallFromAgent,
   encodeExecuteCall,
 } from '../../lib/execute-call';
-import { predictAccountAddress, hasCode } from '../../lib/chain-reads';
+import { predictAccountAddress, waitForCode } from '../../lib/chain-reads';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { shortAddress } from '../../components';
@@ -153,14 +153,21 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
       initParams,
       salt,
     });
-    const deployed = await hasCode(treasuryAddress);
+    const deployed = await waitForCode(treasuryAddress);
     if (!deployed) {
       setStage('error');
       setError(
         `The submit tx succeeded (${result.transactionHash}) but the Treasury address ` +
-          `${treasuryAddress} has no code yet. Try refreshing the page in a moment.`,
+          `${treasuryAddress} still has no code after polling. Refresh the page.`,
       );
       setTxHash(result.transactionHash);
+      saveTreasury({
+        address: treasuryAddress,
+        txHash: result.transactionHash,
+        mode: 0,
+        custodians: [org.address],
+        createdAt: new Date().toISOString(),
+      });
       return;
     }
 

@@ -28,7 +28,7 @@ import {
   executeCallFromAgent,
   encodeExecuteCall,
 } from '../../lib/execute-call';
-import { predictAccountAddress, hasCode } from '../../lib/chain-reads';
+import { predictAccountAddress, waitForCode } from '../../lib/chain-reads';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { shortAddress } from '../../components';
@@ -77,7 +77,52 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
   // If Org already exists, short-circuit. Routing back to seat picker
   // is the caller\'s job via onComplete.
   useEffect(() => {
-    if (loadOrg()) setDialogOpen(false);
+    if (loadOrg()) { setDialogOpen(false); return; }
+    // Recovery: if the visitor cancelled mid-flow (e.g. closed tab
+    // before the propagation poll finished but AFTER the chain
+    // confirmed), the Org is on chain but not in demo-state. Detect
+    // by predicting the address with the SAME init params + salt; if
+    // it has code, register it locally and skip the dialog.
+    const recover = async () => {
+      if (!founder || !factoryAddress) return;
+      const initParams = {
+        mode: 1,
+        custodians: [founder.personAgent],
+        trustees: [] as `0x${string}`[],
+        initialPasskeyCredentialIdDigest: ('0x' + '00'.repeat(32)) as `0x${string}`,
+        initialPasskeyX: 0n,
+        initialPasskeyY: 0n,
+      } as const;
+      const salt = BigInt(
+        '0x' +
+          [...new TextEncoder().encode(`${orgConfig.name}:${founder.personAgent}`)]
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('')
+            .slice(0, 16),
+      );
+      try {
+        const predicted = await predictAccountAddress({
+          factoryAddress,
+          initParams,
+          salt,
+        });
+        const { hasCode: probe } = await import('../../lib/chain-reads');
+        if (await probe(predicted)) {
+          saveOrg({
+            address: predicted,
+            txHash: ('0x' + '00'.repeat(32)) as `0x${string}`,
+            mode: 1,
+            custodians: [founder.personAgent],
+            createdAt: new Date().toISOString(),
+          });
+          setDialogOpen(false);
+        }
+      } catch {
+        // Ignore probe failures; the visitor can still run Act 2 fresh.
+      }
+    };
+    void recover();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runCeremony = async () => {
@@ -158,15 +203,24 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
       initParams,
       salt,
     });
-    const deployed = await hasCode(orgAddress);
+    const deployed = await waitForCode(orgAddress);
     if (!deployed) {
       setStage('error');
       setError(
         `The submit tx succeeded (${result.transactionHash}) but the Org address ` +
-          `${orgAddress} has no code yet. The bundler may still be propagating; ` +
-          'try refreshing the page in a moment.',
+          `${orgAddress} still has no code after polling. Refresh the page — the demo ` +
+          'will detect the deployed Org on next render.',
       );
       setTxHash(result.transactionHash);
+      // Save anyway — the deploy succeeded; the local record lets the
+      // visitor recover by refreshing instead of redoing the act.
+      saveOrg({
+        address: orgAddress,
+        txHash: result.transactionHash,
+        mode: 1,
+        custodians: [founder.personAgent],
+        createdAt: new Date().toISOString(),
+      });
       return;
     }
 
