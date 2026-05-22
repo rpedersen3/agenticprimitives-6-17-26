@@ -6,13 +6,18 @@
  * the userOp. The user only proves possession of their passkey.
  *
  * Round-trip:
- *   1. POST {demoA2aUrl}/a2a/session/deploy
+ *   1. POST {demoA2aUrl}/session/deploy
  *        { initMethod: 'passkey', credentialIdDigest, pubKeyX, pubKeyY }
  *      → { userOp, userOpHash, sender }
  *   2. WebAuthn assertion over userOpHash via signWithPasskeyB64
- *   3. POST {demoA2aUrl}/a2a/session/deploy/submit
+ *   3. POST {demoA2aUrl}/session/deploy/submit
  *        { userOp: { ...userOp, signature } }
  *      → { ok, deployedAddress, transactionHash }
+ *
+ * Path note: demo-web uses `/a2a/session/deploy` because a Pages
+ * Function strips the `/a2a` prefix before forwarding to the worker.
+ * demo-web-pro hits the worker URL directly (cross-origin via
+ * VITE_DEMO_A2A_URL), so the prefix-free path applies.
  *
  * Mirrors apps/demo-web/src/deploy-flow.ts at a simpler surface
  * (no SIWE, no session wallet — passkey is the only signer).
@@ -22,6 +27,7 @@ import { encodeWebAuthnSignature } from '@agenticprimitives/agent-account';
 import type { Address, Hex } from 'viem';
 import { config } from '../config';
 import { assertWithPasskey, type DemoPasskey } from './passkey';
+import { csrfHeaders, ensureCsrfToken, CsrfError } from './csrf';
 
 export interface DeployResult {
   ok: true;
@@ -64,10 +70,30 @@ export async function deployPersonAgent(
     };
   }
 
+  // 0. Acquire CSRF token + cookie. demo-a2a's middleware fail-closes
+  //    every POST without a matching header+cookie pair. The token is
+  //    bound to the demo-web-pro origin via HMAC; cookie roundtrips
+  //    cross-origin because the worker sets it `SameSite=None; Secure`.
+  try {
+    await ensureCsrfToken();
+  } catch (e) {
+    if (e instanceof CsrfError) {
+      return { ok: false, error: 'csrf_unavailable', reason: e.message };
+    }
+    return {
+      ok: false,
+      error: 'csrf_unavailable',
+      reason: e instanceof Error ? e.message : String(e),
+    };
+  }
+
+  const baseTrimmed = base.replace(/\/$/, '');
+
   // 1. Ask demo-a2a for the unsigned userOp.
-  const buildRes = await fetch(`${base.replace(/\/$/, '')}/a2a/session/deploy`, {
+  const buildRes = await fetch(`${baseTrimmed}/session/deploy`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({
       initMethod: 'passkey',
       credentialIdDigest: passkey.credentialIdDigest,
@@ -108,9 +134,10 @@ export async function deployPersonAgent(
   }
 
   // 3. Submit the signed userOp.
-  const submitRes = await fetch(`${base.replace(/\/$/, '')}/a2a/session/deploy/submit`, {
+  const submitRes = await fetch(`${baseTrimmed}/session/deploy/submit`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
   });
   const submitBody = (await submitRes.json()) as Record<string, unknown>;
