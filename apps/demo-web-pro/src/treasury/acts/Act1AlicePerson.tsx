@@ -2,18 +2,20 @@
  * Act 1 — Create a Person Smart Agent for a seat (spec 211 § 5 / 6f.1).
  *
  * Flow:
- *   1. Register passkey for the seat (TouchID / FaceID / security key).
- *   2. Call demo-a2a /a2a/session/deploy with initMethod='passkey'.
- *   3. Sign userOpHash with the freshly-registered passkey.
- *   4. demo-a2a submits the signed userOp via paymaster.
- *   5. Record the deployed Person Smart Agent in seats.ts.
+ *   1. Land on the act page — context card explains what\'s about to happen.
+ *   2. Open ConnectionDialog (modal). Stage 'consent' disclosure:
+ *      grantee / scope / limits / revoke note. ERC-7715-style.
+ *   3. User clicks Allow. Stage 'working' — passkey ceremony, then deploy
+ *      via demo-a2a / paymaster. Phase label updates as we progress.
+ *   4. Stage 'success' — show deployed Person Smart Agent address + tx.
+ *   5. User clicks Continue → claim seat + return to seat picker.
  *
- * The act is routed by seat (each open seat triggers its own Act 1).
- * After completion, the visitor lands back at the seat picker with
- * one seat now showing ✓ claimed.
+ * The dialog stays mounted across the consent/working/success/error
+ * stages so the visitor sees a single focused surface, mirroring
+ * smart-agent\'s DelegationConsentCard + AuthGate overlay pattern.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { orgConfig, type SeatDef } from '../../org-config';
 import {
   registerPasskeyForSeat,
@@ -23,10 +25,25 @@ import {
 import { claimSeat, setActiveSeat } from '../../lib/seats';
 import { deployPersonAgent } from '../../lib/deploy-person';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
-import { shortAddress } from '../../components';
+import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { config } from '../../config';
 
-type Phase = 'idle' | 'registering' | 'deploying' | 'done' | 'error';
+type WorkingPhase = 'registering-passkey' | 'building-userop' | 'awaiting-receipt';
+
+const PHASE_LABEL: Record<WorkingPhase, string> = {
+  'registering-passkey': 'Registering passkey…',
+  'building-userop': 'Building gasless deploy request…',
+  'awaiting-receipt': 'Awaiting paymaster + chain confirmation…',
+};
+
+const PHASE_HINT: Record<WorkingPhase, string | undefined> = {
+  'registering-passkey':
+    'Your browser will prompt you with TouchID / FaceID / a security key. The credential never leaves your device.',
+  'building-userop':
+    'demo-a2a is composing the ERC-4337 user operation. You will be asked to sign one more time with the same passkey.',
+  'awaiting-receipt':
+    'The smart-agent paymaster sponsors the gas. No ETH needed.',
+};
 
 export function Act1AlicePerson({
   seatId,
@@ -49,36 +66,50 @@ export function Act1AlicePerson({
 }
 
 function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void }) {
-  const [phase, setPhase] = useState<Phase>('idle');
+  const [stage, setStage] = useState<ConnectionStage>('consent');
+  const [workingPhase, setWorkingPhase] = useState<WorkingPhase>('registering-passkey');
   const [error, setError] = useState<string | null>(null);
   const [deployedAddress, setDeployedAddress] = useState<`0x${string}` | null>(null);
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(true);
 
   const demoA2aReady = !!config.demoA2aUrl;
   const wrongChain = config.chainId !== undefined && config.chainId !== 84532;
 
-  const handleStart = async () => {
+  // If the visitor lands here for a seat they already claimed, skip the
+  // dialog and let them switch context via the principal chip.
+  useEffect(() => {
+    const existing = getPasskeyForSeat(seat.id);
+    if (existing?.account) {
+      setDialogOpen(false);
+    }
+  }, [seat.id]);
+
+  const runCeremony = async () => {
+    setStage('working');
     setError(null);
 
-    // Re-use existing passkey if the visitor cancelled mid-flow and
-    // came back. Saves them a repeat ceremony.
     let passkey = getPasskeyForSeat(seat.id);
     if (!passkey) {
-      setPhase('registering');
+      setWorkingPhase('registering-passkey');
       try {
         passkey = await registerPasskeyForSeat(seat.id, seat.name);
         savePasskeyForSeat(seat.id, passkey);
       } catch (e) {
-        setPhase('error');
+        setStage('error');
         setError(e instanceof Error ? e.message : String(e));
         return;
       }
     }
 
-    setPhase('deploying');
+    setWorkingPhase('building-userop');
+    // brief tick so the new label shows even on very fast paths
+    await new Promise((r) => setTimeout(r, 50));
+
+    setWorkingPhase('awaiting-receipt');
     const result = await deployPersonAgent(passkey);
     if (!result.ok) {
-      setPhase('error');
+      setStage('error');
       setError(result.reason || result.error);
       return;
     }
@@ -93,7 +124,22 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
 
     setDeployedAddress(result.deployedAddress);
     setTxHash(result.transactionHash);
-    setPhase('done');
+    setStage('success');
+  };
+
+  const handleAccept = () => {
+    if (!demoA2aReady || wrongChain) return;
+    void runCeremony();
+  };
+
+  const handleDecline = () => {
+    setDialogOpen(false);
+    onComplete();
+  };
+
+  const handleRetry = () => {
+    setStage('consent');
+    setError(null);
   };
 
   return (
@@ -126,87 +172,64 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
         </p>
       )}
 
-      <section className="split">
+      {!dialogOpen && (
         <section className="card">
-          <p className="eyebrow">Step 1 · Passkey</p>
-          <h2>Register {seat.name}\'s passkey</h2>
-          <p>
-            Your browser will prompt you with TouchID / FaceID / a security key. The credential
-            never leaves your device — only the P-256 public key (x, y) goes on chain.
+          <p className="muted">
+            This seat is already claimed. Use the <strong>Acting as ▾</strong> chip in the top
+            bar to switch.
           </p>
-        </section>
-
-        <section className="card">
-          <p className="eyebrow">Step 2 · Deploy</p>
-          <h2>Counterfactual address → live</h2>
-          <p>
-            The factory deploys an <code>AgentAccount</code> proxy and initializes it with
-            {' '}<code>{seat.name}\'s</code> passkey credential as the root signer.
-          </p>
-        </section>
-      </section>
-
-      <section className="card">
-        {phase === 'idle' && (
-          <button
-            type="button"
-            className="primary"
-            onClick={handleStart}
-            disabled={!demoA2aReady}
-            data-testid="act1-start"
-          >
-            Begin Act 1 — register {seat.name}\'s passkey
+          <button type="button" className="primary" onClick={onComplete}>
+            ← Back to seat picker
           </button>
-        )}
-        {phase === 'registering' && (
-          <p className="muted" data-testid="act1-registering">
-            Waiting for {seat.name}\'s passkey ceremony… (TouchID / FaceID prompt)
-          </p>
-        )}
-        {phase === 'deploying' && (
-          <p className="muted" data-testid="act1-deploying">
-            Deploying {seat.name}\'s Person Smart Agent via the paymaster… one moment.
-          </p>
-        )}
-        {phase === 'done' && deployedAddress && (
-          <div data-testid="act1-done">
-            <p>
-              <strong>✓ {seat.name}\'s Person Smart Agent is live.</strong>
+        </section>
+      )}
+
+      <ConnectionDialog
+        open={dialogOpen}
+        stage={stage}
+        title={`Connect as ${seat.name}`}
+        // Consent stage props
+        scopeList={[
+          `Sign every action taken by ${seat.name}\'s Person Smart Agent on Base Sepolia.`,
+          `Authorize gasless transactions via the paymaster on ${seat.name}\'s behalf.`,
+          `Be replaced via the Custody Council in Act 4 if this device is lost.`,
+        ]}
+        grantee={`${seat.name}\'s Person Smart Agent`}
+        duration="as long as the passkey exists on this device"
+        limits={[
+          'Sign for the Organization or the Treasury — those have their own Smart Agents.',
+          `Move ${orgConfig.name}\'s treasury funds directly — that requires stewardship from the Treasury (Acts 4–5).`,
+          'Roam to another browser without re-enrollment — the passkey is bound to this device.',
+        ]}
+        revokeNote={`The Custody Council (Act 4) can rotate ${seat.name}\'s passkey at any time. No recovery seed needed.`}
+        onAccept={handleAccept}
+        onDecline={handleDecline}
+        // Working stage props
+        phaseLabel={PHASE_LABEL[workingPhase]}
+        phaseHint={PHASE_HINT[workingPhase]}
+        // Success stage props
+        successAddress={deployedAddress ?? undefined}
+        successTxHash={txHash ?? undefined}
+        successExtra={
+          stage === 'success' && deployedAddress ? (
+            <p className="muted">
+              {seat.name}\'s Person Smart Agent is live on Base Sepolia. Only {seat.name}\'s
+              passkey can sign for it.
             </p>
-            <dl className="kv">
-              <dt>Address</dt>
-              <dd>
-                <code>{shortAddress(deployedAddress)}</code>
-              </dd>
-              {txHash && (
-                <>
-                  <dt>Deploy tx</dt>
-                  <dd>
-                    <code>{shortAddress(txHash)}</code>
-                  </dd>
-                </>
-              )}
-            </dl>
-            <button type="button" className="primary" onClick={onComplete} data-testid="act1-continue">
-              Continue
-            </button>
-          </div>
-        )}
-        {phase === 'error' && (
-          <p className="err" data-testid="act1-error">
-            <strong>Couldn\'t complete Act 1.</strong> {error ?? 'Unknown error.'}{' '}
-            <button
-              type="button"
-              onClick={() => {
-                setPhase('idle');
-                setError(null);
-              }}
-            >
-              Try again
-            </button>
-          </p>
-        )}
-      </section>
+          ) : undefined
+        }
+        onContinue={() => {
+          setDialogOpen(false);
+          onComplete();
+        }}
+        // Error stage props
+        errorMessage={error ?? undefined}
+        onRetry={handleRetry}
+        onCancel={() => {
+          setDialogOpen(false);
+          onComplete();
+        }}
+      />
     </section>
   );
 }
