@@ -254,52 +254,74 @@ function NextStepHint({
 }) {
   const claimedCount = Object.keys(seats).length;
   const openSeats = orgConfig.seats.filter((s) => !seats[s.id]);
+  const allSeatsClaimed = openSeats.length === 0;
 
-  // Choose the next sensible move.
-  let nextHref = '#/acts/create-org';
-  let nextLabel = `Create ${orgConfig.name} →`;
-  if (org && !treasury) {
-    nextHref = '#/acts/create-treasury';
-    nextLabel = 'Create Acme Treasury →';
-  } else if (org && treasury) {
-    nextHref = '#/acts/bob-joins';
-    nextLabel = 'Bring Bob aboard (Act 3) →';
+  // Spec 211 § 4: "Both seats need admins for the treasury to
+  // activate." Only after every seat has a Person Smart Agent does
+  // the next-step CTA point at the Org/Treasury/Act-3 path.
+  let nextHref: string | null = null;
+  let nextLabel = '';
+  if (allSeatsClaimed) {
+    if (!org) {
+      nextHref = '#/acts/create-org';
+      nextLabel = `Create ${orgConfig.name} →`;
+    } else if (!treasury) {
+      nextHref = '#/acts/create-treasury';
+      nextLabel = 'Create Acme Treasury →';
+    } else {
+      nextHref = '#/acts/bob-joins';
+      nextLabel = 'Bring Bob aboard the Org (Act 3) →';
+    }
   }
+
+  const headline = (() => {
+    if (!allSeatsClaimed) {
+      return `${claimedCount} of ${orgConfig.seats.length} seats claimed. ${openSeats[0]?.name} still needs a passkey.`;
+    }
+    if (!org) return 'Both seats claimed. Ready to deploy the Organization.';
+    if (!treasury) return 'Org live. Treasury still needs to be deployed.';
+    return 'Org + Treasury live. Continue with Act 3.';
+  })();
+
+  const subtext = (() => {
+    if (!allSeatsClaimed) {
+      return `Per spec 211 § 4 the Organization doesn\'t boot until every admin seat has a Person Smart Agent on chain. Claim the remaining seat${openSeats.length > 1 ? 's' : ''} below.`;
+    }
+    if (!org) return `${orgConfig.name} deploys with both ${orgConfig.seats.map((s) => s.name).join(' + ')}\'s Person Smart Agents on board (Alice as initial custodian; Bob added via Act 3).`;
+    if (!treasury) return `Acme Treasury is the second Smart Agent — owned by ${orgConfig.name}, separate identity from the Org.`;
+    return 'Schedule + apply the AddCustodian(Bob) change on the Org.';
+  })();
 
   return (
     <section>
       <div className="hero">
         <p className="eyebrow">{orgConfig.name}</p>
-        <h1>
-          {claimedCount} of {orgConfig.seats.length} seats claimed.
-          {org && ' Org live.'}
-          {treasury && ' Treasury live.'}
-        </h1>
-        <p>
-          {org && treasury
-            ? 'Both Smart Agents are deployed. Bob still needs to claim a seat before Act 3 can run.'
-            : org
-              ? 'Acme Construction is live. The Treasury still needs to be deployed (Act 2.5).'
-              : `${orgConfig.name} has not been deployed yet. ${claimedCount === 1
-                  ? 'You can deploy it now.'
-                  : 'Either continue Bob\'s onboarding or deploy the Org.'}`}
-        </p>
+        <h1>{headline}</h1>
+        <p>{subtext}</p>
       </div>
 
       <div className="next-step-grid">
-        <a className="primary next-step-card" href={nextHref}>
-          {nextLabel}
-        </a>
+        {/* Always show the open-seat claim buttons first when seats remain. */}
         {openSeats.map((seat) => (
           <button
             key={seat.id}
             type="button"
-            className="next-step-card secondary"
+            className="next-step-card primary"
             onClick={() => onPickSeat(seat.id)}
+            data-testid={`next-step-claim-${seat.id}`}
           >
             Claim the {seat.name} seat →
           </button>
         ))}
+        {/* Org/Treasury/Act-3 only available once every seat is claimed. */}
+        {nextHref && (
+          <a
+            className={`next-step-card ${openSeats.length === 0 ? 'primary' : 'secondary'}`}
+            href={nextHref}
+          >
+            {nextLabel}
+          </a>
+        )}
       </div>
 
       {org && (

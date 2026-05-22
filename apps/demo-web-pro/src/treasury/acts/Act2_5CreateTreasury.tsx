@@ -107,9 +107,11 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
       initialPasskeyY: 0n,
     } as const;
 
+    // See Act 2 for the salt-version rationale.
+    const SALT_VERSION = 'v2-safety0';
     const salt = BigInt(
       '0x' +
-        [...new TextEncoder().encode(`${TREASURY_NAME}:${org.address}`)]
+        [...new TextEncoder().encode(`${TREASURY_NAME}:${org.address}:${SALT_VERSION}`)]
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('')
           .slice(0, 16),
@@ -217,6 +219,21 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
         <h1>No active seat.</h1>
         <p>Switch to a claimed seat in the top bar before continuing.</p>
         <a href="#/">← Back to seat picker</a>
+      </section>
+    );
+  }
+
+  const unclaimedSeats = orgConfig.seats.filter((s) => !seats[s.id]);
+  if (unclaimedSeats.length > 0) {
+    return (
+      <section className="card">
+        <p className="eyebrow">Act 2.5 · Admin</p>
+        <h1>Claim every seat first.</h1>
+        <p>
+          Treasury deploys only when both admin seats are on board. Still open:{' '}
+          <strong>{unclaimedSeats.map((s) => s.name).join(', ')}</strong>.
+        </p>
+        <a href="#/" className="primary">← Back to seat picker</a>
       </section>
     );
   }

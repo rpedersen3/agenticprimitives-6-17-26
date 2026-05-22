@@ -93,9 +93,10 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
         initialPasskeyX: 0n,
         initialPasskeyY: 0n,
       } as const;
+      const SALT_VERSION = 'v2-safety0';
       const salt = BigInt(
         '0x' +
-          [...new TextEncoder().encode(`${orgConfig.name}:${founder.personAgent}`)]
+          [...new TextEncoder().encode(`${orgConfig.name}:${founder.personAgent}:${SALT_VERSION}`)]
             .map((b) => b.toString(16).padStart(2, '0'))
             .join('')
             .slice(0, 16),
@@ -152,11 +153,18 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
       initialPasskeyY: 0n,
     } as const;
 
-    // Salt derived from a stable demo seed; lets the visitor re-claim
-    // the same Org address across resets if they want.
+    // Salt derived from (org name, founder PSA, version tag). The
+    // version tag bumps whenever the deploy parameters change in a
+    // way that\'s NOT visible in the CREATE2 inputs — most notably,
+    // the safety-delay value, which changes config state after the
+    // proxy is created (via the CustodyPolicy.onInstall payload) but
+    // doesn\'t affect the predicted address. Bumping the tag forces
+    // a fresh address so visitors don\'t inherit a stale on-chain
+    // Org that was deployed before today\'s 0s-safety-delay fix.
+    const SALT_VERSION = 'v2-safety0'; // bump on every breaking deploy-param change
     const salt = BigInt(
       '0x' +
-        [...new TextEncoder().encode(`${orgConfig.name}:${founder.personAgent}`)]
+        [...new TextEncoder().encode(`${orgConfig.name}:${founder.personAgent}:${SALT_VERSION}`)]
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('')
           .slice(0, 16),
@@ -262,6 +270,22 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
         <h1>No active seat.</h1>
         <p>Claim at least one seat in Act 1 before creating the Organization.</p>
         <a href="#/">← Back to seat picker</a>
+      </section>
+    );
+  }
+
+  // Spec 211 § 4: require ALL seats claimed before deploying the Org.
+  const unclaimedSeats = orgConfig.seats.filter((s) => !seats[s.id]);
+  if (unclaimedSeats.length > 0) {
+    return (
+      <section className="card">
+        <p className="eyebrow">Act 2 · Bootstrap</p>
+        <h1>Claim every seat first.</h1>
+        <p>
+          {orgConfig.name} doesn\'t boot until both admins have Person Smart Agents on chain.
+          Still open: <strong>{unclaimedSeats.map((s) => s.name).join(', ')}</strong>.
+        </p>
+        <a href="#/" className="primary">← Back to seat picker</a>
       </section>
     );
   }
