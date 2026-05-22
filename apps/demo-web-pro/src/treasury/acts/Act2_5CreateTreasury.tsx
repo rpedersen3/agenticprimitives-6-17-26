@@ -21,12 +21,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import {
-  decodeEventLog,
-  encodeFunctionData,
-  type Address,
-  type Hex,
-} from 'viem';
+import { encodeFunctionData, type Address, type Hex } from 'viem';
 import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
 import { orgConfig } from '../../org-config';
 import { loadActiveSeat, loadSeats } from '../../lib/seats';
@@ -36,6 +31,7 @@ import {
   executeCallFromAgent,
   encodeExecuteCall,
 } from '../../lib/execute-call';
+import { predictAccountAddress, hasCode } from '../../lib/chain-reads';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { shortAddress } from '../../components';
@@ -151,27 +147,17 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
 
     setPhase('awaiting-receipt');
 
-    let treasuryAddress: Address | null = null;
-    for (const log of result.logs ?? []) {
-      try {
-        const decoded = decodeEventLog({
-          abi: agentAccountFactoryAbi,
-          data: log.data,
-          topics: log.topics as [`0x${string}`, ...`0x${string}`[]],
-        });
-        if (decoded.eventName === 'AgentAccountCreatedWithMode') {
-          treasuryAddress = decoded.args.account;
-          break;
-        }
-      } catch {
-        // not our event
-      }
-    }
-    if (!treasuryAddress) {
+    const treasuryAddress = await predictAccountAddress({
+      factoryAddress,
+      initParams,
+      salt,
+    });
+    const deployed = await hasCode(treasuryAddress);
+    if (!deployed) {
       setStage('error');
       setError(
-        'Tx landed but we couldn\'t decode AgentAccountCreatedWithMode from the receipt. ' +
-          `tx: ${result.transactionHash}.`,
+        `The submit tx succeeded (${result.transactionHash}) but the Treasury address ` +
+          `${treasuryAddress} has no code yet. Try refreshing the page in a moment.`,
       );
       setTxHash(result.transactionHash);
       return;

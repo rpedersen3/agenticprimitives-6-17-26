@@ -18,12 +18,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import {
-  decodeEventLog,
-  encodeFunctionData,
-  type Address,
-  type Hex,
-} from 'viem';
+import { encodeFunctionData, type Address, type Hex } from 'viem';
 import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
 import { orgConfig } from '../../org-config';
 import { loadSeats, loadActiveSeat } from '../../lib/seats';
@@ -33,6 +28,7 @@ import {
   executeCallFromAgent,
   encodeExecuteCall,
 } from '../../lib/execute-call';
+import { predictAccountAddress, hasCode } from '../../lib/chain-reads';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { shortAddress } from '../../components';
@@ -152,30 +148,20 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
 
     setPhase('awaiting-receipt');
 
-    // Parse AgentAccountCreatedWithMode out of the receipt logs to
-    // recover the Org address.
-    let orgAddress: Address | null = null;
-    for (const log of result.logs ?? []) {
-      try {
-        const decoded = decodeEventLog({
-          abi: agentAccountFactoryAbi,
-          data: log.data,
-          topics: log.topics as [`0x${string}`, ...`0x${string}`[]],
-        });
-        if (decoded.eventName === 'AgentAccountCreatedWithMode') {
-          orgAddress = decoded.args.account;
-          break;
-        }
-      } catch {
-        // not our event
-      }
-    }
-    if (!orgAddress) {
+    // CREATE2-deterministic — predicted address IS the deployed address.
+    // Verify code is in place so we don\'t falsely report success.
+    const orgAddress = await predictAccountAddress({
+      factoryAddress,
+      initParams,
+      salt,
+    });
+    const deployed = await hasCode(orgAddress);
+    if (!deployed) {
       setStage('error');
       setError(
-        'The on-chain tx landed but we couldn\'t decode AgentAccountCreatedWithMode from the receipt. ' +
-          `tx: ${result.transactionHash}. ` +
-          'demo-a2a may not be returning userOp receipt logs yet.',
+        `The submit tx succeeded (${result.transactionHash}) but the Org address ` +
+          `${orgAddress} has no code yet. The bundler may still be propagating; ` +
+          'try refreshing the page in a moment.',
       );
       setTxHash(result.transactionHash);
       return;
