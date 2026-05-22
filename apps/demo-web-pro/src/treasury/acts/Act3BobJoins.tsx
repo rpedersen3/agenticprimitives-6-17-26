@@ -287,12 +287,42 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
 
       setPhase('computing-hash');
 
-      // 2. Read next changeId = scheduledChangeCount() + 1.
+      // 2. Resume support: scan for an existing un-executed
+      // AddCustodian(Bob) schedule from a prior attempt. If found,
+      // jump straight to the apply step. Otherwise schedule a new one.
       const lastChangeId = await readScheduledChangeCount({
         custodyPolicy: config.custodyPolicy,
         account: org.address,
       });
-      const expectedChangeId = lastChangeId + 1n;
+      let expectedChangeId: bigint | null = null;
+      let skipSchedule = false;
+      let existingEta: bigint | null = null;
+      // Walk back from the most recent change until we find one
+      // matching action + args + not yet executed/cancelled. Capped at
+      // 5 to avoid burning RPC time when there\'s a long history.
+      const scanFrom = lastChangeId;
+      const scanTo = lastChangeId > 5n ? lastChangeId - 5n : 0n;
+      for (let id = scanFrom; id > scanTo; id--) {
+        const sc = await readScheduledChange({
+          custodyPolicy: config.custodyPolicy,
+          account: org.address,
+          changeId: id,
+        });
+        if (
+          sc.action === action &&
+          sc.args.toLowerCase() === innerArgs.toLowerCase() &&
+          !sc.executed &&
+          !sc.cancelled
+        ) {
+          expectedChangeId = id;
+          existingEta = sc.eta;
+          skipSchedule = true;
+          break;
+        }
+      }
+      if (expectedChangeId === null) {
+        expectedChangeId = lastChangeId + 1n;
+      }
 
       // 3. Compute domain separator + schedule hash.
       const domainSeparator = computeDomainSeparator({
@@ -309,46 +339,52 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
         },
       });
 
-      // 4. Alice signs.
-      setPhase('signing-schedule');
-      const scheduleAssertion = await assertWithPasskey(alicePasskey, scheduleHash);
-      const scheduleBlob = encodeWebAuthnSignature(scheduleAssertion);
-      const scheduleSigs = packContractSigs([
-        { signer: aliceClaim.personAgent, signatureBlob: scheduleBlob },
-      ]);
+      // 4. Alice signs (unless we\'re resuming an existing schedule).
+      let resolvedEta: bigint;
+      if (skipSchedule && existingEta !== null) {
+        resolvedEta = existingEta;
+      } else {
+        setPhase('signing-schedule');
+        const scheduleAssertion = await assertWithPasskey(alicePasskey, scheduleHash);
+        const scheduleBlob = encodeWebAuthnSignature(scheduleAssertion);
+        const scheduleSigs = packContractSigs([
+          { signer: aliceClaim.personAgent, signatureBlob: scheduleBlob },
+        ]);
 
-      // 5. Dispatch via Alice.PSA.execute(CustodyPolicy.schedule(...)).
-      setPhase('submitting-schedule');
-      const scheduleCallData = encodeScheduleCall({
-        account: org.address,
-        action,
-        innerArgs,
-        quorumSigs: scheduleSigs,
-      });
-      const scheduleOuter = encodeExecuteCall({
-        target: config.custodyPolicy,
-        value: 0n,
-        innerData: scheduleCallData,
-      });
-      const scheduleResult = await executeCallFromAgent({
-        sender: aliceClaim.personAgent,
-        passkey: alicePasskey,
-        callData: scheduleOuter,
-      });
-      if (!scheduleResult.ok) {
-        setStage('error');
-        setError(`Schedule failed: ${scheduleResult.reason || scheduleResult.error}`);
-        return;
+        // 5. Dispatch via Alice.PSA.execute(CustodyPolicy.schedule(...)).
+        setPhase('submitting-schedule');
+        const scheduleCallData = encodeScheduleCall({
+          account: org.address,
+          action,
+          innerArgs,
+          quorumSigs: scheduleSigs,
+        });
+        const scheduleOuter = encodeExecuteCall({
+          target: config.custodyPolicy,
+          value: 0n,
+          innerData: scheduleCallData,
+        });
+        const scheduleResult = await executeCallFromAgent({
+          sender: aliceClaim.personAgent,
+          passkey: alicePasskey,
+          callData: scheduleOuter,
+        });
+        if (!scheduleResult.ok) {
+          setStage('error');
+          setError(`Schedule failed: ${scheduleResult.reason || scheduleResult.error}`);
+          return;
+        }
+        setScheduleTx(scheduleResult.transactionHash);
+
+        // 6. Read the eta back from chain.
+        setPhase('reading-eta');
+        const scheduledChange = await readScheduledChange({
+          custodyPolicy: config.custodyPolicy,
+          account: org.address,
+          changeId: expectedChangeId,
+        });
+        resolvedEta = scheduledChange.eta;
       }
-      setScheduleTx(scheduleResult.transactionHash);
-
-      // 6. Read the eta back from chain.
-      setPhase('reading-eta');
-      const scheduledChange = await readScheduledChange({
-        custodyPolicy: config.custodyPolicy,
-        account: org.address,
-        changeId: expectedChangeId,
-      });
 
       // 7. Compute apply hash.
       const applyHash = hashApplyCustodyChange({
@@ -358,7 +394,7 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
           action,
           argsHash,
           changeId: expectedChangeId,
-          eta: scheduledChange.eta,
+          eta: resolvedEta,
         },
       });
 
