@@ -46,6 +46,12 @@ export interface ConnectionDialogProps {
   onAccept?: () => void;
   /** Called when the user declines or clicks the backdrop. */
   onDecline?: () => void;
+  /** Label for the accept button. Defaults to "Allow". */
+  acceptLabel?: string;
+  /** When true, the accept button is disabled (e.g. waiting for wallet connection). */
+  acceptDisabled?: boolean;
+  /** Optional content rendered above the scope/limits — used by Act 1 for the auth-method picker. */
+  preConsentSlot?: ReactNode;
 
   // ─── Working stage ─────────────────────────────────────────────────
   /** One-line phase label. e.g. "Registering Alice\'s passkey…". */
@@ -123,9 +129,13 @@ function ConsentBody({
   revokeNote,
   onAccept,
   onDecline,
+  acceptLabel = 'Allow',
+  acceptDisabled = false,
+  preConsentSlot,
 }: ConnectionDialogProps) {
   return (
     <div className="connection-dialog__body">
+      {preConsentSlot}
       <p className="connection-dialog__lead">
         Granted to <strong>{grantee}</strong> · {duration}.
       </p>
@@ -170,8 +180,9 @@ function ConsentBody({
             onClick={onAccept}
             data-testid="connection-dialog-accept"
             autoFocus
+            disabled={acceptDisabled}
           >
-            Allow
+            {acceptLabel}
           </button>
         )}
       </div>

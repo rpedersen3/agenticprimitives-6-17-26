@@ -27,30 +27,26 @@
  */
 
 import { useEffect, useState } from 'react';
-import { keccak256, type Hex } from 'viem';
+import type { Hex } from 'viem';
+import { useAccount, useConnect, useConnectors, useDisconnect, useSignTypedData } from 'wagmi';
 import { orgConfig } from '../../org-config';
-import { loadActiveSeat, loadSeats, setActiveSeat, type SeatClaim } from '../../lib/seats';
+import {
+  loadActiveSeat,
+  loadSeats,
+  setActiveSeat,
+  getPasskeyAuth,
+  getSiweAuth,
+  type SeatClaim,
+} from '../../lib/seats';
 import { loadOrg } from '../../lib/demo-state';
-import { getPasskeyForSeat, assertWithPasskey } from '../../lib/passkey';
+import { getPasskeyForSeat } from '../../lib/passkey';
 import {
   CustodyAction,
+  buildAddCustodianArgs,
   buildAddPasskeyCredentialArgs,
-  packQuorumSigs,
 } from '@agenticprimitives/custody';
+import { scheduleAndApply } from '../../lib/custody-ceremony';
 import {
-  executeCallFromAgent,
-  encodeExecuteCall,
-} from '../../lib/execute-call';
-import {
-  computeDomainSeparator,
-  hashScheduleCustodyChange,
-  hashApplyCustodyChange,
-  encodeScheduleCall,
-  encodeApplyCall,
-} from '../../lib/custody-flow';
-import {
-  readScheduledChangeCount,
-  readScheduledChange,
   readIsCustodian,
   readSafetyDelay,
 } from '../../lib/chain-reads';
@@ -70,25 +66,58 @@ type WorkingPhase =
 
 const PHASE_LABEL: Record<WorkingPhase, string> = {
   'computing-hash': 'Computing EIP-712 schedule hash…',
-  'signing-schedule': 'Confirming schedule with your passkey…',
+  'signing-schedule': 'Confirming schedule via your enrolled method…',
   'submitting-schedule': 'Submitting scheduled change…',
   'reading-eta': 'Reading change eta from chain…',
-  'signing-apply': 'Confirming apply with your passkey…',
+  'signing-apply': 'Confirming apply via your enrolled method…',
   'submitting-apply': 'Applying the change…',
   'verifying': 'Verifying Bob is now a custodian…',
 };
 
 const PHASE_HINT: Record<WorkingPhase, string | undefined> = {
   'computing-hash': 'Building the ScheduleCustodyChangeRequest hash the CustodyPolicy will verify.',
-  'signing-schedule': 'Alice\'s passkey signs the EIP-712 hash. The quorum slot is v=2 (direct WebAuthn) — Alice\'s PIA is already a custodian of the Org.',
+  'signing-schedule': 'Alice signs the EIP-712 hash. For passkey: v=2 quorum slot (direct WebAuthn). For SIWE: v=27/28 quorum slot via wagmi.signTypedData. Either way, Alice\'s identity is a custodian of the Org.',
   'submitting-schedule': 'Alice\'s PSA dispatches scheduleCustodyChange via the CustodyPolicy module. Paymaster pays gas.',
   'reading-eta': 'The Org was deployed with a 1s safety delay — eta is already reached.',
-  'signing-apply': 'Same passkey, same shape, different EIP-712 typehash (ApplyCustodyChangeRequest).',
+  'signing-apply': 'Same signer, same shape, different EIP-712 typehash (ApplyCustodyChangeRequest).',
   'submitting-apply': 'CustodyPolicy.applyCustodyChange dispatches Org.executeFromModule → addPasskey(Bob\'s credentialId). The PIA-as-custodian flag flips on as a side effect.',
   'verifying': 'Reading Org.isCustodian(Bob\'s PIA) from chain to confirm the change landed.',
 };
 
 export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
+  const { signTypedDataAsync } = useSignTypedData();
+  const { address: walletAddress } = useAccount();
+  const { connectAsync } = useConnect();
+  const { disconnectAsync } = useDisconnect();
+  const connectors = useConnectors();
+  const getWalletAddress = () => walletAddress as `0x${string}` | undefined;
+  /**
+   * Open MetaMask's account picker so the user can switch to whichever
+   * account matches the signer's seat. Resolves to the post-switch
+   * address (or undefined if the user dismissed the picker).
+   */
+  const promptSwitchWalletAccount = async (): Promise<`0x${string}` | undefined> => {
+    const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0];
+    if (!injected) return undefined;
+    try {
+      // Disconnect through wagmi first so React state resets cleanly.
+      await disconnectAsync().catch(() => undefined);
+      // Force MetaMask's account picker. `wallet_requestPermissions`
+      // always opens it, regardless of cached approvals.
+      const provider = (await injected.getProvider()) as
+        | { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> }
+        | undefined;
+      if (provider?.request) {
+        await provider
+          .request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
+          .catch(() => undefined);
+      }
+      const result = await connectAsync({ connector: injected });
+      return result.accounts[0] as `0x${string}` | undefined;
+    } catch {
+      return undefined;
+    }
+  };
   const [stage, setStage] = useState<ConnectionStage>('consent');
   const [phase, setPhase] = useState<WorkingPhase>('computing-hash');
   const [error, setError] = useState<string | null>(null);
@@ -126,10 +155,11 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
       setSafetyDelaySeconds(delay);
       // If Bob's PIA is already a custodian (e.g. Act 3 already
       // completed), close the dialog and show the summary card.
-      if (bobClaim) {
+      const bobPasskeyAuth = bobClaim ? getPasskeyAuth(bobClaim) : undefined;
+      if (bobClaim && bobPasskeyAuth) {
         const isCust = await readIsCustodian({
           account: org.address,
-          signer: bobClaim.personIdentity,
+          signer: bobPasskeyAuth.pia,
         });
         if (isCust) {
           setBobCustodyConfirmed(true);
@@ -268,10 +298,19 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
       setError('Deployment config missing — VITE_FACTORY_ADDRESS / VITE_CUSTODY_POLICY / VITE_CHAIN_ID.');
       return;
     }
-    const alicePasskey = getPasskeyForSeat(aliceSeat.id);
-    if (!alicePasskey) {
+    const alicePasskeyAuth = getPasskeyAuth(aliceClaim);
+    const aliceSiweAuth = getSiweAuth(aliceClaim);
+    if (!alicePasskeyAuth && !aliceSiweAuth) {
       setStage('error');
-      setError(`${aliceSeat.name}'s passkey is missing on this device.`);
+      setError('Alice has no enrolled auth method — re-claim her seat.');
+      return;
+    }
+    // Passkey is only needed if Alice will sign via WebAuthn. For SIWE-only
+    // Alice we'll sign via wagmi and relay through the worker.
+    const alicePasskey = alicePasskeyAuth ? (getPasskeyForSeat(aliceSeat.id) ?? undefined) : undefined;
+    if (alicePasskeyAuth && !alicePasskey) {
+      setStage('error');
+      setError(`${aliceSeat.name}'s passkey enrolment is missing on this device. Reclaim her seat with the same passkey.`);
       return;
     }
 
@@ -283,208 +322,118 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
       setError('Org config has no second seat — check ORG_SEAT_LABELS env.');
       return;
     }
-    const bobPasskey = getPasskeyForSeat(bobSeat.id);
-    if (!bobPasskey) {
+    const bobPasskeyAuth = getPasskeyAuth(bobClaim);
+    const bobSiweAuth = getSiweAuth(bobClaim);
+    const bobPasskey = bobPasskeyAuth ? (getPasskeyForSeat(bobSeat.id) ?? undefined) : undefined;
+    if (bobPasskeyAuth && !bobPasskey) {
       setStage('error');
-      setError(`${bobSeat.name}'s passkey is missing on this device.`);
+      setError(`${bobSeat.name}'s passkey enrolment is missing on this device.`);
       return;
     }
-    const bobPia = bobClaim.personIdentity;
-    const alicePia = aliceClaim.personIdentity;
+    if (!bobPasskeyAuth && !bobSiweAuth) {
+      setStage('error');
+      setError('Bob has no enrolled identity — re-claim his seat with passkey and/or wallet.');
+      return;
+    }
 
     try {
-      // 1. Compose the action args. Phase 6f.4 pivot: add Bob's passkey
-      // directly to the Org. The PIA-as-custodian flag flips on as a
-      // side effect of AgentAccount.addPasskey (spec 211 § 3 / spec 212
-      // § 2.2 — smart-agent custodians forbidden).
-      const action = CustodyAction.AddPasskeyCredential;
-      const innerArgs = buildAddPasskeyCredentialArgs(
-        bobPasskey.credentialIdDigest,
-        bobPasskey.pubKeyX,
-        bobPasskey.pubKeyY,
-      );
-      const argsHash = keccak256(innerArgs);
+      // Register EVERY one of Bob's enrolled identities on the Org. If
+      // both are enrolled (passkey + SIWE), run two ceremonies in
+      // sequence — one AddPasskeyCredential, one AddCustodian. Skip
+      // identities that are already on chain (e.g. partial prior run).
+      let lastScheduleTx: `0x${string}` | null = null;
+      let lastApplyTx: `0x${string}` | null = null;
 
-      setPhase('computing-hash');
-
-      // 2. Resume support: scan for an existing un-executed
-      // AddPasskeyCredential(Bob) schedule from a prior attempt. If found,
-      // jump straight to the apply step. Otherwise schedule a new one.
-      const lastChangeId = await readScheduledChangeCount({
-        custodyPolicy: config.custodyPolicy,
-        account: org.address,
-      });
-      let expectedChangeId: bigint | null = null;
-      let skipSchedule = false;
-      let existingEta: bigint | null = null;
-      // Walk back from the most recent change until we find one
-      // matching action + args + not yet executed/cancelled. Capped at
-      // 5 to avoid burning RPC time when there\'s a long history.
-      const scanFrom = lastChangeId;
-      const scanTo = lastChangeId > 5n ? lastChangeId - 5n : 0n;
-      for (let id = scanFrom; id > scanTo; id--) {
-        const sc = await readScheduledChange({
-          custodyPolicy: config.custodyPolicy,
+      if (bobPasskeyAuth) {
+        const already = await readIsCustodian({
           account: org.address,
-          changeId: id,
+          signer: bobPasskeyAuth.pia,
         });
-        if (
-          sc.action === action &&
-          sc.args.toLowerCase() === innerArgs.toLowerCase() &&
-          !sc.executed &&
-          !sc.cancelled
-        ) {
-          expectedChangeId = id;
-          existingEta = sc.eta;
-          skipSchedule = true;
-          break;
+        if (!already) {
+          const step = await scheduleAndApply({
+            account: org.address,
+            action: CustodyAction.AddPasskeyCredential,
+            innerArgs: buildAddPasskeyCredentialArgs(
+              bobPasskeyAuth.credentialIdDigest,
+              bobPasskeyAuth.pubKeyX,
+              bobPasskeyAuth.pubKeyY,
+            ),
+            signer: aliceClaim,
+            signerPasskey: alicePasskey,
+            signTypedDataAsync: async (a) =>
+              (await signTypedDataAsync({
+                domain: a.domain,
+                types: a.types,
+                primaryType: a.primaryType,
+                message: a.message,
+              })) as Hex,
+            getWalletAddress,
+            promptSwitchWalletAccount,
+            setPhase: setPhase as (p: 'computing-hash' | 'signing-schedule' | 'submitting-schedule' | 'reading-eta' | 'signing-apply' | 'submitting-apply') => void,
+          });
+          if ('error' in step) {
+            setStage('error');
+            setError(`AddPasskey(Bob) on Org: ${step.error}`);
+            return;
+          }
+          lastScheduleTx = step.scheduleTx;
+          lastApplyTx = step.applyTx;
         }
       }
-      if (expectedChangeId === null) {
-        expectedChangeId = lastChangeId + 1n;
-      }
 
-      // 3. Compute domain separator + schedule hash.
-      const domainSeparator = computeDomainSeparator({
-        custodyPolicy: config.custodyPolicy,
-        chainId: config.chainId,
-      });
-      const scheduleHash = hashScheduleCustodyChange({
-        domainSeparator,
-        message: {
+      if (bobSiweAuth) {
+        const already = await readIsCustodian({
           account: org.address,
-          action,
-          argsHash,
-          changeId: expectedChangeId,
-        },
-      });
-
-      // 4. Alice signs (unless we\'re resuming an existing schedule).
-      let resolvedEta: bigint;
-      if (skipSchedule && existingEta !== null) {
-        resolvedEta = existingEta;
-      } else {
-        setPhase('signing-schedule');
-        const scheduleAssertion = await assertWithPasskey(alicePasskey, scheduleHash);
-        const scheduleSigs = packQuorumSigs([
-          {
-            type: 'passkey',
-            pia: alicePia,
-            x: alicePasskey.pubKeyX,
-            y: alicePasskey.pubKeyY,
-            assertion: scheduleAssertion,
-          },
-        ]);
-
-        // 5. Dispatch via Alice.PSA.execute(CustodyPolicy.schedule(...)).
-        setPhase('submitting-schedule');
-        const scheduleCallData = encodeScheduleCall({
-          account: org.address,
-          action,
-          innerArgs,
-          quorumSigs: scheduleSigs,
+          signer: bobSiweAuth.eoa,
         });
-        const scheduleOuter = encodeExecuteCall({
-          target: config.custodyPolicy,
-          value: 0n,
-          innerData: scheduleCallData,
-        });
-        const scheduleResult = await executeCallFromAgent({
-          sender: aliceClaim.personAgent,
-          passkey: alicePasskey,
-          callData: scheduleOuter,
-        });
-        if (!scheduleResult.ok) {
-          setStage('error');
-          setError(`Schedule failed: ${scheduleResult.reason || scheduleResult.error}`);
-          return;
+        if (!already) {
+          const step = await scheduleAndApply({
+            account: org.address,
+            action: CustodyAction.AddCustodian,
+            innerArgs: buildAddCustodianArgs(bobSiweAuth.eoa),
+            signer: aliceClaim,
+            signerPasskey: alicePasskey,
+            signTypedDataAsync: async (a) =>
+              (await signTypedDataAsync({
+                domain: a.domain,
+                types: a.types,
+                primaryType: a.primaryType,
+                message: a.message,
+              })) as Hex,
+            getWalletAddress,
+            promptSwitchWalletAccount,
+            setPhase: setPhase as (p: 'computing-hash' | 'signing-schedule' | 'submitting-schedule' | 'reading-eta' | 'signing-apply' | 'submitting-apply') => void,
+          });
+          if ('error' in step) {
+            setStage('error');
+            setError(`AddCustodian(Bob.EOA) on Org: ${step.error}`);
+            return;
+          }
+          lastScheduleTx = step.scheduleTx;
+          lastApplyTx = step.applyTx;
         }
-        setScheduleTx(scheduleResult.transactionHash);
-
-        // 6. Read the eta back from chain. Poll until the change is
-        // visible — the front-end's RPC may lag the worker's by a few
-        // blocks, and the all-zero default record otherwise sneaks
-        // through as eta=0 and mis-signs the apply hash.
-        setPhase('reading-eta');
-        const scheduledChange = await readScheduledChange({
-          custodyPolicy: config.custodyPolicy,
-          account: org.address,
-          changeId: expectedChangeId,
-          waitForExistence: true,
-        });
-        if (scheduledChange.eta === 0n) {
-          setStage('error');
-          setError(
-            `Schedule tx succeeded but the change isn’t visible on the read-RPC yet. Refresh in a moment to retry.`,
-          );
-          return;
-        }
-        resolvedEta = scheduledChange.eta;
       }
 
-      // 7. Compute apply hash.
-      const applyHash = hashApplyCustodyChange({
-        domainSeparator,
-        message: {
-          account: org.address,
-          action,
-          argsHash,
-          changeId: expectedChangeId,
-          eta: resolvedEta,
-        },
-      });
+      if (lastScheduleTx) setScheduleTx(lastScheduleTx);
+      if (lastApplyTx) setApplyTx(lastApplyTx);
 
-      // 8. Alice signs apply.
-      setPhase('signing-apply');
-      const applyAssertion = await assertWithPasskey(alicePasskey, applyHash);
-      const applySigs = packQuorumSigs([
-        {
-          type: 'passkey',
-          pia: alicePia,
-          x: alicePasskey.pubKeyX,
-          y: alicePasskey.pubKeyY,
-          assertion: applyAssertion,
-        },
-      ]);
-
-      // 9. Dispatch apply via Alice.PSA.execute(CustodyPolicy.apply(...)).
-      setPhase('submitting-apply');
-      const applyCallData = encodeApplyCall({
-        account: org.address,
-        changeId: expectedChangeId,
-        quorumSigs: applySigs,
-      });
-      const applyOuter = encodeExecuteCall({
-        target: config.custodyPolicy,
-        value: 0n,
-        innerData: applyCallData,
-      });
-      const applyResult = await executeCallFromAgent({
-        sender: aliceClaim.personAgent,
-        passkey: alicePasskey,
-        callData: applyOuter,
-      });
-      if (!applyResult.ok) {
-        setStage('error');
-        setError(`Apply failed: ${applyResult.reason || applyResult.error}`);
-        return;
-      }
-      setApplyTx(applyResult.transactionHash);
-
-      // 10. Verify on chain: Bob's PIA is now in the Org's custodian
-      // set. Poll a few times — even with the same Alchemy RPC, reads
-      // can hit a replica that hasn't indexed the apply tx yet, which
-      // would make a correctly-applied change look like a failed one.
+      // Verify every Bob identity is now a custodian on Org.
       setPhase('verifying');
-      const isCust = await readIsCustodian({
-        account: org.address,
-        signer: bobPia,
-        waitForTrue: true,
-      });
-      if (!isCust) {
+      const bobIdentities: `0x${string}`[] = [
+        ...(bobPasskeyAuth ? [bobPasskeyAuth.pia] : []),
+        ...(bobSiweAuth ? [bobSiweAuth.eoa] : []),
+      ];
+      const verifyResults = await Promise.all(
+        bobIdentities.map((id) =>
+          readIsCustodian({ account: org.address, signer: id, waitForTrue: true }),
+        ),
+      );
+      if (!verifyResults.every(Boolean)) {
         setStage('error');
         setError(
-          `applyCustodyChange tx succeeded (${applyResult.transactionHash}) but Org.isCustodian(${bobPia}) is still false. Refresh the page in a moment to retry the verify.`,
+          `Bob's identities aren't all on Org yet — refresh in a moment: ${bobIdentities
+            .map((id, i) => `${id.slice(0, 10)}…=${verifyResults[i] ? '✓' : '✗'}`)
+            .join(' · ')}`,
         );
         return;
       }
@@ -500,12 +449,13 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
     <section>
       <div className="hero">
         <p className="eyebrow">Act 3 · Admin · <LiveStatusBadge status="live" /></p>
-        <h1>Add Bob's passkey identity as a custodian of {orgConfig.name}.</h1>
+        <h1>Add Bob\'s identities as custodians of {orgConfig.name}.</h1>
         <p>
-          Alice (the founding custodian) schedules + applies an
-          <code> AddPasskeyCredential({bobSeat?.name}) </code> change on the Org\'s
-          CustodyPolicy. After this lands, the Org has two passkey custodians but still
-          requires only 1 approval (Act 4 bumps it to 2).
+          Alice (the founding custodian) schedules + applies a CustodyAction per
+          identity Bob enrolled — <code>AddPasskeyCredential</code> for his passkey
+          PIA, <code>AddCustodian</code> for his wallet EOA. After this lands, the
+          Org recognizes every Bob identity but still requires only 1 approval
+          (Act 4 bumps it to 2).
         </p>
       </div>
 
@@ -514,8 +464,8 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
           <p className="eyebrow">Already complete</p>
           <h2>Bob is a custodian of {orgConfig.name}.</h2>
           <p className="muted">
-            On-chain check: <code>Org.isCustodian(Bob passkey identity)</code> = <strong>true</strong>.
-            Continue with Act 4 to make the Org require 2 approvals.
+            On-chain check: <code>Org.isCustodian(Bob\'s identity)</code> = <strong>true</strong>{' '}
+            for every method Bob enrolled. Continue with Act 4 to make the Org require 2 approvals.
           </p>
           <a href="#/" className="primary">← Back to seat picker</a>
         </section>
@@ -526,9 +476,9 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
         stage={stage}
         title={`Add ${bobSeat?.name ?? 'Bob'} as a custodian`}
         scopeList={[
-          `Alice signs an EIP-712 ScheduleCustodyChangeRequest authorizing AddPasskeyCredential(${bobSeat?.name}) on ${orgConfig.name}.`,
+          `Alice signs an EIP-712 ScheduleCustodyChangeRequest per ${bobSeat?.name} identity (AddPasskeyCredential and/or AddCustodian).`,
           `Alice signs an EIP-712 ApplyCustodyChangeRequest immediately after (0s safety delay).`,
-          `${orgConfig.name}'s custodian set goes from {Alice passkey identity} → {Alice passkey identity, ${bobSeat?.name} passkey identity}.`,
+          `${orgConfig.name}'s custodian set grows from {Alice's identities} → {Alice's + ${bobSeat?.name}'s identities}.`,
         ]}
         grantee={`${orgConfig.name} (the Org Smart Agent)`}
         duration="this change is permanent — only a future CustodyAction can reverse it"
@@ -549,8 +499,8 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
           stage === 'success' ? (
             <>
               <p className="muted">
-                Bob's passkey identity is now a custodian of {orgConfig.name}. Both schedule + apply landed
-                on chain.
+                Every identity Bob enrolled is now a custodian of {orgConfig.name}. Schedule + apply landed
+                on chain (one ceremony per identity).
               </p>
               {scheduleTx && (
                 <dl className="kv">

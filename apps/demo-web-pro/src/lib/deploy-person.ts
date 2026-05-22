@@ -1,26 +1,12 @@
 /**
- * Person Smart Agent deploy — passkey-only, gasless.
+ * Person Smart Agent deploy — passkey, SIWE, or both. Gasless via demo-a2a.
  *
- * Talks to demo-a2a's session/deploy endpoints. Spec 211 § 4 + Act 1.
- * The connected visitor has NO ETH; the smartAgentPaymaster sponsors
- * the userOp. The user only proves possession of their passkey.
- *
- * Round-trip:
- *   1. POST {demoA2aUrl}/session/deploy
- *        { initMethod: 'passkey', credentialIdDigest, pubKeyX, pubKeyY }
- *      → { userOp, userOpHash, sender }
- *   2. WebAuthn assertion over userOpHash via signWithPasskeyB64
- *   3. POST {demoA2aUrl}/session/deploy/submit
- *        { userOp: { ...userOp, signature } }
- *      → { ok, deployedAddress, transactionHash }
- *
- * Path note: demo-web uses `/a2a/session/deploy` because a Pages
- * Function strips the `/a2a` prefix before forwarding to the worker.
- * demo-web-pro hits the worker URL directly (cross-origin via
- * VITE_DEMO_A2A_URL), so the prefix-free path applies.
- *
- * Mirrors apps/demo-web/src/deploy-flow.ts at a simpler surface
- * (no SIWE, no session wallet — passkey is the only signer).
+ * The worker accepts a mixed `{ externalCustodians?, passkey? }` payload
+ * (phase 6f.4+). The signer of the userOpHash is whichever owner
+ * authority the freshly-deployed account will accept:
+ *   - passkey-only spec  → WebAuthn assertion  → `0x01 || ABI(Assertion)` blob
+ *   - SIWE-only spec     → ECDSA over userOpHash via wagmi.signMessage({raw}) → 65 bytes
+ *   - mixed              → prefer passkey (gasless, no wallet popup)
  */
 
 import { encodeWebAuthnSignature } from '@agenticprimitives/agent-account';
@@ -58,22 +44,29 @@ type DeployUserOpBuilt = {
   };
 };
 
+export interface DeployPersonAgentArgs {
+  /** Optional — when present, the passkey is registered + its PIA becomes a custodian. */
+  passkey?: DemoPasskey;
+  /** Optional — when non-empty, each EOA is added to externalCustodians at init. */
+  externalCustodians?: Address[];
+}
+
 export async function deployPersonAgent(
-  passkey: DemoPasskey,
+  args: DeployPersonAgentArgs,
 ): Promise<DeployResult | DeployError> {
+  const { passkey, externalCustodians = [] } = args;
+  if (!passkey && externalCustodians.length === 0) {
+    return { ok: false, error: 'no_signers', reason: 'at least one of passkey or externalCustodians required' };
+  }
+
   const base = config.demoA2aUrl;
   if (!base) {
     return {
       ok: false,
       error: 'demo_a2a_url_unset',
-      reason: 'VITE_DEMO_A2A_URL is not configured; the Person Smart Agent deploy needs the relayer to sponsor the userOp.',
+      reason: 'VITE_DEMO_A2A_URL is not configured.',
     };
   }
-
-  // 0. Acquire CSRF token + cookie. demo-a2a's middleware fail-closes
-  //    every POST without a matching header+cookie pair. The token is
-  //    bound to the demo-web-pro origin via HMAC; cookie roundtrips
-  //    cross-origin because the worker sets it `SameSite=None; Secure`.
   try {
     await ensureCsrfToken();
   } catch (e) {
@@ -89,23 +82,58 @@ export async function deployPersonAgent(
 
   const baseTrimmed = base.replace(/\/$/, '');
 
+  // SIWE-only path: bypass ERC-4337 + signed userOp; let the worker
+  // directly invoke `factory.createPersonAgent(externalCustodians, ...)`.
+  // The factory call is permissionless; no user signature needed.
+  if (!passkey) {
+    const directRes = await fetch(`${baseTrimmed}/session/direct-deploy`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify({ externalCustodians }),
+    });
+    const raw = await directRes.text();
+    let directBody: Record<string, unknown> = {};
+    try {
+      directBody = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return { ok: false, error: 'direct_deploy_http', reason: `HTTP ${directRes.status}: ${raw.slice(0, 80)}` };
+    }
+    if (!directRes.ok || directBody.ok !== true) {
+      return {
+        ok: false,
+        error: typeof directBody.error === 'string' ? directBody.error : `HTTP ${directRes.status}`,
+        reason: typeof directBody.detail === 'string' ? directBody.detail : undefined,
+      };
+    }
+    return {
+      ok: true,
+      deployedAddress: directBody.deployedAddress as Address,
+      transactionHash: directBody.transactionHash as Hex,
+    };
+  }
+
   // 1. Ask demo-a2a for the unsigned userOp.
   const buildRes = await fetch(`${baseTrimmed}/session/deploy`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({
-      initMethod: 'passkey',
-      credentialIdDigest: passkey.credentialIdDigest,
-      pubKeyX: passkey.pubKeyX.toString(),
-      pubKeyY: passkey.pubKeyY.toString(),
+      externalCustodians,
+      passkey: passkey
+        ? {
+            credentialIdDigest: passkey.credentialIdDigest,
+            pubKeyX: passkey.pubKeyX.toString(),
+            pubKeyY: passkey.pubKeyY.toString(),
+          }
+        : undefined,
     }),
   });
   if (buildRes.status === 409) {
     return {
       ok: false,
       error: 'paymaster_unavailable',
-      reason: 'demo-a2a has no paymaster configured. Run a deployment with VITE_DEMO_A2A_URL pointing at a paymaster-enabled relay.',
+      reason: 'demo-a2a has no paymaster configured.',
     };
   }
   const buildBody = (await buildRes.json()) as Record<string, unknown>;
@@ -118,9 +146,8 @@ export async function deployPersonAgent(
   }
   const built = buildBody as unknown as DeployUserOpBuilt;
 
-  // 2. Passkey-sign the userOpHash via WebAuthn. The result is an
-  //    0x01-prefixed blob that AgentAccount._validateSig routes to
-  //    _verifyWebAuthn.
+  // 2. Sign the userOpHash. Passkey path is preferred (gasless UX); the
+  //    SIWE path requires the user's wallet to sign the 32-byte hash.
   let signature: Hex;
   try {
     const assertion = await assertWithPasskey(passkey, built.userOpHash);

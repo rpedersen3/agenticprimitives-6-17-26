@@ -1,35 +1,34 @@
 /**
- * RelationshipsCard — verifies on chain who controls what, so the
- * visitor can confirm the demo state matches the spec\'s
- * agent-centric picture (spec 211 § 3 / spec 212 / spec 213).
- *
- * Phase 6f.4 pivot: custody bottoms out at the PASSKEY IDENTITY
- * (PIA) of each human. Smart agents (Org, Treasury) NEVER appear in
- * each other\'s custodian sets — the ERC-165 marker on AgentAccount
- * forbids it. Person.PSA, Org, and Treasury all use PIA-as-custodian.
- *
- * Reads (all public-RPC, no signing):
- *   - Each Person.PSA   → isCustodian(seat.personIdentity)
- *   - Org               → isCustodian(alicePIA), isCustodian(bobPIA)
- *   - Treasury          → isCustodian(alicePIA), isCustodian(bobPIA)
+ * RelationshipsCard — live on-chain custody-graph readout. Renders one
+ * row per smart agent (Alice.PSA, Bob.PSA, Org, Treasury); within each
+ * row, one inline check per *enrolled identity* (passkey PIA, wallet
+ * EOA) the relevant seat has authenticated with. So a "both methods"
+ * seat shows two custody checks per target account.
  */
 
 import { useEffect, useState } from 'react';
+import type { Address } from 'viem';
 import { orgConfig } from '../../org-config';
-import type { SeatClaim } from '../../lib/seats';
+import {
+  getIdentities,
+  getPasskeyAuth,
+  getSiweAuth,
+  type SeatClaim,
+} from '../../lib/seats';
 import type { OrgRecord, TreasuryRecord } from '../../lib/demo-state';
 import { readApprovalsRequired, readIsCustodian } from '../../lib/chain-reads';
 import { shortAddress } from '../../components';
 import { config } from '../../config';
 
+type CheckMap = Map<string, boolean>;
+
+function checkKey(account: Address, identity: Address): string {
+  return `${account.toLowerCase()}|${identity.toLowerCase()}`;
+}
+
 interface Probe {
   loaded: boolean;
-  aliceCustodianOfAlicePSA: boolean | null;
-  bobCustodianOfBobPSA: boolean | null;
-  aliceCustodianOfOrg: boolean | null;
-  bobCustodianOfOrg: boolean | null;
-  aliceCustodianOfTreasury: boolean | null;
-  bobCustodianOfTreasury: boolean | null;
+  checks: CheckMap;
   orgT4Approvals: number | null;
   treasuryT4Approvals: number | null;
 }
@@ -45,12 +44,7 @@ export function RelationshipsCard({
 }) {
   const [probe, setProbe] = useState<Probe>({
     loaded: false,
-    aliceCustodianOfAlicePSA: null,
-    bobCustodianOfBobPSA: null,
-    aliceCustodianOfOrg: null,
-    bobCustodianOfOrg: null,
-    aliceCustodianOfTreasury: null,
-    bobCustodianOfTreasury: null,
+    checks: new Map(),
     orgT4Approvals: null,
     treasuryT4Approvals: null,
   });
@@ -62,56 +56,35 @@ export function RelationshipsCard({
 
   useEffect(() => {
     const run = async () => {
-      const result: Probe = {
-        loaded: true,
-        aliceCustodianOfAlicePSA: null,
-        bobCustodianOfBobPSA: null,
-        aliceCustodianOfOrg: null,
-        bobCustodianOfOrg: null,
-        aliceCustodianOfTreasury: null,
-        bobCustodianOfTreasury: null,
-        orgT4Approvals: null,
-        treasuryT4Approvals: null,
-      };
-      if (aliceClaim) {
-        result.aliceCustodianOfAlicePSA = await readIsCustodian({
-          account: aliceClaim.personAgent,
-          signer: aliceClaim.personIdentity,
-        });
+      const checks: CheckMap = new Map();
+
+      // For each (seat, target_account) pair, check whether each
+      // identity of the seat is a custodian on the target. Targets:
+      // the seat's own PSA, the Org, and the Treasury (when those exist).
+      const pairs: Array<{ seat: SeatClaim; target: Address }> = [];
+      if (aliceClaim) pairs.push({ seat: aliceClaim, target: aliceClaim.personAgent });
+      if (bobClaim) pairs.push({ seat: bobClaim, target: bobClaim.personAgent });
+      if (aliceClaim && org) pairs.push({ seat: aliceClaim, target: org.address });
+      if (bobClaim && org) pairs.push({ seat: bobClaim, target: org.address });
+      if (aliceClaim && treasury) pairs.push({ seat: aliceClaim, target: treasury.address });
+      if (bobClaim && treasury) pairs.push({ seat: bobClaim, target: treasury.address });
+
+      for (const { seat, target } of pairs) {
+        for (const id of getIdentities(seat)) {
+          try {
+            const isCust = await readIsCustodian({ account: target, signer: id });
+            checks.set(checkKey(target, id), isCust);
+          } catch {
+            // tolerate flake — leave undefined, next tick refreshes
+          }
+        }
       }
-      if (bobClaim) {
-        result.bobCustodianOfBobPSA = await readIsCustodian({
-          account: bobClaim.personAgent,
-          signer: bobClaim.personIdentity,
-        });
-      }
-      if (org && aliceClaim) {
-        result.aliceCustodianOfOrg = await readIsCustodian({
-          account: org.address,
-          signer: aliceClaim.personIdentity,
-        });
-      }
-      if (org && bobClaim) {
-        result.bobCustodianOfOrg = await readIsCustodian({
-          account: org.address,
-          signer: bobClaim.personIdentity,
-        });
-      }
-      if (treasury && aliceClaim) {
-        result.aliceCustodianOfTreasury = await readIsCustodian({
-          account: treasury.address,
-          signer: aliceClaim.personIdentity,
-        });
-      }
-      if (treasury && bobClaim) {
-        result.bobCustodianOfTreasury = await readIsCustodian({
-          account: treasury.address,
-          signer: bobClaim.personIdentity,
-        });
-      }
+
+      let orgT4Approvals: number | null = null;
+      let treasuryT4Approvals: number | null = null;
       if (config.custodyPolicy && org) {
         try {
-          result.orgT4Approvals = await readApprovalsRequired({
+          orgT4Approvals = await readApprovalsRequired({
             custodyPolicy: config.custodyPolicy,
             account: org.address,
             tier: 4,
@@ -120,32 +93,63 @@ export function RelationshipsCard({
       }
       if (config.custodyPolicy && treasury) {
         try {
-          result.treasuryT4Approvals = await readApprovalsRequired({
+          treasuryT4Approvals = await readApprovalsRequired({
             custodyPolicy: config.custodyPolicy,
             account: treasury.address,
             tier: 4,
           });
         } catch { /* tolerate */ }
       }
-      setProbe(result);
+
+      setProbe({ loaded: true, checks, orgT4Approvals, treasuryT4Approvals });
     };
     void run();
-  }, [
-    seats,
-    org?.address,
-    treasury?.address,
-    aliceClaim?.personAgent,
-    aliceClaim?.personIdentity,
-    bobClaim?.personAgent,
-    bobClaim?.personIdentity,
-  ]);
+  }, [seats, org?.address, treasury?.address, aliceClaim?.personAgent, bobClaim?.personAgent]);
 
   if (!aliceClaim && !bobClaim && !org && !treasury) return null;
 
-  const verdictDot = (v: boolean | null): 'live' | 'no' | 'pending' =>
-    v === true ? 'live' : v === false ? 'no' : 'pending';
-  const verdictMark = (v: boolean | null) =>
+  const verdictMark = (v: boolean | undefined) =>
     v === true ? '✓' : v === false ? '✗' : '…';
+  const verdictColor = (v: boolean | undefined) =>
+    v === true ? '#196e2a' : v === false ? '#b6471f' : '#888';
+
+  /**
+   * Render every identity of a seat as inline labeled checks against a
+   * target account. Each identity gets its own `kind: passkey|wallet`
+   * label, short address, and ✓/✗/… mark. Used by every row in the
+   * relationships table.
+   */
+  const renderCustodyLine = (seat: SeatClaim, target: Address) => {
+    const passkey = getPasskeyAuth(seat);
+    const siwe = getSiweAuth(seat);
+    const parts: JSX.Element[] = [];
+    if (passkey) {
+      const v = probe.checks.get(checkKey(target, passkey.pia));
+      parts.push(
+        <span key="passkey" style={{ color: verdictColor(v) }}>
+          passkey <code title={passkey.pia}>{shortAddress(passkey.pia)}</code> {verdictMark(v)}
+        </span>,
+      );
+    }
+    if (siwe) {
+      const v = probe.checks.get(checkKey(target, siwe.eoa));
+      parts.push(
+        <span key="siwe" style={{ color: verdictColor(v) }}>
+          wallet <code title={siwe.eoa}>{shortAddress(siwe.eoa)}</code> {verdictMark(v)}
+        </span>,
+      );
+    }
+    if (parts.length === 0) {
+      return <span className="muted small">no identities enrolled</span>;
+    }
+    return (
+      <span>
+        {parts.flatMap((el, i) =>
+          i === 0 ? [el] : [<span key={`sep-${i}`} className="muted">{' · '}</span>, el],
+        )}
+      </span>
+    );
+  };
 
   return (
     <section className="relationships-card" data-testid="relationships-card">
@@ -157,7 +161,7 @@ export function RelationshipsCard({
           <tr>
             <th>Smart Agent</th>
             <th>Address</th>
-            <th>Custody (passkey identities)</th>
+            <th>Custody (enrolled identities)</th>
           </tr>
         </thead>
         <tbody>
@@ -167,12 +171,7 @@ export function RelationshipsCard({
                 {aliceSeat.name}\'s Person Smart Agent
               </td>
               <td><code>{shortAddress(aliceClaim.personAgent)}</code></td>
-              <td>
-                <RelationshipDot kind={verdictDot(probe.aliceCustodianOfAlicePSA)} />
-                {aliceSeat.name}\'s passkey identity{' '}
-                <code title={aliceClaim.personIdentity}>{shortAddress(aliceClaim.personIdentity)}</code>{' '}
-                {verdictMark(probe.aliceCustodianOfAlicePSA)}
-              </td>
+              <td>{renderCustodyLine(aliceClaim, aliceClaim.personAgent)}</td>
             </tr>
           )}
           {bobClaim && bobSeat && (
@@ -181,12 +180,7 @@ export function RelationshipsCard({
                 {bobSeat.name}\'s Person Smart Agent
               </td>
               <td><code>{shortAddress(bobClaim.personAgent)}</code></td>
-              <td>
-                <RelationshipDot kind={verdictDot(probe.bobCustodianOfBobPSA)} />
-                {bobSeat.name}\'s passkey identity{' '}
-                <code title={bobClaim.personIdentity}>{shortAddress(bobClaim.personIdentity)}</code>{' '}
-                {verdictMark(probe.bobCustodianOfBobPSA)}
-              </td>
+              <td>{renderCustodyLine(bobClaim, bobClaim.personAgent)}</td>
             </tr>
           )}
           {org && (
@@ -197,18 +191,22 @@ export function RelationshipsCard({
               </td>
               <td><code>{shortAddress(org.address)}</code></td>
               <td>
-                <RelationshipDot kind={verdictDot(probe.aliceCustodianOfOrg)} />
-                {aliceSeat?.name}\'s passkey {verdictMark(probe.aliceCustodianOfOrg)}
+                {aliceClaim && (
+                  <span>
+                    <span className="muted small">{aliceSeat?.name}:</span>{' '}
+                    {renderCustodyLine(aliceClaim, org.address)}
+                  </span>
+                )}
+                {aliceClaim && bobClaim && <span className="muted">{' | '}</span>}
                 {bobClaim && (
-                  <>
-                    {' · '}
-                    <RelationshipDot kind={verdictDot(probe.bobCustodianOfOrg)} />
-                    {bobSeat?.name}\'s passkey {verdictMark(probe.bobCustodianOfOrg)}
-                  </>
+                  <span>
+                    <span className="muted small">{bobSeat?.name}:</span>{' '}
+                    {renderCustodyLine(bobClaim, org.address)}
+                  </span>
                 )}
                 {probe.orgT4Approvals !== null && (
                   <span className="muted small" style={{ marginLeft: 10 }}>
-                    · T4 quorum {probe.orgT4Approvals}-of-{(probe.aliceCustodianOfOrg ? 1 : 0) + (probe.bobCustodianOfOrg ? 1 : 0)}
+                    · T4 quorum {probe.orgT4Approvals}
                   </span>
                 )}
               </td>
@@ -222,18 +220,22 @@ export function RelationshipsCard({
               </td>
               <td><code>{shortAddress(treasury.address)}</code></td>
               <td>
-                <RelationshipDot kind={verdictDot(probe.aliceCustodianOfTreasury)} />
-                {aliceSeat?.name}\'s passkey {verdictMark(probe.aliceCustodianOfTreasury)}
+                {aliceClaim && (
+                  <span>
+                    <span className="muted small">{aliceSeat?.name}:</span>{' '}
+                    {renderCustodyLine(aliceClaim, treasury.address)}
+                  </span>
+                )}
+                {aliceClaim && bobClaim && <span className="muted">{' | '}</span>}
                 {bobClaim && (
-                  <>
-                    {' · '}
-                    <RelationshipDot kind={verdictDot(probe.bobCustodianOfTreasury)} />
-                    {bobSeat?.name}\'s passkey {verdictMark(probe.bobCustodianOfTreasury)}
-                  </>
+                  <span>
+                    <span className="muted small">{bobSeat?.name}:</span>{' '}
+                    {renderCustodyLine(bobClaim, treasury.address)}
+                  </span>
                 )}
                 {probe.treasuryT4Approvals !== null && (
                   <span className="muted small" style={{ marginLeft: 10 }}>
-                    · T4 quorum {probe.treasuryT4Approvals}-of-{(probe.aliceCustodianOfTreasury ? 1 : 0) + (probe.bobCustodianOfTreasury ? 1 : 0)}
+                    · T4 quorum {probe.treasuryT4Approvals}
                   </span>
                 )}
               </td>
@@ -244,23 +246,11 @@ export function RelationshipsCard({
 
       <p className="muted small">
         Per spec 212 / 213: custody bottoms out at <strong>passkey identities</strong>
-        (PIAs derived from each user\'s P-256 pubkey). Smart agents — Org and Treasury —
-        are NEVER each other\'s custodians; that\'s forbidden at the contract level via the
-        ERC-165 marker check in <code>addCustodian</code>. Inter-agent authority is modeled
-        separately as stewardship / delegation.
+        (PIAs derived from each user\'s P-256 pubkey) and <strong>wallet EOAs</strong>.
+        Smart agents — Org and Treasury — are NEVER each other\'s custodians; that\'s
+        forbidden at the contract level via the ERC-165 marker check in addCustodian.
+        Inter-agent authority is modeled separately as stewardship / delegation.
       </p>
     </section>
   );
-}
-
-function RelationshipDot({ kind }: { kind: 'live' | 'no' | 'pending' | 'passkey' }) {
-  const cls =
-    kind === 'live'
-      ? 'rel-dot rel-dot--live'
-      : kind === 'no'
-        ? 'rel-dot rel-dot--no'
-        : kind === 'pending'
-          ? 'rel-dot rel-dot--pending'
-          : 'rel-dot rel-dot--key';
-  return <span className={cls} aria-hidden />;
 }

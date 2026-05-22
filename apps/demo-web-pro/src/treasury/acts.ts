@@ -71,16 +71,16 @@ export const ACTS: ActDef[] = [
     slug: 'delegate-treasury',
     title: 'Act 5 — Delegate Treasury',
     modality: 'Admin',
-    status: 'not-started',
-    oneLiner: 'Treasury issues stewardship delegations to Alice + Bob\'s Person Agents.',
+    status: 'simulated',
+    oneLiner: 'Treasury issues stewardship delegations to Alice + Bob\'s Person Agents (live object construction + signing; runtime enforcement deferred).',
   },
   {
     id: 7,
     slug: 'dashboard',
     title: 'Act 6 — Org Dashboard',
     modality: 'Read-only',
-    status: 'not-started',
-    oneLiner: 'Live snapshot of the four-agent picture + audit trail.',
+    status: 'live',
+    oneLiner: 'Live snapshot of the four-agent picture, the Treasury\'s delegations, and pending custody changes.',
   },
 ];
 

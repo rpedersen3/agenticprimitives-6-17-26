@@ -5,7 +5,7 @@
  */
 
 import type { SeatDef } from '../../org-config';
-import type { SeatClaim } from '../../lib/seats';
+import { getPasskeyAuth, getSiweAuth, type SeatClaim } from '../../lib/seats';
 import { shortAddress } from '../../components';
 
 export function ActorCard({
@@ -41,17 +41,7 @@ export function ActorCard({
         </span>
       </div>
       {claim ? (
-        <div className="actor-card-body">
-          <p className="muted">Person Smart Agent</p>
-          <code>{shortAddress(claim.personAgent)}</code>
-          {claim.personIdentity && (
-            <>
-              <p className="muted" style={{ marginTop: 6 }}>Passkey identity (custodian)</p>
-              <code title={claim.personIdentity}>{shortAddress(claim.personIdentity)}</code>
-            </>
-          )}
-          <p className="muted small">Passkey enrolled · live on Base Sepolia</p>
-        </div>
+        <ClaimedBody claim={claim} />
       ) : (
         <div className="actor-card-body">
           <p className="muted">Seat is empty.</p>
@@ -60,6 +50,8 @@ export function ActorCard({
       )}
     </>
   );
+
+  // Helper component below.
 
   if (variant === 'compact') {
     return (
@@ -78,5 +70,32 @@ export function ActorCard({
     >
       {content}
     </button>
+  );
+}
+
+function ClaimedBody({ claim }: { claim: SeatClaim }) {
+  const passkey = getPasskeyAuth(claim);
+  const siwe = getSiweAuth(claim);
+  return (
+    <div className="actor-card-body">
+      <p className="muted">Person Smart Agent</p>
+      <code>{shortAddress(claim.personAgent)}</code>
+      {passkey && (
+        <>
+          <p className="muted" style={{ marginTop: 6 }}>Passkey identity (custodian)</p>
+          <code title={passkey.pia}>{shortAddress(passkey.pia)}</code>
+        </>
+      )}
+      {siwe && (
+        <>
+          <p className="muted" style={{ marginTop: 6 }}>Wallet (SIWE) custodian</p>
+          <code title={siwe.eoa}>{shortAddress(siwe.eoa)}</code>
+        </>
+      )}
+      <p className="muted small">
+        {passkey && siwe ? 'Passkey + wallet enrolled' : passkey ? 'Passkey enrolled' : 'Wallet enrolled'}
+        {' · live on Base Sepolia'}
+      </p>
+    </div>
   );
 }

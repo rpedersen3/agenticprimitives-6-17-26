@@ -26,6 +26,10 @@ export interface DeploymentConfig {
   entryPoint?: `0x${string}`;
   smartAgentPaymaster?: `0x${string}`;
   deployer?: `0x${string}`;
+  timestampEnforcer?: `0x${string}`;
+  valueEnforcer?: `0x${string}`;
+  allowedTargetsEnforcer?: `0x${string}`;
+  allowedMethodsEnforcer?: `0x${string}`;
   /**
    * Optional explicit RPC URL — when set, the front-end uses it for ALL
    * chain reads instead of viem's default public node. Critical for
@@ -61,6 +65,10 @@ export const config: DeploymentConfig = {
   entryPoint:           parseAddr(import.meta.env.VITE_ENTRY_POINT),
   smartAgentPaymaster:  parseAddr(import.meta.env.VITE_SMART_AGENT_PAYMASTER),
   deployer:             parseAddr(import.meta.env.VITE_DEPLOYER),
+  timestampEnforcer:        parseAddr(import.meta.env.VITE_TIMESTAMP_ENFORCER),
+  valueEnforcer:            parseAddr(import.meta.env.VITE_VALUE_ENFORCER),
+  allowedTargetsEnforcer:   parseAddr(import.meta.env.VITE_ALLOWED_TARGETS_ENFORCER),
+  allowedMethodsEnforcer:   parseAddr(import.meta.env.VITE_ALLOWED_METHODS_ENFORCER),
   rpcUrl:               import.meta.env.VITE_RPC_URL || undefined,
   demoA2aUrl:           import.meta.env.VITE_DEMO_A2A_URL || undefined,
   demoMcpUrl:           import.meta.env.VITE_DEMO_MCP_URL || undefined,

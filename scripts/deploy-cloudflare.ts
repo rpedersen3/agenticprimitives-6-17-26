@@ -330,6 +330,10 @@ proBuildEnv.VITE_ENTRY_POINT = d.entryPoint;
 if (d.smartAgentPaymaster) proBuildEnv.VITE_SMART_AGENT_PAYMASTER = d.smartAgentPaymaster;
 const _deployerForVite = (d as { deployer?: string }).deployer;
 if (_deployerForVite) proBuildEnv.VITE_DEPLOYER = _deployerForVite;
+if (d.timestampEnforcer)       proBuildEnv.VITE_TIMESTAMP_ENFORCER        = d.timestampEnforcer;
+if (d.valueEnforcer)           proBuildEnv.VITE_VALUE_ENFORCER            = d.valueEnforcer;
+if (d.allowedTargetsEnforcer)  proBuildEnv.VITE_ALLOWED_TARGETS_ENFORCER  = d.allowedTargetsEnforcer;
+if (d.allowedMethodsEnforcer)  proBuildEnv.VITE_ALLOWED_METHODS_ENFORCER  = d.allowedMethodsEnforcer;
 // Use the worker's RPC so read-after-write stays consistent across
 // surfaces. Without this, the front-end uses viem's default public node
 // and lags behind the worker's Alchemy RPC, causing every Act 3/4 apply

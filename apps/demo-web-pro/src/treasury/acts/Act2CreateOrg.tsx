@@ -20,6 +20,7 @@
 import { useEffect, useState } from 'react';
 import { encodeFunctionData, type Address, type Hex } from 'viem';
 import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
+import { getPasskeyAuth, getSiweAuth } from '../../lib/seats';
 import { orgConfig } from '../../org-config';
 import { loadSeats, loadActiveSeat, setActiveSeat } from '../../lib/seats';
 import { loadOrg, saveOrg } from '../../lib/demo-state';
@@ -39,14 +40,14 @@ type WorkingPhase = 'preflight' | 'building-userop' | 'signing' | 'awaiting-rece
 const PHASE_LABEL: Record<WorkingPhase, string> = {
   'preflight': 'Computing counterfactual Org address…',
   'building-userop': 'Building gasless deploy request…',
-  'signing': 'Confirming with your passkey…',
+  'signing': 'Confirming via your enrolled method…',
   'awaiting-receipt': 'Awaiting paymaster + chain confirmation…',
 };
 
 const PHASE_HINT: Record<WorkingPhase, string | undefined> = {
   'preflight': 'The factory deterministically computes Acme Construction\'s on-chain address before any tx is sent.',
   'building-userop': 'demo-a2a composes the ERC-4337 user operation that Alice\'s Person Smart Agent will dispatch.',
-  'signing': 'Your passkey authorizes Alice\'s Person Smart Agent to create the Org. Same passkey, second use.',
+  'signing': 'Alice\'s passkey signs the userOp (gasless) — or, for SIWE-only Alice, the worker direct-deploys via the factory. Either way, the Org\'s CREATE2 address is deterministic.',
   'awaiting-receipt': 'The smart-agent paymaster sponsors the gas. No ETH needed.',
 };
 
@@ -88,10 +89,21 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
       setError('Preconditions missing — need an active seat claim + factory address + custody policy address.');
       return;
     }
+    // Phase 6f.4 — passkey is needed only when Alice will dispatch the
+    // factory call via her PSA (gasless userOp). SIWE-only founders go
+    // through the worker's direct-deploy path, which doesn't require
+    // signing the userOpHash; the factory call is permissionless.
     const passkey = getPasskeyForSeat(aliceSeat.id);
-    if (!passkey) {
+    const alicePasskeyMethod = getPasskeyAuth(founder);
+    const aliceSiweMethod = getSiweAuth(founder);
+    if (alicePasskeyMethod && !passkey) {
       setStage('error');
-      setError(`${founderName}\'s passkey is missing. Try disconnecting + reclaiming the seat.`);
+      setError(`${founderName}\'s passkey enrolment is missing from this device. Try disconnecting + reclaiming the seat (use the same passkey).`);
+      return;
+    }
+    if (!alicePasskeyMethod && !aliceSiweMethod) {
+      setStage('error');
+      setError(`${founderName} has no enrolled auth method — re-claim her seat.`);
       return;
     }
 
@@ -99,24 +111,31 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     setError(null);
     setPhase('preflight');
 
-    // Phase 6f.4 — Org's sole human custodian is Alice's passkey. The
-    // initializer registers the passkey + writes its PIA into
-    // `piaToCredentialId`; `isCustodian(alicePia)` reads from that
-    // mapping. We deliberately leave `custodians` empty: putting the
-    // same PIA in BOTH `externalCustodians` AND the passkey path
-    // would double-count it in `custodianCount()` and skew the
-    // factory's default-threshold matrix (defaultApprovals(N=2,T4)=2
-    // when there's really only one human signer). The contract now
-    // reverts CustodianAlreadyExists if you try.
-    const alicePia = founder.personIdentity;
+    // Phase 6f.4 — Org's initial custodian set = Alice's enrolled
+    // human-signer authorities. Each PasskeyAuth registers via
+    // `initialPasskey*` (one passkey per init slot); SiweAuth methods
+    // go in `externalCustodians`. Per the 2026-05-22 product decision
+    // ("register both"), if Alice enrolled both we set both on chain.
+    const alicePasskey = alicePasskeyMethod;
+    const aliceSiwe = aliceSiweMethod;
+    const externalCustodians = aliceSiwe ? ([aliceSiwe.eoa] as Address[]) : ([] as Address[]);
     const initParams = {
       mode: 1, // hybrid
-      custodians: [] as Address[],
+      custodians: externalCustodians,
       trustees: [] as Address[],
-      initialPasskeyCredentialIdDigest: passkey.credentialIdDigest,
-      initialPasskeyX: passkey.pubKeyX,
-      initialPasskeyY: passkey.pubKeyY,
+      initialPasskeyCredentialIdDigest: alicePasskey?.credentialIdDigest ?? (('0x' + '00'.repeat(32)) as Hex),
+      initialPasskeyX: alicePasskey?.pubKeyX ?? 0n,
+      initialPasskeyY: alicePasskey?.pubKeyY ?? 0n,
     } as const;
+    // Salt-version still keys off whichever identity is canonical.
+    // Pick PIA if passkey, else EOA — the salt just needs to be
+    // deterministic for the (Alice, version) pair.
+    const aliceIdentityForSalt = alicePasskey?.pia ?? aliceSiwe?.eoa;
+    if (!aliceIdentityForSalt) {
+      setStage('error');
+      setError('Founder has no enrolled identity — re-claim her seat with passkey and/or wallet.');
+      return;
+    }
 
     // Salt derived from (org name, founder PSA, version tag). The
     // version tag bumps whenever the deploy parameters change in a
@@ -126,10 +145,10 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     // doesn\'t affect the predicted address. Bumping the tag forces
     // a fresh address so visitors don\'t inherit a stale on-chain
     // Org that was deployed before today\'s 0s-safety-delay fix.
-    const SALT_VERSION = 'v6-dedup-pia';
+    const SALT_VERSION = 'v7-multi-auth';
     const salt = BigInt(
       '0x' +
-        [...new TextEncoder().encode(`${orgConfig.name}:${alicePia}:${SALT_VERSION}`)]
+        [...new TextEncoder().encode(`${orgConfig.name}:${aliceIdentityForSalt}:${SALT_VERSION}`)]
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('')
           .slice(0, 16),
@@ -157,14 +176,54 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     await new Promise((r) => setTimeout(r, 30));
     setPhase('signing');
 
-    const result = await executeCallFromAgent({
-      sender: founder.personAgent,
-      passkey,
-      callData: outerCallData,
-    });
+    // Branch on Alice's auth method:
+    //   - Passkey: gasless userOp from Alice.PSA → factory (paymaster pays)
+    //   - SIWE-only: worker calls factory.createMultiSigSmartAgent directly
+    //     from its deployer EOA. No signature needed from Alice; the
+    //     factory call is permissionless. Worker pays gas.
+    let result: { ok: boolean; transactionHash?: `0x${string}`; reason?: string; error?: string };
+    if (passkey && alicePasskey) {
+      result = await executeCallFromAgent({
+        sender: founder.personAgent,
+        passkey,
+        callData: outerCallData,
+      });
+    } else {
+      const base = config.demoA2aUrl?.replace(/\/$/, '');
+      if (!base) {
+        setStage('error');
+        setError('demo-a2a URL not configured');
+        return;
+      }
+      const { ensureCsrfToken, csrfHeaders } = await import('../../lib/csrf');
+      await ensureCsrfToken();
+      const res = await fetch(`${base}/session/direct-deploy-multisig`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({
+          mode: initParams.mode,
+          custodians: initParams.custodians,
+          trustees: initParams.trustees,
+          initialPasskeyCredentialIdDigest: initParams.initialPasskeyCredentialIdDigest,
+          initialPasskeyX: initParams.initialPasskeyX.toString(),
+          initialPasskeyY: initParams.initialPasskeyY.toString(),
+          validator: custodyPolicyAddress,
+          safetyDelaySeconds: 1,
+          salt: salt.toString(),
+        }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      result = {
+        ok: res.ok && body.ok === true,
+        transactionHash: body.transactionHash as `0x${string}` | undefined,
+        error: typeof body.error === 'string' ? body.error : undefined,
+        reason: typeof body.detail === 'string' ? body.detail : undefined,
+      };
+    }
     if (!result.ok) {
       setStage('error');
-      setError(result.reason || result.error);
+      setError(result.reason || result.error || 'deploy failed');
       return;
     }
 
@@ -185,14 +244,17 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
           `${orgAddress} still has no code after polling. Refresh the page — the demo ` +
           'will detect the deployed Org on next render.',
       );
-      setTxHash(result.transactionHash);
+      setTxHash((result.transactionHash ?? ('0x' + '00'.repeat(32))) as `0x${string}`);
       // Save anyway — the deploy succeeded; the local record lets the
       // visitor recover by refreshing instead of redoing the act.
       saveOrg({
         address: orgAddress,
-        txHash: result.transactionHash,
+        txHash: (result.transactionHash ?? ('0x' + '00'.repeat(32))) as `0x${string}`,
         mode: 1,
-        custodians: [alicePia],
+        custodians: [
+          ...(alicePasskey ? [alicePasskey.pia] : []),
+          ...(aliceSiwe ? [aliceSiwe.eoa] : []),
+        ],
         createdAt: new Date().toISOString(),
       });
       return;
@@ -200,15 +262,18 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
 
     saveOrg({
       address: orgAddress,
-      txHash: result.transactionHash,
+      txHash: (result.transactionHash ?? ('0x' + '00'.repeat(32))) as `0x${string}`,
       mode: 1,
-      custodians: [alicePia],
+      custodians: [
+        ...(alicePasskey ? [alicePasskey.pia] : []),
+        ...(aliceSiwe ? [aliceSiwe.eoa] : []),
+      ],
       createdAt: new Date().toISOString(),
     });
 
     setDeployedAddress(orgAddress);
     setPredictedAddress(orgAddress);
-    setTxHash(result.transactionHash);
+    setTxHash((result.transactionHash ?? ('0x' + '00'.repeat(32))) as `0x${string}`);
     setStage('success');
   };
 
@@ -304,8 +369,8 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
         <p>
           {founderName}\'s Person Smart Agent will deploy an on-chain Smart Agent for{' '}
           <strong>{orgConfig.name}</strong>. The Org is its own identity — separate from{' '}
-          {founderName} — but {founderName}\'s passkey identity is its sole custodian
-          until Bob\'s passkey joins (Act 3).
+          {founderName} — but every identity {founderName} enrolled (passkey PIA and/or
+          wallet EOA) becomes a custodian, until Bob\'s identities join in Act 3.
         </p>
       </div>
 
@@ -335,7 +400,18 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
         scopeList={[
           `Deploy a new AgentAccount on Base Sepolia named "${orgConfig.name}".`,
           `Install the CustodyPolicy module so the Org can schedule custody changes (Acts 3, 4).`,
-          `Make ${founderName}\'s passkey identity the sole custodian (approvalsRequired=1).`,
+          (() => {
+            const f = founder;
+            if (!f) return `Make ${founderName}\'s identity the sole custodian (approvalsRequired=1).`;
+            const p = getPasskeyAuth(f);
+            const s = getSiweAuth(f);
+            const labels: string[] = [];
+            if (p) labels.push('passkey identity');
+            if (s) labels.push('wallet EOA');
+            const joined = labels.length === 2 ? 'passkey identity + wallet EOA' : (labels[0] ?? 'identity');
+            const count = labels.length === 2 ? 'sole co-custodians' : 'sole custodian';
+            return `Make ${founderName}\'s ${joined} the ${count} (approvalsRequired=1).`;
+          })(),
         ]}
         grantee={`${orgConfig.name} (a new Smart Agent)`}
         duration="permanent on-chain identity"

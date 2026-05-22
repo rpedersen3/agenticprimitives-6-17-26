@@ -16,10 +16,10 @@ import {
   loadSeats,
   loadActiveSeat,
   subscribeSeats,
-  migrateSeatsAddPersonIdentity,
+  migrateSeatsToAuthMethods,
+  type SeatClaim,
 } from '../lib/seats';
 import { getPasskeyForSeat } from '../lib/passkey';
-import { passkeyIdentity } from '@agenticprimitives/custody';
 import { ProgressRail } from './components/ProgressRail';
 import { PrincipalChip } from './components/PrincipalChip';
 import { LiveStatusBadge } from './components/LiveStatusBadge';
@@ -32,8 +32,9 @@ import { Act2CreateOrg } from './acts/Act2CreateOrg';
 import { Act2_5CreateTreasury } from './acts/Act2_5CreateTreasury';
 import { Act3BobJoins } from './acts/Act3BobJoins';
 import { Act4TwoPersonControl } from './acts/Act4TwoPersonControl';
+import { Act5DelegateTreasury } from './acts/Act5DelegateTreasury';
+import { Act6OrgDashboard } from './acts/Act6OrgDashboard';
 import { config } from '../config';
-import type { SeatClaim } from '../lib/seats';
 import {
   loadDemoState,
   subscribeDemoState,
@@ -66,14 +67,19 @@ export function TreasuryShell() {
   useEffect(() => subscribeSeats(() => setSeatsTick((t) => t + 1)), []);
   useEffect(() => subscribeDemoState(() => setDemoTick((t) => t + 1)), []);
 
-  // Phase 6f.4 migration — pre-pivot SeatClaim records have no
-  // `personIdentity` field; derive it from the locally-stored passkey
-  // on first load so Acts 3/4 + UI cards can rely on it.
+  // Phase 6f.4 migration — pre-pivot SeatClaim records had flat
+  // `personIdentity` + `credentialIdDigest` fields; new shape uses
+  // `authMethods: AuthMethod[]`. Look up the seat's local passkey to
+  // synthesise a PasskeyAuth.
   useEffect(() => {
-    migrateSeatsAddPersonIdentity((seatId) => {
+    migrateSeatsToAuthMethods((seatId) => {
       const pk = getPasskeyForSeat(seatId);
       if (!pk) return null;
-      return passkeyIdentity(pk.pubKeyX, pk.pubKeyY);
+      return {
+        credentialIdDigest: pk.credentialIdDigest,
+        pubKeyX: pk.pubKeyX,
+        pubKeyY: pk.pubKeyY,
+      };
     });
   }, []);
 
@@ -147,28 +153,39 @@ export function TreasuryShell() {
       const bobClaim = bobSeat ? seats[bobSeat.id] : null;
       const next = new Set<string>();
       try {
-        // Act 3: Bob's PIA is a custodian of the Org.
-        if (org && bobClaim?.personIdentity) {
-          const bobOnOrg = await readIsCustodian({
-            account: org.address,
-            signer: bobClaim.personIdentity,
-          });
-          if (bobOnOrg) next.add('bob-joins');
+        // Build the list of Bob's enrolled identities (could be multiple if
+        // he chose both passkey + SIWE at seat-claim time). Each method's
+        // identity must be a custodian on the target account for the act
+        // to count as complete.
+        const bobIdentities: `0x${string}`[] = bobClaim
+          ? bobClaim.authMethods.map((m) =>
+              m.kind === 'passkey' ? m.pia : m.eoa,
+            )
+          : [];
+        // Act 3: every one of Bob's identities is a custodian of the Org.
+        if (org && bobIdentities.length > 0) {
+          const checks = await Promise.all(
+            bobIdentities.map((id) =>
+              readIsCustodian({ account: org.address, signer: id }),
+            ),
+          );
+          if (checks.every(Boolean)) next.add('bob-joins');
         }
-        // Act 4: Bob's PIA is a custodian of Treasury AND Org's T4 = 2.
-        if (org && treasury && bobClaim?.personIdentity) {
-          const [bobOnTreasury, orgT4] = await Promise.all([
-            readIsCustodian({
-              account: treasury.address,
-              signer: bobClaim.personIdentity,
-            }),
+        // Act 4: every Bob identity on Treasury AND Org's T4 quorum ≥ 2.
+        if (org && treasury && bobIdentities.length > 0) {
+          const [treasuryChecks, orgT4] = await Promise.all([
+            Promise.all(
+              bobIdentities.map((id) =>
+                readIsCustodian({ account: treasury.address, signer: id }),
+              ),
+            ),
             readApprovalsRequired({
               custodyPolicy: config.custodyPolicy,
               account: org.address,
               tier: 4,
             }),
           ]);
-          if (bobOnTreasury && orgT4 >= 2) next.add('two-person-control');
+          if (treasuryChecks.every(Boolean) && orgT4 >= 2) next.add('two-person-control');
         }
       } catch {
         // tolerate flake — refresh on next tick
@@ -185,6 +202,17 @@ export function TreasuryShell() {
     if (Object.keys(seats).length > 0) set.add('create-alice');
     if (org) set.add('create-org');
     if (treasury) set.add('create-treasury');
+    // Act 5 = at least 2 delegations issued (alice + bob).
+    try {
+      // Lazy require to keep this hook synchronous.
+      const raw = localStorage.getItem('agenticprimitives:demo-web-pro:treasury-delegations');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length >= 2) {
+          set.add('delegate-treasury');
+        }
+      }
+    } catch { /* tolerate */ }
     return set;
   }, [seats, org, treasury, chainCompletedSlugs]);
 
@@ -207,6 +235,12 @@ export function TreasuryShell() {
     }
     if (act && act.slug === 'two-person-control') {
       return <Act4TwoPersonControl onComplete={goHome} />;
+    }
+    if (act && act.slug === 'delegate-treasury') {
+      return <Act5DelegateTreasury onComplete={goHome} />;
+    }
+    if (act && act.slug === 'dashboard') {
+      return <Act6OrgDashboard />;
     }
     if (act && act.status === 'not-started') {
       return <ActNotYet act={act} />;
@@ -495,12 +529,13 @@ function RightExplainer({ act }: { act: import('./acts').ActDef | null }) {
         <div>
           <h3>Seat picker</h3>
           <p className="muted">
-            Pick a seat to claim. Each seat gets its own passkey and its own Person
-            Smart Agent on chain. Once both seats are claimed, the org boots up.
+            Pick a seat to claim. Each seat enrolls an auth method (passkey, wallet
+            via SIWE, or both) and deploys its own Person Smart Agent on chain. Once
+            both seats are claimed, the Org boots up.
           </p>
           <p className="muted">
-            <LiveStatusBadge status="live" /> — passkey enrollment + Person Smart Agent
-            deploy land on Base Sepolia (gasless via paymaster).
+            <LiveStatusBadge status="live" /> — auth-method enrollment + Person Smart
+            Agent deploy land on Base Sepolia (gasless via paymaster or worker direct-deploy).
           </p>
         </div>
       )}
@@ -536,6 +571,7 @@ function NextStepHint({
   const allSeatsClaimed = openSeats.length === 0;
   const bobOnOrg = completedSlugs.has('bob-joins');
   const twoPersonControl = completedSlugs.has('two-person-control');
+  const delegationsIssued = completedSlugs.has('delegate-treasury');
 
   let nextHref: string | null = null;
   let nextLabel = '';
@@ -552,29 +588,37 @@ function NextStepHint({
     } else if (!twoPersonControl) {
       nextHref = '#/acts/two-person-control';
       nextLabel = 'Set 2-of-2 control (Act 4) →';
+    } else if (!delegationsIssued) {
+      nextHref = '#/acts/delegate-treasury';
+      nextLabel = 'Delegate Treasury management (Act 5) →';
+    } else {
+      nextHref = '#/acts/dashboard';
+      nextLabel = 'Open Org Dashboard (Act 6) →';
     }
   }
 
   const headline = (() => {
     if (!allSeatsClaimed) {
-      return `${claimedCount} of ${orgConfig.seats.length} seats claimed. ${openSeats[0]?.name} still needs a passkey.`;
+      return `${claimedCount} of ${orgConfig.seats.length} seats claimed. ${openSeats[0]?.name} still needs to enroll an auth method.`;
     }
     if (!org) return 'Both seats claimed. Ready to deploy the Organization.';
     if (!treasury) return 'Org live. Treasury still needs to be deployed.';
     if (!bobOnOrg) return 'Org + Treasury live. Continue with Act 3.';
     if (!twoPersonControl) return 'Bob is on the Org. Continue with Act 4 to require 2-of-2.';
-    return 'All admin acts complete. Act 5 (delegation) is queued.';
+    if (!delegationsIssued) return 'Two-person control on. Issue Treasury stewardship delegations (Act 5).';
+    return 'All steps complete. Open the Org Dashboard (Act 6) to see the live picture.';
   })();
 
   const subtext = (() => {
     if (!allSeatsClaimed) {
       return `Per spec 211 § 4 the Organization doesn\'t boot until every admin seat has a Person Smart Agent on chain. Claim the remaining seat${openSeats.length > 1 ? 's' : ''} below.`;
     }
-    if (!org) return `${orgConfig.name} deploys with Alice\'s passkey identity as initial custodian; Bob\'s passkey is added in Act 3.`;
-    if (!treasury) return `Acme Treasury is the second Smart Agent — authorized by ${orgConfig.name}, but custodied by passkey identities.`;
-    if (!bobOnOrg) return 'Schedule + apply the AddPasskeyCredential(Bob) change on the Org.';
-    if (!twoPersonControl) return 'Add Bob\'s passkey to the Treasury + raise the Org\'s T4 quorum to 2-of-2. Alice signs both admin changes.';
-    return 'Inter-agent stewardship (Treasury → Person Agents) ships in phase 6f.5.';
+    if (!org) return `${orgConfig.name} deploys with Alice\'s enrolled identities as initial custodians; Bob\'s identities are added in Act 3.`;
+    if (!treasury) return `Acme Treasury is the second Smart Agent — authorized by ${orgConfig.name}, custodied by human-signer identities (passkey PIA / wallet EOA).`;
+    if (!bobOnOrg) return 'Schedule + apply CustodyActions to add each Bob identity (passkey and/or wallet) to the Org.';
+    if (!twoPersonControl) return 'Register Bob\'s identities on the Treasury + raise the Org\'s T4 quorum to 2-of-2. Alice signs both admin changes.';
+    if (!delegationsIssued) return 'Treasury issues bounded delegations to Alice + Bob\'s Person Smart Agents — 90-day window, 0.05 ETH per-call cap, target allowlist restricted to Treasury, methods restricted to ERC-20 transfer.';
+    return 'Org Dashboard: live four-agent custody graph + Treasury stewardship cards + pending changes.';
   })();
 
   return (

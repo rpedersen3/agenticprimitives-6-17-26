@@ -5,50 +5,129 @@
  * Persisted in localStorage so a refresh / new-tab keeps the demo's
  * state across visits. This is intentionally demo-only — production
  * would model this server-side.
+ *
+ * Phase 6f.4 extension: each seat carries a polymorphic `authMethods`
+ * list — every method is one human signer authority bound to this
+ * seat. Mix freely:
+ *   - passkey only
+ *   - SIWE only (a connected EOA wallet)
+ *   - both (passkey + EOA — registered as TWO custodians on chain)
  */
 
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem';
 
 const STORAGE_KEY = 'agenticprimitives:demo-web-pro:seats';
 const ACTIVE_SEAT_KEY = 'agenticprimitives:demo-web-pro:active-seat';
 
+export type PasskeyAuth = {
+  kind: 'passkey';
+  /** keccak256(credentialId) — local-storage key into DemoPasskey + on-chain passkey storage. */
+  credentialIdDigest: Hex;
+  /** P-256 public key X — needed to pack v=2 quorum slots without round-tripping passkey.ts. */
+  pubKeyX: bigint;
+  /** P-256 public key Y. */
+  pubKeyY: bigint;
+  /** Passkey-Identity-Address = keccak256(abi.encode(x, y)) cast to address. Custodian identity. */
+  pia: Address;
+};
+
+export type SiweAuth = {
+  kind: 'siwe';
+  /** The wallet EOA. Custodian identity. */
+  eoa: Address;
+};
+
+export type AuthMethod = PasskeyAuth | SiweAuth;
+
 export interface SeatClaim {
   seatId: string;
-  /**
-   * Person Smart Agent address (the deployed AgentAccount). Used as
-   * the userOp sender + gas-paying intermediary; NOT the human's
-   * custody identity (that's `personIdentity` below).
-   */
+  /** Person Smart Agent address (CREATE2-deterministic from the chosen auth methods + salt). */
   personAgent: Address;
-  /**
-   * Person Smart Agent's PIA — the Passkey-Identity-Address derived
-   * from the seat's passkey pubkey. Phase 6f.4 pivot: PIA is the
-   * canonical custodian identity (registered as a custodian on
-   * Person.PSA, Org, Treasury). All custody-action targets that
-   * identify this human should use `personIdentity`, never
-   * `personAgent`.
-   */
-  personIdentity: Address;
-  /** keccak256 of the credentialId — the on-chain passkey index. */
-  credentialIdDigest: `0x${string}`;
+  /** Non-empty list of human-signer authorities for this seat. */
+  authMethods: AuthMethod[];
   /** ISO timestamp of when the seat was claimed. */
   claimedAt: string;
 }
 
+// ─── Auth-method accessors ───────────────────────────────────────────
+
+export function getPasskeyAuth(seat: SeatClaim): PasskeyAuth | undefined {
+  return seat.authMethods.find((m): m is PasskeyAuth => m.kind === 'passkey');
+}
+
+export function getSiweAuth(seat: SeatClaim): SiweAuth | undefined {
+  return seat.authMethods.find((m): m is SiweAuth => m.kind === 'siwe');
+}
+
+/**
+ * Convenience: every custodian identity registered for this seat. The
+ * Org / Treasury custody set should include every one of these
+ * (since the operator chose "register both" at seat-claim time when
+ * both methods were enrolled).
+ */
+export function getIdentities(seat: SeatClaim): Address[] {
+  return seat.authMethods.map((m) => (m.kind === 'passkey' ? m.pia : m.eoa));
+}
+
+/**
+ * Which method should sign quorum slots for admin actions? Passkey
+ * preferred (gasless, no wallet popup); SIWE only if no passkey.
+ * Matches the locked-in 2026-05-22 product decision.
+ */
+export function getSigningMethod(seat: SeatClaim): AuthMethod | undefined {
+  return getPasskeyAuth(seat) ?? getSiweAuth(seat);
+}
+
+// ─── Store ───────────────────────────────────────────────────────────
+
 type SeatRecord = Record<string, SeatClaim>;
+
+// PasskeyAuth carries bigint pubKeyX/Y. JSON can't represent bigints
+// natively, so we tag them on the way out and revive on the way in.
+// Tag format: `{ __bigint: "<base10>" }` — chosen over plain strings so
+// we never accidentally revive an address field as a bigint.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function serializeBigInts(v: any): any {
+  if (typeof v === 'bigint') return { __bigint: v.toString() };
+  if (Array.isArray(v)) return v.map(serializeBigInts);
+  if (v && typeof v === 'object') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const out: any = {};
+    for (const k of Object.keys(v)) out[k] = serializeBigInts(v[k]);
+    return out;
+  }
+  return v;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function reviveBigInts(v: any): any {
+  if (v && typeof v === 'object') {
+    if (typeof v.__bigint === 'string' && Object.keys(v).length === 1) {
+      return BigInt(v.__bigint);
+    }
+    if (Array.isArray(v)) return v.map(reviveBigInts);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const out: any = {};
+    for (const k of Object.keys(v)) out[k] = reviveBigInts(v[k]);
+    return out;
+  }
+  return v;
+}
 
 function readRecord(): SeatRecord {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
-    return JSON.parse(raw) as SeatRecord;
+    const parsed = JSON.parse(raw);
+    return reviveBigInts(parsed) as SeatRecord;
   } catch {
     return {};
   }
 }
 
 function writeRecord(record: SeatRecord): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeBigInts(record)));
   // Notify same-tab listeners (storage event only fires across tabs).
   window.dispatchEvent(new Event('seats:update'));
 }
@@ -58,29 +137,58 @@ export function loadSeats(): SeatRecord {
 }
 
 /**
- * Phase 6f.4 migration — back-fill `personIdentity` on pre-pivot
- * SeatClaim records that pre-date the field. `derivePia(seatId)` is
- * injected because `passkeyIdentity` lives in `@agenticprimitives/custody`
- * and the passkey storage lives in `lib/passkey.ts`; injection keeps
- * `seats.ts` free of cross-module coupling.
- *
- * Idempotent — only writes if at least one seat needed patching.
+ * Phase 6f.4 migration — back-fill `authMethods` on pre-pivot SeatClaim
+ * records. Pre-pivot records had `personIdentity` + `credentialIdDigest`
+ * flat fields; we look up the seat's local passkey for its pubKey, then
+ * synthesise a PasskeyAuth method so existing claims survive the bundle
+ * upgrade.
  */
-export function migrateSeatsAddPersonIdentity(
-  derivePia: (seatId: string) => Address | null,
+export function migrateSeatsToAuthMethods(
+  lookupPasskey: (seatId: string) => { credentialIdDigest: Hex; pubKeyX: bigint; pubKeyY: bigint } | null,
 ): void {
   const record = readRecord();
   let changed = false;
   for (const [seatId, claim] of Object.entries(record)) {
-    if (!(claim as Partial<SeatClaim>).personIdentity) {
-      const pia = derivePia(seatId);
-      if (pia) {
-        record[seatId] = { ...claim, personIdentity: pia };
-        changed = true;
-      }
-    }
+    const c = claim as Partial<SeatClaim> & {
+      personIdentity?: Address;
+      credentialIdDigest?: Hex;
+    };
+    if (Array.isArray(c.authMethods) && c.authMethods.length > 0) continue;
+    const pk = lookupPasskey(seatId);
+    if (!pk) continue;
+    const pia = c.personIdentity ?? deriveLegacyPia(pk.pubKeyX, pk.pubKeyY);
+    const migrated: SeatClaim = {
+      seatId: c.seatId ?? seatId,
+      personAgent: c.personAgent!,
+      claimedAt: c.claimedAt ?? new Date().toISOString(),
+      authMethods: [
+        {
+          kind: 'passkey',
+          credentialIdDigest: pk.credentialIdDigest,
+          pubKeyX: pk.pubKeyX,
+          pubKeyY: pk.pubKeyY,
+          pia,
+        },
+      ],
+    };
+    record[seatId] = migrated;
+    changed = true;
   }
   if (changed) writeRecord(record);
+}
+
+// Replicated locally to avoid cross-package import cycle just for migration.
+function deriveLegacyPia(x: bigint, y: bigint): Address {
+  // Mirror `passkeyIdentity` from @agenticprimitives/custody. Kept inline
+  // so this migration helper can run before the package is initialised.
+  // The shape is: address(uint160(uint256(keccak256(abi.encode(x, y))))).
+  // We can't compute keccak here without a hashing lib, so callers MUST
+  // pass through `c.personIdentity` (which is already the on-chain PIA)
+  // — this fallback only fires for the impossible case where the legacy
+  // record has the passkey storage entry but no `personIdentity` field,
+  // which never happens with records written by current code.
+  void x; void y;
+  throw new Error('migrateSeatsToAuthMethods: legacy record missing personIdentity');
 }
 
 export function getSeatClaim(seatId: string): SeatClaim | null {
@@ -120,11 +228,6 @@ export function clearActiveSeat(): void {
   window.dispatchEvent(new Event('seats:update'));
 }
 
-/**
- * Subscribe to seat-state changes. Fires on both same-tab updates
- * (synthetic `seats:update` event) and cross-tab updates (browser
- * `storage` event for STORAGE_KEY / ACTIVE_SEAT_KEY).
- */
 export function subscribeSeats(listener: () => void): () => void {
   const onStorage = (e: StorageEvent) => {
     if (e.key === STORAGE_KEY || e.key === ACTIVE_SEAT_KEY) listener();

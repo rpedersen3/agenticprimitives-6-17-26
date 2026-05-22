@@ -23,38 +23,31 @@
  */
 
 import { useEffect, useState } from 'react';
-import { keccak256, type Hex } from 'viem';
+import type { Address, Hex } from 'viem';
+import { useAccount, useConnect, useConnectors, useDisconnect, useSignTypedData } from 'wagmi';
 import { orgConfig } from '../../org-config';
-import { loadActiveSeat, loadSeats, setActiveSeat, type SeatClaim } from '../../lib/seats';
+import {
+  loadActiveSeat,
+  loadSeats,
+  setActiveSeat,
+  getPasskeyAuth,
+  getSiweAuth,
+  type SeatClaim,
+} from '../../lib/seats';
 import { loadOrg, loadTreasury } from '../../lib/demo-state';
-import { getPasskeyForSeat, assertWithPasskey, type DemoPasskey } from '../../lib/passkey';
+import { getPasskeyForSeat } from '../../lib/passkey';
 import {
   CustodyAction,
+  buildAddCustodianArgs,
   buildAddPasskeyCredentialArgs,
   buildChangeApprovalsRequiredArgs,
-  packQuorumSigs,
 } from '@agenticprimitives/custody';
-import {
-  executeCallFromAgent,
-  encodeExecuteCall,
-} from '../../lib/execute-call';
-import {
-  computeDomainSeparator,
-  hashScheduleCustodyChange,
-  hashApplyCustodyChange,
-  encodeScheduleCall,
-  encodeApplyCall,
-} from '../../lib/custody-flow';
-import {
-  readScheduledChangeCount,
-  readScheduledChange,
-  readIsCustodian,
-} from '../../lib/chain-reads';
+import { readIsCustodian } from '../../lib/chain-reads';
+import { scheduleAndApply, type CeremonyResult, type CeremonyPhase } from '../../lib/custody-ceremony';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { shortAddress } from '../../components';
 import { config } from '../../config';
-import type { Address } from 'viem';
 
 type Step = 'add-bob-treasury' | 'bump-org-threshold';
 type WorkingPhase =
@@ -68,20 +61,51 @@ type WorkingPhase =
 
 const PHASE_LABEL: Record<WorkingPhase, string> = {
   'computing-hash': 'Computing EIP-712 hash…',
-  'signing-schedule': 'Signing schedule with passkey…',
+  'signing-schedule': 'Signing schedule…',
   'submitting-schedule': 'Submitting scheduled change…',
   'reading-eta': 'Reading change eta from chain…',
-  'signing-apply': 'Signing apply with passkey…',
+  'signing-apply': 'Signing apply…',
   'submitting-apply': 'Applying the change…',
   'verifying': 'Verifying on chain…',
 };
 
-interface CeremonyResult {
-  scheduleTx: Hex;
-  applyTx: Hex;
-}
 
 export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void }) {
+  const { signTypedDataAsync } = useSignTypedData();
+  const { address: walletAddress } = useAccount();
+  const { connectAsync } = useConnect();
+  const { disconnectAsync } = useDisconnect();
+  const connectors = useConnectors();
+  const getWalletAddress = () => walletAddress as `0x${string}` | undefined;
+  const promptSwitchWalletAccount = async (): Promise<`0x${string}` | undefined> => {
+    const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0];
+    if (!injected) return undefined;
+    try {
+      await disconnectAsync().catch(() => undefined);
+      const provider = (await injected.getProvider()) as
+        | { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> }
+        | undefined;
+      if (provider?.request) {
+        await provider
+          .request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
+          .catch(() => undefined);
+      }
+      const result = await connectAsync({ connector: injected });
+      return result.accounts[0] as `0x${string}` | undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const std = async (a: { domain: unknown; types: unknown; primaryType: string; message: unknown }) =>
+    (await signTypedDataAsync({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      domain: a.domain as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      types: a.types as any,
+      primaryType: a.primaryType,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      message: a.message as any,
+    })) as Hex;
   const [stage, setStage] = useState<ConnectionStage>('consent');
   const [phase, setPhase] = useState<WorkingPhase>('computing-hash');
   const [activeStep, setActiveStep] = useState<Step>('add-bob-treasury');
@@ -106,9 +130,11 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
   useEffect(() => {
     const probe = async () => {
       if (!org || !treasury || !bobClaim) return;
+      const bobPa = getPasskeyAuth(bobClaim);
+      if (!bobPa) return;
       const isBobTreasury = await readIsCustodian({
         account: treasury.address,
-        signer: bobClaim.personIdentity,
+        signer: bobPa.pia,
       });
       if (isBobTreasury) {
         // Step 1 already done; step 2's verification (Org T4 = 2) would
@@ -172,11 +198,24 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
       setError('Deployment config missing — VITE_CUSTODY_POLICY / VITE_CHAIN_ID.');
       return;
     }
-    const alicePasskey = getPasskeyForSeat(aliceSeat.id);
-    const bobPasskey = getPasskeyForSeat(bobSeat.id);
-    if (!alicePasskey || !bobPasskey) {
+    const alicePasskeyAuth = getPasskeyAuth(aliceClaim);
+    const aliceSiweAuth = getSiweAuth(aliceClaim);
+    if (!alicePasskeyAuth && !aliceSiweAuth) {
       setStage('error');
-      setError(`Missing passkey(s) on this device.`);
+      setError('Alice has no enrolled auth method — re-claim her seat.');
+      return;
+    }
+    const alicePasskey = alicePasskeyAuth ? (getPasskeyForSeat(aliceSeat.id) ?? undefined) : undefined;
+    if (alicePasskeyAuth && !alicePasskey) {
+      setStage('error');
+      setError(`${aliceSeat.name}\'s passkey enrolment is missing from this device.`);
+      return;
+    }
+    const bobPasskeyMethod = getPasskeyAuth(bobClaim);
+    const bobPasskey = bobPasskeyMethod ? (getPasskeyForSeat(bobSeat.id) ?? undefined) : undefined;
+    if (bobPasskeyMethod && !bobPasskey) {
+      setStage('error');
+      setError(`${bobSeat.name}\'s passkey enrolment is missing from this device.`);
       return;
     }
 
@@ -184,38 +223,87 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
     setError(null);
 
     try {
-      // Step A: AddPasskeyCredential(Bob) on Treasury.
+      // Step A: register EACH of Bob's enrolled identities on Treasury.
+      // Per the 2026-05-22 product decision ("register both"), if Bob
+      // has passkey + SIWE, we run two ceremonies — one AddPasskeyCredential,
+      // one AddCustodian — sequenced, both Alice-signed.
       setActiveStep('add-bob-treasury');
-      const step1 = await scheduleAndApply({
-        account: treasury.address,
-        action: CustodyAction.AddPasskeyCredential,
-        innerArgs: buildAddPasskeyCredentialArgs(
-          bobPasskey.credentialIdDigest,
-          bobPasskey.pubKeyX,
-          bobPasskey.pubKeyY,
-        ),
-        signer: aliceClaim,
-        signerPasskey: alicePasskey,
-        setPhase,
-      });
-      if ('error' in step1) {
-        setStage('error');
-        setError(`Step 1 (AddPasskey Bob on Treasury): ${step1.error}`);
-        return;
+      const bobPasskeyAuth = bobPasskeyMethod;
+      const bobSiweAuth = getSiweAuth(bobClaim);
+      let lastStep1: CeremonyResult | null = null;
+      if (bobPasskeyAuth) {
+        const already = await readIsCustodian({
+          account: treasury.address,
+          signer: bobPasskeyAuth.pia,
+        });
+        if (!already) {
+          const step = await scheduleAndApply({
+            account: treasury.address,
+            action: CustodyAction.AddPasskeyCredential,
+            innerArgs: buildAddPasskeyCredentialArgs(
+              bobPasskeyAuth.credentialIdDigest,
+              bobPasskeyAuth.pubKeyX,
+              bobPasskeyAuth.pubKeyY,
+            ),
+            signer: aliceClaim,
+            signerPasskey: alicePasskey,
+            signTypedDataAsync: std,
+            getWalletAddress,
+            promptSwitchWalletAccount,
+            setPhase,
+          });
+          if ('error' in step) {
+            setStage('error');
+            setError(`Step 1a (AddPasskey Bob on Treasury): ${step.error}`);
+            return;
+          }
+          lastStep1 = step;
+        }
       }
-      setStep1Result(step1);
+      if (bobSiweAuth) {
+        const already = await readIsCustodian({
+          account: treasury.address,
+          signer: bobSiweAuth.eoa,
+        });
+        if (!already) {
+          const step = await scheduleAndApply({
+            account: treasury.address,
+            action: CustodyAction.AddCustodian,
+            innerArgs: buildAddCustodianArgs(bobSiweAuth.eoa),
+            signer: aliceClaim,
+            signerPasskey: alicePasskey,
+            signTypedDataAsync: std,
+            getWalletAddress,
+            promptSwitchWalletAccount,
+            setPhase,
+          });
+          if ('error' in step) {
+            setStage('error');
+            setError(`Step 1b (AddCustodian Bob.EOA on Treasury): ${step.error}`);
+            return;
+          }
+          lastStep1 = step;
+        }
+      }
+      if (lastStep1) setStep1Result(lastStep1);
 
-      // Verify Bob's PIA landed on Treasury (poll past RPC-replica lag).
+      // Verify every Bob identity is now a custodian on Treasury.
       setPhase('verifying');
-      const isBobOnTreasury = await readIsCustodian({
-        account: treasury.address,
-        signer: bobClaim.personIdentity,
-        waitForTrue: true,
-      });
-      if (!isBobOnTreasury) {
+      const bobIdentities: Address[] = [
+        ...(bobPasskeyAuth ? [bobPasskeyAuth.pia] : []),
+        ...(bobSiweAuth ? [bobSiweAuth.eoa] : []),
+      ];
+      const verifyResults = await Promise.all(
+        bobIdentities.map((id) =>
+          readIsCustodian({ account: treasury.address, signer: id, waitForTrue: true }),
+        ),
+      );
+      if (!verifyResults.every(Boolean)) {
         setStage('error');
         setError(
-          `Step 1 applyCustodyChange tx succeeded (${step1.applyTx}) but Treasury.isCustodian(${bobClaim.personIdentity}) is still false.`,
+          `Bob's identities aren't all on Treasury yet: ${bobIdentities
+            .map((id, i) => `${shortAddress(id)}=${verifyResults[i] ? '✓' : '✗'}`)
+            .join(' · ')}`,
         );
         return;
       }
@@ -228,6 +316,9 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
         innerArgs: buildChangeApprovalsRequiredArgs(4, 2),
         signer: aliceClaim,
         signerPasskey: alicePasskey,
+        signTypedDataAsync: std,
+        getWalletAddress,
+        promptSwitchWalletAccount,
         setPhase,
       });
       if ('error' in step2) {
@@ -254,9 +345,9 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
         </p>
         <ol>
           <li>
-            Add <strong>{bobSeat.name}'s passkey</strong> to the Treasury — afterward
-            the Treasury recognizes both Alice's and Bob's passkey identities
-            as custodians.
+            Register <strong>{bobSeat.name}\'s identities</strong> on the Treasury —
+            one CustodyAction per enrolled method (passkey + wallet). Afterward
+            the Treasury recognizes both Alice\'s and Bob\'s identities as custodians.
           </li>
           <li>
             Bump the Org's <strong>T4 approvals required</strong> from 1 to 2 —
@@ -298,15 +389,15 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
         phaseLabel={PHASE_LABEL[phase]}
         phaseHint={
           activeStep === 'add-bob-treasury'
-            ? `Step 1 / 2 — adding ${bobSeat.name}'s passkey to the Treasury.`
-            : `Step 2 / 2 — bumping ${orgConfig.name}'s T4 threshold.`
+            ? `Step 1 / 2 — registering ${bobSeat.name}\'s identities on the Treasury.`
+            : `Step 2 / 2 — bumping ${orgConfig.name}\'s T4 threshold.`
         }
         successExtra={
           stage === 'success' ? (
             <>
               <p className="muted">
                 {orgConfig.name} now requires 2 approvals for T4 admin
-                changes. The Treasury recognizes both passkeys.
+                changes. The Treasury recognizes both Alice\'s and Bob\'s identities.
               </p>
               {step1Result && step2Result && (
                 <dl className="kv">
@@ -339,155 +430,4 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
       />
     </section>
   );
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────
-
-interface ScheduleAndApplyArgs {
-  account: Address;
-  action: CustodyAction;
-  innerArgs: Hex;
-  signer: SeatClaim;
-  signerPasskey: DemoPasskey;
-  setPhase: (p: WorkingPhase) => void;
-}
-
-async function scheduleAndApply(
-  args: ScheduleAndApplyArgs,
-): Promise<CeremonyResult | { error: string }> {
-  if (!config.custodyPolicy || !config.chainId) {
-    return { error: 'custody policy / chain id missing' };
-  }
-  const { account, action, innerArgs, signer, signerPasskey, setPhase } = args;
-  const signerPia = signer.personIdentity;
-  const argsHash = keccak256(innerArgs);
-
-  setPhase('computing-hash');
-  const lastChangeId = await readScheduledChangeCount({
-    custodyPolicy: config.custodyPolicy,
-    account,
-  });
-  let expectedChangeId = lastChangeId + 1n;
-  let skipSchedule = false;
-  let existingEta: bigint | null = null;
-  // Resume: scan recent un-executed matching changes (last 5).
-  const scanTo = lastChangeId > 5n ? lastChangeId - 5n : 0n;
-  for (let id = lastChangeId; id > scanTo; id--) {
-    const sc = await readScheduledChange({
-      custodyPolicy: config.custodyPolicy,
-      account,
-      changeId: id,
-    });
-    if (
-      sc.action === action &&
-      sc.args.toLowerCase() === innerArgs.toLowerCase() &&
-      !sc.executed &&
-      !sc.cancelled
-    ) {
-      expectedChangeId = id;
-      existingEta = sc.eta;
-      skipSchedule = true;
-      break;
-    }
-  }
-
-  const domainSeparator = computeDomainSeparator({
-    custodyPolicy: config.custodyPolicy,
-    chainId: config.chainId,
-  });
-  const scheduleHash = hashScheduleCustodyChange({
-    domainSeparator,
-    message: { account, action, argsHash, changeId: expectedChangeId },
-  });
-
-  let resolvedEta: bigint;
-  let scheduleTx: Hex;
-  if (skipSchedule && existingEta !== null) {
-    resolvedEta = existingEta;
-    scheduleTx = ('0x' + '00'.repeat(32)) as Hex; // resumed; no fresh tx
-  } else {
-    setPhase('signing-schedule');
-    const scheduleAssertion = await assertWithPasskey(signerPasskey, scheduleHash);
-    const scheduleSigs = packQuorumSigs([
-      {
-        type: 'passkey',
-        pia: signerPia,
-        x: signerPasskey.pubKeyX,
-        y: signerPasskey.pubKeyY,
-        assertion: scheduleAssertion,
-      },
-    ]);
-
-    setPhase('submitting-schedule');
-    const scheduleCallData = encodeScheduleCall({
-      account,
-      action,
-      innerArgs,
-      quorumSigs: scheduleSigs,
-    });
-    const scheduleOuter = encodeExecuteCall({
-      target: config.custodyPolicy,
-      value: 0n,
-      innerData: scheduleCallData,
-    });
-    const scheduleResult = await executeCallFromAgent({
-      sender: signer.personAgent,
-      passkey: signerPasskey,
-      callData: scheduleOuter,
-    });
-    if (!scheduleResult.ok) {
-      return { error: scheduleResult.reason || scheduleResult.error };
-    }
-    scheduleTx = scheduleResult.transactionHash;
-
-    setPhase('reading-eta');
-    const scheduledChange = await readScheduledChange({
-      custodyPolicy: config.custodyPolicy,
-      account,
-      changeId: expectedChangeId,
-      waitForExistence: true,
-    });
-    if (scheduledChange.eta === 0n) {
-      return { error: 'schedule landed but the change is not visible to the read-RPC yet — refresh + retry' };
-    }
-    resolvedEta = scheduledChange.eta;
-  }
-
-  const applyHash = hashApplyCustodyChange({
-    domainSeparator,
-    message: { account, action, argsHash, changeId: expectedChangeId, eta: resolvedEta },
-  });
-
-  setPhase('signing-apply');
-  const applyAssertion = await assertWithPasskey(signerPasskey, applyHash);
-  const applySigs = packQuorumSigs([
-    {
-      type: 'passkey',
-      pia: signerPia,
-      x: signerPasskey.pubKeyX,
-      y: signerPasskey.pubKeyY,
-      assertion: applyAssertion,
-    },
-  ]);
-
-  setPhase('submitting-apply');
-  const applyCallData = encodeApplyCall({
-    account,
-    changeId: expectedChangeId,
-    quorumSigs: applySigs,
-  });
-  const applyOuter = encodeExecuteCall({
-    target: config.custodyPolicy,
-    value: 0n,
-    innerData: applyCallData,
-  });
-  const applyResult = await executeCallFromAgent({
-    sender: signer.personAgent,
-    passkey: signerPasskey,
-    callData: applyOuter,
-  });
-  if (!applyResult.ok) {
-    return { error: applyResult.reason || applyResult.error };
-  }
-  return { scheduleTx, applyTx: applyResult.transactionHash };
 }
