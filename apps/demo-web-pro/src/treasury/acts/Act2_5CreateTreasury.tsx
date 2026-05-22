@@ -109,7 +109,7 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     } as const;
 
     // See Act 2 for the salt-version rationale.
-    const SALT_VERSION = 'v3-safety1';
+    const SALT_VERSION = 'v4-fresh';
     const salt = BigInt(
       '0x' +
         [...new TextEncoder().encode(`${TREASURY_NAME}:${org.address}:${SALT_VERSION}`)]

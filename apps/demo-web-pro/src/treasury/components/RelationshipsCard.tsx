@@ -89,57 +89,70 @@ export function RelationshipsCard({
   return (
     <section className="relationships-card" data-testid="relationships-card">
       <p className="eyebrow">On-chain state · live read</p>
-      <h3>Who controls what</h3>
+      <h3>Custody graph</h3>
 
       <table className="relationships-table">
         <thead>
           <tr>
-            <th>Identity</th>
-            <th>On-chain address</th>
-            <th>Controls / Controlled by</th>
+            <th>Smart Agent</th>
+            <th>Address</th>
+            <th>Custody</th>
           </tr>
         </thead>
         <tbody>
           {aliceClaim && aliceSeat && (
             <tr>
-              <td className="relationship-actor">{aliceSeat.name}</td>
+              <td className="relationship-actor">
+                {aliceSeat.name}\'s Person Smart Agent
+              </td>
               <td><code>{shortAddress(aliceClaim.personAgent)}</code></td>
               <td>
                 <RelationshipDot kind="passkey" />
-                Controlled by {aliceSeat.name}\'s passkey
+                Custodian: {aliceSeat.name}\'s passkey
               </td>
             </tr>
           )}
           {bobClaim && bobSeat && (
             <tr>
-              <td className="relationship-actor">{bobSeat.name}</td>
+              <td className="relationship-actor">
+                {bobSeat.name}\'s Person Smart Agent
+              </td>
               <td><code>{shortAddress(bobClaim.personAgent)}</code></td>
               <td>
                 <RelationshipDot kind="passkey" />
-                Controlled by {bobSeat.name}\'s passkey
+                Custodian: {bobSeat.name}\'s passkey
               </td>
             </tr>
           )}
           {org && (
             <tr>
-              <td className="relationship-actor">{orgConfig.name}</td>
+              <td className="relationship-actor">
+                {orgConfig.name}{' '}
+                <span className="muted small">(Org Smart Agent)</span>
+              </td>
               <td><code>{shortAddress(org.address)}</code></td>
               <td>
                 <RelationshipDot kind={probe.aliceCustodianOfOrg ? 'live' : probe.loaded ? 'no' : 'pending'} />
-                {aliceSeat?.name} {probe.aliceCustodianOfOrg ? 'IS' : probe.loaded ? 'is NOT' : '…'} custodian
+                Custodian: {aliceSeat?.name}\'s PSA{' '}
+                {probe.aliceCustodianOfOrg ? '✓' : probe.loaded ? '✗' : '…'}
                 {' · '}
                 <RelationshipDot kind={probe.bobCustodianOfOrg ? 'live' : probe.loaded ? 'no' : 'pending'} />
-                {bobSeat?.name} {probe.bobCustodianOfOrg ? 'IS' : probe.loaded ? 'is NOT' : '…'} custodian
+                Custodian: {bobSeat?.name}\'s PSA{' '}
+                {probe.bobCustodianOfOrg ? '✓' : probe.loaded ? '✗' : '…'}
               </td>
             </tr>
           )}
           {treasury && (
             <tr>
-              <td className="relationship-actor">Treasury</td>
+              <td className="relationship-actor">
+                Acme Treasury{' '}
+                <span className="muted small">(Service Smart Agent)</span>
+              </td>
               <td><code>{shortAddress(treasury.address)}</code></td>
               <td>
                 <RelationshipDot kind={probe.orgCustodianOfTreasury ? 'live' : probe.loaded ? 'no' : 'pending'} />
-                {orgConfig.name} {probe.orgCustodianOfTreasury ? 'IS' : probe.loaded ? 'is NOT' : '…'} sole custodian
+                Custodian: {orgConfig.name}{' '}
+                {probe.orgCustodianOfTreasury ? '✓' : probe.loaded ? '✗' : '…'}
               </td>
             </tr>
           )}
@@ -147,9 +160,12 @@ export function RelationshipsCard({
       </table>
 
       <p className="muted small">
-        Per spec 212: passkeys control Person Smart Agents only. All inter-agent authority
-        is custodian-shaped. Acts 3 + 4 progressively add Bob as a custodian of the Org and
-        bump approvalsRequired to 2.
+        Per spec 212 / 213: a <strong>custodian</strong> is whichever entity holds custody
+        authority over a Smart Agent. For Person Smart Agents that\'s a <em>passkey</em>
+        (a key, not an agent). For higher-tier Smart Agents the custodian is itself a
+        <em> Smart Agent</em> — Person Smart Agents are custodians of {orgConfig.name},
+        and {orgConfig.name} is the custodian of the Treasury. Authority chains agent →
+        agent → agent; users never appear in the chain.
       </p>
     </section>
   );

@@ -116,7 +116,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     // doesn\'t affect the predicted address. Bumping the tag forces
     // a fresh address so visitors don\'t inherit a stale on-chain
     // Org that was deployed before today\'s 0s-safety-delay fix.
-    const SALT_VERSION = 'v3-safety1'; // bump on every breaking deploy-param change
+    const SALT_VERSION = 'v4-fresh'; // bump on every breaking deploy-param change
     const salt = BigInt(
       '0x' +
         [...new TextEncoder().encode(`${orgConfig.name}:${founder.personAgent}:${SALT_VERSION}`)]
