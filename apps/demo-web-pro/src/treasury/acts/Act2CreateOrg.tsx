@@ -117,11 +117,14 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
           .slice(0, 16),
     );
 
-    // Encode factory.createAccountWithMode(initParams, custodyPolicy, salt).
+    // Encode factory.createAccountWithModeCustomSafetyDelay with 0-second
+    // T4 safety delay so subsequent custody changes (Act 3+) can
+    // schedule+apply in the same demo session without a real wait.
+    // Production should NEVER do this; the spec default is 1h.
     const factoryCallData = encodeFunctionData({
       abi: agentAccountFactoryAbi,
-      functionName: 'createAccountWithMode',
-      args: [initParams, custodyPolicyAddress, salt],
+      functionName: 'createAccountWithModeCustomSafetyDelay',
+      args: [initParams, custodyPolicyAddress, 0, salt],
     });
 
     // Wrap as Alice.PSA.execute(factory, 0, factoryCallData).

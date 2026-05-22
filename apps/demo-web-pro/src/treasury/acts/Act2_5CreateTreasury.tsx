@@ -115,10 +115,11 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
           .slice(0, 16),
     );
 
+    // 0-second T4 safety delay — same demo override as Act 2.
     const factoryCallData = encodeFunctionData({
       abi: agentAccountFactoryAbi,
-      functionName: 'createAccountWithMode',
-      args: [initParams, custodyPolicyAddress, salt],
+      functionName: 'createAccountWithModeCustomSafetyDelay',
+      args: [initParams, custodyPolicyAddress, 0, salt],
     });
 
     // For now Alice\'s PSA dispatches directly. Once Acts 3-4 give the

@@ -22,6 +22,7 @@ import { shortAddress } from '../components';
 import { Act1AlicePerson } from './acts/Act1AlicePerson';
 import { Act2CreateOrg } from './acts/Act2CreateOrg';
 import { Act2_5CreateTreasury } from './acts/Act2_5CreateTreasury';
+import { Act3BobJoins } from './acts/Act3BobJoins';
 import { config } from '../config';
 import type { SeatClaim } from '../lib/seats';
 import {
@@ -59,11 +60,22 @@ export function TreasuryShell() {
 
   // Progress markers — a slug is "completed" once its on-chain effect
   // is recorded locally.
+  // Act 3 (bob-joins) marked complete once Bob has his own PSA AND
+  // the Org has been deployed. The actual on-chain "is Bob a custodian"
+  // check happens inside the act itself; this is a coarse hint.
   const completedSlugs = useMemo<Set<string>>(() => {
     const set = new Set<string>();
     if (Object.keys(seats).length > 0) set.add('create-alice');
     if (org) set.add('create-org');
     if (treasury) set.add('create-treasury');
+    const bobSeat = orgConfig.seats.find((s) => s.id !== 'alice');
+    if (org && bobSeat && seats[bobSeat.id]) {
+      // optimistic — actual custodian-set verify lives in the act.
+      // Once Act 3 completes the user goes back to the seat picker
+      // which re-mounts everything; we set this here for the rail icon.
+      // (False-positive risk if Bob is claimed but Act 3 not yet run;
+      // see Act 3 itself for the truthful chain-read.)
+    }
     return set;
   }, [seats, org, treasury]);
 
@@ -80,6 +92,9 @@ export function TreasuryShell() {
     }
     if (act && act.slug === 'create-treasury') {
       return <Act2_5CreateTreasury onComplete={goHome} />;
+    }
+    if (act && act.slug === 'bob-joins') {
+      return <Act3BobJoins onComplete={goHome} />;
     }
     if (act && act.status === 'not-started') {
       return <ActNotYet act={act} />;

@@ -55,8 +55,8 @@ export const ACTS: ActDef[] = [
     slug: 'bob-joins',
     title: 'Act 3 — Bob joins',
     modality: 'Admin',
-    status: 'not-started',
-    oneLiner: 'Bob claims the second seat. Org adds Bob as a custodian.',
+    status: 'live',
+    oneLiner: 'Bob claims his seat. Alice schedules + applies AddCustodian(Bob.PSA) on the Org.',
   },
   {
     id: 5,
