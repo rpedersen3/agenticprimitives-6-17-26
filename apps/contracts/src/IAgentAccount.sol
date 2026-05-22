@@ -4,6 +4,29 @@ pragma solidity ^0.8.28;
 import "account-abstraction/interfaces/IAccount.sol";
 
 /**
+ * @title IAgenticPrimitivesAgentAccount
+ * @notice ERC-165 marker interface for AgentAccounts deployed by
+ *         agenticprimitives. `AgentAccount.addCustodian` queries this
+ *         (via ERC-165 `supportsInterface`) to enforce the architectural
+ *         invariant from spec 211 § 3 + spec 212 § 2.2: an
+ *         agenticprimitives AgentAccount MUST NEVER appear in another
+ *         AgentAccount's custodian set. Smart-agent ↔ smart-agent
+ *         relationships are stewardship/delegation, not custody —
+ *         custody bottoms out at external signer authority (EOA / SIWE /
+ *         passkey / third-party smart wallet).
+ *
+ *         Third-party smart wallets (Safe, Argent, Privy, …) are
+ *         intentionally permitted as custodians because they wrap
+ *         external human signers and validate via ERC-1271 without
+ *         recursing into our own custody system.
+ */
+interface IAgenticPrimitivesAgentAccount {
+    /// @dev Marker — implementations MUST return true. The selector is
+    ///      the ERC-165 interfaceId via `type(IAgenticPrimitivesAgentAccount).interfaceId`.
+    function isAgenticPrimitivesAgentAccount() external pure returns (bool);
+}
+
+/**
  * @notice Parameters bundled into one struct so the factory entry point
  *         + the matching `initializeWithThresholdPolicy` initializer
  *         share an exact shape. Captures everything the spec 207

@@ -20,6 +20,9 @@ export {
   buildChangeValueCeilingArgs,
   buildSetRecoveryApprovalsArgs,
   buildApplySystemUpdateArgs,
+  buildChangeApprovalsRequiredArgs,
+  buildAddPasskeyCredentialArgs,
+  buildRemovePasskeyCredentialArgs,
 } from './actions.js';
 
 export {
@@ -43,3 +46,15 @@ export {
   type RiskTier,
   CUSTODY_MODE_BY_INDEX,
 } from './types.js';
+
+export {
+  type EcdsaSlot,
+  type ContractSigSlot,
+  type ApprovedHashSlot,
+  type PasskeySlot,
+  type QuorumSlot,
+  type WebAuthnAssertion,
+  packQuorumSigs,
+  encodePasskeyTailBody,
+  passkeyIdentity,
+} from './quorum-slots.js';

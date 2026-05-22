@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import "./IAgentAccount.sol";
 import "./libraries/SignatureSlotRecovery.sol";
 import "./libraries/WebAuthnLib.sol";
@@ -40,7 +41,16 @@ interface IAgentAccountFactoryView {
  * - ERC-7710 delegated execution via DelegationManager
  * - UUPS upgrades (ERC-1822)
  */
-contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, ReentrancyGuard, IAgentAccount, IERC1271 {
+contract AgentAccount is
+    BaseAccount,
+    Initializable,
+    UUPSUpgradeable,
+    ReentrancyGuard,
+    IAgentAccount,
+    IERC1271,
+    IERC165,
+    IAgenticPrimitivesAgentAccount
+{
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
@@ -53,12 +63,21 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     /// @dev Authorized DelegationManager (ERC-7710 executor)
     address private _delegationManager;
 
-    /// @dev Owner set
+    /// @dev External custodian set — addresses outside our own
+    ///      AgentAccount system that can sign for this account. Holds
+    ///      EOAs (SIWE) and third-party smart wallets (Safe, Argent,
+    ///      Privy, …). Per spec 211 § 3 / spec 212 § 2.2, an
+    ///      agenticprimitives AgentAccount must NEVER appear here —
+    ///      enforced at runtime by `addCustodian` via the ERC-165
+    ///      `IAgenticPrimitivesAgentAccount` marker. Passkey custodians
+    ///      live in the namespaced `_passkeyStorage().piaToCredentialId`
+    ///      mapping; the unified view is exposed via `isCustodian` and
+    ///      `custodianCount`.
     /// @dev internal (not private) so test harnesses can subclass + seed
-    ///      owner state for the threshold-policy tests. Storage layout
-    ///      is unaffected by visibility.
-    mapping(address => bool) internal _custodians;
-    uint256 internal _custodianCount;
+    ///      this state for policy tests. Storage layout is unaffected
+    ///      by visibility.
+    mapping(address => bool) internal _externalCustodians;
+    uint256 internal _externalCustodianCount;
 
     /// @dev Spec 007 Phase A — the factory that deployed this account.
     ///      `bundlerSigner()` and `sessionIssuer()` are read off this
@@ -117,6 +136,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     error InvalidPasskeyPublicKey();
     error CannotRemoveLastSigner();
     error UnknownSignatureType(uint8 sigType);
+    error AgenticPrimitivesAgentNotAllowedAsCustodian(address candidate);
 
     // Phase A errors (spec 007).
     error NotEntryPoint();
@@ -171,110 +191,81 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     }
 
     /**
-     * @notice Initialize the account with an initial owner, the
-     *         DelegationManager, and the factory address.
+     * @notice Unified initializer (phase 6f.4 pivot).
      *
-     *         Spec 007 Phase A: the master / bundler / session-issuer
-     *         keys are NOT added to `_custodians`. The factory address is
-     *         stored so the account can resolve `bundlerSigner()` and
-     *         `sessionIssuer()` on demand. This lets a future factory
-     *         upgrade rotate those roles without per-account
-     *         migration. If `factory_` is `address(0)` the account
-     *         supports the legacy / test path (no bundler envelope or
-     *         session-issuer capability checks).
+     *         Bootstraps an AgentAccount with any combination of
+     *         external custodians (EOAs / SIWE / third-party smart
+     *         wallets) and an initial passkey credential. At least one
+     *         must be supplied — an account with no signer would be
+     *         bricked.
      *
-     * @param initialOwner The primary owner of this agent account (user's EOA).
-     * @param dm The DelegationManager address (ERC-7710 executor). Use address(0) to skip.
-     * @param factory_ The factory that deployed this account. Pass
-     *                 address(0) for legacy/test paths.
-     */
-    function initialize(address initialOwner, address dm, address factory_) external initializer {
-        if (initialOwner == address(0)) revert ZeroAddress();
-        _custodians[initialOwner] = true;
-        _custodianCount = 1;
-        emit CustodianAdded(initialOwner);
-
-        _delegationManager = dm;
-        _factory = factory_;
-    }
-
-    /**
-     * @notice Two-owner initializer used by `SessionAgentAccountFactory`
-     *         when bootstrapping session-scoped accounts whose modules
-     *         must be installed by the factory at deploy time.
+     *         Each external custodian is checked against the ERC-165
+     *         `IAgenticPrimitivesAgentAccount` marker: any address that
+     *         responds positively is rejected. This enforces spec 211
+     *         § 3 / spec 212 § 2.2 — an agenticprimitives AgentAccount
+     *         can never be a custodian of another. Smart-agent ↔
+     *         smart-agent relationships move into stewardship /
+     *         delegation territory.
      *
-     *         This path intentionally co-owns the account at init —
-     *         the second owner is the FACTORY itself, so it can call
-     *         `installModule` (owner-gated) before stepping back. It
-     *         is NOT used by the main `AgentAccountFactory` (user
-     *         accounts are single-owner under Phase A).
+     *         When `passkeyX != 0 && passkeyY != 0`, the passkey is
+     *         registered and its PIA (derived from the pubkey) becomes
+     *         a first-class custodian via the namespaced passkey
+     *         storage. The PIA's "membership" is unified with
+     *         `_externalCustodians` via `isCustodian` / `custodianCount`.
      *
-     *         The co-owner is removable post-bootstrap via a userOp
-     *         signed by the primary owner (`addCustodian` / `removeCustodian`
-     *         are `onlySelf` — see `SessionAgentAccountFactory.sol`
-     *         for the documented cleanup path).
-     */
-    function initializeWithCoOwner(
-        address initialOwner,
-        address coOwner,
-        address dm,
-        address factory_
-    ) external initializer {
-        if (initialOwner == address(0)) revert ZeroAddress();
-        _custodians[initialOwner] = true;
-        _custodianCount = 1;
-        emit CustodianAdded(initialOwner);
-        if (coOwner != address(0) && coOwner != initialOwner) {
-            _custodians[coOwner] = true;
-            _custodianCount = 2;
-            emit CustodianAdded(coOwner);
-        }
-        _delegationManager = dm;
-        _factory = factory_;
-    }
-
-    /**
-     * @notice Passkey-only initializer. The account is deployed with NO
-     *         EOA owner; the WebAuthn credential identified by
-     *         `credentialIdDigest = keccak256(credentialId)` is the sole
-     *         signer. All UserOps must carry a `SIG_TYPE_WEBAUTHN`
-     *         signature payload that recovers to (x, y).
-     *
-     *         Used by `AgentAccountFactory.createAccountWithPasskey`,
-     *         which routes per spec 130 (passkey-flow) when the user
-     *         enrolls a credential before any EOA is connected.
-     *
-     *         Additional signers (EOA owners or extra passkeys) can be
-     *         added post-deploy via `addCustodian` / `addPasskey` userOps
-     *         signed by the passkey. The `removePasskey` invariant
-     *         (`_custodianCount + count == 1`) keeps the account from being
-     *         rendered unsignable.
-     *
-     * @param credentialIdDigest keccak256(credentialId) — same wire form
-     *                           used by `addPasskey` and the WebAuthn
-     *                           verification path.
-     * @param x WebAuthn P-256 public key X coordinate (uint256).
-     * @param y WebAuthn P-256 public key Y coordinate (uint256).
-     * @param dm DelegationManager address. address(0) to skip.
+     * @param externalCustodians Initial set of external custodian
+     *        addresses (zero or more EOAs / third-party smart wallets).
+     * @param passkeyCredentialIdDigest keccak256(credentialId) of the
+     *        initial passkey (or `bytes32(0)` to skip).
+     * @param passkeyX P-256 X coordinate (or 0 to skip the passkey).
+     * @param passkeyY P-256 Y coordinate (or 0 to skip).
+     * @param dm DelegationManager address (or `address(0)`).
      * @param factory_ The factory that deployed this account.
      */
-    function initializeWithPasskey(
-        bytes32 credentialIdDigest,
-        uint256 x,
-        uint256 y,
+    function initialize(
+        address[] calldata externalCustodians,
+        bytes32 passkeyCredentialIdDigest,
+        uint256 passkeyX,
+        uint256 passkeyY,
         address dm,
         address factory_
     ) external initializer {
-        if (x == 0 || y == 0) revert InvalidPasskeyPublicKey();
-        PasskeyStorage storage $ = _passkeyStorage();
-        $.keys[credentialIdDigest] = PasskeyEntry(x, y);
-        $.registered[credentialIdDigest] = true;
-        $.count = 1;
-        emit PasskeyAdded(credentialIdDigest, x, y);
+        bool withPasskey = passkeyX != 0 && passkeyY != 0;
+        if (externalCustodians.length == 0 && !withPasskey) {
+            revert ZeroAddress();
+        }
 
-        // _custodianCount stays at 0 — passkey is the only signer. The
-        // CannotRemoveLastSigner invariant in removePasskey
-        // (`_custodianCount + count == 1`) prevents bricking.
+        for (uint256 i; i < externalCustodians.length; i++) {
+            address c = externalCustodians[i];
+            if (c == address(0)) revert ZeroAddress();
+            if (_externalCustodians[c]) revert CustodianAlreadyExists(c);
+            if (_isAgenticPrimitivesAgent(c)) {
+                revert AgenticPrimitivesAgentNotAllowedAsCustodian(c);
+            }
+            _externalCustodians[c] = true;
+            emit CustodianAdded(c);
+        }
+        _externalCustodianCount = externalCustodians.length;
+
+        if (withPasskey) {
+            PasskeyStorage storage $ = _passkeyStorage();
+            address pia = _passkeyIdentity(passkeyX, passkeyY);
+            // Architectural invariant: a PIA never appears in both the
+            // external-custodian set AND the passkey set. The two
+            // mappings are disjoint by intent (see `isCustodian` /
+            // `custodianCount`); double-registration would inflate
+            // `custodianCount` and break the threshold matrix computed
+            // by the factory's `_buildValidatorInitData`.
+            if (_externalCustodians[pia]) {
+                revert CustodianAlreadyExists(pia);
+            }
+            $.keys[passkeyCredentialIdDigest] = PasskeyEntry(passkeyX, passkeyY);
+            $.registered[passkeyCredentialIdDigest] = true;
+            $.piaToCredentialId[pia] = passkeyCredentialIdDigest;
+            $.count = 1;
+            emit PasskeyAdded(passkeyCredentialIdDigest, passkeyX, passkeyY);
+            emit CustodianAdded(pia);
+        }
 
         _delegationManager = dm;
         _factory = factory_;
@@ -433,7 +424,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      *         Can be called by an owner (for initial setup) or by the account itself.
      */
     function setDelegationManager(address dm) external {
-        if (msg.sender != address(this) && !_custodians[msg.sender]) {
+        if (msg.sender != address(this) && !_externalCustodians[msg.sender]) {
             revert NotCustodianOrSelf();
         }
         _delegationManager = dm;
@@ -521,7 +512,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
      *             `block.chainid`. Master / random callers cannot
      *             impersonate the bundler.
      *           - The inner `op.signature` is validated against
-     *             `_custodians` (or the WebAuthn passkey set) via the
+     *             `_externalCustodians` (or the WebAuthn passkey set) via the
      *             standard `_validateSig` path. The bundler envelope
      *             alone is insufficient.
      *
@@ -637,7 +628,7 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     ///      mode-specific module set; once the account is in use, the
     ///      threshold validator's quorum gate replaces this surface.
     modifier onlyOwnerOrSelf() {
-        if (msg.sender != address(this) && !_custodians[msg.sender] && msg.sender != _factory) {
+        if (msg.sender != address(this) && !_externalCustodians[msg.sender] && msg.sender != _factory) {
             revert NotCustodianOrSelf();
         }
         _;
@@ -1021,12 +1012,12 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     function _verifyEcdsa(bytes32 hash, bytes memory sig) internal view returns (bool) {
         // Try raw hash first — matches EntryPoint v0.8 (EIP-712 userOpHash signed directly).
         (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(hash, sig);
-        if (err == ECDSA.RecoverError.NoError && _custodians[recovered]) return true;
+        if (err == ECDSA.RecoverError.NoError && _externalCustodians[recovered]) return true;
         // Fall back to eth-signed-message wrap — matches v0.7 and legacy ERC-1271
         // callers that pre-prefix the digest.
         bytes32 ethSigned = hash.toEthSignedMessageHash();
         (recovered, err,) = ECDSA.tryRecover(ethSigned, sig);
-        return err == ECDSA.RecoverError.NoError && _custodians[recovered];
+        return err == ECDSA.RecoverError.NoError && _externalCustodians[recovered];
     }
 
     /// @dev Verify a signature recovers to a SPECIFIC expected signer
@@ -1062,23 +1053,83 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     ///      external call has `msg.sender == address(this)`. Downstream
     ///      `isCustodian(msg.sender)` checks (e.g. FundRegistry.onlyFundOwner)
     ///      should pass — the account IS the actor making the call.
+    ///
+    ///      Also resolves passkey-identity addresses (PIAs): the
+    ///      deterministic address derived from a registered passkey's
+    ///      (x, y) is a custodian first-class, so multi-passkey accounts
+    ///      can put each user's PIA into quorum slots without nesting
+    ///      through a separate Person Smart Agent.
     function isCustodian(address account) external view override returns (bool) {
         if (account == address(this)) return true;
-        return _custodians[account];
+        if (_externalCustodians[account]) return true;
+        return _passkeyStorage().piaToCredentialId[account] != bytes32(0);
     }
 
     /// @inheritdoc IAgentAccount
+    /// @dev Counts EOA/contract custodians PLUS registered passkeys —
+    ///      each passkey contributes one PIA-custodian. Matches the
+    ///      isCustodian semantics above so `defaultApprovals(N, t)` at
+    ///      install time and ChangeApprovalsRequired bounds at apply
+    ///      time both see the same N.
     function custodianCount() external view override returns (uint256) {
-        return _custodianCount;
+        return _externalCustodianCount + _passkeyStorage().count;
+    }
+
+    /// @notice Deterministically derive the Passkey-Identity-Address for
+    ///         a P-256 public key. Exposed as `pure` so off-chain code +
+    ///         other contracts (CustodyPolicy, factory) can recompute it
+    ///         without reading account state.
+    function passkeyIdentity(uint256 x, uint256 y) public pure returns (address) {
+        return _passkeyIdentity(x, y);
+    }
+
+    function _passkeyIdentity(uint256 x, uint256 y) internal pure returns (address) {
+        return address(uint160(uint256(keccak256(abi.encode(x, y)))));
     }
 
     /// @inheritdoc IAgentAccount
+    /// @dev `owner` here is an EXTERNAL custodian (EOA / SIWE wallet /
+    ///      third-party smart wallet like Safe/Argent). Adding an
+    ///      agenticprimitives AgentAccount is forbidden — enforced via
+    ///      the ERC-165 marker. Passkey custodians are not added here;
+    ///      use `addPasskey` instead.
     function addCustodian(address owner) external override onlySelf {
         if (owner == address(0)) revert ZeroAddress();
-        if (_custodians[owner]) revert CustodianAlreadyExists(owner);
-        _custodians[owner] = true;
-        _custodianCount++;
+        if (_externalCustodians[owner]) revert CustodianAlreadyExists(owner);
+        if (_isAgenticPrimitivesAgent(owner)) {
+            revert AgenticPrimitivesAgentNotAllowedAsCustodian(owner);
+        }
+        _externalCustodians[owner] = true;
+        _externalCustodianCount++;
         emit CustodianAdded(owner);
+    }
+
+    /// @dev ERC-165 query — true iff `addr` is a deployed contract that
+    ///      advertises `IAgenticPrimitivesAgentAccount`. Safe-style
+    ///      try/catch so non-contracts and non-ERC-165 contracts return
+    ///      false without reverting.
+    function _isAgenticPrimitivesAgent(address addr) internal view returns (bool) {
+        if (addr.code.length == 0) return false;
+        try IERC165(addr).supportsInterface(
+            type(IAgenticPrimitivesAgentAccount).interfaceId
+        ) returns (bool ok) {
+            return ok;
+        } catch {
+            return false;
+        }
+    }
+
+    /// @inheritdoc IAgenticPrimitivesAgentAccount
+    function isAgenticPrimitivesAgentAccount() external pure override returns (bool) {
+        return true;
+    }
+
+    /// @inheritdoc IERC165
+    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
+        return interfaceId == type(IERC165).interfaceId
+            || interfaceId == type(IERC1271).interfaceId
+            || interfaceId == type(IAgentAccount).interfaceId
+            || interfaceId == type(IAgenticPrimitivesAgentAccount).interfaceId;
     }
 
     /// @inheritdoc IAgentAccount
@@ -1086,10 +1137,10 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
     ///      owner if there are also no registered passkeys. A passkey-only
     ///      account is allowed, but a zero-signer account is not.
     function removeCustodian(address owner) external override onlySelf {
-        if (!_custodians[owner]) revert CustodianDoesNotExist(owner);
-        if (_custodianCount == 1 && _passkeyStorage().count == 0) revert CannotRemoveLastCustodian();
-        _custodians[owner] = false;
-        _custodianCount--;
+        if (!_externalCustodians[owner]) revert CustodianDoesNotExist(owner);
+        if (_externalCustodianCount == 1 && _passkeyStorage().count == 0) revert CannotRemoveLastCustodian();
+        _externalCustodians[owner] = false;
+        _externalCustodianCount--;
         emit CustodianRemoved(owner);
     }
 
@@ -1110,6 +1161,14 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
         mapping(bytes32 => PasskeyEntry) keys;
         mapping(bytes32 => bool) registered;
         uint256 count;
+        // Passkey-Identity-Address → credentialIdDigest. PIA is the
+        // deterministic address derived from a passkey's (x, y) pubkey
+        // via `_passkeyIdentity(x, y)`. Lets `isCustodian(pia)` resolve
+        // a passkey without iterating the credentialId set, and lets
+        // CustodyPolicy `_verifyQuorum` count passkey signers as
+        // first-class quorum members (v=2 slots in
+        // SignatureSlotRecovery).
+        mapping(address => bytes32) piaToCredentialId;
     }
 
     function _passkeyStorage() private pure returns (PasskeyStorage storage $) {
@@ -1122,27 +1181,40 @@ contract AgentAccount is BaseAccount, Initializable, UUPSUpgradeable, Reentrancy
 
     /// @notice Register a new WebAuthn credential. onlySelf — callable via a
     ///         UserOp signed by any existing signer (owner or another passkey).
+    ///         Also registers the credential's Passkey-Identity-Address
+    ///         (PIA) so `isCustodian(pia)` returns true and v=2 quorum
+    ///         slots can count this passkey as a distinct signer.
     function addPasskey(bytes32 credentialIdDigest, uint256 x, uint256 y) external onlySelf {
         if (x == 0 || y == 0) revert InvalidPasskeyPublicKey();
         PasskeyStorage storage $ = _passkeyStorage();
         if ($.registered[credentialIdDigest]) revert PasskeyAlreadyRegistered(credentialIdDigest);
+        address pia = _passkeyIdentity(x, y);
+        if ($.piaToCredentialId[pia] != bytes32(0)) revert PasskeyAlreadyRegistered(credentialIdDigest);
+        if (_externalCustodians[pia]) revert CustodianAlreadyExists(pia);
         $.keys[credentialIdDigest] = PasskeyEntry(x, y);
         $.registered[credentialIdDigest] = true;
+        $.piaToCredentialId[pia] = credentialIdDigest;
         $.count += 1;
         emit PasskeyAdded(credentialIdDigest, x, y);
+        emit CustodianAdded(pia);
     }
 
     /// @notice Remove a registered WebAuthn credential. onlySelf, with a
     ///         "must leave at least one signer" invariant that counts owners
-    ///         AND passkeys together.
+    ///         AND passkeys together. Also clears the credential's PIA
+    ///         entry so `isCustodian(pia)` flips back to false.
     function removePasskey(bytes32 credentialIdDigest) external onlySelf {
         PasskeyStorage storage $ = _passkeyStorage();
         if (!$.registered[credentialIdDigest]) revert PasskeyNotRegistered(credentialIdDigest);
-        if (_custodianCount + $.count == 1) revert CannotRemoveLastSigner();
+        if (_externalCustodianCount + $.count == 1) revert CannotRemoveLastSigner();
+        PasskeyEntry storage key = $.keys[credentialIdDigest];
+        address pia = _passkeyIdentity(key.x, key.y);
         delete $.keys[credentialIdDigest];
         $.registered[credentialIdDigest] = false;
+        delete $.piaToCredentialId[pia];
         $.count -= 1;
         emit PasskeyRemoved(credentialIdDigest);
+        emit CustodianRemoved(pia);
     }
 
     /// @notice Whether a passkey is registered on this account.

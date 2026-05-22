@@ -18,46 +18,51 @@
 import { encodeAbiParameters, encodeFunctionData, concat } from 'viem';
 import type { Address, Hex } from '@agenticprimitives/types';
 
+const CREATE_PERSON_AGENT_ABI = [
+  {
+    type: 'function',
+    name: 'createPersonAgent',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'externalCustodians', type: 'address[]' },
+      { name: 'passkeyCredentialIdDigest', type: 'bytes32' },
+      { name: 'passkeyX', type: 'uint256' },
+      { name: 'passkeyY', type: 'uint256' },
+      { name: 'salt', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'address' }],
+  },
+] as const;
+
+const ZERO_BYTES32: Hex = `0x${'00'.repeat(32)}`;
+
 /** ERC-6492 32-byte magic suffix. */
 export const ERC6492_MAGIC: Hex =
   '0x6492649264926492649264926492649264926492649264926492649264926492';
 
 /**
- * Wrap an inner signature with the ERC-6492 envelope for the EOA
- * factory path (`createAccount(owner, salt)`).
+ * Wrap an inner signature with the ERC-6492 envelope for an EOA / SIWE /
+ * third-party-smart-wallet Person.PSA factory path. The init binds the
+ * external custodian into the CREATE2 address, so the wrapper recreates
+ * the same calldata the actual deploy will use.
  */
-export function wrap6492ForEoa(args: {
+export function wrap6492ForExternal(args: {
   factory: Address;
-  owner: Address;
+  externalCustodian: Address;
   salt: bigint;
   innerSig: Hex;
 }): Hex {
   const factoryCalldata = encodeFunctionData({
-    abi: [
-      {
-        type: 'function',
-        name: 'createAccount',
-        stateMutability: 'nonpayable',
-        inputs: [
-          { name: 'owner', type: 'address' },
-          { name: 'salt', type: 'uint256' },
-        ],
-        outputs: [{ name: '', type: 'address' }],
-      },
-    ] as const,
-    functionName: 'createAccount',
-    args: [args.owner, args.salt],
+    abi: CREATE_PERSON_AGENT_ABI,
+    functionName: 'createPersonAgent',
+    args: [[args.externalCustodian], ZERO_BYTES32, 0n, 0n, args.salt],
   });
-  return wrap6492({
-    factory: args.factory,
-    factoryCalldata,
-    innerSig: args.innerSig,
-  });
+  return wrap6492({ factory: args.factory, factoryCalldata, innerSig: args.innerSig });
 }
 
 /**
- * Wrap an inner signature with the ERC-6492 envelope for the passkey
- * factory path (`createAccountWithPasskey(credentialIdDigest, x, y, salt)`).
+ * Wrap an inner signature with the ERC-6492 envelope for a passkey-only
+ * Person.PSA factory path.
  */
 export function wrap6492ForPasskey(args: {
   factory: Address;
@@ -68,28 +73,11 @@ export function wrap6492ForPasskey(args: {
   innerSig: Hex;
 }): Hex {
   const factoryCalldata = encodeFunctionData({
-    abi: [
-      {
-        type: 'function',
-        name: 'createAccountWithPasskey',
-        stateMutability: 'nonpayable',
-        inputs: [
-          { name: 'credentialIdDigest', type: 'bytes32' },
-          { name: 'x', type: 'uint256' },
-          { name: 'y', type: 'uint256' },
-          { name: 'salt', type: 'uint256' },
-        ],
-        outputs: [{ name: '', type: 'address' }],
-      },
-    ] as const,
-    functionName: 'createAccountWithPasskey',
-    args: [args.credentialIdDigest, args.pubKeyX, args.pubKeyY, args.salt],
+    abi: CREATE_PERSON_AGENT_ABI,
+    functionName: 'createPersonAgent',
+    args: [[], args.credentialIdDigest, args.pubKeyX, args.pubKeyY, args.salt],
   });
-  return wrap6492({
-    factory: args.factory,
-    factoryCalldata,
-    innerSig: args.innerSig,
-  });
+  return wrap6492({ factory: args.factory, factoryCalldata, innerSig: args.innerSig });
 }
 
 /**

@@ -22,7 +22,8 @@ vi.mock('viem', async (importOriginal) => {
       if (address === FACTORY) {
         return {
           read: {
-            getAddress: vi.fn(async () => PREDICTED_ACCOUNT),
+            getAddressForPersonAgent: vi.fn(async () => PREDICTED_ACCOUNT),
+            getAddressForMultiSigSmartAgent: vi.fn(async () => PREDICTED_ACCOUNT),
             accountImplementation: vi.fn(async () => '0xabc'),
           },
         };
@@ -30,6 +31,7 @@ vi.mock('viem', async (importOriginal) => {
       return {
         read: {
           isValidSignature: vi.fn(async () => isValidSigMockReturn),
+          isCustodian: vi.fn(async () => true),
         },
       };
     }),
@@ -55,8 +57,23 @@ describe('AgentAccountClient', () => {
     isValidSigMockReturn = '0x1626ba7e';
   });
 
-  it('getAddress delegates to factory.getAddress() view', async () => {
-    const result = await client.getAddress(OWNER, 0n);
+  it('getAddressForPersonAgent delegates to factory.getAddressForPersonAgent', async () => {
+    const result = await client.getAddressForPersonAgent({
+      externalCustodians: [OWNER],
+      salt: 0n,
+    });
+    expect(result).toBe(PREDICTED_ACCOUNT);
+  });
+
+  it('getAddressForPersonAgent works for the passkey-only path', async () => {
+    const result = await client.getAddressForPersonAgent({
+      passkey: {
+        credentialIdDigest: ('0x' + '00'.repeat(32)) as `0x${string}`,
+        x: 1n,
+        y: 2n,
+      },
+      salt: 0n,
+    });
     expect(result).toBe(PREDICTED_ACCOUNT);
   });
 
@@ -85,6 +102,16 @@ describe('AgentAccountClient', () => {
     expect(await client.isValidSignature(PREDICTED_ACCOUNT, '0xabc' as `0x${string}`, '0xdef' as `0x${string}`)).toBe(false);
   });
 
+  it('isCustodian returns false when account isn\'t deployed', async () => {
+    fakePublicClient.getCode.mockResolvedValueOnce('0x');
+    expect(await client.isCustodian(PREDICTED_ACCOUNT, OWNER)).toBe(false);
+  });
+
+  it('isCustodian queries the account when deployed', async () => {
+    fakePublicClient.getCode.mockResolvedValueOnce('0x6080604052');
+    expect(await client.isCustodian(PREDICTED_ACCOUNT, OWNER)).toBe(true);
+  });
+
   it('signWithErc1271 delegates to the signer.signMessage with raw hash', async () => {
     const mockSigner = {
       address: OWNER,
@@ -99,6 +126,6 @@ describe('AgentAccountClient', () => {
   it('buildUserOp throws "not implemented" in v0', async () => {
     await expect(
       client.buildUserOp({ account: PREDICTED_ACCOUNT, calls: [] }),
-    ).rejects.toThrow(/not implemented in v0/);
+    ).rejects.toThrow(/not implemented in v0|at least one call required/);
   });
 });

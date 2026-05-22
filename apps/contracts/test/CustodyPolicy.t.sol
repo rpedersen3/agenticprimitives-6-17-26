@@ -43,7 +43,9 @@ contract CustodyPolicyTest is Test {
             address(0xCC),
             address(0xDD)
         );
-        acct = factory.createAccount(owner, 42);
+        address[] memory custodians = new address[](1);
+        custodians[0] = owner;
+        acct = factory.createPersonAgent(custodians, bytes32(0), 0, 0, 42);
         validator = new CustodyPolicy();
     }
 
@@ -196,7 +198,9 @@ contract CustodyPolicyTest is Test {
 
     function test_proposeAdmin_revertsForUninstalledAccount() public {
         // Brand-new account; validator never installed.
-        AgentAccount fresh = factory.createAccount(owner, 99);
+        address[] memory _c = new address[](1);
+        _c[0] = owner;
+        AgentAccount fresh = factory.createPersonAgent(_c, bytes32(0), 0, 0, 99);
         vm.expectRevert(abi.encodeWithSelector(CustodyPolicy.NotInstalledOn.selector, address(fresh)));
         validator.scheduleCustodyChange(
             address(fresh),

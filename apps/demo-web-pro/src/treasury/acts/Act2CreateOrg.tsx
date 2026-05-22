@@ -5,7 +5,7 @@
  *   - Sender: the founding seat\'s Person Smart Agent (Alice\'s PSA).
  *   - Calls factory.createAccountWithMode with:
  *       mode      = 1 (hybrid)         — sole-custodian shape
- *       custodians = [Alice.PSA]       — Alice\'s Person Smart Agent
+ *       custodians = [Alice.PIA]       — passkey-derived identity, not Alice.PSA
  *       trustees   = []                — added in Act 4 with mode upgrade
  *   - Paymaster sponsors gas via demo-a2a\'s /account/build-call-userop.
  *   - Alice\'s passkey signs the userOpHash (verified inside Alice.PSA
@@ -60,8 +60,9 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
   const [dialogOpen, setDialogOpen] = useState(true);
 
   // Spec 211 § 5 Act 2: Alice is the founder. The "Acting as" chip
-  // doesn\'t matter here — the Org\'s initial custodian is always
-  // Alice\'s PSA. Acts 4+ are where Bob participates in admin actions.
+  // doesn't matter here — the Org's initial custodian is always
+  // Alice's passkey identity. Acts 4+ are where Bob participates in
+  // admin actions.
   const seats = loadSeats();
   const aliceSeat = orgConfig.seats[0]!;
   const founder = seats[aliceSeat.id] ?? null;
@@ -98,14 +99,23 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     setError(null);
     setPhase('preflight');
 
-    // Compose AgentAccountInitParams for the Org.
+    // Phase 6f.4 — Org's sole human custodian is Alice's passkey. The
+    // initializer registers the passkey + writes its PIA into
+    // `piaToCredentialId`; `isCustodian(alicePia)` reads from that
+    // mapping. We deliberately leave `custodians` empty: putting the
+    // same PIA in BOTH `externalCustodians` AND the passkey path
+    // would double-count it in `custodianCount()` and skew the
+    // factory's default-threshold matrix (defaultApprovals(N=2,T4)=2
+    // when there's really only one human signer). The contract now
+    // reverts CustodianAlreadyExists if you try.
+    const alicePia = founder.personIdentity;
     const initParams = {
       mode: 1, // hybrid
-      custodians: [founder.personAgent],
+      custodians: [] as Address[],
       trustees: [] as Address[],
-      initialPasskeyCredentialIdDigest: ('0x' + '00'.repeat(32)) as Hex,
-      initialPasskeyX: 0n,
-      initialPasskeyY: 0n,
+      initialPasskeyCredentialIdDigest: passkey.credentialIdDigest,
+      initialPasskeyX: passkey.pubKeyX,
+      initialPasskeyY: passkey.pubKeyY,
     } as const;
 
     // Salt derived from (org name, founder PSA, version tag). The
@@ -116,28 +126,23 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     // doesn\'t affect the predicted address. Bumping the tag forces
     // a fresh address so visitors don\'t inherit a stale on-chain
     // Org that was deployed before today\'s 0s-safety-delay fix.
-    const SALT_VERSION = 'v4-fresh'; // bump on every breaking deploy-param change
+    const SALT_VERSION = 'v6-dedup-pia';
     const salt = BigInt(
       '0x' +
-        [...new TextEncoder().encode(`${orgConfig.name}:${founder.personAgent}:${SALT_VERSION}`)]
+        [...new TextEncoder().encode(`${orgConfig.name}:${alicePia}:${SALT_VERSION}`)]
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('')
           .slice(0, 16),
     );
 
-    // Encode factory.createAccountWithModeCustomSafetyDelay with a 1-second
-    // T4 safety delay. KNOWN CONTRACT QUIRK: the factory treats
-    // safetyDelaySeconds==0 as "use spec default (1 hour)" — there's no
-    // way to pass literal zero through the current factory ABI. Passing
-    // 1 second is the smallest legal value; Base Sepolia mines blocks
-    // every ~2s, so by the time Act 3's apply userOp lands the eta is
-    // already past. Production must NEVER use this; spec default is 1h.
-    //
-    // TODO: fix factory to use type(uint32).max as the default sentinel
-    // so literal 0 can be passed through. Requires factory redeploy.
+    // Encode factory.createMultiSigSmartAgent with a 1-second T4 safety
+    // delay. KNOWN CONTRACT QUIRK: safetyDelaySeconds==0 means "use spec
+    // default (1 hour)"; 1 second is the smallest legal demo value, and
+    // Base Sepolia mines every ~2s so the eta passes before any apply
+    // userOp bundles. Production must NEVER use this.
     const factoryCallData = encodeFunctionData({
       abi: agentAccountFactoryAbi,
-      functionName: 'createAccountWithModeCustomSafetyDelay',
+      functionName: 'createMultiSigSmartAgent',
       args: [initParams, custodyPolicyAddress, 1, salt],
     });
 
@@ -187,7 +192,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
         address: orgAddress,
         txHash: result.transactionHash,
         mode: 1,
-        custodians: [founder.personAgent],
+        custodians: [alicePia],
         createdAt: new Date().toISOString(),
       });
       return;
@@ -197,7 +202,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
       address: orgAddress,
       txHash: result.transactionHash,
       mode: 1,
-      custodians: [founder.personAgent],
+      custodians: [alicePia],
       createdAt: new Date().toISOString(),
     });
 
@@ -299,8 +304,8 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
         <p>
           {founderName}\'s Person Smart Agent will deploy an on-chain Smart Agent for{' '}
           <strong>{orgConfig.name}</strong>. The Org is its own identity — separate from{' '}
-          {founderName} — but {founderName}\'s Person Smart Agent is its sole custodian
-          until Bob joins (Act 3).
+          {founderName} — but {founderName}\'s passkey identity is its sole custodian
+          until Bob\'s passkey joins (Act 3).
         </p>
       </div>
 
@@ -330,7 +335,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
         scopeList={[
           `Deploy a new AgentAccount on Base Sepolia named "${orgConfig.name}".`,
           `Install the CustodyPolicy module so the Org can schedule custody changes (Acts 3, 4).`,
-          `Make ${founderName}\'s Person Smart Agent the sole admin (approvalsRequired=1).`,
+          `Make ${founderName}\'s passkey identity the sole custodian (approvalsRequired=1).`,
         ]}
         grantee={`${orgConfig.name} (a new Smart Agent)`}
         duration="permanent on-chain identity"

@@ -326,6 +326,17 @@ const proBuildEnv: Record<string, string> = {
 if (d.custodyPolicy)   proBuildEnv.VITE_CUSTODY_POLICY    = d.custodyPolicy;
 if (d.quorumEnforcer)       proBuildEnv.VITE_QUORUM_ENFORCER        = d.quorumEnforcer;
 if (d.approvedHashRegistry) proBuildEnv.VITE_APPROVED_HASH_REGISTRY = d.approvedHashRegistry;
+proBuildEnv.VITE_ENTRY_POINT = d.entryPoint;
+if (d.smartAgentPaymaster) proBuildEnv.VITE_SMART_AGENT_PAYMASTER = d.smartAgentPaymaster;
+const _deployerForVite = (d as { deployer?: string }).deployer;
+if (_deployerForVite) proBuildEnv.VITE_DEPLOYER = _deployerForVite;
+// Use the worker's RPC so read-after-write stays consistent across
+// surfaces. Without this, the front-end uses viem's default public node
+// and lags behind the worker's Alchemy RPC, causing every Act 3/4 apply
+// to mis-sign with eta=0.
+if (process.env.BASE_SEPOLIA_RPC) {
+  proBuildEnv.VITE_RPC_URL = process.env.BASE_SEPOLIA_RPC;
+}
 execSync('pnpm --filter @agenticprimitives-demo/web-pro build', {
   cwd: REPO_ROOT,
   stdio: 'inherit',

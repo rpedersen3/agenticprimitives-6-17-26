@@ -1,104 +1,57 @@
 // Minimal ABI fragments for the on-chain calls AgentAccountClient makes.
 // Source of truth: apps/contracts/src/AgentAccountFactory.sol + AgentAccount.sol.
+// Phase 6f.4 — collapsed factory surface (createPersonAgent + createMultiSigSmartAgent)
+// and unified AgentAccount initializer.
+
+const initParamsTuple = {
+  name: 'params',
+  type: 'tuple',
+  components: [
+    { name: 'mode', type: 'uint8' },
+    { name: 'custodians', type: 'address[]' },
+    { name: 'trustees', type: 'address[]' },
+    { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
+    { name: 'initialPasskeyX', type: 'uint256' },
+    { name: 'initialPasskeyY', type: 'uint256' },
+  ],
+} as const;
 
 export const agentAccountFactoryAbi = [
+  // ─── Person Smart Agent (no validator) ────────────────────────────────
   {
     type: 'function',
-    name: 'getAddress',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'owner', type: 'address' },
-      { name: 'salt', type: 'uint256' },
-    ],
-    outputs: [{ name: '', type: 'address' }],
-  },
-  {
-    type: 'function',
-    name: 'createAccount',
+    name: 'createPersonAgent',
     stateMutability: 'nonpayable',
     inputs: [
-      { name: 'owner', type: 'address' },
-      { name: 'salt', type: 'uint256' },
-    ],
-    outputs: [{ name: '', type: 'address' }],
-  },
-  {
-    type: 'function',
-    name: 'accountImplementation',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: '', type: 'address' }],
-  },
-  // Passkey-owned accounts (spec 130) — analogous shape to createAccount.
-  {
-    type: 'function',
-    name: 'getAddressForPasskey',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'credentialIdDigest', type: 'bytes32' },
-      { name: 'x', type: 'uint256' },
-      { name: 'y', type: 'uint256' },
-      { name: 'salt', type: 'uint256' },
-    ],
-    outputs: [{ name: '', type: 'address' }],
-  },
-  {
-    type: 'function',
-    name: 'createAccountWithPasskey',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'credentialIdDigest', type: 'bytes32' },
-      { name: 'x', type: 'uint256' },
-      { name: 'y', type: 'uint256' },
-      { name: 'salt', type: 'uint256' },
-    ],
-    outputs: [{ name: '', type: 'address' }],
-  },
-  // Spec 207 / 209 mode-aware deploy path. Source:
-  // apps/contracts/src/AgentAccountFactory.sol#createAccountWithMode.
-  {
-    type: 'function',
-    name: 'createAccountWithMode',
-    stateMutability: 'nonpayable',
-    inputs: [
-      {
-        name: 'params',
-        type: 'tuple',
-        components: [
-          { name: 'mode', type: 'uint8' },
-          { name: 'custodians', type: 'address[]' },
-          { name: 'trustees', type: 'address[]' },
-          { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
-          { name: 'initialPasskeyX', type: 'uint256' },
-          { name: 'initialPasskeyY', type: 'uint256' },
-        ],
-      },
-      { name: 'validator', type: 'address' },
+      { name: 'externalCustodians', type: 'address[]' },
+      { name: 'passkeyCredentialIdDigest', type: 'bytes32' },
+      { name: 'passkeyX', type: 'uint256' },
+      { name: 'passkeyY', type: 'uint256' },
       { name: 'salt', type: 'uint256' },
     ],
     outputs: [{ name: 'account', type: 'address' }],
   },
-  // Variant that takes an optional custom T4 timelock (seconds).
-  // Pass 0 for the spec default (1h). Useful for demo accounts that
-  // want immediate execute-after-propose. T5 + T6 timelocks stay at
-  // spec defaults regardless (24h / 48h).
   {
     type: 'function',
-    name: 'createAccountWithModeCustomSafetyDelay',
+    name: 'getAddressForPersonAgent',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'externalCustodians', type: 'address[]' },
+      { name: 'passkeyCredentialIdDigest', type: 'bytes32' },
+      { name: 'passkeyX', type: 'uint256' },
+      { name: 'passkeyY', type: 'uint256' },
+      { name: 'salt', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'address' }],
+  },
+
+  // ─── Multi-sig Smart Agent (CustodyPolicy installed) ──────────────────
+  {
+    type: 'function',
+    name: 'createMultiSigSmartAgent',
     stateMutability: 'nonpayable',
     inputs: [
-      {
-        name: 'params',
-        type: 'tuple',
-        components: [
-          { name: 'mode', type: 'uint8' },
-          { name: 'custodians', type: 'address[]' },
-          { name: 'trustees', type: 'address[]' },
-          { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
-          { name: 'initialPasskeyX', type: 'uint256' },
-          { name: 'initialPasskeyY', type: 'uint256' },
-        ],
-      },
+      initParamsTuple,
       { name: 'validator', type: 'address' },
       { name: 'safetyDelaySeconds', type: 'uint32' },
       { name: 'salt', type: 'uint256' },
@@ -107,34 +60,54 @@ export const agentAccountFactoryAbi = [
   },
   {
     type: 'function',
-    name: 'getAddressForMode',
+    name: 'getAddressForMultiSigSmartAgent',
     stateMutability: 'view',
     inputs: [
-      {
-        name: 'params',
-        type: 'tuple',
-        components: [
-          { name: 'mode', type: 'uint8' },
-          { name: 'custodians', type: 'address[]' },
-          { name: 'trustees', type: 'address[]' },
-          { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
-          { name: 'initialPasskeyX', type: 'uint256' },
-          { name: 'initialPasskeyY', type: 'uint256' },
-        ],
-      },
+      initParamsTuple,
       { name: 'salt', type: 'uint256' },
     ],
     outputs: [{ name: '', type: 'address' }],
   },
+
+  // ─── Factory-level capability roles ──────────────────────────────────
+  {
+    type: 'function',
+    name: 'accountImplementation',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'bundlerSigner',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'sessionIssuer',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'delegationManager',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+
+  // ─── Events ──────────────────────────────────────────────────────────
   {
     type: 'event',
-    name: 'AgentAccountCreatedWithMode',
+    name: 'AgentAccountCreated',
     inputs: [
       { name: 'account', type: 'address', indexed: true },
-      { name: 'validator', type: 'address', indexed: true },
-      { name: 'mode', type: 'uint8', indexed: true },
-      { name: 'nCustodians', type: 'uint256', indexed: false },
-      { name: 'nTrustees', type: 'uint256', indexed: false },
+      { name: 'withValidator', type: 'bool', indexed: false },
+      { name: 'nExternalCustodians', type: 'uint256', indexed: false },
+      { name: 'withPasskey', type: 'bool', indexed: false },
       { name: 'salt', type: 'uint256', indexed: false },
     ],
   },
@@ -169,6 +142,25 @@ export const agentAccountAbi = [
   { type: 'function', name: 'custodianCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'factory', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'delegationManager', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  // Phase 6f.4 — passkey-direct custody surface.
+  { type: 'function', name: 'passkeyIdentity', stateMutability: 'pure', inputs: [{ name: 'x', type: 'uint256' }, { name: 'y', type: 'uint256' }], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'hasPasskey', stateMutability: 'view', inputs: [{ name: 'credentialIdDigest', type: 'bytes32' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'getPasskey', stateMutability: 'view', inputs: [{ name: 'credentialIdDigest', type: 'bytes32' }], outputs: [{ name: 'x', type: 'uint256' }, { name: 'y', type: 'uint256' }] },
+  { type: 'function', name: 'passkeyCount', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'addPasskey', stateMutability: 'nonpayable', inputs: [{ name: 'credentialIdDigest', type: 'bytes32' }, { name: 'x', type: 'uint256' }, { name: 'y', type: 'uint256' }], outputs: [] },
+  { type: 'function', name: 'removePasskey', stateMutability: 'nonpayable', inputs: [{ name: 'credentialIdDigest', type: 'bytes32' }], outputs: [] },
+  { type: 'function', name: 'addCustodian', stateMutability: 'nonpayable', inputs: [{ name: 'owner', type: 'address' }], outputs: [] },
+  { type: 'function', name: 'removeCustodian', stateMutability: 'nonpayable', inputs: [{ name: 'owner', type: 'address' }], outputs: [] },
+  // execute(target, value, data) — used to wrap arbitrary calls from the account.
+  { type: 'function', name: 'execute', stateMutability: 'nonpayable', inputs: [{ name: 'target', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'data', type: 'bytes' }], outputs: [] },
+  // ERC-165 surface for the IAgenticPrimitivesAgentAccount marker.
+  { type: 'function', name: 'supportsInterface', stateMutability: 'pure', inputs: [{ name: 'interfaceId', type: 'bytes4' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'isAgenticPrimitivesAgentAccount', stateMutability: 'pure', inputs: [], outputs: [{ type: 'bool' }] },
+  // Events.
+  { type: 'event', name: 'CustodianAdded', inputs: [{ name: 'owner', type: 'address', indexed: true }] },
+  { type: 'event', name: 'CustodianRemoved', inputs: [{ name: 'owner', type: 'address', indexed: true }] },
+  { type: 'event', name: 'PasskeyAdded', inputs: [{ name: 'credentialIdDigest', type: 'bytes32', indexed: true }, { name: 'x', type: 'uint256', indexed: false }, { name: 'y', type: 'uint256', indexed: false }] },
+  { type: 'event', name: 'PasskeyRemoved', inputs: [{ name: 'credentialIdDigest', type: 'bytes32', indexed: true }] },
 ] as const;
 
 // custodyPolicyAbi was relocated to `@agenticprimitives/custody` per

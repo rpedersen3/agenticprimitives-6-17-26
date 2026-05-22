@@ -10,14 +10,14 @@ import "../src/agency/DelegationManager.sol";
 import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
 import {AgentAccountInitParams} from "../src/IAgentAccount.sol";
 
-/// @dev Phase 6c.5-d.1.c — factory createAccountWithMode tests, restored
-///      against the new CustodyPolicy install path. Replaces the
-///      pre-d.1 file that drove `initializeWithThresholdPolicy` directly
-///      on the account.
+/// @dev Phase 6f.4 — `createMultiSigSmartAgent` (renamed + collapsed
+///      from the legacy `createAccountWithMode*` family). Covers mode
+///      bounds, trustee minima per spec § 8, default threshold matrix,
+///      idempotency, counterfactual derivation, and event emission.
 contract AgentAccountFactoryModeTest is Test {
     AgentAccountFactory factory;
     DelegationManager   dm;
-    CustodyPolicy  validator;
+    CustodyPolicy       validator;
 
     uint256 internal constant MODULE_TYPE_EXECUTOR = 2;
 
@@ -48,8 +48,8 @@ contract AgentAccountFactoryModeTest is Test {
     {
         return AgentAccountInitParams({
             mode: mode_,
-           custodians: owners,
-           trustees: guardians,
+            custodians: owners,
+            trustees: guardians,
             initialPasskeyCredentialIdDigest: bytes32(0),
             initialPasskeyX: 0,
             initialPasskeyY: 0
@@ -58,9 +58,6 @@ contract AgentAccountFactoryModeTest is Test {
 
     function _custodians(address a) internal pure returns (address[] memory r) {
         r = new address[](1); r[0] = a;
-    }
-    function _ownersN(address[] memory addrs) internal pure returns (address[] memory) {
-        return addrs;
     }
     function _guardians(uint256 n, address g1, address g2, address g3) internal pure returns (address[] memory r) {
         r = new address[](n);
@@ -71,9 +68,9 @@ contract AgentAccountFactoryModeTest is Test {
 
     // ─── 1. Single mode ─────────────────────────────────────────────
 
-    function test_createAccountWithMode_single() public {
+    function test_createMultiSigSmartAgent_single() public {
         AgentAccountInitParams memory p = _params(0, _custodians(owner1), new address[](0));
-        AgentAccount acct = factory.createAccountWithMode(p, address(validator), 1);
+        AgentAccount acct = factory.createMultiSigSmartAgent(p, address(validator), 0, 1);
         assertTrue(acct.isCustodian(owner1));
         assertEq(validator.custodyMode(address(acct)), 0);
         assertTrue(validator.isInstalledOn(address(acct)));
@@ -81,45 +78,39 @@ contract AgentAccountFactoryModeTest is Test {
 
     // ─── 2. Hybrid mode (consumer default) ──────────────────────────
 
-    function test_createAccountWithMode_hybrid_with_one_owner() public {
+    function test_createMultiSigSmartAgent_hybrid_with_one_owner() public {
         AgentAccountInitParams memory p = _params(1, _custodians(owner1), new address[](0));
-        AgentAccount acct = factory.createAccountWithMode(p, address(validator), 2);
+        AgentAccount acct = factory.createMultiSigSmartAgent(p, address(validator), 0, 2);
         assertEq(validator.custodyMode(address(acct)), 1);
-        // Default T4 threshold for N=1 is 1
         assertEq(validator.approvalsRequired(address(acct), 4), 1);
-        // T5 timelock should be 24h
         assertEq(validator.safetyDelay(address(acct), 5), 24 hours);
     }
 
     // ─── 3. Threshold mode (≥ 2 guardians required) ─────────────────
 
-    function test_createAccountWithMode_threshold_n3() public {
+    function test_createMultiSigSmartAgent_threshold_n3() public {
         address[] memory owners = new address[](3);
         owners[0] = owner1; owners[1] = owner2; owners[2] = owner3;
         AgentAccountInitParams memory p = _params(2, owners, _guardians(2, guardian1, guardian2, address(0)));
-        AgentAccount acct = factory.createAccountWithMode(p, address(validator), 3);
+        AgentAccount acct = factory.createMultiSigSmartAgent(p, address(validator), 0, 3);
 
         assertEq(validator.custodyMode(address(acct)), 2);
-        // N=3 matrix from spec § 5.1: T4 = 3 (unanimous for N≤3)
         assertEq(validator.approvalsRequired(address(acct), 4), 3);
-        // T5 = 3 (unanimous for N≤5)
         assertEq(validator.approvalsRequired(address(acct), 5), 3);
         assertEq(validator.trusteeCount(address(acct)), 2);
-        // recoveryApprovals = floor(2/2)+1 = 2 (i.e. unanimous for n=2)
         assertEq(validator.recoveryApprovals(address(acct)), 2);
     }
 
     // ─── 4. Org mode (≥ 3 guardians required) ───────────────────────
 
-    function test_createAccountWithMode_org_n5() public {
+    function test_createMultiSigSmartAgent_org_n5() public {
         address[] memory owners = new address[](5);
         owners[0] = owner1; owners[1] = owner2; owners[2] = owner3;
         owners[3] = owner4; owners[4] = owner5;
         AgentAccountInitParams memory p = _params(3, owners, _guardians(3, guardian1, guardian2, guardian3));
-        AgentAccount acct = factory.createAccountWithMode(p, address(validator), 4);
+        AgentAccount acct = factory.createMultiSigSmartAgent(p, address(validator), 0, 4);
 
         assertEq(validator.custodyMode(address(acct)), 3);
-        // N=5 matrix: T4 = N-1 = 4, T5 = N = 5
         assertEq(validator.approvalsRequired(address(acct), 4), 4);
         assertEq(validator.approvalsRequired(address(acct), 5), 5);
         assertEq(validator.trusteeCount(address(acct)), 3);
@@ -127,80 +118,112 @@ contract AgentAccountFactoryModeTest is Test {
 
     // ─── 5. Idempotent return ───────────────────────────────────────
 
-    function test_createAccountWithMode_idempotent() public {
+    function test_createMultiSigSmartAgent_idempotent() public {
         AgentAccountInitParams memory p = _params(1, _custodians(owner1), new address[](0));
-        AgentAccount acct1 = factory.createAccountWithMode(p, address(validator), 99);
-        AgentAccount acct2 = factory.createAccountWithMode(p, address(validator), 99);
+        AgentAccount acct1 = factory.createMultiSigSmartAgent(p, address(validator), 0, 99);
+        AgentAccount acct2 = factory.createMultiSigSmartAgent(p, address(validator), 0, 99);
         assertEq(address(acct1), address(acct2));
     }
 
     // ─── 6. Counterfactual address derivation ──────────────────────
 
-    function test_getAddressForMode_matches_deploy() public {
+    function test_getAddressForMultiSigSmartAgent_matches_deploy() public {
         AgentAccountInitParams memory p = _params(1, _custodians(owner1), new address[](0));
-        address predicted = factory.getAddressForMode(p, 7);
-        AgentAccount actual = factory.createAccountWithMode(p, address(validator), 7);
+        address predicted = factory.getAddressForMultiSigSmartAgent(p, 7);
+        AgentAccount actual = factory.createMultiSigSmartAgent(p, address(validator), 0, 7);
         assertEq(predicted, address(actual));
     }
 
-    // ─── 7. Validation: missing primary signer ─────────────────────
+    // ─── 7. Validation: zero signers (no external + no passkey) ────
 
-    function test_createAccountWithMode_rejects_zeroOwners() public {
+    function test_createMultiSigSmartAgent_rejects_no_signers() public {
         AgentAccountInitParams memory p = _params(1, new address[](0), new address[](0));
-        vm.expectRevert(AgentAccountFactory.NoPrimaryCustodian.selector);
-        factory.createAccountWithMode(p, address(validator), 8);
+        // Initializer reverts with ZeroAddress (signer-set empty).
+        vm.expectRevert(AgentAccount.ZeroAddress.selector);
+        factory.createMultiSigSmartAgent(p, address(validator), 0, 8);
     }
 
-    // ─── 8. Validation: threshold mode requires ≥ 2 guardians ─────
+    // ─── 8. Threshold mode requires ≥ 2 guardians ──────────────────
 
-    function test_createAccountWithMode_rejects_thresholdWith1Guardian() public {
+    function test_createMultiSigSmartAgent_rejects_thresholdWith1Guardian() public {
         address[] memory owners = new address[](2);
         owners[0] = owner1; owners[1] = owner2;
         AgentAccountInitParams memory p = _params(2, owners, _guardians(1, guardian1, address(0), address(0)));
         vm.expectRevert(abi.encodeWithSelector(
             AgentAccountFactory.InsufficientTrusteesForMode.selector, uint8(2), uint256(1), uint256(2)
         ));
-        factory.createAccountWithMode(p, address(validator), 9);
+        factory.createMultiSigSmartAgent(p, address(validator), 0, 9);
     }
 
-    // ─── 9. Validation: org mode requires ≥ 3 guardians ────────────
+    // ─── 9. Org mode requires ≥ 3 guardians ────────────────────────
 
-    function test_createAccountWithMode_rejects_orgWith2Guardians() public {
+    function test_createMultiSigSmartAgent_rejects_orgWith2Guardians() public {
         address[] memory owners = new address[](3);
         owners[0] = owner1; owners[1] = owner2; owners[2] = owner3;
         AgentAccountInitParams memory p = _params(3, owners, _guardians(2, guardian1, guardian2, address(0)));
         vm.expectRevert(abi.encodeWithSelector(
             AgentAccountFactory.InsufficientTrusteesForMode.selector, uint8(3), uint256(2), uint256(3)
         ));
-        factory.createAccountWithMode(p, address(validator), 10);
+        factory.createMultiSigSmartAgent(p, address(validator), 0, 10);
     }
 
     // ─── 10. Invalid mode value ─────────────────────────────────────
 
-    function test_createAccountWithMode_rejects_invalidMode() public {
+    function test_createMultiSigSmartAgent_rejects_invalidMode() public {
         AgentAccountInitParams memory p = _params(7, _custodians(owner1), new address[](0));
         vm.expectRevert(abi.encodeWithSelector(AgentAccountFactory.InvalidMode.selector, uint8(7)));
-        factory.createAccountWithMode(p, address(validator), 11);
+        factory.createMultiSigSmartAgent(p, address(validator), 0, 11);
     }
 
     // ─── 11. Zero validator address rejected ────────────────────────
 
-    function test_createAccountWithMode_rejects_zeroValidator() public {
+    function test_createMultiSigSmartAgent_rejects_zeroValidator() public {
         AgentAccountInitParams memory p = _params(1, _custodians(owner1), new address[](0));
-        vm.expectRevert(AgentAccountFactory.ZeroAddress.selector);
-        factory.createAccountWithMode(p, address(0), 12);
+        vm.expectRevert(AgentAccountFactory.ValidatorRequired.selector);
+        factory.createMultiSigSmartAgent(p, address(0), 0, 12);
     }
 
-    // ─── 12. Module install event observable ────────────────────────
+    // ─── 12. Event emission ─────────────────────────────────────────
 
-    function test_createAccountWithMode_emitsEvents() public {
+    function test_createMultiSigSmartAgent_emitsEvent() public {
         AgentAccountInitParams memory p = _params(1, _custodians(owner1), new address[](0));
-        address predicted = factory.getAddressForMode(p, 13);
+        address predicted = factory.getAddressForMultiSigSmartAgent(p, 13);
 
-        vm.expectEmit(true, true, true, true, address(factory));
-        emit AgentAccountFactory.AgentAccountCreatedWithMode(
-            predicted, address(validator), 1, 1, 0, 13
+        vm.expectEmit(true, false, false, true, address(factory));
+        emit AgentAccountFactory.AgentAccountCreated(
+            predicted, /*withValidator=*/ true, 1, /*withPasskey=*/ false, 13
         );
-        factory.createAccountWithMode(p, address(validator), 13);
+        factory.createMultiSigSmartAgent(p, address(validator), 0, 13);
+    }
+
+    // ─── 13. Phase 6f.4 — passkey-direct init for multi-sig accounts
+
+    bytes32 internal constant TEST_CRED = keccak256("alice-cred");
+    uint256 internal constant TEST_X = uint256(keccak256("alice-x"));
+    uint256 internal constant TEST_Y = uint256(keccak256("alice-y"));
+
+    function _pia(uint256 x, uint256 y) internal pure returns (address) {
+        return address(uint160(uint256(keccak256(abi.encode(x, y)))));
+    }
+
+    function test_createMultiSigSmartAgent_passkeyOnly() public {
+        // Hybrid Org-like deploy: no external custodians, one passkey
+        // PIA — the demo's Act 2 shape post-pivot.
+        AgentAccountInitParams memory p = AgentAccountInitParams({
+            mode: 1,
+            custodians: new address[](0),
+            trustees: new address[](0),
+            initialPasskeyCredentialIdDigest: TEST_CRED,
+            initialPasskeyX: TEST_X,
+            initialPasskeyY: TEST_Y
+        });
+        AgentAccount acct = factory.createMultiSigSmartAgent(p, address(validator), 0, 20);
+
+        assertTrue(acct.isCustodian(_pia(TEST_X, TEST_Y)));
+        assertEq(acct.custodianCount(), 1);
+        assertTrue(acct.hasPasskey(TEST_CRED));
+        assertTrue(validator.isInstalledOn(address(acct)));
+        // N=1 (just the PIA) → T4=1.
+        assertEq(validator.approvalsRequired(address(acct), 4), 1);
     }
 }

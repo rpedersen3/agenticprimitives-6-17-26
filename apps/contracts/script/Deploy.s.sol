@@ -110,7 +110,7 @@ contract Deploy is Script {
         //   relocated the propose/execute/cancel admin surface out of
         //   AgentAccount and into this ERC-7579 module. The factory
         //   installs it on every account created via
-        //   `createAccountWithMode`. Deploying it here means the
+        //   `createMultiSigSmartAgent`. Deploying it here means the
         //   demo apps + SDK can read the canonical address from
         //   deployments-<network>.json without a separate broadcast.
         CustodyPolicy custodyPolicy = new CustodyPolicy();

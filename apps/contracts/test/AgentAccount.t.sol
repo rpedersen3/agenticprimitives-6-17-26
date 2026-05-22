@@ -31,7 +31,9 @@ contract AgentAccountTest is Test {
             address(0xCC),
             address(0xDD)
         );
-        acct = factory.createAccount(owner, 42);
+        address[] memory custodians = new address[](1);
+        custodians[0] = owner;
+        acct = factory.createPersonAgent(custodians, bytes32(0), 0, 0, 42);
     }
 
     function _signRaw(uint256 pk, bytes32 hash) internal pure returns (bytes memory) {
@@ -106,21 +108,24 @@ contract AgentAccountTest is Test {
     function test_initialize_cannot_be_called_twice() public {
         // The proxy already called initialize during deployment; another
         // call should revert (OpenZeppelin's `initializer` modifier).
+        address[] memory custodians = new address[](1);
+        custodians[0] = owner;
         vm.expectRevert();
-        acct.initialize(owner, address(dm), address(factory));
+        acct.initialize(custodians, bytes32(0), 0, 0, address(dm), address(factory));
     }
 
-    // ─── Passkey-only initializer (spec 130) ─────────────────────────
+    // ─── Passkey-only initializer (phase 6f.4 unified) ────────────────
 
     bytes32 internal constant TEST_CRED_DIGEST = keccak256("test-cred");
     uint256 internal constant TEST_X = uint256(keccak256("test-x"));
     uint256 internal constant TEST_Y = uint256(keccak256("test-y"));
 
     function _deployPasskey(uint256 salt) internal returns (AgentAccount) {
-        return factory.createAccountWithPasskey(TEST_CRED_DIGEST, TEST_X, TEST_Y, salt);
+        address[] memory empty;
+        return factory.createPersonAgent(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y, salt);
     }
 
-    function test_initializeWithPasskey_registers_credential() public {
+    function test_passkeyOnlyInit_registers_credential() public {
         AgentAccount pk = _deployPasskey(100);
         assertTrue(pk.hasPasskey(TEST_CRED_DIGEST));
         (uint256 x, uint256 y) = pk.getPasskey(TEST_CRED_DIGEST);
@@ -129,28 +134,34 @@ contract AgentAccountTest is Test {
         assertEq(pk.passkeyCount(), 1);
     }
 
-    function test_initializeWithPasskey_leaves_zero_eoa_owners() public {
+    function test_passkeyOnlyInit_registers_pia_as_custodian() public {
+        // Phase 6f.4 pivot: the passkey's PIA is a first-class custodian
+        // (counted via passkey storage). A passkey-only account reports
+        // custodianCount == 1 (the PIA), and isCustodian(pia) returns
+        // true; unrelated addresses do not.
         AgentAccount pk = _deployPasskey(101);
-        assertEq(pk.custodianCount(), 0);
+        assertEq(pk.custodianCount(), 1);
+        address pia = pk.passkeyIdentity(TEST_X, TEST_Y);
+        assertTrue(pk.isCustodian(pia));
         assertFalse(pk.isCustodian(address(0xBEEF)));
     }
 
-    function test_initializeWithPasskey_cannot_be_called_twice() public {
+    function test_passkeyOnlyInit_cannot_be_called_twice() public {
         AgentAccount pk = _deployPasskey(102);
+        address[] memory empty;
         vm.expectRevert();
-        pk.initializeWithPasskey(
-            TEST_CRED_DIGEST, TEST_X, TEST_Y, address(dm), address(factory)
-        );
+        pk.initialize(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y, address(dm), address(factory));
     }
 
     function test_passkey_account_emits_PasskeyAdded_at_init() public {
         // Compute predicted address; bind expectEmit to it before the
         // CREATE2 happens. The factory will subsequently call the
         // initializer which emits PasskeyAdded from the proxy.
-        address predicted = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_X, TEST_Y, 103);
+        address[] memory empty;
+        address predicted = factory.getAddressForPersonAgent(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y, 103);
         vm.expectEmit(true, false, false, true, predicted);
         emit AgentAccount.PasskeyAdded(TEST_CRED_DIGEST, TEST_X, TEST_Y);
-        factory.createAccountWithPasskey(TEST_CRED_DIGEST, TEST_X, TEST_Y, 103);
+        factory.createPersonAgent(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y, 103);
     }
 
     function test_passkey_account_ecdsa_signature_rejected() public {
@@ -175,11 +186,13 @@ contract AgentAccountTest is Test {
     function test_passkey_account_can_add_eoa_owner_via_self_call() public {
         // Verify the passkey-only account can be upgraded to multi-sig
         // by adding an EOA owner via a self-call (post-init UserOp path).
+        // After: custodianCount counts both the passkey's PIA (1) and
+        // the added EOA owner (1) = 2.
         AgentAccount pk = _deployPasskey(106);
         vm.prank(address(pk));
         pk.addCustodian(address(0xCAFE));
         assertTrue(pk.isCustodian(address(0xCAFE)));
-        assertEq(pk.custodianCount(), 1);
+        assertEq(pk.custodianCount(), 2);
         assertEq(pk.passkeyCount(), 1);
     }
 

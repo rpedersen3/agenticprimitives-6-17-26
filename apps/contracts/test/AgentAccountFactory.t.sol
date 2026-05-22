@@ -8,6 +8,12 @@ import "../src/AgentAccountFactory.sol";
 import "../src/AgentAccount.sol";
 import "../src/agency/DelegationManager.sol";
 
+/// @dev Phase 6f.4 — the factory was collapsed to two entries
+///      (`createPersonAgent` + `createMultiSigSmartAgent`). These tests
+///      cover deterministic address derivation, idempotency, event
+///      emission, and the factory-level capability roles.
+///      Tests for `createMultiSigSmartAgent` (CustodyPolicy install)
+///      live in `AgentAccountFactoryMode.t.sol`.
 contract AgentAccountFactoryTest is Test {
     AgentAccountFactory factory;
     DelegationManager dm;
@@ -16,6 +22,10 @@ contract AgentAccountFactoryTest is Test {
     address internal bundlerSigner = address(0xBB);
     address internal sessionIssuer = address(0xCC);
     address internal governance = address(0xDD);
+
+    bytes32 internal constant CRED = keccak256("test-credential-id");
+    uint256 internal constant PX = uint256(keccak256("test-x"));
+    uint256 internal constant PY = uint256(keccak256("test-y"));
 
     function setUp() public {
         EntryPoint ep = new EntryPoint();
@@ -29,44 +39,128 @@ contract AgentAccountFactoryTest is Test {
         );
     }
 
-    function test_getAddress_is_deterministic_pure_function() public view {
-        address a1 = factory.getAddress(owner, 0);
-        address a2 = factory.getAddress(owner, 0);
-        assertEq(a1, a2);
+    function _eoaArr(address a) internal pure returns (address[] memory r) {
+        r = new address[](1); r[0] = a;
     }
 
-    function test_getAddress_changes_with_salt() public view {
-        address a1 = factory.getAddress(owner, 0);
-        address a2 = factory.getAddress(owner, 1);
+    function _emptyArr() internal pure returns (address[] memory r) {
+        r = new address[](0);
+    }
+
+    // ─── createPersonAgent: EOA-only path ─────────────────────────────
+
+    function test_createPersonAgent_eoa_at_predicted_address() public {
+        address[] memory custodians = _eoaArr(owner);
+        address predicted = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 7);
+        assertEq(predicted.code.length, 0);
+        AgentAccount acct = factory.createPersonAgent(custodians, bytes32(0), 0, 0, 7);
+        assertEq(address(acct), predicted);
+        assertGt(predicted.code.length, 0);
+        assertTrue(acct.isCustodian(owner));
+        assertEq(acct.custodianCount(), 1);
+        assertEq(acct.passkeyCount(), 0);
+    }
+
+    function test_createPersonAgent_eoa_idempotent() public {
+        address[] memory custodians = _eoaArr(owner);
+        AgentAccount a1 = factory.createPersonAgent(custodians, bytes32(0), 0, 0, 8);
+        AgentAccount a2 = factory.createPersonAgent(custodians, bytes32(0), 0, 0, 8);
+        assertEq(address(a1), address(a2));
+    }
+
+    function test_createPersonAgent_address_changes_with_salt() public view {
+        address[] memory custodians = _eoaArr(owner);
+        address a1 = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 0);
+        address a2 = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 1);
         assertTrue(a1 != a2);
     }
 
-    function test_getAddress_changes_with_owner() public view {
-        address a1 = factory.getAddress(owner, 0);
-        address a2 = factory.getAddress(address(0x99), 0);
+    function test_createPersonAgent_address_changes_with_custodian() public view {
+        address a1 = factory.getAddressForPersonAgent(_eoaArr(owner), bytes32(0), 0, 0, 0);
+        address a2 = factory.getAddressForPersonAgent(_eoaArr(address(0x99)), bytes32(0), 0, 0, 0);
         assertTrue(a1 != a2);
     }
 
-    function test_createAccount_deploys_at_predicted_address() public {
-        address predicted = factory.getAddress(owner, 7);
-        assertEq(predicted.code.length, 0, "should not be deployed yet");
-        AgentAccount acct = factory.createAccount(owner, 7);
-        assertEq(address(acct), predicted, "deployed address must match prediction");
-        assertGt(predicted.code.length, 0, "should now have code");
+    function test_createPersonAgent_emits_event() public {
+        address[] memory custodians = _eoaArr(owner);
+        address predicted = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 9);
+        vm.expectEmit(true, false, false, true);
+        emit AgentAccountFactory.AgentAccountCreated(predicted, /*withValidator=*/ false, 1, /*withPasskey=*/ false, 9);
+        factory.createPersonAgent(custodians, bytes32(0), 0, 0, 9);
     }
 
-    function test_createAccount_is_idempotent() public {
-        AgentAccount a1 = factory.createAccount(owner, 8);
-        AgentAccount a2 = factory.createAccount(owner, 8);
-        assertEq(address(a1), address(a2), "second call returns same instance");
+    // ─── createPersonAgent: passkey-only path ─────────────────────────
+
+    function test_createPersonAgent_passkey_at_predicted_address() public {
+        address[] memory empty = _emptyArr();
+        address predicted = factory.getAddressForPersonAgent(empty, CRED, PX, PY, 0);
+        assertEq(predicted.code.length, 0);
+        AgentAccount acct = factory.createPersonAgent(empty, CRED, PX, PY, 0);
+        assertEq(address(acct), predicted);
+        assertTrue(acct.hasPasskey(CRED));
+        assertEq(acct.passkeyCount(), 1);
+        assertEq(acct.custodianCount(), 1, "passkey-only account counts PIA as 1 custodian");
+        assertTrue(acct.isCustodian(acct.passkeyIdentity(PX, PY)));
     }
 
-    function test_createAccount_emits_event() public {
-        address predicted = factory.getAddress(owner, 9);
-        vm.expectEmit(true, true, false, true);
-        emit AgentAccountFactory.AgentAccountCreated(predicted, owner, 9);
-        factory.createAccount(owner, 9);
+    function test_createPersonAgent_passkey_idempotent() public {
+        address[] memory empty = _emptyArr();
+        AgentAccount a1 = factory.createPersonAgent(empty, CRED, PX, PY, 11);
+        AgentAccount a2 = factory.createPersonAgent(empty, CRED, PX, PY, 11);
+        assertEq(address(a1), address(a2));
     }
+
+    function test_createPersonAgent_passkey_address_changes_with_credId() public view {
+        address[] memory empty = _emptyArr();
+        address a1 = factory.getAddressForPersonAgent(empty, CRED, PX, PY, 0);
+        address a2 = factory.getAddressForPersonAgent(empty, keccak256("other"), PX, PY, 0);
+        assertTrue(a1 != a2);
+    }
+
+    function test_createPersonAgent_passkey_address_changes_with_pubkey() public view {
+        address[] memory empty = _emptyArr();
+        address a1 = factory.getAddressForPersonAgent(empty, CRED, PX, PY, 0);
+        address a2 = factory.getAddressForPersonAgent(empty, CRED, PX + 1, PY, 0);
+        assertTrue(a1 != a2);
+    }
+
+    function test_passkey_account_carries_factory_and_dm() public {
+        address[] memory empty = _emptyArr();
+        AgentAccount acct = factory.createPersonAgent(empty, CRED, PX, PY, 14);
+        assertEq(acct.factory(), address(factory));
+        assertEq(acct.delegationManager(), address(dm));
+        assertEq(acct.bundlerSigner(), bundlerSigner);
+        assertEq(acct.sessionIssuer(), sessionIssuer);
+    }
+
+    function test_createPersonAgent_rejects_zero_x() public {
+        address[] memory empty = _emptyArr();
+        vm.expectRevert();
+        factory.createPersonAgent(empty, CRED, 0, PY, 0);
+    }
+
+    function test_createPersonAgent_rejects_zero_y() public {
+        address[] memory empty = _emptyArr();
+        vm.expectRevert();
+        factory.createPersonAgent(empty, CRED, PX, 0, 0);
+    }
+
+    function test_createPersonAgent_rejects_no_signers() public {
+        address[] memory empty = _emptyArr();
+        vm.expectRevert(AgentAccountFactory.NoInitialSigner.selector);
+        factory.createPersonAgent(empty, bytes32(0), 0, 0, 0);
+    }
+
+    // ─── createPersonAgent: mixed (EOA + passkey) ─────────────────────
+
+    function test_createPersonAgent_mixed_custodianCount_unions() public {
+        AgentAccount acct = factory.createPersonAgent(_eoaArr(owner), CRED, PX, PY, 50);
+        assertEq(acct.custodianCount(), 2, "EOA + PIA");
+        assertTrue(acct.isCustodian(owner));
+        assertTrue(acct.isCustodian(acct.passkeyIdentity(PX, PY)));
+    }
+
+    // ─── Factory-level capability roles ───────────────────────────────
 
     function test_factory_exposes_capability_roles() public view {
         assertEq(factory.bundlerSigner(), bundlerSigner);
@@ -101,108 +195,5 @@ contract AgentAccountFactoryTest is Test {
         emit AgentAccountFactory.BundlerSignerChanged(bundlerSigner, address(0xFF));
         vm.prank(governance);
         factory.setBundlerSigner(address(0xFF));
-    }
-
-    // ─── Passkey-owned accounts (spec 130) ───────────────────────────
-
-    // Use fixed but non-zero test values. These are NOT a real P-256 key
-    // — the contract only validates x != 0 && y != 0 at this layer.
-    // Signature verification happens later via the WebAuthn validator.
-    bytes32 internal constant TEST_CRED_DIGEST =
-        keccak256("test-credential-id");
-    uint256 internal constant TEST_PASSKEY_X =
-        uint256(keccak256("test-x"));
-    uint256 internal constant TEST_PASSKEY_Y =
-        uint256(keccak256("test-y"));
-
-    function test_getAddressForPasskey_is_deterministic_pure_function() public view {
-        address a1 = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 0);
-        address a2 = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 0);
-        assertEq(a1, a2);
-    }
-
-    function test_getAddressForPasskey_changes_with_salt() public view {
-        address a1 = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 0);
-        address a2 = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 1);
-        assertTrue(a1 != a2);
-    }
-
-    function test_getAddressForPasskey_changes_with_credentialIdDigest() public view {
-        address a1 = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 0);
-        address a2 = factory.getAddressForPasskey(keccak256("other-cred"), TEST_PASSKEY_X, TEST_PASSKEY_Y, 0);
-        assertTrue(a1 != a2);
-    }
-
-    function test_getAddressForPasskey_changes_with_pubkey() public view {
-        address a1 = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 0);
-        address a2 = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X + 1, TEST_PASSKEY_Y, 0);
-        assertTrue(a1 != a2);
-    }
-
-    function test_getAddressForPasskey_differs_from_getAddress() public view {
-        // A passkey-owned account at salt 0 must NOT collide with an
-        // EOA-owned account at salt 0 even for the same numeric inputs.
-        address eoaAddr = factory.getAddress(address(uint160(TEST_PASSKEY_X)), 0);
-        address pkAddr  = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 0);
-        assertTrue(eoaAddr != pkAddr);
-    }
-
-    function test_createAccountWithPasskey_deploys_at_predicted_address() public {
-        address predicted = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 0);
-        assertEq(predicted.code.length, 0, "should not be deployed yet");
-        AgentAccount acct = factory.createAccountWithPasskey(
-            TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 0
-        );
-        assertEq(address(acct), predicted);
-        assertGt(predicted.code.length, 0);
-    }
-
-    function test_createAccountWithPasskey_is_idempotent() public {
-        AgentAccount a1 = factory.createAccountWithPasskey(
-            TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 11
-        );
-        AgentAccount a2 = factory.createAccountWithPasskey(
-            TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 11
-        );
-        assertEq(address(a1), address(a2));
-    }
-
-    function test_createAccountWithPasskey_emits_event() public {
-        address predicted = factory.getAddressForPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 12);
-        vm.expectEmit(true, true, false, true);
-        emit AgentAccountFactory.AgentAccountCreatedWithPasskey(predicted, TEST_CRED_DIGEST, 12);
-        factory.createAccountWithPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 12);
-    }
-
-    function test_passkey_account_has_passkey_registered_and_no_owners() public {
-        AgentAccount acct = factory.createAccountWithPasskey(
-            TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 13
-        );
-        assertTrue(acct.hasPasskey(TEST_CRED_DIGEST));
-        (uint256 gx, uint256 gy) = acct.getPasskey(TEST_CRED_DIGEST);
-        assertEq(gx, TEST_PASSKEY_X);
-        assertEq(gy, TEST_PASSKEY_Y);
-        assertEq(acct.passkeyCount(), 1);
-        assertEq(acct.custodianCount(), 0, "passkey-only account must have 0 EOA owners");
-    }
-
-    function test_passkey_account_carries_factory_and_dm() public {
-        AgentAccount acct = factory.createAccountWithPasskey(
-            TEST_CRED_DIGEST, TEST_PASSKEY_X, TEST_PASSKEY_Y, 14
-        );
-        assertEq(acct.factory(), address(factory));
-        assertEq(acct.delegationManager(), address(dm));
-        assertEq(acct.bundlerSigner(), bundlerSigner);
-        assertEq(acct.sessionIssuer(), sessionIssuer);
-    }
-
-    function test_createAccountWithPasskey_rejects_zero_x() public {
-        vm.expectRevert();
-        factory.createAccountWithPasskey(TEST_CRED_DIGEST, 0, TEST_PASSKEY_Y, 0);
-    }
-
-    function test_createAccountWithPasskey_rejects_zero_y() public {
-        vm.expectRevert();
-        factory.createAccountWithPasskey(TEST_CRED_DIGEST, TEST_PASSKEY_X, 0, 0);
     }
 }

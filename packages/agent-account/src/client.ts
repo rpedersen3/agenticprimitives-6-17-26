@@ -1,9 +1,9 @@
 // AgentAccountClient — ERC-4337 substrate. Deterministic address + lazy
 // deploy + ERC-1271 verification + UserOp building.
 //
-// This client delegates CREATE2 math to the factory's getAddress() view —
-// keeping all address-derivation logic on-chain so TS and Solidity never
-// disagree.
+// This client delegates CREATE2 math to the factory's
+// `getAddressForPersonAgent` / `getAddressForMultiSigSmartAgent` views
+// so TS and Solidity stay in lock-step.
 
 import {
   createPublicClient,
@@ -17,13 +17,11 @@ import {
   type Hex,
   type PublicClient,
   type TransactionReceipt,
-  type WalletClient,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { Signer } from '@agenticprimitives/identity-auth';
 import { agentAccountFactoryAbi, agentAccountAbi, ERC1271_MAGIC_VALUE } from './abis';
 import { BundlerClient, packGasLimits, type PackedUserOperation } from './bundler-client';
-import type { UserOperation } from './types';
 
 /**
  * Build `paymasterAndData` with the standard v0.7+ prefix:
@@ -92,9 +90,34 @@ export interface AgentAccountClientOpts {
   factory: Address;
 }
 
-export interface CreateAgentAccountParams {
-  owner: Address;
+/**
+ * Phase 6f.4 — the unified person-agent specification. Mirrors the
+ * factory's `createPersonAgent` signature. At least one of
+ * `externalCustodians` (non-empty) or `passkey` (non-zero pubkey) must
+ * be supplied; both is the mixed-mode account (SIWE wallet plus a
+ * passkey on the same Person.PSA).
+ */
+export interface PersonAgentSpec {
+  externalCustodians?: readonly Address[];
+  passkey?: {
+    credentialIdDigest: Hex;
+    x: bigint;
+    y: bigint;
+  };
   salt: bigint;
+}
+
+function _custodiansArg(spec: PersonAgentSpec): readonly Address[] {
+  return spec.externalCustodians ?? [];
+}
+function _credIdArg(spec: PersonAgentSpec): Hex {
+  return (spec.passkey?.credentialIdDigest ?? ('0x' + '00'.repeat(32))) as Hex;
+}
+function _xArg(spec: PersonAgentSpec): bigint {
+  return spec.passkey?.x ?? 0n;
+}
+function _yArg(spec: PersonAgentSpec): bigint {
+  return spec.passkey?.y ?? 0n;
 }
 
 export class AgentAccountClient {
@@ -107,89 +130,64 @@ export class AgentAccountClient {
   }
 
   /**
-   * Deterministic CREATE2 address. Works pre-deploy. Delegates the actual
-   * computation to the factory's getAddress() view so TS and Solidity stay
-   * in lock-step.
+   * Deterministic CREATE2 address for a Person Smart Agent (passkey-only,
+   * external-only, or mixed). Delegates to the factory's view so TS +
+   * Solidity stay in lock-step.
    */
-  async getAddress(owner: Address, salt: bigint): Promise<Address> {
+  async getAddressForPersonAgent(spec: PersonAgentSpec): Promise<Address> {
     const factory = getContract({
       address: this.opts.factory,
       abi: agentAccountFactoryAbi,
       client: this.publicClient,
     });
-    return (await factory.read.getAddress([owner, salt])) as Address;
+    return (await factory.read.getAddressForPersonAgent([
+      _custodiansArg(spec),
+      _credIdArg(spec),
+      _xArg(spec),
+      _yArg(spec),
+      spec.salt,
+    ])) as Address;
   }
 
   /**
-   * Deploy via factory using the provided signer to broadcast.
-   * For relayer-deployed accounts (auth flows where the user can't pay
-   * gas themselves), the signer should be a tool-executor key from
-   * @agenticprimitives/key-custody, NOT the user's own signer.
+   * Deploy a Person.PSA via the factory using a raw bootstrap private key.
+   * Idempotent — skips the tx if the predicted address already has code.
+   * Prefer `createPersonAgentFromAccount` with a KMS-backed viem account
+   * in production (no private-key material in process memory).
    */
-  async createAccount(params: CreateAgentAccountParams, signer: Signer): Promise<Address> {
-    const wallet = this.walletFromSigner(signer);
-    const hash = await wallet.writeContract({
-      address: this.opts.factory,
-      abi: agentAccountFactoryAbi,
-      functionName: 'createAccount',
-      args: [params.owner, params.salt],
-      account: signer.address,
-      chain: null,
-    });
-    // Wait for receipt; on success the deployed address is also derivable.
-    await this.publicClient.waitForTransactionReceipt({ hash });
-    return this.getAddress(params.owner, params.salt);
-  }
-
-  /**
-   * Deploy via factory using a raw bootstrap private key.
-   *
-   * Lower-level primitive: most callers should prefer
-   * `createAccountFromAccount` with a KMS-backed viem account
-   * (`createKmsViemAccount` from `@agenticprimitives/key-custody/kms-viem`)
-   * so no private-key material lives in env vars or process memory.
-   *
-   * Idempotent: skips the tx if the account is already deployed.
-   */
-  async createAccountFromPrivateKey(
-    owner: Address,
-    salt: bigint,
+  async createPersonAgentFromPrivateKey(
+    spec: PersonAgentSpec,
     bootstrapPrivateKey: Hex,
   ): Promise<Address> {
     const account = privateKeyToAccount(bootstrapPrivateKey);
-    return this.createAccountFromAccount(owner, salt, account);
+    return this.createPersonAgentFromAccount(spec, account);
   }
 
   /**
-   * Deploy via factory using any viem-compatible account. The intended
-   * production caller is the KMS-backed viem account from
-   * `@agenticprimitives/key-custody/kms-viem` — that way the relayer
-   * signs the deploy tx via Cloud KMS instead of holding a private key.
-   *
-   * The address backing `account` must hold ETH on the target chain to
-   * pay gas. The deployed smart account is owned by `owner`, not by the
-   * relayer — the relayer is a gas payer, not an authority.
-   *
-   * Idempotent: skips the tx if the account is already deployed.
+   * Deploy a Person.PSA via the factory using any viem-compatible account.
+   * The signer pays gas; the deployed account is custodian-of-spec, not
+   * custodian-of-relayer. Idempotent.
    */
-  async createAccountFromAccount(
-    owner: Address,
-    salt: bigint,
+  async createPersonAgentFromAccount(
+    spec: PersonAgentSpec,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     account: any,
   ): Promise<Address> {
-    const predicted = await this.getAddress(owner, salt);
+    const predicted = await this.getAddressForPersonAgent(spec);
     if (await this.isDeployed(predicted)) return predicted;
 
-    const wallet = createWalletClient({
-      account,
-      transport: http(this.opts.rpcUrl),
-    });
+    const wallet = createWalletClient({ account, transport: http(this.opts.rpcUrl) });
     const hash = await wallet.writeContract({
       address: this.opts.factory,
       abi: agentAccountFactoryAbi,
-      functionName: 'createAccount',
-      args: [owner, salt],
+      functionName: 'createPersonAgent',
+      args: [
+        _custodiansArg(spec),
+        _credIdArg(spec),
+        _xArg(spec),
+        _yArg(spec),
+        spec.salt,
+      ],
       account,
       chain: null,
     });
@@ -197,14 +195,23 @@ export class AgentAccountClient {
     return predicted;
   }
 
+  /**
+   * On-chain `isCustodian(addr)` query against a deployed AgentAccount.
+   * Returns the unified view (external custodians + passkey PIAs). Returns
+   * false if the account isn't deployed yet.
+   */
   async isCustodian(account: Address, address: Address): Promise<boolean> {
-    // AgentAccount has an internal _custodians mapping; expose via a view if
-    // the contract has one. For v0 we don't have a public read; return
-    // false as a conservative default until the consumer wires one.
-    // (Deferred: extend ABI when needed.)
-    void account;
-    void address;
-    return false;
+    if (!(await this.isDeployed(account))) return false;
+    try {
+      const acct = getContract({
+        address: account,
+        abi: agentAccountAbi,
+        client: this.publicClient,
+      });
+      return (await acct.read.isCustodian([address])) as boolean;
+    } catch {
+      return false;
+    }
   }
 
   async isDeployed(account: Address): Promise<boolean> {
@@ -290,7 +297,7 @@ export class AgentAccountClient {
     //
     // callGasLimit is sized for the most common heavy demo path: an Org or
     // Treasury AgentAccount deploy dispatched as Account.execute(factory,
-    // 0, createAccountWithMode(...)). Factory deploy + custody-policy
+    // 0, createMultiSigSmartAgent(...)). Factory deploy + custody-policy
     // install lands around 600-700k; 800k leaves headroom.
     //
     // Callers can override either via opts.verificationGasLimit /
@@ -388,22 +395,6 @@ export class AgentAccountClient {
   }
 
   /**
-   * Build an UNSIGNED ERC-4337 v0.9 UserOperation that, when submitted,
-   * will deploy the smart account at `getAddress(owner, salt)` via the
-   * factory. The user signs `userOpHash` with their owner EOA; the
-   * caller then passes the signed userOp to `submitDeployUserOp`.
-   *
-   * Paymaster sponsorship: `paymasterAndData` is set to the configured
-   * paymaster (typically our SmartAgentPaymaster). Dev-mode accept-all
-   * means no further data needed beyond gas limits.
-   *
-   * Returns:
-   *   - `userOp`: the unsigned PackedUserOperation (signature = '0x')
-   *   - `userOpHash`: the EIP-712 hash the owner must sign
-   *   - `sender`: the predicted smart-account address (same as
-   *     `getAddress(owner, salt)`)
-   */
-  /**
    * Compute the canonical hash a verifying-paymaster signer must sign
    * (audit C2). Matches `SmartAgentPaymaster.getHash(...)` on-chain.
    * Returns the raw keccak256 — callers wrap with EIP-191 ("\\x19Ethereum
@@ -452,146 +443,49 @@ export class AgentAccountClient {
     );
   }
 
-  async buildDeployUserOp(opts: {
-    owner: Address;
-    salt: bigint;
-    paymaster: Address;
-    verificationGasLimit?: bigint;
-    preVerificationGas?: bigint;
-    paymasterVerificationGasLimit?: bigint;
-    /**
-     * Verifying-paymaster mode (audit C2). When provided, the client
-     * appends `[validUntil(6)][validAfter(6)][sig(65)]` to
-     * `paymasterAndData`, where the signature is produced by calling
-     * `signFn(hash)` over the EIP-191-wrapped `getHash(...)` digest.
-     * The signFn typically wraps a KMS-backed signMessage call.
-     *
-     * When omitted, `paymasterAndData` is just the standard prefix
-     * (paymaster addr + gas limits) — works for paymasters in dev /
-     * accept-all mode (local anvil) or allowlist mode.
-     */
-    verifyingPaymaster?: {
-      signFn: (hash: Hex) => Promise<Hex>;
-      validUntilSeconds?: number; // default: now + 1h
-      validAfterSeconds?: number; // default: 0 (always valid from start)
-    };
-  }): Promise<{ userOp: PackedUserOperation; userOpHash: Hex; sender: Address }> {
-    const sender = await this.getAddress(opts.owner, opts.salt);
-
-    // initCode = factory address (20 bytes) || createAccount(owner, salt) calldata
-    const factoryCalldata = encodeFunctionData({
-      abi: agentAccountFactoryAbi,
-      functionName: 'createAccount',
-      args: [opts.owner, opts.salt],
-    });
-    const initCode = (this.opts.factory + factoryCalldata.slice(2)) as Hex;
-
-    // Gas defaults sized for the actual factory.createAccount cost on
-    // Base Sepolia (~232k from cast estimate). Account-side validateUserOp
-    // for a fresh account adds ~30-50k, so 350k verificationGasLimit gives
-    // 50%+ headroom without inflating the EntryPoint's prefund requirement.
-    const verificationGasLimit = opts.verificationGasLimit ?? 350_000n;
-    const callGasLimit = 0n; // callData is empty — we only want to deploy.
-    const accountGasLimits = packGasLimits(verificationGasLimit, callGasLimit);
-    const preVerificationGas = opts.preVerificationGas ?? 60_000n;
-
-    // Gas fees — pull current base fee from the chain. On L2s (Base, OP,
-    // Arbitrum) baseFee is typically <0.01 gwei and a small priority tip
-    // is plenty. EntryPoint pre-charges totalGas * maxFeePerGas as
-    // "prefund" before the op runs — keeping maxFeePerGas low keeps the
-    // paymaster's deposit going further per op.
-    const block = await this.publicClient.getBlock();
-    const baseFeePerGas = block.baseFeePerGas ?? 100_000_000n;
-    const maxPriorityFeePerGas = 100_000_000n; // 0.1 gwei
-    const maxFeePerGas = baseFeePerGas + maxPriorityFeePerGas * 2n;
-    const gasFees = packGasLimits(maxPriorityFeePerGas, maxFeePerGas);
-
-    // paymasterAndData (v0.7+ layout):
-    //   [20 bytes paymaster addr][16 bytes paymasterVerificationGasLimit]
-    //   [16 bytes paymasterPostOpGasLimit][remaining bytes paymasterData]
-    const pmVerifGas = opts.paymasterVerificationGasLimit ?? 50_000n;
-    const pmPostOpGas = 0n; // our SmartAgentPaymaster._postOp is a no-op
-    const paymasterAndData = await buildPaymasterAndData({
-      paymaster: opts.paymaster,
-      pmVerifGas,
-      pmPostOpGas,
-      verifyingPaymaster: opts.verifyingPaymaster,
-      userOpFields: { sender, nonce: 0n, initCode, callData: '0x' as Hex, accountGasLimits, preVerificationGas, gasFees },
-      chainId: this.opts.chainId,
-    });
-
-    const userOp: PackedUserOperation = {
-      sender,
-      nonce: 0n,
-      initCode,
-      callData: '0x',
-      accountGasLimits,
-      preVerificationGas,
-      gasFees,
-      paymasterAndData,
-      signature: '0x',
-    };
-
-    const bundler = new BundlerClient({
-      rpcUrl: this.opts.rpcUrl,
-      entryPoint: this.opts.entryPoint,
-    });
-    const userOpHash = await bundler.getUserOpHash(userOp);
-
-    return { userOp, userOpHash, sender };
-  }
-
   /**
-   * Passkey variant of `buildDeployUserOp`: builds a paymaster-sponsored
-   * UserOp whose initCode calls `AgentAccountFactory.createAccountWithPasskey(
-   * credentialIdDigest, x, y, salt)`. The deployed smart account has NO
-   * EOA owner — the WebAuthn credential at (x, y) is the sole signer.
+   * Build an UNSIGNED ERC-4337 v0.9 UserOperation that deploys a Person.PSA
+   * via `factory.createPersonAgent(...)`. Works for any custodian shape
+   * (passkey-only, external-only, mixed) — the signature on `userOpHash`
+   * uses whatever owner authority the resulting account will accept.
    *
-   * The userOpHash returned here must be signed by the passkey
-   * (`navigator.credentials.get` over the hash → `0x01 ||
-   * abi.encode(Assertion)` blob). demo-a2a's `/session/deploy` dispatches
-   * to this variant when `initMethod=passkey`; the server itself never
-   * inspects the signature shape.
+   * Paymaster sponsorship: `paymasterAndData` is set to the configured
+   * paymaster. Pass `verifyingPaymaster.signFn` to opt into audit C2's
+   * verifying-paymaster signed-attestation mode.
+   *
+   * Gas defaults are sized for the worst-case validateUserOp path: a
+   * WebAuthn passkey-init account verified by Daimo's pure-Solidity P-256
+   * fallback (~350-400k) plus ERC1967Proxy deploy + storage writes
+   * (~300k). Override via `verificationGasLimit` for cheaper paths.
    */
-  async buildDeployUserOpWithPasskey(opts: {
-    credentialIdDigest: Hex;
-    pubKeyX: bigint;
-    pubKeyY: bigint;
-    salt: bigint;
+  async buildDeployUserOpForPersonAgent(opts: {
+    spec: PersonAgentSpec;
     paymaster: Address;
     verificationGasLimit?: bigint;
     preVerificationGas?: bigint;
     paymasterVerificationGasLimit?: bigint;
-    /** Audit C2: verifying-paymaster signature. See buildDeployUserOp opts. */
     verifyingPaymaster?: {
       signFn: (hash: Hex) => Promise<Hex>;
       validUntilSeconds?: number;
       validAfterSeconds?: number;
     };
   }): Promise<{ userOp: PackedUserOperation; userOpHash: Hex; sender: Address }> {
-    const sender = await this.getAddressForPasskey(
-      opts.credentialIdDigest,
-      opts.pubKeyX,
-      opts.pubKeyY,
-      opts.salt,
-    );
+    const { spec, paymaster } = opts;
+    const sender = await this.getAddressForPersonAgent(spec);
 
     const factoryCalldata = encodeFunctionData({
       abi: agentAccountFactoryAbi,
-      functionName: 'createAccountWithPasskey',
-      args: [opts.credentialIdDigest, opts.pubKeyX, opts.pubKeyY, opts.salt],
+      functionName: 'createPersonAgent',
+      args: [
+        _custodiansArg(spec),
+        _credIdArg(spec),
+        _xArg(spec),
+        _yArg(spec),
+        spec.salt,
+      ],
     });
     const initCode = (this.opts.factory + factoryCalldata.slice(2)) as Hex;
 
-    // Higher verification budget than the EOA path: validateUserOp runs
-    // `_verifyWebAuthn` which calls P256Verifier. On chains with the
-    // RIP-7212 precompile (Base mainnet, recent L2s) the verification
-    // is ~3k gas; on chains without (anvil, older testnets) the Daimo
-    // Solidity fallback uses ~350-400k. The verificationGasLimit also
-    // covers _createSenderIfNeeded (factory deploys ERC1967Proxy ~250k
-    // + initializeWithPasskey storage writes ~50k). 1.2M is a comfortable
-    // ceiling for both paths; the user only pays the gas actually used
-    // (paymaster reimburses, no client cost on Base mainnet/Sepolia).
     const verificationGasLimit = opts.verificationGasLimit ?? 1_200_000n;
     const callGasLimit = 0n;
     const accountGasLimits = packGasLimits(verificationGasLimit, callGasLimit);
@@ -606,7 +500,7 @@ export class AgentAccountClient {
     const pmVerifGas = opts.paymasterVerificationGasLimit ?? 50_000n;
     const pmPostOpGas = 0n;
     const paymasterAndData = await buildPaymasterAndData({
-      paymaster: opts.paymaster,
+      paymaster,
       pmVerifGas,
       pmPostOpGas,
       verifyingPaymaster: opts.verifyingPaymaster,
@@ -631,18 +525,24 @@ export class AgentAccountClient {
       entryPoint: this.opts.entryPoint,
     });
     const userOpHash = await bundler.getUserOpHash(userOp);
-
     return { userOp, userOpHash, sender };
   }
 
   /**
-   * Counterfactual address for a passkey-owned account. Mirrors
-   * `getAddress` but for the passkey factory path.
+   * Counterfactual address for a multi-sig Smart Agent (Org / Treasury /
+   * any account with a CustodyPolicy module). The init-params bundle
+   * carries the initial custodian set + initial passkey + mode etc.;
+   * factory derivation matches the actual deploy bytecode exactly.
    */
-  async getAddressForPasskey(
-    credentialIdDigest: Hex,
-    x: bigint,
-    y: bigint,
+  async getAddressForMultiSigSmartAgent(
+    params: {
+      mode: number;
+      custodians: readonly Address[];
+      trustees: readonly Address[];
+      initialPasskeyCredentialIdDigest: Hex;
+      initialPasskeyX: bigint;
+      initialPasskeyY: bigint;
+    },
     salt: bigint,
   ): Promise<Address> {
     const factory = getContract({
@@ -650,13 +550,12 @@ export class AgentAccountClient {
       abi: agentAccountFactoryAbi,
       client: this.publicClient,
     });
-    return (await factory.read.getAddressForPasskey([
-      credentialIdDigest,
-      x,
-      y,
+    return (await factory.read.getAddressForMultiSigSmartAgent([
+      params,
       salt,
     ])) as Address;
   }
+
 
   /**
    * Submit a (now-signed) deploy UserOp via EntryPoint.handleOps. The
@@ -695,15 +594,4 @@ export class AgentAccountClient {
     return { receipt };
   }
 
-  private walletFromSigner(signer: Signer): WalletClient {
-    // Adapt the abstract Signer interface to viem's WalletClient. We never
-    // expose the private key. The signer's signMessage is sufficient for
-    // factory.createAccount (which is a regular contract call, not a UserOp).
-    void signer;
-    // viem requires an account-of-known-type for writeContract. For v0,
-    // consumers passing an EOA signer can supply a viem WalletClient
-    // directly via a future overload. Today: deploy path is exercised by
-    // the contract deploy script, not via this client.
-    return createWalletClient({ transport: http(this.opts.rpcUrl) }) as WalletClient;
-  }
 }

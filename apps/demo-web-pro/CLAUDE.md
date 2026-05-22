@@ -2,9 +2,11 @@
 
 ## What this app is
 
-The canonical home for **cross-cutting capability** demos — features that thread through ≥ 3 packages and carry their own threat model. Each capability has a guide co-located in `docs/<capability>/` + interactive flows under `src/flows/<capability>/`.
+The canonical **Treasury Service Agent** demo from spec 211. The old cross-capability gallery is gone; this app tells one story end-to-end:
 
-**Not** the simple SIWE → read-profile demo. That lives in [`apps/demo-web`](../demo-web/) (different audience: fast onboarding / marketing). This app is for **evaluators** who want to see hybrid recovery, threshold approval, org treasury, and recovery flows end-to-end.
+> two passkey-controlled Person Smart Agents create an Organization Smart Agent, create a Treasury Service Agent, and move authority toward agent-to-agent stewardship.
+
+**Not** the simple SIWE → read-profile demo. That lives in [`apps/demo-web`](../demo-web/). This app is for evaluators who want to see the agent-centric model across web app, demo-a2a, contracts, and future MCP stewardship.
 
 ## Layout
 
@@ -12,49 +14,39 @@ The canonical home for **cross-cutting capability** demos — features that thre
 apps/demo-web-pro/
 ├── CLAUDE.md                       ← you are here
 ├── docs/
-│   └── multi-sig/
-│       ├── guide.md                ← developer tutorial
-│       └── flows/
-│           ├── hybrid-recovery.md  ← per-use-case walkthroughs
-│           ├── threshold-approval.md
-│           ├── org-treasury.md
-│           ├── steward-attenuation.md
-│           └── recovery.md
+│   ├── README.md
+│   └── treasury-service-agent/
+│       └── guide.md                ← current web/a2a/MCP interaction guide
 └── src/
     ├── main.tsx
-    ├── App.tsx                     ← gallery + hash router
-    └── flows/                      ← one subdir per use case
-        ├── hybrid-recovery/        ← lands 6c.5
-        ├── threshold-approval/     ← lands 6c.5
-        ├── org-treasury/           ← lands 6c.5 + 6e
-        ├── steward-attenuation/    ← post-H5 (cross-delegation)
-        └── recovery/               ← lands post-6c.2-e (T6 Recovery flow)
+    ├── App.tsx                     ← mounts TreasuryShell
+    ├── treasury/                   ← act ladder + UI shell
+    └── lib/                        ← passkey, gasless, custody, demo state helpers
 ```
 
 ## Capabilities demoed here
 
-| Capability | Spec | Demo guide | Flow dirs |
+| Capability | Spec | Demo guide | Implementation |
 | --- | --- | --- | --- |
-| **Multi-sig + threshold policy** | [`specs/207`](../../specs/207-smart-account-threshold-policy.md) | [`docs/multi-sig/guide.md`](docs/multi-sig/guide.md) | `src/flows/{hybrid-recovery, threshold-approval, org-treasury, steward-attenuation, recovery}/` |
-| **Treasury** (queued, phase 6e) | TBD | `docs/treasury/guide.md` (TBD) | `src/flows/treasury/` |
-| **Argument-level caveats** (queued, [`specs/208`](../../specs/208-argument-level-caveats.md)) | spec 208 | `docs/argument-caveats/guide.md` (TBD) | `src/flows/argument-caveats/` |
+| **Treasury Service Agent** | [`specs/211`](../../specs/211-treasury-service-agent-demo.md) | [`docs/treasury-service-agent/guide.md`](docs/treasury-service-agent/guide.md) | `src/treasury/` |
+| **Agent-centric delegation** | [`specs/212`](../../specs/212-agent-centric-delegation.md) | same guide | planned Acts 5–6 |
+| **Treasury ontology** | [`specs/210`](../../specs/210-treasury-service-agent.md) | same guide | UI vocabulary + act model |
 
-When you add a flow:
+When you add an act:
 
 1. Land the corresponding spec in `specs/2XX-*.md` first (spec-first doctrine).
-2. Add `docs/<capability>/flows/<use-case>.md` walkthrough.
-3. Add `src/flows/<use-case>/` implementation referencing the walkthrough.
-4. Update `App.tsx` `USE_CASES` array (badge: `stub` → `in-flight` → `live`).
-5. Update `docs/architecture/cross-cutting-capabilities.md` (top-level index).
-6. Update each participating package's `CLAUDE.md` "Capabilities this package participates in" section.
-7. Run `pnpm check:cross-cutting-capabilities` to confirm all four artifacts wired.
+2. Add/update `docs/treasury-service-agent/guide.md`.
+3. Add/update `src/treasury/acts.ts` and `src/treasury/acts/<ActName>.tsx`.
+4. Mark act status honestly: `not-started` → `simulated` → `live`.
+5. Update e2e coverage in `tests/e2e/pro-specs/`.
 
 ## Doctrine pinned to this app
 
-- **Multi-sig is safety + recovery, not a "ceremony."** Every flow's UI copy + permission cards reflect this: "2 approvals required to let Agent X spend up to 10 USDC/day" — NEVER "sign this hash."
-- **Hybrid is the default consumer mode.** Even within `demo-web-pro`, when a flow creates an account it defaults to hybrid. `single` mode is reserved for the simpler `demo-web`.
-- **Permission UX is security.** Every caveat-bearing delegation issues a permission card. Argument-level caveats (spec 208) make these cards more specific over time.
-- **One AgentAccount substrate.** No flow forks the account contract. Mode is policy state on the same contract.
+- **Agent-centric, not user-centric.** The human controls one Person Smart Agent via passkey. Authority flows between Smart Agents.
+- **Treasury is a Service Agent, not a wallet.** The account is the embodiment; the agent is the identity.
+- **Admin authority creates stewardship.** Admin changes are deliberate; stewardship permissions are bounded operational authority.
+- **Web app is not authority.** Web builds UX and calldata. Contracts, demo-a2a, and future MCP verification enforce the authority model.
+- **Do not revive the gallery.** This app answers one product question, one story.
 
 ## Running this app
 

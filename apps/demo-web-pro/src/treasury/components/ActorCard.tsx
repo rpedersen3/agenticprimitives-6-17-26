@@ -44,6 +44,12 @@ export function ActorCard({
         <div className="actor-card-body">
           <p className="muted">Person Smart Agent</p>
           <code>{shortAddress(claim.personAgent)}</code>
+          {claim.personIdentity && (
+            <>
+              <p className="muted" style={{ marginTop: 6 }}>Passkey identity (custodian)</p>
+              <code title={claim.personIdentity}>{shortAddress(claim.personIdentity)}</code>
+            </>
+          )}
           <p className="muted small">Passkey enrolled · live on Base Sepolia</p>
         </div>
       ) : (

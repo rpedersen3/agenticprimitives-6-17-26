@@ -62,7 +62,7 @@ contract AdminFlowsViaValidatorTest is Test {
             initialPasskeyX: 0,
             initialPasskeyY: 0
         });
-        acct = factory.createAccountWithMode(p, address(validator), 1);
+        acct = factory.createMultiSigSmartAgent(p, address(validator), 0, 1);
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────
@@ -358,5 +358,144 @@ contract AdminFlowsViaValidatorTest is Test {
         validator.applyCustodyChange(
             address(acct), changeId, _twoSigsSorted(GUARDIAN1_PK, GUARDIAN2_PK, eh)
         );
+    }
+
+    // ─── 9. ChangeApprovalsRequired (phase 6f.4) ──────────────────────
+
+    /// @notice Happy path: with two custodians, bump T4 threshold from
+    ///         1 → 2 via the new ChangeApprovalsRequired action.
+    function test_admin_changeApprovalsRequired_t4_oneToTwo() public {
+        // Add a second custodian first so the new threshold is reachable.
+        _proposeAndExecuteByOwner(
+            CustodyPolicy.CustodyAction.AddCustodian, abi.encode(newOwner)
+        );
+        assertEq(acct.custodianCount(), 2);
+        assertEq(validator.approvalsRequired(address(acct), 4), 1);
+
+        bytes memory args = abi.encode(uint8(4), uint8(2));
+        _proposeAndExecuteByOwner(
+            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args
+        );
+
+        assertEq(validator.approvalsRequired(address(acct), 4), 2);
+        // T5 untouched.
+        assertEq(validator.approvalsRequired(address(acct), 5), 1);
+    }
+
+    /// @notice After bumping T4 to 2, subsequent T4 admin changes need
+    ///         two distinct custodian sigs — single-sig schedule reverts.
+    function test_admin_changeApprovalsRequired_t4_enforcedAfterBump() public {
+        // Add owner #2 (a pk we know — newOwner address only, no key, so
+        // use guardian1 as the second custodian for signature purposes).
+        _proposeAndExecuteByOwner(
+            CustodyPolicy.CustodyAction.AddCustodian, abi.encode(guardian1)
+        );
+        _proposeAndExecuteByOwner(
+            CustodyPolicy.CustodyAction.ChangeApprovalsRequired,
+            abi.encode(uint8(4), uint8(2))
+        );
+        assertEq(validator.approvalsRequired(address(acct), 4), 2);
+
+        // Single-sig (just OWNER1) should now fail with InsufficientQuorum.
+        bytes memory args = abi.encode(newOwner);
+        uint256 changeId = validator.scheduledChangeCount(address(acct)) + 1;
+        bytes32 ph = _payloadHash(
+            bytes32("ADMIN_PROPOSE"), changeId, CustodyPolicy.CustodyAction.AddCustodian, args, 0
+        );
+        vm.expectRevert(abi.encodeWithSelector(
+            CustodyPolicy.AdminInsufficientQuorum.selector, uint256(1), uint8(2)
+        ));
+        validator.scheduleCustodyChange(
+            address(acct), CustodyPolicy.CustodyAction.AddCustodian, args, _signRaw(OWNER1_PK, ph)
+        );
+
+        // Two-sig flow now works.
+        bytes memory twoSigs = _twoSigsSorted(OWNER1_PK, GUARDIAN1_PK, ph);
+        validator.scheduleCustodyChange(
+            address(acct), CustodyPolicy.CustodyAction.AddCustodian, args, twoSigs
+        );
+    }
+
+    /// @notice Reverts when the requested threshold exceeds the current
+    ///         custodian count (e.g. trying to set T4=3 on a 2-custodian
+    ///         account).
+    function test_admin_changeApprovalsRequired_revertsWhenAboveCustodianCount() public {
+        _proposeAndExecuteByOwner(
+            CustodyPolicy.CustodyAction.AddCustodian, abi.encode(newOwner)
+        );
+        bytes memory args = abi.encode(uint8(4), uint8(3));
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 eta = nowTs + 1 hours;
+        uint256 changeId = validator.scheduledChangeCount(address(acct)) + 1;
+        bytes32 ph = _payloadHash(
+            bytes32("ADMIN_PROPOSE"), changeId,
+            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args, eta
+        );
+        validator.scheduleCustodyChange(
+            address(acct), CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args,
+            _signRaw(OWNER1_PK, ph)
+        );
+
+        vm.warp(nowTs + 1 hours + 1);
+        bytes32 eh = _payloadHash(
+            bytes32("ADMIN_EXECUTE"), changeId,
+            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args, eta
+        );
+        vm.expectRevert(abi.encodeWithSelector(
+            CustodyPolicy.InvalidThresholdValue.selector, uint8(3)
+        ));
+        validator.applyCustodyChange(address(acct), changeId, _signRaw(OWNER1_PK, eh));
+    }
+
+    /// @notice Reverts when newCount = 0 (would brick the tier).
+    function test_admin_changeApprovalsRequired_revertsOnZero() public {
+        bytes memory args = abi.encode(uint8(4), uint8(0));
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 eta = nowTs + 1 hours;
+        uint256 changeId = validator.scheduledChangeCount(address(acct)) + 1;
+        bytes32 ph = _payloadHash(
+            bytes32("ADMIN_PROPOSE"), changeId,
+            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args, eta
+        );
+        validator.scheduleCustodyChange(
+            address(acct), CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args,
+            _signRaw(OWNER1_PK, ph)
+        );
+        vm.warp(nowTs + 1 hours + 1);
+        bytes32 eh = _payloadHash(
+            bytes32("ADMIN_EXECUTE"), changeId,
+            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args, eta
+        );
+        vm.expectRevert(abi.encodeWithSelector(
+            CustodyPolicy.InvalidThresholdValue.selector, uint8(0)
+        ));
+        validator.applyCustodyChange(address(acct), changeId, _signRaw(OWNER1_PK, eh));
+    }
+
+    /// @notice Reverts when tier is outside [1, 5] — tier 6 belongs to
+    ///         SetRecoveryApprovals, tier 0 is invalid.
+    function test_admin_changeApprovalsRequired_revertsOnInvalidTier() public {
+        // Tier 6 — should route through SetRecoveryApprovals instead.
+        bytes memory args6 = abi.encode(uint8(6), uint8(1));
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 eta6 = nowTs + 1 hours;
+        uint256 changeId6 = validator.scheduledChangeCount(address(acct)) + 1;
+        bytes32 ph6 = _payloadHash(
+            bytes32("ADMIN_PROPOSE"), changeId6,
+            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args6, eta6
+        );
+        validator.scheduleCustodyChange(
+            address(acct), CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args6,
+            _signRaw(OWNER1_PK, ph6)
+        );
+        vm.warp(nowTs + 1 hours + 1);
+        bytes32 eh6 = _payloadHash(
+            bytes32("ADMIN_EXECUTE"), changeId6,
+            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args6, eta6
+        );
+        vm.expectRevert(abi.encodeWithSelector(
+            CustodyPolicy.InvalidTier.selector, uint8(6)
+        ));
+        validator.applyCustodyChange(address(acct), changeId6, _signRaw(OWNER1_PK, eh6));
     }
 }

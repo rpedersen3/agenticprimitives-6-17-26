@@ -33,7 +33,13 @@ contract UniversalSignatureValidatorTest is Test {
             address(0xCC),
             address(0xDD)
         );
-        acct = factory.createAccount(owner, 1);
+        address[] memory _c = new address[](1);
+        _c[0] = owner;
+        acct = factory.createPersonAgent(_c, bytes32(0), 0, 0, 1);
+    }
+
+    function _eoaArr(address a) internal pure returns (address[] memory r) {
+        r = new address[](1); r[0] = a;
     }
 
     function _signRaw(uint256 pk, bytes32 hash) internal pure returns (bytes memory) {
@@ -81,17 +87,17 @@ contract UniversalSignatureValidatorTest is Test {
 
     function test_erc6492_path_deploys_then_verifies() public {
         // Predict address of a not-yet-deployed account.
-        address predicted = factory.getAddress(owner, 99);
+        address[] memory custodians = _eoaArr(owner);
+        address predicted = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 99);
         assertEq(predicted.code.length, 0);
 
-        // Inner sig: owner's ECDSA over the hash. After 6492 deploy, the
-        // proxy's isValidSignature delegates to AgentAccount which
-        // routes to _verifyEcdsa.
         bytes32 hash = keccak256("6492");
         bytes memory innerSig = _signRaw(OWNER_PK, hash);
 
         // Build 6492-wrapped sig: abi.encode(factory, factoryCalldata, innerSig) || MAGIC
-        bytes memory factoryCalldata = abi.encodeCall(factory.createAccount, (owner, 99));
+        bytes memory factoryCalldata = abi.encodeCall(
+            factory.createPersonAgent, (custodians, bytes32(0), 0, 0, 99)
+        );
         bytes memory prefix = abi.encode(address(factory), factoryCalldata, innerSig);
         bytes memory wrapped = abi.encodePacked(prefix, ERC6492_MAGIC);
 
@@ -101,19 +107,19 @@ contract UniversalSignatureValidatorTest is Test {
     }
 
     function test_erc6492_path_view_returns_false_when_not_deployed() public view {
-        // View path can't deploy; with no code, must return false.
-        address predicted = factory.getAddress(owner, 100);
+        address[] memory custodians = _eoaArr(owner);
+        address predicted = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 100);
         bytes32 hash = keccak256("6492-view");
         bytes memory innerSig = _signRaw(OWNER_PK, hash);
-        bytes memory factoryCalldata = abi.encodeCall(factory.createAccount, (owner, 100));
+        bytes memory factoryCalldata = abi.encodeCall(
+            factory.createPersonAgent, (custodians, bytes32(0), 0, 0, 100)
+        );
         bytes memory prefix = abi.encode(address(factory), factoryCalldata, innerSig);
         bytes memory wrapped = abi.encodePacked(prefix, ERC6492_MAGIC);
         assertFalse(validator.isValidSigView(predicted, hash, wrapped));
     }
 
     function test_erc6492_path_view_works_if_already_deployed() public {
-        // If the account is already deployed, the view path strips the
-        // 6492 envelope and just calls 1271.
         bytes32 hash = keccak256("6492-already");
         bytes memory innerSig = _signRaw(OWNER_PK, hash);
         bytes memory wrapped = abi.encodePacked(
@@ -124,13 +130,14 @@ contract UniversalSignatureValidatorTest is Test {
     }
 
     function test_erc6492_path_reverts_when_factory_call_does_not_deploy() public {
-        // A factory call that returns OK but doesn't deploy at the
-        // predicted address must revert with DeployFailed.
-        address predicted = factory.getAddress(owner, 101);
+        address[] memory custodians = _eoaArr(owner);
+        address predicted = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 101);
         bytes32 hash = keccak256("6492-bad-factory");
         bytes memory innerSig = _signRaw(OWNER_PK, hash);
         // Wrong factoryCalldata — deploy at a different salt:
-        bytes memory wrongCalldata = abi.encodeCall(factory.createAccount, (owner, 9999));
+        bytes memory wrongCalldata = abi.encodeCall(
+            factory.createPersonAgent, (custodians, bytes32(0), 0, 0, 9999)
+        );
         bytes memory prefix = abi.encode(address(factory), wrongCalldata, innerSig);
         bytes memory wrapped = abi.encodePacked(prefix, ERC6492_MAGIC);
         vm.expectRevert(UniversalSignatureValidator.DeployFailed.selector);

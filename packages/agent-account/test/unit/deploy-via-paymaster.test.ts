@@ -1,5 +1,5 @@
 /**
- * Tests for AgentAccountClient.buildDeployUserOp + submitDeployUserOp.
+ * Tests for AgentAccountClient.buildDeployUserOpForPersonAgent + submitDeployUserOp.
  * viem is mocked; covers the UserOp construction shape.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -36,7 +36,8 @@ vi.mock('viem', async (importOriginal) => {
       if (address === FACTORY) {
         return {
           read: {
-            getAddress: vi.fn(async () => PREDICTED),
+            getAddressForPersonAgent: vi.fn(async () => PREDICTED),
+            getAddressForMultiSigSmartAgent: vi.fn(async () => PREDICTED),
           },
         };
       }
@@ -46,7 +47,7 @@ vi.mock('viem', async (importOriginal) => {
   };
 });
 
-describe('AgentAccountClient.buildDeployUserOp', () => {
+describe('AgentAccountClient.buildDeployUserOpForPersonAgent', () => {
   let client: AgentAccountClient;
   beforeEach(() => {
     fakeReadContract.mockReset();
@@ -61,70 +62,62 @@ describe('AgentAccountClient.buildDeployUserOp', () => {
     });
   });
 
-  it('returns sender == factory.getAddress(owner, salt)', async () => {
-    const { sender } = await client.buildDeployUserOp({
-      owner: OWNER,
-      salt: 0n,
+  it('returns sender == getAddressForPersonAgent(spec)', async () => {
+    const { sender } = await client.buildDeployUserOpForPersonAgent({
+      spec: { externalCustodians: [OWNER], salt: 0n },
       paymaster: PAYMASTER,
     });
     expect(sender).toBe(PREDICTED);
   });
 
   it('initCode starts with factory address (20 bytes)', async () => {
-    const { userOp } = await client.buildDeployUserOp({
-      owner: OWNER,
-      salt: 0n,
+    const { userOp } = await client.buildDeployUserOpForPersonAgent({
+      spec: { externalCustodians: [OWNER], salt: 0n },
       paymaster: PAYMASTER,
     });
     const first20 = userOp.initCode.slice(2, 42).toLowerCase();
     expect(first20).toBe(FACTORY.slice(2).toLowerCase());
-    // Followed by calldata — at least the 4-byte selector
     expect(userOp.initCode.length).toBeGreaterThan(2 + 40 + 8);
   });
 
   it('callData is empty (deploy-only UserOp)', async () => {
-    const { userOp } = await client.buildDeployUserOp({
-      owner: OWNER,
-      salt: 0n,
+    const { userOp } = await client.buildDeployUserOpForPersonAgent({
+      spec: { externalCustodians: [OWNER], salt: 0n },
       paymaster: PAYMASTER,
     });
     expect(userOp.callData).toBe('0x');
   });
 
   it('paymasterAndData starts with paymaster address (20 bytes)', async () => {
-    const { userOp } = await client.buildDeployUserOp({
-      owner: OWNER,
-      salt: 0n,
+    const { userOp } = await client.buildDeployUserOpForPersonAgent({
+      spec: { externalCustodians: [OWNER], salt: 0n },
       paymaster: PAYMASTER,
     });
     const first20 = userOp.paymasterAndData.slice(2, 42).toLowerCase();
     expect(first20).toBe(PAYMASTER.slice(2).toLowerCase());
-    // 20 bytes addr + 16 bytes verifGas + 16 bytes postOpGas = 52 bytes = 104 hex + '0x'
+    // 20 + 16 + 16 = 52 bytes
     expect(userOp.paymasterAndData.length).toBe(2 + 52 * 2);
   });
 
   it('signature is empty in unsigned userOp', async () => {
-    const { userOp } = await client.buildDeployUserOp({
-      owner: OWNER,
-      salt: 0n,
+    const { userOp } = await client.buildDeployUserOpForPersonAgent({
+      spec: { externalCustodians: [OWNER], salt: 0n },
       paymaster: PAYMASTER,
     });
     expect(userOp.signature).toBe('0x');
   });
 
   it('nonce is 0 for first deploy', async () => {
-    const { userOp } = await client.buildDeployUserOp({
-      owner: OWNER,
-      salt: 0n,
+    const { userOp } = await client.buildDeployUserOpForPersonAgent({
+      spec: { externalCustodians: [OWNER], salt: 0n },
       paymaster: PAYMASTER,
     });
     expect(userOp.nonce).toBe(0n);
   });
 
   it('userOpHash is fetched from EntryPoint.getUserOpHash', async () => {
-    const { userOpHash } = await client.buildDeployUserOp({
-      owner: OWNER,
-      salt: 0n,
+    const { userOpHash } = await client.buildDeployUserOpForPersonAgent({
+      spec: { externalCustodians: [OWNER], salt: 0n },
       paymaster: PAYMASTER,
     });
     expect(userOpHash).toBe(MOCK_USEROP_HASH);
@@ -136,18 +129,31 @@ describe('AgentAccountClient.buildDeployUserOp', () => {
   });
 
   it('overrides verificationGasLimit + preVerificationGas when supplied', async () => {
-    const { userOp } = await client.buildDeployUserOp({
-      owner: OWNER,
-      salt: 0n,
+    const { userOp } = await client.buildDeployUserOpForPersonAgent({
+      spec: { externalCustodians: [OWNER], salt: 0n },
       paymaster: PAYMASTER,
       verificationGasLimit: 999_999n,
       preVerificationGas: 88_888n,
     });
     expect(userOp.preVerificationGas).toBe(88_888n);
-    // accountGasLimits packs (high=verificationGasLimit, low=callGasLimit=0)
-    // Unpacking: BigInt(packed) >> 128 should equal 999_999
     const packed = BigInt(userOp.accountGasLimits);
     expect(packed >> 128n).toBe(999_999n);
+  });
+
+  it('passkey-only spec encodes the passkey args into initCode', async () => {
+    const { userOp } = await client.buildDeployUserOpForPersonAgent({
+      spec: {
+        passkey: {
+          credentialIdDigest: ('0x' + 'ee'.repeat(32)) as `0x${string}`,
+          x: 0xa1n,
+          y: 0xa2n,
+        },
+        salt: 7n,
+      },
+      paymaster: PAYMASTER,
+    });
+    // initCode includes the credentialIdDigest constant pattern.
+    expect(userOp.initCode.toLowerCase()).toContain('ee'.repeat(32));
   });
 });
 

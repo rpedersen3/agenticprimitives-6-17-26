@@ -84,6 +84,18 @@ export function clearDemoState(): void {
   window.dispatchEvent(new Event('demo-state:update'));
 }
 
+export function clearStrandedOrg(): void {
+  const state = read();
+  delete state.org;
+  write(state);
+}
+
+export function clearStrandedTreasury(): void {
+  const state = read();
+  delete state.treasury;
+  write(state);
+}
+
 export function subscribeDemoState(listener: () => void): () => void {
   const onStorage = (e: StorageEvent) => {
     if (e.key === STORAGE_KEY) listener();

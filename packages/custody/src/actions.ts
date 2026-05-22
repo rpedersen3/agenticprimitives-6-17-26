@@ -20,6 +20,7 @@ export enum CustodyAction {
   ChangeValueCeiling = 12,
   SetRecoveryApprovals = 13,
   RecoverAccount = 14,
+  ChangeApprovalsRequired = 15,
 }
 
 // ─── Per-action arg builders ─────────────────────────────────────────────
@@ -58,4 +59,39 @@ export function buildSetRecoveryApprovalsArgs(approvals: number): Hex {
 
 export function buildApplySystemUpdateArgs(newImpl: Address): Hex {
   return encodeAbiParameters([{ type: 'address' }], [newImpl]);
+}
+
+/**
+ * Encode args for `ChangeApprovalsRequired(tier, newCount)`.
+ *
+ * `tier` is a RiskTier in [1, 5] — T6 (recovery) lives in a separate
+ * slot and is set via `buildSetRecoveryApprovalsArgs`. `newCount` must
+ * satisfy `1 <= newCount <= account.custodianCount()` at apply time.
+ */
+export function buildChangeApprovalsRequiredArgs(tier: number, newCount: number): Hex {
+  return encodeAbiParameters(
+    [{ type: 'uint8' }, { type: 'uint8' }],
+    [tier, newCount],
+  );
+}
+
+/**
+ * Encode args for `AddPasskeyCredential(credentialIdDigest, x, y)`.
+ * Side effect on AgentAccount: also registers the PIA derived from
+ * `(x, y)` as a first-class custodian.
+ */
+export function buildAddPasskeyCredentialArgs(
+  credentialIdDigest: Hex,
+  x: bigint,
+  y: bigint,
+): Hex {
+  return encodeAbiParameters(
+    [{ type: 'bytes32' }, { type: 'uint256' }, { type: 'uint256' }],
+    [credentialIdDigest, x, y],
+  );
+}
+
+/** Encode args for `RemovePasskeyCredential(credentialIdDigest)`. */
+export function buildRemovePasskeyCredentialArgs(credentialIdDigest: Hex): Hex {
+  return encodeAbiParameters([{ type: 'bytes32' }], [credentialIdDigest]);
 }

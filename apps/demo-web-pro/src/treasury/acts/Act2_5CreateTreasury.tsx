@@ -3,14 +3,14 @@
  *
  * Per spec 211 § 5 Act 2.5 + the 2026-05-22 mode-choice round:
  *   - Sender: the founder\'s Person Smart Agent (Alice\'s PSA).
- *     This is a transitional shape — Acme Construction\'s admin set is
- *     just {Alice.PSA} at this point, so Alice\'s passkey can sign for
- *     the Org indirectly via ERC-1271. Phase 6f.4 lights up the proper
- *     "Org dispatches → Treasury" chain once Bob is on board.
+ *     This is a transitional shape — Acme Construction\'s custodian set is
+ *     just {Alice.PIA} at this point, so Alice\'s passkey can sign the
+ *     required custody slot directly. Phase 6f.4 adds Bob\'s passkey and
+ *     raises approvals required.
  *   - Calls factory.createAccountWithMode for the Treasury with:
- *       mode       = 0 (single)        — Org as sole custodian
- *       custodians = [Org.address]     — Acme Construction
- *       trustees   = []                — Treasury inherits recovery from the Org
+ *       mode       = 1 (hybrid)        — Alice passkey identity as initial custodian
+ *       custodians = [Alice.PIA]       — passkey-derived identity, not Org address
+ *       trustees   = []                — added later by custody policy acts
  *   - Paymaster sponsors gas.
  *   - On success the Treasury address is saved in demo-state.
  *
@@ -99,30 +99,41 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     setError(null);
     setPhase('preflight');
 
+    // Phase 6f.4 — Treasury custodians are PASSKEY-DIRECT, not the Org.
+    // The "Treasury actedOnBehalfOf Org" relationship is now expressed
+    // purely as a delegation/PROV-O attestation (issued in Act 5), not
+    // by putting the Org in the Treasury's custodian set. Custody must
+    // bottom out at human signers (spec 211 § 3 / spec 212 § 2.2).
+    //
+    // Pass an empty `custodians` array: Alice's passkey is registered
+    // via the `initialPasskey*` path, which writes Alice's PIA into the
+    // passkey-storage mapping. Including the PIA in `custodians` too
+    // would double-count it; the contract reverts CustodianAlreadyExists.
+    const alicePia = founder.personIdentity;
     const initParams = {
-      mode: 0, // single — Org as sole custodian
-      custodians: [org.address],
+      mode: 1, // hybrid — same shape as Org; threshold bumps to 2 in Act 4
+      custodians: [] as Address[],
       trustees: [] as Address[],
-      initialPasskeyCredentialIdDigest: ('0x' + '00'.repeat(32)) as Hex,
-      initialPasskeyX: 0n,
-      initialPasskeyY: 0n,
+      initialPasskeyCredentialIdDigest: passkey.credentialIdDigest,
+      initialPasskeyX: passkey.pubKeyX,
+      initialPasskeyY: passkey.pubKeyY,
     } as const;
 
-    // See Act 2 for the salt-version rationale.
-    const SALT_VERSION = 'v4-fresh';
+    // Salt includes the Org address so a Treasury deployed for a
+    // different Org never collides at the same CREATE2 slot.
+    const SALT_VERSION = 'v6-dedup-pia';
     const salt = BigInt(
       '0x' +
-        [...new TextEncoder().encode(`${TREASURY_NAME}:${org.address}:${SALT_VERSION}`)]
+        [...new TextEncoder().encode(`${TREASURY_NAME}:${org.address}:${alicePia}:${SALT_VERSION}`)]
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('')
           .slice(0, 16),
     );
 
-    // 1-second T4 safety delay — same demo override as Act 2. See
-    // Act2CreateOrg for the "why 1 not 0" factory quirk.
+    // 1-second T4 safety delay — same demo override as Act 2.
     const factoryCallData = encodeFunctionData({
       abi: agentAccountFactoryAbi,
-      functionName: 'createAccountWithModeCustomSafetyDelay',
+      functionName: 'createMultiSigSmartAgent',
       args: [initParams, custodyPolicyAddress, 1, salt],
     });
 
@@ -168,8 +179,8 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
       saveTreasury({
         address: treasuryAddress,
         txHash: result.transactionHash,
-        mode: 0,
-        custodians: [org.address],
+        mode: 1,
+        custodians: [alicePia],
         createdAt: new Date().toISOString(),
       });
       return;
@@ -178,8 +189,8 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     saveTreasury({
       address: treasuryAddress,
       txHash: result.transactionHash,
-      mode: 0,
-      custodians: [org.address],
+      mode: 1,
+      custodians: [alicePia],
       createdAt: new Date().toISOString(),
     });
 
@@ -208,7 +219,7 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
       <section className="card">
         <p className="eyebrow">Act 2.5 · Admin</p>
         <h1>Create the Organization first.</h1>
-        <p>The Treasury is owned by {orgConfig.name}. Run Act 2 before Act 2.5.</p>
+        <p>The Treasury is authorized by {orgConfig.name}. Run Act 2 before Act 2.5.</p>
         <a href="#/acts/create-org" className="primary">Go to Act 2 →</a>
       </section>
     );
@@ -247,8 +258,8 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
           <p className="eyebrow">Act 2.5 · Admin · <LiveStatusBadge status="live" /></p>
           <h1>Switch to {founderName} to deploy the Treasury.</h1>
           <p>
-            The Treasury is owned by {orgConfig.name}, which only {founderName} can sign for
-            right now (she\'s the sole custodian until Act 3).
+            The Treasury is authorized by {orgConfig.name}, but custody still bottoms out at
+            passkey identities. Right now only {founderName}'s passkey identity is available.
           </p>
         </div>
         <section className="card">
@@ -309,17 +320,17 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
         title={`Create ${TREASURY_NAME}`}
         scopeList={[
           `Deploy a new AgentAccount named "${TREASURY_NAME}" on Base Sepolia.`,
-          `Set ${orgConfig.name} as its sole custodian (the Treasury cannot move funds without Org approval).`,
+          `Set ${founderName}'s passkey identity as the initial Treasury custodian.`,
           `Establish the prov:actedOnBehalfOf link from the Treasury to ${orgConfig.name} in the audit trail.`,
         ]}
         grantee={`${TREASURY_NAME} (Service Smart Agent)`}
-        duration="permanent on-chain identity, owned by the Org"
+        duration="permanent on-chain identity, authorized by the Org"
         limits={[
-          'Hold its own keys — it has no passkey; only the Org can sign for it.',
+          'Put any Smart Agent address in the Treasury custodian set — custody bottoms out at passkey identities.',
           `Issue payments yet — Acts 4 and 5 set up the stewardship pattern that lets Person Agents draft payments under caveats.`,
-          `Be controlled directly by ${founderName}\'s passkey — authority chains through the Org.`,
+          `Treat ${orgConfig.name} as the literal custodian — the Org→Treasury relationship is stewardship/provenance, not custody.`,
         ]}
-        revokeNote={`The Org\'s Custody Council (Act 4) controls every Treasury custody change. The Treasury inherits the Org\'s recovery posture.`}
+        revokeNote={`Act 4 adds Bob's passkey identity to Treasury custody and raises approvals required where needed.`}
         onAccept={handleAccept}
         onDecline={handleDecline}
         phaseLabel={PHASE_LABEL[phase]}
@@ -330,7 +341,8 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
           stage === 'success' && deployedAddress ? (
             <>
               <p className="muted">
-                {TREASURY_NAME} is live on Base Sepolia, owned by {orgConfig.name}.
+                {TREASURY_NAME} is live on Base Sepolia. It is authorized by {orgConfig.name}
+                in the product model and initially custodied by {founderName}'s passkey identity.
               </p>
               <p className="muted small">
                 The Org→Treasury "actedOnBehalfOf" delegation will be enforceable in

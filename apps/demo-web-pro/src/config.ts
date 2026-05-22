@@ -23,6 +23,19 @@ export interface DeploymentConfig {
   delegationManager?: `0x${string}`;
   quorumEnforcer?: `0x${string}`;
   approvedHashRegistry?: `0x${string}`;
+  entryPoint?: `0x${string}`;
+  smartAgentPaymaster?: `0x${string}`;
+  deployer?: `0x${string}`;
+  /**
+   * Optional explicit RPC URL — when set, the front-end uses it for ALL
+   * chain reads instead of viem's default public node. Critical for
+   * staying in sync with the worker (demo-a2a) which submits via this
+   * same RPC: if the two ends use different nodes, read-after-write
+   * propagation lag silently returns stale state (e.g. `getScheduledChange`
+   * returns the all-zero default record for a just-scheduled change,
+   * which Acts 3/4 then mis-sign as eta=0).
+   */
+  rpcUrl?: string;
   demoA2aUrl?: string;
   demoMcpUrl?: string;
 }
@@ -45,6 +58,10 @@ export const config: DeploymentConfig = {
   delegationManager:    parseAddr(import.meta.env.VITE_DELEGATION_MANAGER),
   quorumEnforcer:       parseAddr(import.meta.env.VITE_QUORUM_ENFORCER),
   approvedHashRegistry: parseAddr(import.meta.env.VITE_APPROVED_HASH_REGISTRY),
+  entryPoint:           parseAddr(import.meta.env.VITE_ENTRY_POINT),
+  smartAgentPaymaster:  parseAddr(import.meta.env.VITE_SMART_AGENT_PAYMASTER),
+  deployer:             parseAddr(import.meta.env.VITE_DEPLOYER),
+  rpcUrl:               import.meta.env.VITE_RPC_URL || undefined,
   demoA2aUrl:           import.meta.env.VITE_DEMO_A2A_URL || undefined,
   demoMcpUrl:           import.meta.env.VITE_DEMO_MCP_URL || undefined,
 };

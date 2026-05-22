@@ -137,7 +137,9 @@ contract ExecuteFromModuleTest is Test {
             address(0xCC),
             address(0xDD)
         );
-        acct = factory.createAccount(owner, 42);
+        address[] memory _c = new address[](1);
+        _c[0] = owner;
+        acct = factory.createPersonAgent(_c, bytes32(0), 0, 0, 42);
 
         executor      = new MockExecutorModule();
         validatorOnly = new MockValidatorModule();

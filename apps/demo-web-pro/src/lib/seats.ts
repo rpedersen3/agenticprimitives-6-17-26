@@ -14,8 +14,21 @@ const ACTIVE_SEAT_KEY = 'agenticprimitives:demo-web-pro:active-seat';
 
 export interface SeatClaim {
   seatId: string;
-  /** Person Smart Agent address (the deployed AgentAccount). */
+  /**
+   * Person Smart Agent address (the deployed AgentAccount). Used as
+   * the userOp sender + gas-paying intermediary; NOT the human's
+   * custody identity (that's `personIdentity` below).
+   */
   personAgent: Address;
+  /**
+   * Person Smart Agent's PIA — the Passkey-Identity-Address derived
+   * from the seat's passkey pubkey. Phase 6f.4 pivot: PIA is the
+   * canonical custodian identity (registered as a custodian on
+   * Person.PSA, Org, Treasury). All custody-action targets that
+   * identify this human should use `personIdentity`, never
+   * `personAgent`.
+   */
+  personIdentity: Address;
   /** keccak256 of the credentialId — the on-chain passkey index. */
   credentialIdDigest: `0x${string}`;
   /** ISO timestamp of when the seat was claimed. */
@@ -42,6 +55,32 @@ function writeRecord(record: SeatRecord): void {
 
 export function loadSeats(): SeatRecord {
   return readRecord();
+}
+
+/**
+ * Phase 6f.4 migration — back-fill `personIdentity` on pre-pivot
+ * SeatClaim records that pre-date the field. `derivePia(seatId)` is
+ * injected because `passkeyIdentity` lives in `@agenticprimitives/custody`
+ * and the passkey storage lives in `lib/passkey.ts`; injection keeps
+ * `seats.ts` free of cross-module coupling.
+ *
+ * Idempotent — only writes if at least one seat needed patching.
+ */
+export function migrateSeatsAddPersonIdentity(
+  derivePia: (seatId: string) => Address | null,
+): void {
+  const record = readRecord();
+  let changed = false;
+  for (const [seatId, claim] of Object.entries(record)) {
+    if (!(claim as Partial<SeatClaim>).personIdentity) {
+      const pia = derivePia(seatId);
+      if (pia) {
+        record[seatId] = { ...claim, personIdentity: pia };
+        changed = true;
+      }
+    }
+  }
+  if (changed) writeRecord(record);
 }
 
 export function getSeatClaim(seatId: string): SeatClaim | null {

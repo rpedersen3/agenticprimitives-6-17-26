@@ -1,29 +1,37 @@
 /**
  * RelationshipsCard — verifies on chain who controls what, so the
  * visitor can confirm the demo state matches the spec\'s
- * agent-centric picture (spec 211 § 3 / spec 212).
+ * agent-centric picture (spec 211 § 3 / spec 212 / spec 213).
+ *
+ * Phase 6f.4 pivot: custody bottoms out at the PASSKEY IDENTITY
+ * (PIA) of each human. Smart agents (Org, Treasury) NEVER appear in
+ * each other\'s custodian sets — the ERC-165 marker on AgentAccount
+ * forbids it. Person.PSA, Org, and Treasury all use PIA-as-custodian.
  *
  * Reads (all public-RPC, no signing):
- *   - Each seat → Person Smart Agent (from local seats)
- *   - Org's mode + custodian count + isCustodian(Alice/Bob)
- *   - Treasury's mode + custodian count + isCustodian(Org)
- *
- * Renders the four-agent graph as a compact table with
- * green/yellow/red dots per relationship.
+ *   - Each Person.PSA   → isCustodian(seat.personIdentity)
+ *   - Org               → isCustodian(alicePIA), isCustodian(bobPIA)
+ *   - Treasury          → isCustodian(alicePIA), isCustodian(bobPIA)
  */
 
 import { useEffect, useState } from 'react';
 import { orgConfig } from '../../org-config';
 import type { SeatClaim } from '../../lib/seats';
 import type { OrgRecord, TreasuryRecord } from '../../lib/demo-state';
-import { readIsCustodian } from '../../lib/chain-reads';
+import { readApprovalsRequired, readIsCustodian } from '../../lib/chain-reads';
 import { shortAddress } from '../../components';
+import { config } from '../../config';
 
 interface Probe {
   loaded: boolean;
+  aliceCustodianOfAlicePSA: boolean | null;
+  bobCustodianOfBobPSA: boolean | null;
   aliceCustodianOfOrg: boolean | null;
   bobCustodianOfOrg: boolean | null;
-  orgCustodianOfTreasury: boolean | null;
+  aliceCustodianOfTreasury: boolean | null;
+  bobCustodianOfTreasury: boolean | null;
+  orgT4Approvals: number | null;
+  treasuryT4Approvals: number | null;
 }
 
 export function RelationshipsCard({
@@ -37,9 +45,14 @@ export function RelationshipsCard({
 }) {
   const [probe, setProbe] = useState<Probe>({
     loaded: false,
+    aliceCustodianOfAlicePSA: null,
+    bobCustodianOfBobPSA: null,
     aliceCustodianOfOrg: null,
     bobCustodianOfOrg: null,
-    orgCustodianOfTreasury: null,
+    aliceCustodianOfTreasury: null,
+    bobCustodianOfTreasury: null,
+    orgT4Approvals: null,
+    treasuryT4Approvals: null,
   });
 
   const aliceSeat = orgConfig.seats[0];
@@ -51,27 +64,68 @@ export function RelationshipsCard({
     const run = async () => {
       const result: Probe = {
         loaded: true,
+        aliceCustodianOfAlicePSA: null,
+        bobCustodianOfBobPSA: null,
         aliceCustodianOfOrg: null,
         bobCustodianOfOrg: null,
-        orgCustodianOfTreasury: null,
+        aliceCustodianOfTreasury: null,
+        bobCustodianOfTreasury: null,
+        orgT4Approvals: null,
+        treasuryT4Approvals: null,
       };
+      if (aliceClaim) {
+        result.aliceCustodianOfAlicePSA = await readIsCustodian({
+          account: aliceClaim.personAgent,
+          signer: aliceClaim.personIdentity,
+        });
+      }
+      if (bobClaim) {
+        result.bobCustodianOfBobPSA = await readIsCustodian({
+          account: bobClaim.personAgent,
+          signer: bobClaim.personIdentity,
+        });
+      }
       if (org && aliceClaim) {
         result.aliceCustodianOfOrg = await readIsCustodian({
           account: org.address,
-          signer: aliceClaim.personAgent,
+          signer: aliceClaim.personIdentity,
         });
       }
       if (org && bobClaim) {
         result.bobCustodianOfOrg = await readIsCustodian({
           account: org.address,
-          signer: bobClaim.personAgent,
+          signer: bobClaim.personIdentity,
         });
       }
-      if (org && treasury) {
-        result.orgCustodianOfTreasury = await readIsCustodian({
+      if (treasury && aliceClaim) {
+        result.aliceCustodianOfTreasury = await readIsCustodian({
           account: treasury.address,
-          signer: org.address,
+          signer: aliceClaim.personIdentity,
         });
+      }
+      if (treasury && bobClaim) {
+        result.bobCustodianOfTreasury = await readIsCustodian({
+          account: treasury.address,
+          signer: bobClaim.personIdentity,
+        });
+      }
+      if (config.custodyPolicy && org) {
+        try {
+          result.orgT4Approvals = await readApprovalsRequired({
+            custodyPolicy: config.custodyPolicy,
+            account: org.address,
+            tier: 4,
+          });
+        } catch { /* tolerate */ }
+      }
+      if (config.custodyPolicy && treasury) {
+        try {
+          result.treasuryT4Approvals = await readApprovalsRequired({
+            custodyPolicy: config.custodyPolicy,
+            account: treasury.address,
+            tier: 4,
+          });
+        } catch { /* tolerate */ }
       }
       setProbe(result);
     };
@@ -81,10 +135,17 @@ export function RelationshipsCard({
     org?.address,
     treasury?.address,
     aliceClaim?.personAgent,
+    aliceClaim?.personIdentity,
     bobClaim?.personAgent,
+    bobClaim?.personIdentity,
   ]);
 
   if (!aliceClaim && !bobClaim && !org && !treasury) return null;
+
+  const verdictDot = (v: boolean | null): 'live' | 'no' | 'pending' =>
+    v === true ? 'live' : v === false ? 'no' : 'pending';
+  const verdictMark = (v: boolean | null) =>
+    v === true ? '✓' : v === false ? '✗' : '…';
 
   return (
     <section className="relationships-card" data-testid="relationships-card">
@@ -96,7 +157,7 @@ export function RelationshipsCard({
           <tr>
             <th>Smart Agent</th>
             <th>Address</th>
-            <th>Custody</th>
+            <th>Custody (passkey identities)</th>
           </tr>
         </thead>
         <tbody>
@@ -107,8 +168,10 @@ export function RelationshipsCard({
               </td>
               <td><code>{shortAddress(aliceClaim.personAgent)}</code></td>
               <td>
-                <RelationshipDot kind="passkey" />
-                Custodian: {aliceSeat.name}\'s passkey
+                <RelationshipDot kind={verdictDot(probe.aliceCustodianOfAlicePSA)} />
+                {aliceSeat.name}\'s passkey identity{' '}
+                <code title={aliceClaim.personIdentity}>{shortAddress(aliceClaim.personIdentity)}</code>{' '}
+                {verdictMark(probe.aliceCustodianOfAlicePSA)}
               </td>
             </tr>
           )}
@@ -119,8 +182,10 @@ export function RelationshipsCard({
               </td>
               <td><code>{shortAddress(bobClaim.personAgent)}</code></td>
               <td>
-                <RelationshipDot kind="passkey" />
-                Custodian: {bobSeat.name}\'s passkey
+                <RelationshipDot kind={verdictDot(probe.bobCustodianOfBobPSA)} />
+                {bobSeat.name}\'s passkey identity{' '}
+                <code title={bobClaim.personIdentity}>{shortAddress(bobClaim.personIdentity)}</code>{' '}
+                {verdictMark(probe.bobCustodianOfBobPSA)}
               </td>
             </tr>
           )}
@@ -132,13 +197,20 @@ export function RelationshipsCard({
               </td>
               <td><code>{shortAddress(org.address)}</code></td>
               <td>
-                <RelationshipDot kind={probe.aliceCustodianOfOrg ? 'live' : probe.loaded ? 'no' : 'pending'} />
-                Custodian: {aliceSeat?.name}\'s PSA{' '}
-                {probe.aliceCustodianOfOrg ? '✓' : probe.loaded ? '✗' : '…'}
-                {' · '}
-                <RelationshipDot kind={probe.bobCustodianOfOrg ? 'live' : probe.loaded ? 'no' : 'pending'} />
-                Custodian: {bobSeat?.name}\'s PSA{' '}
-                {probe.bobCustodianOfOrg ? '✓' : probe.loaded ? '✗' : '…'}
+                <RelationshipDot kind={verdictDot(probe.aliceCustodianOfOrg)} />
+                {aliceSeat?.name}\'s passkey {verdictMark(probe.aliceCustodianOfOrg)}
+                {bobClaim && (
+                  <>
+                    {' · '}
+                    <RelationshipDot kind={verdictDot(probe.bobCustodianOfOrg)} />
+                    {bobSeat?.name}\'s passkey {verdictMark(probe.bobCustodianOfOrg)}
+                  </>
+                )}
+                {probe.orgT4Approvals !== null && (
+                  <span className="muted small" style={{ marginLeft: 10 }}>
+                    · T4 quorum {probe.orgT4Approvals}-of-{(probe.aliceCustodianOfOrg ? 1 : 0) + (probe.bobCustodianOfOrg ? 1 : 0)}
+                  </span>
+                )}
               </td>
             </tr>
           )}
@@ -150,9 +222,20 @@ export function RelationshipsCard({
               </td>
               <td><code>{shortAddress(treasury.address)}</code></td>
               <td>
-                <RelationshipDot kind={probe.orgCustodianOfTreasury ? 'live' : probe.loaded ? 'no' : 'pending'} />
-                Custodian: {orgConfig.name}{' '}
-                {probe.orgCustodianOfTreasury ? '✓' : probe.loaded ? '✗' : '…'}
+                <RelationshipDot kind={verdictDot(probe.aliceCustodianOfTreasury)} />
+                {aliceSeat?.name}\'s passkey {verdictMark(probe.aliceCustodianOfTreasury)}
+                {bobClaim && (
+                  <>
+                    {' · '}
+                    <RelationshipDot kind={verdictDot(probe.bobCustodianOfTreasury)} />
+                    {bobSeat?.name}\'s passkey {verdictMark(probe.bobCustodianOfTreasury)}
+                  </>
+                )}
+                {probe.treasuryT4Approvals !== null && (
+                  <span className="muted small" style={{ marginLeft: 10 }}>
+                    · T4 quorum {probe.treasuryT4Approvals}-of-{(probe.aliceCustodianOfTreasury ? 1 : 0) + (probe.bobCustodianOfTreasury ? 1 : 0)}
+                  </span>
+                )}
               </td>
             </tr>
           )}
@@ -160,12 +243,11 @@ export function RelationshipsCard({
       </table>
 
       <p className="muted small">
-        Per spec 212 / 213: a <strong>custodian</strong> is whichever entity holds custody
-        authority over a Smart Agent. For Person Smart Agents that\'s a <em>passkey</em>
-        (a key, not an agent). For higher-tier Smart Agents the custodian is itself a
-        <em> Smart Agent</em> — Person Smart Agents are custodians of {orgConfig.name},
-        and {orgConfig.name} is the custodian of the Treasury. Authority chains agent →
-        agent → agent; users never appear in the chain.
+        Per spec 212 / 213: custody bottoms out at <strong>passkey identities</strong>
+        (PIAs derived from each user\'s P-256 pubkey). Smart agents — Org and Treasury —
+        are NEVER each other\'s custodians; that\'s forbidden at the contract level via the
+        ERC-165 marker check in <code>addCustodian</code>. Inter-agent authority is modeled
+        separately as stewardship / delegation.
       </p>
     </section>
   );

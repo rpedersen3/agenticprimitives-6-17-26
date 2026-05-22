@@ -10,7 +10,7 @@
  *      switches the active actor to Bob and routes to his Act 1.
  *      Onreturn (Bob\'s PSA deployed), the visitor switches back to Alice.
  *   B. Alice (the founding custodian) schedules
- *      `CustodyAction.AddCustodian(Bob.PSA)` on the Org via
+ *      `CustodyAction.AddPasskeyCredential(Bob)` on the Org via
  *      Alice.PSA.execute(CustodyPolicy.scheduleCustodyChange(...)).
  *      The quorum sig is a single v=0 ERC-1271 slot pointing at
  *      Alice.PSA + a WebAuthn assertion blob over the EIP-712 hash.
@@ -19,8 +19,8 @@
  *      safe.
  *   D. Alice applies the change via Alice.PSA.execute(CustodyPolicy
  *      .applyCustodyChange(...)). The CustodyPolicy then dispatches
- *      Org.executeFromModule(Org, 0, encode addCustodian(Bob.PSA)).
- *   E. Verify Org.isCustodian(Bob.PSA) == true.
+ *      Org.executeFromModule(Org, 0, encode addPasskeyCredential(Bob)).
+ *   E. Verify Org.isCustodian(Bob.PIA) == true.
  *
  * 🟢 LIVE end-to-end. The EIP-712 hashes + quorum-sig packing are real
  * on-chain mechanics; nothing simulated.
@@ -32,10 +32,10 @@ import { orgConfig } from '../../org-config';
 import { loadActiveSeat, loadSeats, setActiveSeat, type SeatClaim } from '../../lib/seats';
 import { loadOrg } from '../../lib/demo-state';
 import { getPasskeyForSeat, assertWithPasskey } from '../../lib/passkey';
-import { encodeWebAuthnSignature } from '@agenticprimitives/agent-account';
 import {
   CustodyAction,
-  buildAddCustodianArgs,
+  buildAddPasskeyCredentialArgs,
+  packQuorumSigs,
 } from '@agenticprimitives/custody';
 import {
   executeCallFromAgent,
@@ -48,7 +48,6 @@ import {
   encodeScheduleCall,
   encodeApplyCall,
 } from '../../lib/custody-flow';
-import { packContractSigs } from '../../lib/quorum-sigs';
 import {
   readScheduledChangeCount,
   readScheduledChange,
@@ -81,12 +80,12 @@ const PHASE_LABEL: Record<WorkingPhase, string> = {
 
 const PHASE_HINT: Record<WorkingPhase, string | undefined> = {
   'computing-hash': 'Building the ScheduleCustodyChangeRequest hash the CustodyPolicy will verify.',
-  'signing-schedule': 'Your passkey signs the EIP-712 hash on behalf of Alice\'s Person Smart Agent.',
+  'signing-schedule': 'Alice\'s passkey signs the EIP-712 hash. The quorum slot is v=2 (direct WebAuthn) — Alice\'s PIA is already a custodian of the Org.',
   'submitting-schedule': 'Alice\'s PSA dispatches scheduleCustodyChange via the CustodyPolicy module. Paymaster pays gas.',
-  'reading-eta': 'The Org was deployed with 0s safety delay — eta should already be reached.',
+  'reading-eta': 'The Org was deployed with a 1s safety delay — eta is already reached.',
   'signing-apply': 'Same passkey, same shape, different EIP-712 typehash (ApplyCustodyChangeRequest).',
-  'submitting-apply': 'CustodyPolicy.applyCustodyChange dispatches Org.executeFromModule → addCustodian(Bob.PSA).',
-  'verifying': 'Reading Org.isCustodian(Bob.PSA) from chain to confirm the change landed.',
+  'submitting-apply': 'CustodyPolicy.applyCustodyChange dispatches Org.executeFromModule → addPasskey(Bob\'s credentialId). The PIA-as-custodian flag flips on as a side effect.',
+  'verifying': 'Reading Org.isCustodian(Bob\'s PIA) from chain to confirm the change landed.',
 };
 
 export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
@@ -125,12 +124,12 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
         tier: 4,
       });
       setSafetyDelaySeconds(delay);
-      // If Bob is already a custodian (e.g. Act 3 already completed),
-      // close the dialog and show the summary card.
+      // If Bob's PIA is already a custodian (e.g. Act 3 already
+      // completed), close the dialog and show the summary card.
       if (bobClaim) {
         const isCust = await readIsCustodian({
           account: org.address,
-          signer: bobClaim.personAgent,
+          signer: bobClaim.personIdentity,
         });
         if (isCust) {
           setBobCustodyConfirmed(true);
@@ -159,7 +158,7 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
       <section className="card">
         <p className="eyebrow">Act 3 · Admin</p>
         <h1>{aliceSeat?.name ?? 'Alice'} hasn\'t claimed her seat yet.</h1>
-        <p>The Org\'s only custodian is needed to sign for the AddCustodian change.</p>
+        <p>The Org\'s only passkey custodian is needed to sign for the AddPasskeyCredential change.</p>
         <a href="#/" className="primary">← Back to seat picker</a>
       </section>
     );
@@ -175,7 +174,7 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
             Bob hasn\'t claimed his seat yet. First, walk Bob through onboarding —
             the visitor switches to Bob\'s seat, registers a fresh passkey, and deploys
             Bob\'s Person Smart Agent. After that, Alice schedules + applies the
-            <code> AddCustodian(Bob.PSA) </code> change on the Org.
+            <code> AddPasskeyCredential(Bob) </code> change on the Org.
           </p>
         </div>
         <section className="card">
@@ -241,7 +240,7 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
           <h1>Switch to Alice to continue.</h1>
           <p>
             Bob is on board. Now Alice (the founding custodian) needs to sign the
-            AddCustodian change on the Org\'s behalf.
+            AddPasskeyCredential change on the Org\'s behalf.
           </p>
         </div>
         <section className="card">
@@ -279,16 +278,37 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
     setStage('working');
     setError(null);
 
+    if (!bobSeat) {
+      setStage('error');
+      setError('Org config has no second seat — check ORG_SEAT_LABELS env.');
+      return;
+    }
+    const bobPasskey = getPasskeyForSeat(bobSeat.id);
+    if (!bobPasskey) {
+      setStage('error');
+      setError(`${bobSeat.name}'s passkey is missing on this device.`);
+      return;
+    }
+    const bobPia = bobClaim.personIdentity;
+    const alicePia = aliceClaim.personIdentity;
+
     try {
-      // 1. Compose the action args.
-      const action = CustodyAction.AddCustodian;
-      const innerArgs = buildAddCustodianArgs(bobClaim.personAgent);
+      // 1. Compose the action args. Phase 6f.4 pivot: add Bob's passkey
+      // directly to the Org. The PIA-as-custodian flag flips on as a
+      // side effect of AgentAccount.addPasskey (spec 211 § 3 / spec 212
+      // § 2.2 — smart-agent custodians forbidden).
+      const action = CustodyAction.AddPasskeyCredential;
+      const innerArgs = buildAddPasskeyCredentialArgs(
+        bobPasskey.credentialIdDigest,
+        bobPasskey.pubKeyX,
+        bobPasskey.pubKeyY,
+      );
       const argsHash = keccak256(innerArgs);
 
       setPhase('computing-hash');
 
       // 2. Resume support: scan for an existing un-executed
-      // AddCustodian(Bob) schedule from a prior attempt. If found,
+      // AddPasskeyCredential(Bob) schedule from a prior attempt. If found,
       // jump straight to the apply step. Otherwise schedule a new one.
       const lastChangeId = await readScheduledChangeCount({
         custodyPolicy: config.custodyPolicy,
@@ -346,9 +366,14 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
       } else {
         setPhase('signing-schedule');
         const scheduleAssertion = await assertWithPasskey(alicePasskey, scheduleHash);
-        const scheduleBlob = encodeWebAuthnSignature(scheduleAssertion);
-        const scheduleSigs = packContractSigs([
-          { signer: aliceClaim.personAgent, signatureBlob: scheduleBlob },
+        const scheduleSigs = packQuorumSigs([
+          {
+            type: 'passkey',
+            pia: alicePia,
+            x: alicePasskey.pubKeyX,
+            y: alicePasskey.pubKeyY,
+            assertion: scheduleAssertion,
+          },
         ]);
 
         // 5. Dispatch via Alice.PSA.execute(CustodyPolicy.schedule(...)).
@@ -376,13 +401,24 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
         }
         setScheduleTx(scheduleResult.transactionHash);
 
-        // 6. Read the eta back from chain.
+        // 6. Read the eta back from chain. Poll until the change is
+        // visible — the front-end's RPC may lag the worker's by a few
+        // blocks, and the all-zero default record otherwise sneaks
+        // through as eta=0 and mis-signs the apply hash.
         setPhase('reading-eta');
         const scheduledChange = await readScheduledChange({
           custodyPolicy: config.custodyPolicy,
           account: org.address,
           changeId: expectedChangeId,
+          waitForExistence: true,
         });
+        if (scheduledChange.eta === 0n) {
+          setStage('error');
+          setError(
+            `Schedule tx succeeded but the change isn’t visible on the read-RPC yet. Refresh in a moment to retry.`,
+          );
+          return;
+        }
         resolvedEta = scheduledChange.eta;
       }
 
@@ -401,9 +437,14 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
       // 8. Alice signs apply.
       setPhase('signing-apply');
       const applyAssertion = await assertWithPasskey(alicePasskey, applyHash);
-      const applyBlob = encodeWebAuthnSignature(applyAssertion);
-      const applySigs = packContractSigs([
-        { signer: aliceClaim.personAgent, signatureBlob: applyBlob },
+      const applySigs = packQuorumSigs([
+        {
+          type: 'passkey',
+          pia: alicePia,
+          x: alicePasskey.pubKeyX,
+          y: alicePasskey.pubKeyY,
+          assertion: applyAssertion,
+        },
       ]);
 
       // 9. Dispatch apply via Alice.PSA.execute(CustodyPolicy.apply(...)).
@@ -430,16 +471,20 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
       }
       setApplyTx(applyResult.transactionHash);
 
-      // 10. Verify on chain.
+      // 10. Verify on chain: Bob's PIA is now in the Org's custodian
+      // set. Poll a few times — even with the same Alchemy RPC, reads
+      // can hit a replica that hasn't indexed the apply tx yet, which
+      // would make a correctly-applied change look like a failed one.
       setPhase('verifying');
       const isCust = await readIsCustodian({
         account: org.address,
-        signer: bobClaim.personAgent,
+        signer: bobPia,
+        waitForTrue: true,
       });
       if (!isCust) {
         setStage('error');
         setError(
-          `applyCustodyChange tx succeeded (${applyResult.transactionHash}) but Org.isCustodian(${bobClaim.personAgent}) is still false. Refresh the page in a moment to retry the verify.`,
+          `applyCustodyChange tx succeeded (${applyResult.transactionHash}) but Org.isCustodian(${bobPia}) is still false. Refresh the page in a moment to retry the verify.`,
         );
         return;
       }
@@ -455,11 +500,11 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
     <section>
       <div className="hero">
         <p className="eyebrow">Act 3 · Admin · <LiveStatusBadge status="live" /></p>
-        <h1>Add Bob as a custodian of {orgConfig.name}.</h1>
+        <h1>Add Bob's passkey identity as a custodian of {orgConfig.name}.</h1>
         <p>
           Alice (the founding custodian) schedules + applies an
-          <code> AddCustodian({bobSeat?.name}.PSA) </code> change on the Org\'s
-          CustodyPolicy. After this lands, the Org has two custodians but still
+          <code> AddPasskeyCredential({bobSeat?.name}) </code> change on the Org\'s
+          CustodyPolicy. After this lands, the Org has two passkey custodians but still
           requires only 1 approval (Act 4 bumps it to 2).
         </p>
       </div>
@@ -469,7 +514,7 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
           <p className="eyebrow">Already complete</p>
           <h2>Bob is a custodian of {orgConfig.name}.</h2>
           <p className="muted">
-            On-chain check: <code>Org.isCustodian(Bob.PSA)</code> = <strong>true</strong>.
+            On-chain check: <code>Org.isCustodian(Bob passkey identity)</code> = <strong>true</strong>.
             Continue with Act 4 to make the Org require 2 approvals.
           </p>
           <a href="#/" className="primary">← Back to seat picker</a>
@@ -481,9 +526,9 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
         stage={stage}
         title={`Add ${bobSeat?.name ?? 'Bob'} as a custodian`}
         scopeList={[
-          `Alice signs an EIP-712 ScheduleCustodyChangeRequest authorizing AddCustodian(${bobSeat?.name}.PSA) on ${orgConfig.name}.`,
+          `Alice signs an EIP-712 ScheduleCustodyChangeRequest authorizing AddPasskeyCredential(${bobSeat?.name}) on ${orgConfig.name}.`,
           `Alice signs an EIP-712 ApplyCustodyChangeRequest immediately after (0s safety delay).`,
-          `${orgConfig.name}'s custodian set goes from {Alice.PSA} → {Alice.PSA, Bob.PSA}.`,
+          `${orgConfig.name}'s custodian set goes from {Alice passkey identity} → {Alice passkey identity, ${bobSeat?.name} passkey identity}.`,
         ]}
         grantee={`${orgConfig.name} (the Org Smart Agent)`}
         duration="this change is permanent — only a future CustodyAction can reverse it"
@@ -504,7 +549,7 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
           stage === 'success' ? (
             <>
               <p className="muted">
-                Bob.PSA is now a custodian of {orgConfig.name}. Both schedule + apply landed
+                Bob's passkey identity is now a custodian of {orgConfig.name}. Both schedule + apply landed
                 on chain.
               </p>
               {scheduleTx && (

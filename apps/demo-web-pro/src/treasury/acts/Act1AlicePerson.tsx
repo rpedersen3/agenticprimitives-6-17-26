@@ -24,6 +24,7 @@ import {
 } from '../../lib/passkey';
 import { claimSeat, setActiveSeat } from '../../lib/seats';
 import { deployPersonAgent } from '../../lib/deploy-person';
+import { passkeyIdentity } from '@agenticprimitives/custody';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { config } from '../../config';
@@ -114,9 +115,17 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
       return;
     }
 
+    // The Person.PSA was deployed via factory.createPersonAgent with
+    // `externalCustodians = []` + this passkey; on chain, the passkey's
+    // PIA is the sole custodian (registered through
+    // `piaToCredentialId`). Store the PIA alongside the PSA address so
+    // every downstream Act references the same human identity without
+    // re-deriving it from the passkey pubkey ad-hoc.
+    const personIdentity = passkeyIdentity(passkey.pubKeyX, passkey.pubKeyY);
     claimSeat({
       seatId: seat.id,
       personAgent: result.deployedAddress,
+      personIdentity,
       credentialIdDigest: passkey.credentialIdDigest,
       claimedAt: new Date().toISOString(),
     });

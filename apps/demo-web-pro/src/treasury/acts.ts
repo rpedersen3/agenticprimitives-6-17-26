@@ -48,7 +48,7 @@ export const ACTS: ActDef[] = [
     title: 'Act 2.5 — Create Treasury',
     modality: 'Admin',
     status: 'live',
-    oneLiner: 'Deploy Acme Treasury, owned by the Org. Org→Treasury delegation simulated.',
+    oneLiner: 'Deploy Acme Treasury with Alice passkey custody. Org→Treasury stewardship is simulated.',
   },
   {
     id: 4,
@@ -56,15 +56,15 @@ export const ACTS: ActDef[] = [
     title: 'Act 3 — Bob joins',
     modality: 'Admin',
     status: 'live',
-    oneLiner: 'Bob claims his seat. Alice schedules + applies AddCustodian(Bob.PSA) on the Org.',
+    oneLiner: 'Bob claims his seat. Alice schedules + applies AddPasskeyCredential(Bob) on the Org.',
   },
   {
     id: 5,
     slug: 'two-person-control',
     title: 'Act 4 — Two-person control',
     modality: 'Admin',
-    status: 'not-started',
-    oneLiner: 'Org approvalsRequired ← 2. Treasury Add Steward(Bob).',
+    status: 'live',
+    oneLiner: 'Treasury AddPasskey(Bob) + Org approvalsRequired ← 2. Both signed by Alice via v=2 quorum slot.',
   },
   {
     id: 6,

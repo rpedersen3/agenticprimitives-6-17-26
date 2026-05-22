@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import "../ApprovedHashRegistry.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import {WebAuthnLib} from "./WebAuthnLib.sol";
 
 /**
  * @title SignatureSlotRecovery
@@ -16,7 +17,7 @@ import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
  * @dev Per-slot layout (65 bytes):
  *        {32 r/data}{32 s/data}{1 v/type}
  *
- *      v-byte type discrimination (Safe-compatible):
+ *      v-byte type discrimination (Safe-compatible + AP extension):
  *         v == 27 || v == 28 → ECDSA over `payloadHash`
  *         v >  30            → eth_sign ECDSA (EIP-191 wrapped); v - 4 = recovery
  *         v == 1             → pre-approved hash via `approvedHashRegistry`;
@@ -24,6 +25,20 @@ import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
  *         v == 0             → ERC-1271 contract sig; r holds signer
  *                              (left-padded), s holds the byte offset into
  *                              `signatures` to a length-prefixed sig tail
+ *         v == 2             → WebAuthn passkey sig (agenticprimitives
+ *                              extension; NOT in Safe). r holds the
+ *                              Passkey-Identity-Address (PIA, derived
+ *                              from the P-256 pubkey via
+ *                              `address(uint160(uint256(keccak256(abi.encode(x, y)))))`).
+ *                              s holds the byte offset into `signatures`
+ *                              to a length-prefixed tail containing
+ *                              `abi.encode(uint256 x, uint256 y, WebAuthnLib.Assertion assertion)`.
+ *                              The library re-derives the PIA from (x, y)
+ *                              and asserts it matches r before running
+ *                              the WebAuthn verify against (x, y).
+ *                              Caller-side authorization is unchanged —
+ *                              CustodyPolicy still checks
+ *                              `account.isCustodian(pia)` after recovery.
  *
  *      Library is `internal` so the bodies inline into each calling contract
  *      (no DELEGATECALL hop, no proxy address juggling, no extra storage
@@ -34,6 +49,8 @@ library SignatureSlotRecovery {
     error InvalidSignature(uint8 v);
     error ApprovedHashRequired(address signer);
     error ContractSigInvalid(address signer);
+    error PasskeySigInvalid(address signer);
+    error PasskeyPubKeyMismatch(address claimed, address derived);
 
     bytes4 internal constant ERC1271_MAGIC = 0x1626ba7e;
 
@@ -99,6 +116,33 @@ library SignatureSlotRecovery {
             signer = address(uint160(uint256(r)));
             if (!ApprovedHashRegistry(approvedHashRegistry).isApproved(signer, payloadHash)) {
                 revert ApprovedHashRequired(signer);
+            }
+        } else if (v == 2) {
+            // WebAuthn passkey slot. r holds the claimed PIA; tail
+            // holds (x, y, Assertion). Verify the assertion against
+            // the supplied pubkey, then assert that the PIA derived
+            // from (x, y) matches the claim. Caller authorizes via
+            // `account.isCustodian(signer)`.
+            signer = address(uint160(uint256(r)));
+            uint256 sigOffset = uint256(s);
+            uint256 sigLen;
+            assembly {
+                sigLen := mload(add(signatures, add(0x20, sigOffset)))
+            }
+            bytes memory dyn = new bytes(sigLen);
+            assembly {
+                let src := add(signatures, add(0x40, sigOffset))
+                let dst := add(dyn, 0x20)
+                for { let j := 0 } lt(j, sigLen) { j := add(j, 0x20) } {
+                    mstore(add(dst, j), mload(add(src, j)))
+                }
+            }
+            (uint256 pubX, uint256 pubY, WebAuthnLib.Assertion memory assertion) =
+                abi.decode(dyn, (uint256, uint256, WebAuthnLib.Assertion));
+            address derived = address(uint160(uint256(keccak256(abi.encode(pubX, pubY)))));
+            if (derived != signer) revert PasskeyPubKeyMismatch(signer, derived);
+            if (!WebAuthnLib.verify(assertion, payloadHash, pubX, pubY)) {
+                revert PasskeySigInvalid(signer);
             }
         } else if (v == 27 || v == 28) {
             signer = ecrecover(payloadHash, v, r, s);

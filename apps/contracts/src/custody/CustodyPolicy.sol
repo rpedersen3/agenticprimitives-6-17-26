@@ -56,7 +56,8 @@ contract CustodyPolicy {
         RotateAllCustodians,           // 11 — T4
         ChangeValueCeiling,           // 12 — T4
         SetRecoveryApprovals,      // 13 — T4
-        RecoverAccount             // 14 — T6
+        RecoverAccount,            // 14 — T6
+        ChangeApprovalsRequired    // 15 — T4 (per-tier custody quorum threshold)
     }
 
     struct ScheduledChange {
@@ -562,6 +563,9 @@ contract CustodyPolicy {
         } else if (action == CustodyAction.SetRecoveryApprovals) {
             (uint8 newThr) = abi.decode(args, (uint8));
             _applySetRecoveryThreshold(account, c, newThr);
+        } else if (action == CustodyAction.ChangeApprovalsRequired) {
+            (uint8 tier, uint8 newCount) = abi.decode(args, (uint8, uint8));
+            _applyChangeApprovalsRequired(account, c, tier, newCount);
         } else if (action == CustodyAction.RecoverAccount) {
             AgentAccountRecoveryArgs memory r = abi.decode(args, (AgentAccountRecoveryArgs));
             _applyRecoverAccount(account, r);
@@ -655,6 +659,26 @@ contract CustodyPolicy {
         uint8 oldThr = c.recoveryApprovals;
         c.recoveryApprovals = newThr;
         emit RecoveryThresholdChanged(account, oldThr, newThr);
+    }
+
+    /// @dev Per-tier custody-quorum threshold mutator. Tier 6 (recovery)
+    ///      lives in `recoveryApprovals` instead, so it routes through
+    ///      `SetRecoveryApprovals`; this surface covers T1..T5. The new
+    ///      count must be ≥ 1 and ≤ the account's current custodianCount.
+    function _applyChangeApprovalsRequired(
+        address account,
+        Config storage c,
+        uint8 tier,
+        uint8 newCount
+    ) internal {
+        if (tier == 0 || tier > 5) revert InvalidTier(tier);
+        if (newCount == 0) revert InvalidThresholdValue(newCount);
+        uint256 n = IAgentAccount(account).custodianCount();
+        if (uint256(newCount) > n) revert InvalidThresholdValue(newCount);
+        uint8 oldValue = c.approvalsRequiredByTier[tier];
+        if (oldValue == 0) oldValue = 1; // mirror _approvalsValue fallback
+        c.approvalsRequiredByTier[tier] = newCount;
+        emit ThresholdChanged(account, tier, oldValue, newCount);
     }
 
     function _applyRecoverAccount(address account, AgentAccountRecoveryArgs memory r) internal {
