@@ -18,6 +18,7 @@ import { PrincipalChip } from './components/PrincipalChip';
 import { LiveStatusBadge } from './components/LiveStatusBadge';
 import { SeatPicker } from './components/SeatPicker';
 import { DisconnectMenu } from './components/DisconnectMenu';
+import { RelationshipsCard } from './components/RelationshipsCard';
 import { shortAddress } from '../components';
 import { Act1AlicePerson } from './acts/Act1AlicePerson';
 import { Act2CreateOrg } from './acts/Act2CreateOrg';
@@ -324,21 +325,7 @@ function NextStepHint({
         )}
       </div>
 
-      {org && (
-        <section className="card">
-          <p className="eyebrow">Deployed</p>
-          <dl className="kv">
-            <dt>{orgConfig.name}</dt>
-            <dd><code>{shortAddress(org.address)}</code> · mode {org.mode}</dd>
-            {treasury && (
-              <>
-                <dt>Treasury</dt>
-                <dd><code>{shortAddress(treasury.address)}</code> · owned by {orgConfig.name}</dd>
-              </>
-            )}
-          </dl>
-        </section>
-      )}
+      <RelationshipsCard seats={seats} org={org} treasury={treasury} />
     </section>
   );
 }

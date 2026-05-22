@@ -108,7 +108,7 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     } as const;
 
     // See Act 2 for the salt-version rationale.
-    const SALT_VERSION = 'v2-safety0';
+    const SALT_VERSION = 'v3-safety1';
     const salt = BigInt(
       '0x' +
         [...new TextEncoder().encode(`${TREASURY_NAME}:${org.address}:${SALT_VERSION}`)]
@@ -117,11 +117,12 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
           .slice(0, 16),
     );
 
-    // 0-second T4 safety delay — same demo override as Act 2.
+    // 1-second T4 safety delay — same demo override as Act 2. See
+    // Act2CreateOrg for the "why 1 not 0" factory quirk.
     const factoryCallData = encodeFunctionData({
       abi: agentAccountFactoryAbi,
       functionName: 'createAccountWithModeCustomSafetyDelay',
-      args: [initParams, custodyPolicyAddress, 0, salt],
+      args: [initParams, custodyPolicyAddress, 1, salt],
     });
 
     // For now Alice\'s PSA dispatches directly. Once Acts 3-4 give the

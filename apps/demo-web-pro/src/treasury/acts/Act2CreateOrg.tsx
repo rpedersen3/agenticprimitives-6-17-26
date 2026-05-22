@@ -93,7 +93,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
         initialPasskeyX: 0n,
         initialPasskeyY: 0n,
       } as const;
-      const SALT_VERSION = 'v2-safety0';
+      const SALT_VERSION = 'v3-safety1';
       const salt = BigInt(
         '0x' +
           [...new TextEncoder().encode(`${orgConfig.name}:${founder.personAgent}:${SALT_VERSION}`)]
@@ -161,7 +161,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     // doesn\'t affect the predicted address. Bumping the tag forces
     // a fresh address so visitors don\'t inherit a stale on-chain
     // Org that was deployed before today\'s 0s-safety-delay fix.
-    const SALT_VERSION = 'v2-safety0'; // bump on every breaking deploy-param change
+    const SALT_VERSION = 'v3-safety1'; // bump on every breaking deploy-param change
     const salt = BigInt(
       '0x' +
         [...new TextEncoder().encode(`${orgConfig.name}:${founder.personAgent}:${SALT_VERSION}`)]
@@ -170,14 +170,20 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
           .slice(0, 16),
     );
 
-    // Encode factory.createAccountWithModeCustomSafetyDelay with 0-second
-    // T4 safety delay so subsequent custody changes (Act 3+) can
-    // schedule+apply in the same demo session without a real wait.
-    // Production should NEVER do this; the spec default is 1h.
+    // Encode factory.createAccountWithModeCustomSafetyDelay with a 1-second
+    // T4 safety delay. KNOWN CONTRACT QUIRK: the factory treats
+    // safetyDelaySeconds==0 as "use spec default (1 hour)" — there's no
+    // way to pass literal zero through the current factory ABI. Passing
+    // 1 second is the smallest legal value; Base Sepolia mines blocks
+    // every ~2s, so by the time Act 3's apply userOp lands the eta is
+    // already past. Production must NEVER use this; spec default is 1h.
+    //
+    // TODO: fix factory to use type(uint32).max as the default sentinel
+    // so literal 0 can be passed through. Requires factory redeploy.
     const factoryCallData = encodeFunctionData({
       abi: agentAccountFactoryAbi,
       functionName: 'createAccountWithModeCustomSafetyDelay',
-      args: [initParams, custodyPolicyAddress, 0, salt],
+      args: [initParams, custodyPolicyAddress, 1, salt],
     });
 
     // Wrap as Alice.PSA.execute(factory, 0, factoryCallData).

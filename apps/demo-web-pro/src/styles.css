@@ -1160,3 +1160,48 @@ button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
   border: 1px solid var(--line-1, #e5e5e5);
 }
 .next-step-card.secondary:hover { background: var(--surface-2, #f6f6f6); }
+
+/* ─── RelationshipsCard ───────────────────────────────────────────── */
+
+.relationships-card {
+  background: #fff;
+  border: 1px solid var(--line-1, #ece6db);
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+  margin: 1rem 0;
+}
+.relationships-card h3 { margin: 0 0 0.6rem; font-size: 1rem; }
+.relationships-card .eyebrow { margin: 0 0 0.2rem; }
+.relationships-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin: 0.4rem 0 0.7rem;
+}
+.relationships-table th, .relationships-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--line-1, #ece6db);
+  text-align: left;
+  vertical-align: top;
+}
+.relationships-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-4, #888);
+  background: var(--surface-2, #f6f6f6);
+  font-weight: 600;
+}
+.relationship-actor { font-weight: 600; }
+.rel-dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  margin-right: 0.3rem;
+  vertical-align: middle;
+}
+.rel-dot--live    { background: #2bb673; }
+.rel-dot--no      { background: #c9c9c9; }
+.rel-dot--pending { background: #e3b53a; }
+.rel-dot--key     { background: #6093e8; }

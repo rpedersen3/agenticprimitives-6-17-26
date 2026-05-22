@@ -198,10 +198,13 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
     );
   }
 
-  // Stale Org deployed before the 0s-safety-delay fix. The schedule
-  // step would still work but the apply step would revert with
-  // "ProposalNotReady" for an hour. Surface this as a fixable error.
-  if (safetyDelaySeconds !== null && safetyDelaySeconds > 0) {
+  // Stale Org deployed before the safety-delay-fix path (or with a
+  // value tall enough to break the same-session demo flow). The
+  // schedule step would still work but the apply step would revert
+  // with "ProposalNotReady" for an hour. 1-2 seconds is acceptable
+  // — Base Sepolia mines every ~2s so the eta passes before the
+  // apply userOp gets bundled.
+  if (safetyDelaySeconds !== null && safetyDelaySeconds > 10) {
     return (
       <section>
         <div className="hero">
