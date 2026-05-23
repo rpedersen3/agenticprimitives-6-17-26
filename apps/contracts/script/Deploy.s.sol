@@ -68,10 +68,18 @@ contract Deploy is Script {
         DelegationManager dm = new DelegationManager();
         console2.log("DelegationManager:    %s", address(dm));
 
+        // 2.5. CustodyPolicy — factory-immutable validator. Deployed
+        //      BEFORE the factory so its address can be wired into the
+        //      factory constructor. Every multi-sig account the factory
+        //      creates (mode > 0) installs THIS module instance at birth.
+        CustodyPolicy custodyPolicy = new CustodyPolicy();
+        console2.log("CustodyPolicy:        %s", address(custodyPolicy));
+
         // 3. AgentAccountFactory (deploys AgentAccount implementation as side-effect)
         AgentAccountFactory factory = new AgentAccountFactory(
             IEntryPoint(address(entryPoint)),
             address(dm),
+            address(custodyPolicy),
             deployer,    // bundlerSigner
             deployer,    // sessionIssuer
             deployer     // governance
@@ -105,16 +113,6 @@ contract Deploy is Script {
         console2.log("QuorumEnforcer:       %s", address(quorumEnforcer));
         ApprovedHashRegistry approvedHashRegistry = new ApprovedHashRegistry();
         console2.log("ApprovedHashRegistry: %s", address(approvedHashRegistry));
-
-        // 4.6. Spec 209 module — CustodyPolicy. Phase 6c.5-d.1
-        //   relocated the propose/execute/cancel admin surface out of
-        //   AgentAccount and into this ERC-7579 module. The factory
-        //   installs it on every account created via
-        //   `createMultiSigSmartAgent`. Deploying it here means the
-        //   demo apps + SDK can read the canonical address from
-        //   deployments-<network>.json without a separate broadcast.
-        CustodyPolicy custodyPolicy = new CustodyPolicy();
-        console2.log("CustodyPolicy:   %s", address(custodyPolicy));
 
         // 5. SmartAgentPaymaster — sponsors gas for user-op-based account deploys.
         //    Constructor takes entryPoint, initialOwner (for stake/deposit in this

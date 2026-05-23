@@ -46,7 +46,7 @@ export async function predictAccountAddress(args: {
   return (await publicClient.readContract({
     address: args.factoryAddress,
     abi: agentAccountFactoryAbi,
-    functionName: 'getAddressForMultiSigSmartAgent',
+    functionName: 'getAddressForAgentAccount',
     args: [args.initParams, args.salt],
   })) as Address;
 }

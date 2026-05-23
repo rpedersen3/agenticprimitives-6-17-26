@@ -22,8 +22,7 @@ vi.mock('viem', async (importOriginal) => {
       if (address === FACTORY) {
         return {
           read: {
-            getAddressForPersonAgent: vi.fn(async () => PREDICTED_ACCOUNT),
-            getAddressForMultiSigSmartAgent: vi.fn(async () => PREDICTED_ACCOUNT),
+            getAddressForAgentAccount: vi.fn(async () => PREDICTED_ACCOUNT),
             accountImplementation: vi.fn(async () => '0xabc'),
           },
         };
@@ -57,22 +56,32 @@ describe('AgentAccountClient', () => {
     isValidSigMockReturn = '0x1626ba7e';
   });
 
-  it('getAddressForPersonAgent delegates to factory.getAddressForPersonAgent', async () => {
-    const result = await client.getAddressForPersonAgent({
-      externalCustodians: [OWNER],
+  it('getAddressForAgentAccount delegates to factory view (EOA-only spec)', async () => {
+    const result = await client.getAddressForAgentAccount({
+      custodians: [OWNER],
       salt: 0n,
     });
     expect(result).toBe(PREDICTED_ACCOUNT);
   });
 
-  it('getAddressForPersonAgent works for the passkey-only path', async () => {
-    const result = await client.getAddressForPersonAgent({
+  it('getAddressForAgentAccount works for the passkey-only spec', async () => {
+    const result = await client.getAddressForAgentAccount({
       passkey: {
         credentialIdDigest: ('0x' + '00'.repeat(32)) as `0x${string}`,
         x: 1n,
         y: 2n,
       },
       salt: 0n,
+    });
+    expect(result).toBe(PREDICTED_ACCOUNT);
+  });
+
+  it('getAddressForAgentAccount works for mode>0 spec with trustees', async () => {
+    const result = await client.getAddressForAgentAccount({
+      mode: 1,
+      custodians: [OWNER],
+      trustees: [OWNER],
+      salt: 7n,
     });
     expect(result).toBe(PREDICTED_ACCOUNT);
   });
@@ -125,7 +134,7 @@ describe('AgentAccountClient', () => {
 
   it('buildUserOp throws "not implemented" in v0', async () => {
     await expect(
-      client.buildUserOp({ account: PREDICTED_ACCOUNT, calls: [] }),
+      client.buildUserOp({ account: PREDICTED_ACCOUNT, calls: [], paymaster: '0x0000000000000000000000000000000000000000' }),
     ).rejects.toThrow(/not implemented in v0|at least one call required/);
   });
 });

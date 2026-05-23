@@ -1,0 +1,103 @@
+import { useEffect, useState } from 'react';
+import { loadSeats } from '../lib/seats';
+import { loadRecoveryState, clearRecoveryState } from '../lib/recovery-state';
+import { readIsCustodian } from '../lib/chain-reads';
+import { releaseSeat } from '../lib/seats';
+import type { Address } from 'viem';
+
+/**
+ * Act 5 — Verification.
+ *
+ * On-chain probe: Sam's PSA should now report
+ *   isCustodian(replacementPia) == true
+ *   isCustodian(oldPia)         == false
+ *
+ * This is the source-of-truth check that the recovery actually
+ * mutated state. UI shows both probes side-by-side.
+ */
+export function Act5Verify() {
+  const seats = loadSeats();
+  const recovery = loadRecoveryState();
+  const sam = seats['sam'];
+  const oldPia = sam?.authMethods.find((m) => m.kind === 'passkey')?.kind === 'passkey'
+    ? (sam.authMethods.find((m) => m.kind === 'passkey') as { kind: 'passkey'; pia: Address }).pia
+    : null;
+  const newPia = recovery.replacementPia ?? null;
+
+  const [newOk, setNewOk] = useState<boolean | null>(null);
+  const [oldOk, setOldOk] = useState<boolean | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Bind to STABLE addresses (strings), not the SeatClaim object —
+  // loadSeats() returns a fresh object reference every render, which
+  // would re-fire this effect forever and loop the RPC call.
+  const samAddr = sam?.personAgent ?? null;
+  useEffect(() => {
+    if (!samAddr || !newPia || !oldPia) return;
+    let cancelled = false;
+    setChecking(true);
+    Promise.all([
+      readIsCustodian({ account: samAddr, signer: newPia, waitForTrue: true }),
+      readIsCustodian({ account: samAddr, signer: oldPia }),
+    ])
+      .then(([nOk, oOk]) => {
+        if (cancelled) return;
+        setNewOk(nOk);
+        setOldOk(oOk);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setChecking(false);
+      });
+    return () => { cancelled = true; };
+  }, [samAddr, newPia, oldPia]);
+
+  if (!sam) {
+    return (
+      <section className="card act-section">
+        <h2>Act 5 · Verify</h2>
+        <p className="act-error">Sam isn't onboarded.</p>
+      </section>
+    );
+  }
+
+  const handleReset = () => {
+    if (!confirm('Reset the recovery demo? This clears Sam + recovery state but keeps Alice + Bob.')) return;
+    releaseSeat('sam');
+    clearRecoveryState();
+  };
+
+  const verdictNew = newOk === null ? '⏳' : newOk ? '✓' : '✗';
+  const verdictOld = oldOk === null ? '⏳' : oldOk ? '✗ (still on chain!)' : '✓ (removed)';
+
+  return (
+    <section className="card act-section">
+      <h2>Act 5 · Verify</h2>
+      <p className="act-intro">
+        On-chain probes confirm the rotation. The replacement passkey's PIA is now a
+        custodian; the lost passkey's PIA is no longer recognized.
+      </p>
+      <ul className="trustee-list">
+        <li>Sam's PSA: <code>{sam.personAgent}</code></li>
+        <li>New PIA <code>{newPia}</code>: <strong>{verdictNew}</strong></li>
+        <li>Old PIA <code>{oldPia}</code>: <strong>{verdictOld}</strong></li>
+        <li>Recovery applied at: {recovery.recoveredAt ?? '(not yet)'}</li>
+      </ul>
+      {checking && <div>Querying chain…</div>}
+      {error && <div className="act-error">{error}</div>}
+      {newOk === true && oldOk === false && (
+        <div className="act-success">
+          ✓ Recovery verified. Sam's PSA address is unchanged; only the controlling
+          passkey rotated. Any delegations Sam holds elsewhere remain valid.
+        </div>
+      )}
+      <div className="act-footer">
+        <button type="button" onClick={handleReset}>Reset recovery demo</button>
+      </div>
+    </section>
+  );
+}

@@ -7,8 +7,11 @@ import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import "../src/AgentAccountFactory.sol";
 import "../src/AgentAccount.sol";
 import "../src/agency/DelegationManager.sol";
+import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
+import {AgentAccountInitParams} from "../src/IAgentAccount.sol";
 
 contract AgentAccountTest is Test {
+    function _defaultTimelocks() internal pure returns (uint32[7] memory tl) {}
     AgentAccountFactory factory;
     DelegationManager dm;
     AgentAccount acct;
@@ -24,16 +27,31 @@ contract AgentAccountTest is Test {
         EntryPoint ep = new EntryPoint();
         dm = new DelegationManager();
         owner = vm.addr(OWNER_PK);
+        CustodyPolicy cp = new CustodyPolicy();
         factory = new AgentAccountFactory(
             IEntryPoint(address(ep)),
             address(dm),
+            address(cp),
             address(0xBB),
             address(0xCC),
             address(0xDD)
         );
         address[] memory custodians = new address[](1);
         custodians[0] = owner;
-        acct = factory.createPersonAgent(custodians, bytes32(0), 0, 0, 42);
+        acct = factory.createAgentAccount(_simpleParams(custodians, bytes32(0), 0, 0), _defaultTimelocks(), 42);
+    }
+
+    function _simpleParams(address[] memory custodians, bytes32 cred, uint256 x, uint256 y)
+        internal pure returns (AgentAccountInitParams memory)
+    {
+        return AgentAccountInitParams({
+            mode: 0,
+            custodians: custodians,
+            trustees: new address[](0),
+            initialPasskeyCredentialIdDigest: cred,
+            initialPasskeyX: x,
+            initialPasskeyY: y
+        });
     }
 
     function _signRaw(uint256 pk, bytes32 hash) internal pure returns (bytes memory) {
@@ -122,7 +140,7 @@ contract AgentAccountTest is Test {
 
     function _deployPasskey(uint256 salt) internal returns (AgentAccount) {
         address[] memory empty;
-        return factory.createPersonAgent(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y, salt);
+        return factory.createAgentAccount(_simpleParams(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y), _defaultTimelocks(), salt);
     }
 
     function test_passkeyOnlyInit_registers_credential() public {
@@ -158,10 +176,10 @@ contract AgentAccountTest is Test {
         // CREATE2 happens. The factory will subsequently call the
         // initializer which emits PasskeyAdded from the proxy.
         address[] memory empty;
-        address predicted = factory.getAddressForPersonAgent(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y, 103);
+        address predicted = factory.getAddressForAgentAccount(_simpleParams(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y), 103);
         vm.expectEmit(true, false, false, true, predicted);
         emit AgentAccount.PasskeyAdded(TEST_CRED_DIGEST, TEST_X, TEST_Y);
-        factory.createPersonAgent(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y, 103);
+        factory.createAgentAccount(_simpleParams(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y), _defaultTimelocks(), 103);
     }
 
     function test_passkey_account_ecdsa_signature_rejected() public {

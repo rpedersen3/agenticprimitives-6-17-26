@@ -73,20 +73,81 @@ contract QuorumEnforcer is ICaveatEnforcer {
     error InsufficientQuorum(uint256 supplied, uint8 threshold);
     error UnauthorizedSigner(address signer);
     error DuplicateOrUnsortedSigner(address signer);
+    error PayloadHashMismatch(bytes32 expected, bytes32 supplied);
+
+    /// @notice Typehash for the quorum-action binding (contract audit C-4).
+    /// @dev Bound to (chainId, enforcer, delegationHash, delegator, redeemer,
+    ///      target, value, keccak256(callData)) so quorum signatures cannot
+    ///      be replayed across executions, accounts, or chains.
+    bytes32 public constant QUORUM_ACTION_TYPEHASH = keccak256(
+        "QuorumAction(uint256 chainId,address enforcer,bytes32 delegationHash,address delegator,address redeemer,address target,uint256 value,bytes32 callDataHash)"
+    );
+
+    /**
+     * @notice Compute the canonical payload hash quorum signers MUST sign.
+     * @dev Public so the off-chain signing path can mirror it byte-for-byte
+     *      via TS helpers. Equivalent to the inline computation in
+     *      `beforeHook` — exposing it as a view function keeps the
+     *      two implementations in lockstep.
+     */
+    function computeQuorumPayloadHash(
+        bytes32 delegationHash,
+        address delegator,
+        address redeemer,
+        address target,
+        uint256 value,
+        bytes calldata callData
+    ) public view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                QUORUM_ACTION_TYPEHASH,
+                block.chainid,
+                address(this),
+                delegationHash,
+                delegator,
+                redeemer,
+                target,
+                value,
+                keccak256(callData)
+            )
+        );
+    }
 
     function beforeHook(
         bytes calldata terms,
         bytes calldata args,
-        bytes32, // delegationHash
-        address, // delegator
-        address, // redeemer
-        address, // target
-        uint256, // value
-        bytes calldata // callData
+        bytes32 delegationHash,
+        address delegator,
+        address redeemer,
+        address target,
+        uint256 value,
+        bytes calldata callData
     ) external view override {
         (address[] memory signerSet, uint8 threshold, address approvedHashRegistry) =
             abi.decode(terms, (address[], uint8, address));
-        (bytes32 payloadHash, bytes memory signatures) = abi.decode(args, (bytes32, bytes));
+        (bytes32 suppliedPayloadHash, bytes memory signatures) = abi.decode(args, (bytes32, bytes));
+
+        // Contract audit C-4: bind the signed payload to the actual
+        // execution context. Previously the redeemer chose payloadHash
+        // freely, so a quorum signed off-chain to "approve a transfer
+        // to alice" could be replayed against "approve a transfer to
+        // attacker" with no on-chain check. Reject any mismatch.
+        bytes32 expectedPayloadHash = keccak256(
+            abi.encode(
+                QUORUM_ACTION_TYPEHASH,
+                block.chainid,
+                address(this),
+                delegationHash,
+                delegator,
+                redeemer,
+                target,
+                value,
+                keccak256(callData)
+            )
+        );
+        if (suppliedPayloadHash != expectedPayloadHash) {
+            revert PayloadHashMismatch(expectedPayloadHash, suppliedPayloadHash);
+        }
 
         if (signatures.length < uint256(threshold) * 65) {
             revert InsufficientQuorum(signatures.length / 65, threshold);
@@ -95,7 +156,7 @@ contract QuorumEnforcer is ICaveatEnforcer {
         address prev;
         for (uint256 i; i < threshold; i++) {
             address signer = SignatureSlotRecovery.recoverFromSlot(
-                payloadHash,
+                expectedPayloadHash,
                 signatures,
                 i,
                 approvedHashRegistry

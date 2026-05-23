@@ -37,7 +37,7 @@
     "@agenticprimitives/key-custody": "workspace:*",
     "@agenticprimitives/tool-policy": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
-    "@modelcontextprotocol/sdk": "*",
+    "@modelcontextprotocol/sdk": ">=1.29.0 <2",
     "viem": "^2.21.0"
   },
   "devDependencies": {

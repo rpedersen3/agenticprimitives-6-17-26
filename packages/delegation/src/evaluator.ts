@@ -85,9 +85,50 @@ function evalMcpToolScope(c: Caveat, ctx: CaveatContext): CaveatVerdict {
 }
 
 function evalInert(c: Caveat): CaveatVerdict {
-  // DATA_SCOPE + DELEGATE_BINDING are evaluated outside this dispatcher
-  // (by verifyCrossDelegation). Accept here as inert; sanity-check decode.
-  void c;
+  // DATA_SCOPE + DELEGATE_BINDING + on-chain-only enforcers are
+  // evaluated outside this dispatcher (by verifyCrossDelegation or
+  // on-chain). We accept here as inert BUT sanity-check the term
+  // structure — malformed terms must reject at the closest layer to
+  // discovery to keep downstream verifiers from having to defend
+  // against garbage. Per spec 202 § 11: fail-closed on shape.
+  const enforcerLower = c.enforcer.toLowerCase();
+  if (enforcerLower === DELEGATE_BINDING_ENFORCER.toLowerCase()) {
+    try {
+      // DelegateBinding terms = abi.encode(address, address) — EXACTLY
+      // 64 bytes (0x + 128 hex chars). We assert length explicitly:
+      // viem's decoder happily ignores trailing bytes, so a 16 KiB blob
+      // whose first 64 bytes encode two addresses would otherwise pass
+      // this shape check. The CLAUDE.md regression class.
+      const expectedHexLen = 2 + 64 * 2; // "0x" + 64 bytes
+      if (c.terms.length !== expectedHexLen) {
+        return {
+          enforcer: c.enforcer,
+          allowed: false,
+          reason: `delegate-binding: terms length ${c.terms.length} ≠ expected ${expectedHexLen} (abi.encode(address,address) is exactly 64 bytes)`,
+        };
+      }
+      const [smartAccount, personAgent] = decodeAbiParameters(
+        [{ type: 'address' }, { type: 'address' }],
+        c.terms,
+      );
+      if (
+        smartAccount === '0x0000000000000000000000000000000000000000' ||
+        personAgent === '0x0000000000000000000000000000000000000000'
+      ) {
+        return {
+          enforcer: c.enforcer,
+          allowed: false,
+          reason: 'delegate-binding: zero address in terms',
+        };
+      }
+    } catch (e) {
+      return {
+        enforcer: c.enforcer,
+        allowed: false,
+        reason: `delegate-binding: malformed terms — ${e instanceof Error ? e.message : e}`,
+      };
+    }
+  }
   return { enforcer: c.enforcer, allowed: true };
 }
 

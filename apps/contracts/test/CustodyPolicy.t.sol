@@ -8,6 +8,7 @@ import "../src/AgentAccountFactory.sol";
 import "../src/AgentAccount.sol";
 import "../src/agency/DelegationManager.sol";
 import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
+import {AgentAccountInitParams} from "../src/IAgentAccount.sol";
 
 /// @dev Phase 6c.5-d.1 smoke-test suite for the CustodyPolicy
 ///      module. Verifies end-to-end: install → propose → execute (with
@@ -18,6 +19,7 @@ import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
 ///      the same phase but lives in a separate commit so the green
 ///      bar moves in checkable steps.
 contract CustodyPolicyTest is Test {
+    function _defaultTimelocks() internal pure returns (uint32[7] memory tl) {}
     AgentAccountFactory factory;
     DelegationManager   dm;
     AgentAccount        acct;
@@ -36,17 +38,31 @@ contract CustodyPolicyTest is Test {
         owner  = vm.addr(OWNER_PK);
         owner2 = vm.addr(OWNER2_PK);
 
+        validator = new CustodyPolicy();
         factory = new AgentAccountFactory(
             IEntryPoint(address(ep)),
             address(dm),
+            address(validator),
             address(0xBB),
             address(0xCC),
             address(0xDD)
         );
         address[] memory custodians = new address[](1);
         custodians[0] = owner;
-        acct = factory.createPersonAgent(custodians, bytes32(0), 0, 0, 42);
-        validator = new CustodyPolicy();
+        acct = factory.createAgentAccount(_simpleParams(custodians), _defaultTimelocks(), 42);
+    }
+
+    function _simpleParams(address[] memory custodians)
+        internal pure returns (AgentAccountInitParams memory)
+    {
+        return AgentAccountInitParams({
+            mode: 0,
+            custodians: custodians,
+            trustees: new address[](0),
+            initialPasskeyCredentialIdDigest: bytes32(0),
+            initialPasskeyX: 0,
+            initialPasskeyY: 0
+        });
     }
 
     function _installValidator(uint8 modeVal, uint8[7] memory thresholds, uint32[7] memory timelocks) internal {
@@ -60,7 +76,12 @@ contract CustodyPolicyTest is Test {
             uint256(0),                     // t3HighValueCeiling
             address(0)                      // approvedHashRegistry
         );
-        vm.prank(owner);
+        // Wave 2A: install MUST come from the account itself (self-call)
+        // — no more direct custodian / EOA install path. In production
+        // this self-call routes through CustodyPolicy.ApplySystemUpdate
+        // or the factory's one-time init exception; here we vm.prank
+        // the account to simulate the policy-quorum self-dispatch.
+        vm.prank(address(acct));
         acct.installModule(MODULE_TYPE_EXECUTOR, address(validator), initData);
     }
 
@@ -139,7 +160,8 @@ contract CustodyPolicyTest is Test {
         uint32[7] memory timelocks;
         _installValidator(1, thresholds, timelocks);
 
-        vm.prank(owner);
+        // Wave 2A: uninstall is `onlySelf` (no factory exception).
+        vm.prank(address(acct));
         acct.uninstallModule(MODULE_TYPE_EXECUTOR, address(validator), hex"");
         assertFalse(validator.isInstalledOn(address(acct)));
     }
@@ -149,12 +171,10 @@ contract CustodyPolicyTest is Test {
         uint32[7] memory timelocks;
         _installValidator(1, thresholds, timelocks);
 
-        // Second install via owner re-call. Account-side gate would
+        // Second install via self-call. Account-side gate would
         // catch this via "module already installed" — verify both layers
-        // are coherent. Forward the validator's specific
-        // AlreadyInstalledOn signal by wrapping it through the
-        // account's onInstall-failure error.
-        vm.prank(owner);
+        // are coherent.
+        vm.prank(address(acct));
         vm.expectRevert();
         acct.installModule(MODULE_TYPE_EXECUTOR, address(validator), abi.encode(
             uint8(1), uint8(0), new address[](0), thresholds, timelocks, uint256(0), address(0)
@@ -200,7 +220,7 @@ contract CustodyPolicyTest is Test {
         // Brand-new account; validator never installed.
         address[] memory _c = new address[](1);
         _c[0] = owner;
-        AgentAccount fresh = factory.createPersonAgent(_c, bytes32(0), 0, 0, 99);
+        AgentAccount fresh = factory.createAgentAccount(_simpleParams(_c), _defaultTimelocks(), 99);
         vm.expectRevert(abi.encodeWithSelector(CustodyPolicy.NotInstalledOn.selector, address(fresh)));
         validator.scheduleCustodyChange(
             address(fresh),

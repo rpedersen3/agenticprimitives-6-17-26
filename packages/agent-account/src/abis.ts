@@ -1,7 +1,9 @@
 // Minimal ABI fragments for the on-chain calls AgentAccountClient makes.
 // Source of truth: apps/contracts/src/AgentAccountFactory.sol + AgentAccount.sol.
-// Phase 6f.4 — collapsed factory surface (createPersonAgent + createMultiSigSmartAgent)
-// and unified AgentAccount initializer.
+// Wave R0 — unified factory surface: a single `createAgentAccount` entry
+// replaces the legacy `createPersonAgent` + `createMultiSigSmartAgent` pair.
+// `mode` on the init params picks the shape (0=simple, 1-3=CustodyPolicy
+// installed; mode>0 requires ≥1 trustee).
 
 const initParamsTuple = {
   name: 'params',
@@ -17,50 +19,21 @@ const initParamsTuple = {
 } as const;
 
 export const agentAccountFactoryAbi = [
-  // ─── Person Smart Agent (no validator) ────────────────────────────────
+  // ─── Unified factory entry ────────────────────────────────────────────
   {
     type: 'function',
-    name: 'createPersonAgent',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'externalCustodians', type: 'address[]' },
-      { name: 'passkeyCredentialIdDigest', type: 'bytes32' },
-      { name: 'passkeyX', type: 'uint256' },
-      { name: 'passkeyY', type: 'uint256' },
-      { name: 'salt', type: 'uint256' },
-    ],
-    outputs: [{ name: 'account', type: 'address' }],
-  },
-  {
-    type: 'function',
-    name: 'getAddressForPersonAgent',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'externalCustodians', type: 'address[]' },
-      { name: 'passkeyCredentialIdDigest', type: 'bytes32' },
-      { name: 'passkeyX', type: 'uint256' },
-      { name: 'passkeyY', type: 'uint256' },
-      { name: 'salt', type: 'uint256' },
-    ],
-    outputs: [{ name: '', type: 'address' }],
-  },
-
-  // ─── Multi-sig Smart Agent (CustodyPolicy installed) ──────────────────
-  {
-    type: 'function',
-    name: 'createMultiSigSmartAgent',
+    name: 'createAgentAccount',
     stateMutability: 'nonpayable',
     inputs: [
       initParamsTuple,
-      { name: 'validator', type: 'address' },
-      { name: 'safetyDelaySeconds', type: 'uint32' },
+      { name: 'timelockOverrides', type: 'uint32[7]' },
       { name: 'salt', type: 'uint256' },
     ],
     outputs: [{ name: 'account', type: 'address' }],
   },
   {
     type: 'function',
-    name: 'getAddressForMultiSigSmartAgent',
+    name: 'getAddressForAgentAccount',
     stateMutability: 'view',
     inputs: [
       initParamsTuple,
@@ -98,6 +71,13 @@ export const agentAccountFactoryAbi = [
     inputs: [],
     outputs: [{ name: '', type: 'address' }],
   },
+  {
+    type: 'function',
+    name: 'custodyPolicy',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
 
   // ─── Events ──────────────────────────────────────────────────────────
   {
@@ -105,7 +85,7 @@ export const agentAccountFactoryAbi = [
     name: 'AgentAccountCreated',
     inputs: [
       { name: 'account', type: 'address', indexed: true },
-      { name: 'withValidator', type: 'bool', indexed: false },
+      { name: 'mode', type: 'uint8', indexed: false },
       { name: 'nExternalCustodians', type: 'uint256', indexed: false },
       { name: 'withPasskey', type: 'bool', indexed: false },
       { name: 'salt', type: 'uint256', indexed: false },

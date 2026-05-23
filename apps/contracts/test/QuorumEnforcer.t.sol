@@ -36,7 +36,13 @@ contract QuorumEnforcerTest is Test {
     address internal bob;
     address internal carol;
 
-    bytes32 internal payloadHash = keccak256("agenticprimitives.quorum.test.payload");
+    // Per contract audit C-4 fix: payloadHash MUST equal the canonical
+    // binding computed by `QuorumEnforcer.computeQuorumPayloadHash(...)`
+    // — signers can no longer sign an arbitrary hash and have the
+    // redeemer pass it through. The legacy tests all called
+    // `beforeHook(..., bytes32(0), address(0), address(0), address(0), 0, "")`,
+    // so the expected hash is the canonical one against all-zero context.
+    bytes32 internal payloadHash;
 
     function setUp() public {
         enf = new QuorumEnforcer();
@@ -44,6 +50,9 @@ contract QuorumEnforcerTest is Test {
         alice = vm.addr(alicePk);
         bob = vm.addr(bobPk);
         carol = vm.addr(carolPk);
+        payloadHash = enf.computeQuorumPayloadHash(
+            bytes32(0), address(0), address(0), address(0), 0, ""
+        );
     }
 
     function _terms(uint8 threshold) internal view returns (bytes memory) {

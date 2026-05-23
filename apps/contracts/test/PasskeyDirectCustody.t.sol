@@ -10,6 +10,7 @@ import "../src/agency/DelegationManager.sol";
 import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
 import {SignatureSlotRecovery} from "../src/libraries/SignatureSlotRecovery.sol";
 import {WebAuthnLib} from "../src/libraries/WebAuthnLib.sol";
+import {AgentAccountInitParams} from "../src/IAgentAccount.sol";
 
 /// @dev Phase 6f.4 — passkey-direct custody pivot. Covers:
 ///       (a) PIA derivation matches the documented formula
@@ -23,6 +24,7 @@ import {WebAuthnLib} from "../src/libraries/WebAuthnLib.sol";
 ///              about is the slot decoder, NOT the P-256 crypto path
 ///              which is covered by existing WebAuthn fixtures).
 contract PasskeyDirectCustodyTest is Test {
+    function _defaultTimelocks() internal pure returns (uint32[7] memory tl) {}
     AgentAccountFactory factory;
     DelegationManager   dm;
     CustodyPolicy       validator;
@@ -35,18 +37,32 @@ contract PasskeyDirectCustodyTest is Test {
     function setUp() public {
         EntryPoint ep = new EntryPoint();
         dm = new DelegationManager();
+        validator = new CustodyPolicy();
         factory = new AgentAccountFactory(
             IEntryPoint(address(ep)),
             address(dm),
+            address(validator),
             address(0xBB),
             address(0xCC),
             address(0xDD)
         );
-        validator = new CustodyPolicy();
     }
 
     function _pia(uint256 x, uint256 y) internal pure returns (address) {
         return address(uint160(uint256(keccak256(abi.encode(x, y)))));
+    }
+
+    function _simpleParams(address[] memory custodians, bytes32 cred, uint256 x, uint256 y)
+        internal pure returns (AgentAccountInitParams memory)
+    {
+        return AgentAccountInitParams({
+            mode: 0,
+            custodians: custodians,
+            trustees: new address[](0),
+            initialPasskeyCredentialIdDigest: cred,
+            initialPasskeyX: x,
+            initialPasskeyY: y
+        });
     }
 
     function _emptyArr() internal pure returns (address[] memory r) {
@@ -56,13 +72,13 @@ contract PasskeyDirectCustodyTest is Test {
     // ─── (a) PIA derivation ────────────────────────────────────────────
 
     function test_passkeyIdentity_matches_documented_formula() public {
-        AgentAccount acct = factory.createPersonAgent(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y, 1);
+        AgentAccount acct = factory.createAgentAccount(_simpleParams(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y), _defaultTimelocks(), 1);
         address expected = _pia(PASSKEY_X, PASSKEY_Y);
         assertEq(acct.passkeyIdentity(PASSKEY_X, PASSKEY_Y), expected);
     }
 
     function test_passkeyIdentity_differs_for_different_pubkeys() public {
-        AgentAccount acct = factory.createPersonAgent(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y, 2);
+        AgentAccount acct = factory.createAgentAccount(_simpleParams(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y), _defaultTimelocks(), 2);
         address a = acct.passkeyIdentity(PASSKEY_X, PASSKEY_Y);
         address b = acct.passkeyIdentity(PASSKEY_X + 1, PASSKEY_Y);
         assertTrue(a != b);
@@ -71,7 +87,7 @@ contract PasskeyDirectCustodyTest is Test {
     // ─── (b) Passkey-only init: PIA is a first-class custodian ─────────
 
     function test_initWithPasskey_registers_pia_as_custodian() public {
-        AgentAccount acct = factory.createPersonAgent(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y, 3);
+        AgentAccount acct = factory.createAgentAccount(_simpleParams(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y), _defaultTimelocks(), 3);
         address pia = _pia(PASSKEY_X, PASSKEY_Y);
         assertTrue(acct.isCustodian(pia));
         assertEq(acct.custodianCount(), 1);
@@ -81,7 +97,7 @@ contract PasskeyDirectCustodyTest is Test {
     // ─── (c) addPasskey adds PIA; removePasskey clears it ──────────────
 
     function test_addPasskey_registers_new_pia_as_custodian() public {
-        AgentAccount acct = factory.createPersonAgent(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y, 4);
+        AgentAccount acct = factory.createAgentAccount(_simpleParams(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y), _defaultTimelocks(), 4);
         bytes32 cred2 = keccak256("second-credential");
         uint256 x2 = uint256(keccak256("second-x"));
         uint256 y2 = uint256(keccak256("second-y"));
@@ -97,7 +113,7 @@ contract PasskeyDirectCustodyTest is Test {
     }
 
     function test_removePasskey_clears_pia_custodian() public {
-        AgentAccount acct = factory.createPersonAgent(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y, 5);
+        AgentAccount acct = factory.createAgentAccount(_simpleParams(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y), _defaultTimelocks(), 5);
         bytes32 cred2 = keccak256("removable-credential");
         uint256 x2 = uint256(keccak256("removable-x"));
         uint256 y2 = uint256(keccak256("removable-y"));
@@ -115,7 +131,7 @@ contract PasskeyDirectCustodyTest is Test {
     }
 
     function test_addPasskey_rejects_duplicate_pia_under_different_credId() public {
-        AgentAccount acct = factory.createPersonAgent(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y, 6);
+        AgentAccount acct = factory.createAgentAccount(_simpleParams(_emptyArr(), CRED_DIGEST, PASSKEY_X, PASSKEY_Y), _defaultTimelocks(), 6);
         // Different credentialIdDigest, SAME (x, y) — would re-add the
         // same PIA. The piaToCredentialId mapping check catches this.
         vm.prank(address(acct));

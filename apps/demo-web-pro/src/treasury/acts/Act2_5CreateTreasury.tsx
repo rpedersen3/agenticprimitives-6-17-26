@@ -112,25 +112,27 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     // the human-signer authorities. Per spec 212/213 the Treasury is
     // owned by Alice's identities, not by the Org's address; Org→Treasury
     // is a delegation relationship issued in Act 5.
-    const externalCustodians = aliceSiwe ? ([aliceSiwe.eoa] as Address[]) : ([] as Address[]);
-    const initParams = {
-      mode: 1, // hybrid — same shape as Org; threshold bumps to 2 in Act 4
-      custodians: externalCustodians,
-      trustees: [] as Address[],
-      initialPasskeyCredentialIdDigest: alicePasskey?.credentialIdDigest ?? (('0x' + '00'.repeat(32)) as Hex),
-      initialPasskeyX: alicePasskey?.pubKeyX ?? 0n,
-      initialPasskeyY: alicePasskey?.pubKeyY ?? 0n,
-    } as const;
+    const custodians = aliceSiwe ? ([aliceSiwe.eoa] as Address[]) : ([] as Address[]);
     const aliceIdentityForSalt = alicePasskey?.pia ?? aliceSiwe?.eoa;
     if (!aliceIdentityForSalt) {
       setStage('error');
       setError('Founder has no enrolled identity — re-claim her seat.');
       return;
     }
+    // Wave R0 — mode>0 requires ≥1 trustee at deploy. Self-trustee
+    // bootstrap; Bob's identity is added via T6 admin in later acts.
+    const initParams = {
+      mode: 1, // hybrid — same shape as Org; threshold bumps to 2 in Act 4
+      custodians: custodians,
+      trustees: [aliceIdentityForSalt] as Address[],
+      initialPasskeyCredentialIdDigest: alicePasskey?.credentialIdDigest ?? (('0x' + '00'.repeat(32)) as Hex),
+      initialPasskeyX: alicePasskey?.pubKeyX ?? 0n,
+      initialPasskeyY: alicePasskey?.pubKeyY ?? 0n,
+    } as const;
 
     // Salt includes the Org address so a Treasury deployed for a
     // different Org never collides at the same CREATE2 slot.
-    const SALT_VERSION = 'v7-multi-auth';
+    const SALT_VERSION = 'v8-r0-unified-factory';
     const salt = BigInt(
       '0x' +
         [...new TextEncoder().encode(`${TREASURY_NAME}:${org.address}:${aliceIdentityForSalt}:${SALT_VERSION}`)]
@@ -140,10 +142,11 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     );
 
     // 1-second T4 safety delay — same demo override as Act 2.
+    // Wave R0 — the validator is factory-immutable; no per-call override.
     const factoryCallData = encodeFunctionData({
       abi: agentAccountFactoryAbi,
-      functionName: 'createMultiSigSmartAgent',
-      args: [initParams, custodyPolicyAddress, 1, salt],
+      functionName: 'createAgentAccount',
+      args: [initParams, [0, 0, 0, 0, 1, 0, 0] as const, salt],
     });
 
     // For now Alice\'s PSA dispatches directly. Once Acts 3-4 give the
@@ -175,7 +178,7 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
       }
       const { ensureCsrfToken, csrfHeaders } = await import('../../lib/csrf');
       await ensureCsrfToken();
-      const res = await fetch(`${base}/session/direct-deploy-multisig`, {
+      const res = await fetch(`${base}/session/direct-deploy`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
@@ -186,8 +189,7 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
           initialPasskeyCredentialIdDigest: initParams.initialPasskeyCredentialIdDigest,
           initialPasskeyX: initParams.initialPasskeyX.toString(),
           initialPasskeyY: initParams.initialPasskeyY.toString(),
-          validator: custodyPolicyAddress,
-          safetyDelaySeconds: 1,
+          timelockOverrides: [0, 0, 0, 0, 1, 0, 0],
           salt: salt.toString(),
         }),
       });

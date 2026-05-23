@@ -1,20 +1,21 @@
 /**
- * Shared schedule+apply ceremony helper.
+ * Shared schedule+apply ceremony helper — NATIVE MULTI-SIGNER.
  *
- * Acts 3 and 4 both run "schedule a custody change → wait the timelock
- * → apply it" loops against the CustodyPolicy module. The flow is
- * identical regardless of which CustodyAction is being applied
- * (AddPasskeyCredential, AddCustodian, ChangeApprovalsRequired, …) so
- * we keep one canonical implementation here and call it from both acts.
+ * Wave R1 collapsed the old single-signer + planned-multi-signer split
+ * into one helper: `scheduleAndApply({ signers: [...] })` where the
+ * trivial `signers.length === 1` case is what every demo-web-pro Act
+ * 3/4/5/etc. already uses, and `signers.length === 2+` is what the
+ * recovery demo needs (Alice + Bob 2-of-2 on T6 RecoverAccount).
  *
- * Caller responsibilities:
- *   - Provide the SeatClaim of the signer (e.g. Alice — must have a
- *     passkey method to sign quorum slots; SIWE-only signing for admin
- *     actions ships in a later phase).
- *   - Provide the DemoPasskey for that signer (passkey enrolment data
- *     lives in local-only passkey.ts, separate from SeatClaim).
- *   - Provide the action + its abi-encoded innerArgs (see
- *     packages/custody/src/actions.ts for builders).
+ * Each signer signs both the schedule hash and the apply hash. The
+ * collected `QuorumSlot[]` is sorted-ascending-by-signer-address inside
+ * `packQuorumSigs` and submitted in one tx. CustodyPolicy verifies all
+ * slots against the bound payload hash + the account's custodian set.
+ *
+ * Submission account choice doesn't affect security (CustodyPolicy
+ * validates quorum sigs, not msg.sender). We prefer the first signer's
+ * PSA when they have a passkey (gasless userOp + paymaster), falling
+ * back to the demo-a2a worker relay (worker pays gas with deployer EOA).
  */
 
 import { keccak256, type Address, type Hex } from 'viem';
@@ -72,20 +73,31 @@ export type GetWalletAddressFn = () => `0x${string}` | undefined;
 export type PromptSwitchWalletAccountFn = () => Promise<`0x${string}` | undefined>;
 
 /**
+ * One participant in a multi-sig ceremony. Carries the seat (which
+ * exposes the auth method) + the local-only passkey credential (if any)
+ * + the SIWE callbacks (if no passkey). For a single-signer ceremony
+ * the caller passes one of these; for 2-of-2 recovery they pass two.
+ */
+export interface CeremonySigner {
+  seat: SeatClaim;
+  /** Required when the seat has passkey auth. */
+  passkey?: DemoPasskey;
+  /** Required when the seat is SIWE-only. */
+  signTypedDataAsync?: SignTypedDataFn;
+  /** Required when SIWE-only — wagmi `useAccount().address` accessor. */
+  getWalletAddress?: GetWalletAddressFn;
+  /** Required when SIWE-only — wallet account-picker prompt. */
+  promptSwitchWalletAccount?: PromptSwitchWalletAccountFn;
+}
+
+/**
  * Sign a CustodyPolicy schedule/apply payload using whichever method
- * the seat has enrolled. Passkey preferred (gasless UX); SIWE used
+ * the signer has enrolled. Passkey preferred (gasless UX); SIWE used
  * only when no passkey method exists. Returns a packed quorum slot
  * the caller can hand to `packQuorumSigs`.
  */
 async function signCeremonyHash(args: {
-  seat: SeatClaim;
-  seatPasskey?: DemoPasskey;
-  /** Witness for the wallet path. Must be supplied if no passkey. */
-  signTypedDataAsync?: SignTypedDataFn;
-  /** Returns the wallet's current active address — for the safety guard. */
-  getWalletAddress?: GetWalletAddressFn;
-  /** Auto-opens MetaMask's account picker on wallet/seat mismatch. */
-  promptSwitchWalletAccount?: PromptSwitchWalletAccountFn;
+  signer: CeremonySigner;
   /** Domain + typed-data fragments for the SIWE path. */
   domain: { chainId: number; verifyingContract: Address };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,19 +108,20 @@ async function signCeremonyHash(args: {
   /** Pre-computed EIP-712 hash. Passkey signs this directly. */
   hash: Hex;
 }): Promise<QuorumSlot> {
-  const passkeyAuth = getPasskeyAuth(args.seat);
-  if (passkeyAuth && args.seatPasskey) {
-    const assertion = await assertWithPasskey(args.seatPasskey, args.hash);
+  const { signer } = args;
+  const passkeyAuth = getPasskeyAuth(signer.seat);
+  if (passkeyAuth && signer.passkey) {
+    const assertion = await assertWithPasskey(signer.passkey, args.hash);
     return {
       type: 'passkey',
       pia: passkeyAuth.pia,
-      x: args.seatPasskey.pubKeyX,
-      y: args.seatPasskey.pubKeyY,
+      x: signer.passkey.pubKeyX,
+      y: signer.passkey.pubKeyY,
       assertion,
     };
   }
-  const siwe = getSiweAuth(args.seat);
-  if (!siwe || !args.signTypedDataAsync) {
+  const siwe = getSiweAuth(signer.seat);
+  if (!siwe || !signer.signTypedDataAsync) {
     throw new Error(
       'Seat has no signing method available — needs either a local DemoPasskey or a connected wallet + signTypedDataAsync callback.',
     );
@@ -120,19 +133,19 @@ async function signCeremonyHash(args: {
   // `AdminUnauthorizedSigner`. On mismatch we trigger MetaMask's
   // account picker so the user can switch with one click; if they
   // still pick the wrong account (or dismiss), we throw a clear error.
-  if (args.getWalletAddress) {
-    let active = args.getWalletAddress();
-    if (!active && args.promptSwitchWalletAccount) {
-      active = await args.promptSwitchWalletAccount();
+  if (signer.getWalletAddress) {
+    let active = signer.getWalletAddress();
+    if (!active && signer.promptSwitchWalletAccount) {
+      active = await signer.promptSwitchWalletAccount();
     }
     if (!active) {
       throw new Error(
         'No wallet account connected. Connect MetaMask + select the account bound to this seat, then retry.',
       );
     }
-    if (active.toLowerCase() !== siwe.eoa.toLowerCase() && args.promptSwitchWalletAccount) {
+    if (active.toLowerCase() !== siwe.eoa.toLowerCase() && signer.promptSwitchWalletAccount) {
       // Prompt for switch automatically.
-      const after = await args.promptSwitchWalletAccount();
+      const after = await signer.promptSwitchWalletAccount();
       if (after) active = after;
     }
     if (active.toLowerCase() !== siwe.eoa.toLowerCase()) {
@@ -145,7 +158,7 @@ async function signCeremonyHash(args: {
     chainId: args.domain.chainId,
     verifyingContract: args.domain.verifyingContract,
   });
-  const signature = await args.signTypedDataAsync({
+  const signature = await signer.signTypedDataAsync({
     domain: domainForWallet,
     types: args.types,
     primaryType: args.primaryType,
@@ -161,42 +174,25 @@ export interface CeremonyResult {
 }
 
 export interface ScheduleAndApplyArgs {
-  /** The account whose custody is being modified (Org or Treasury). */
+  /** The account whose custody is being modified (Org, Treasury, PSA). */
   account: Address;
   /** Which CustodyPolicy action to schedule + apply. */
   action: CustodyAction;
   /** The action's abi-encoded args blob (see packages/custody/src/actions.ts). */
   innerArgs: Hex;
-  /** The signer's SeatClaim — at least one auth method enrolled. */
-  signer: SeatClaim;
-  /** The signer's local passkey credential, if they have one. */
-  signerPasskey?: DemoPasskey;
   /**
-   * wagmi's `useSignTypedData().signTypedDataAsync` — only used if the
-   * signer has no passkey method.
+   * One or more signers. Each contributes one QuorumSlot to both the
+   * schedule and apply payloads. Order doesn't matter — `packQuorumSigs`
+   * sorts ascending by signer address.
    */
-  signTypedDataAsync?: SignTypedDataFn;
-  /**
-   * Returns wagmi's `useAccount().address`. When the signer is SIWE-only,
-   * we verify the wallet's active account matches the seat's EOA before
-   * prompting signTypedData; otherwise the signature recovers to a
-   * different address and the on-chain quorum check reverts with
-   * `AdminUnauthorizedSigner`.
-   */
-  getWalletAddress?: GetWalletAddressFn;
-  /**
-   * Opens MetaMask's account picker (via `wallet_requestPermissions`) so
-   * the user can switch in one click when the wallet's active account
-   * doesn't match the seat. Resolves to the post-switch address.
-   */
-  promptSwitchWalletAccount?: PromptSwitchWalletAccountFn;
+  signers: CeremonySigner[];
   /**
    * Optional phase notifier. The set of phases is:
    *   - 'computing-hash' | 'signing-schedule' | 'submitting-schedule'
    *   - 'reading-eta' | 'signing-apply' | 'submitting-apply'
    * Callers can map these to UI affordances or ignore them.
    */
-  setPhase?: (p: CeremonyPhase) => void;
+  setPhase?: (p: CeremonyPhase, signerIndex?: number) => void;
 }
 
 export type CeremonyPhase =
@@ -207,50 +203,66 @@ export type CeremonyPhase =
   | 'signing-apply'
   | 'submitting-apply';
 
+/** Identity (PIA or EOA) the seat will sign as. */
+function signerIdentity(signer: CeremonySigner): Address | null {
+  const passkeyAuth = getPasskeyAuth(signer.seat);
+  if (passkeyAuth) return passkeyAuth.pia;
+  const siwe = getSiweAuth(signer.seat);
+  return siwe?.eoa ?? null;
+}
+
 export async function scheduleAndApply(
   args: ScheduleAndApplyArgs,
 ): Promise<CeremonyResult | { error: string }> {
   if (!config.custodyPolicy || !config.chainId) {
     return { error: 'custody policy / chain id missing' };
   }
-  const { account, action, innerArgs, signer, signerPasskey, signTypedDataAsync, getWalletAddress, promptSwitchWalletAccount, setPhase } = args;
-  const signerPasskeyAuth = getPasskeyAuth(signer);
-  const signerSiweAuth = getSiweAuth(signer);
-  if (!signerPasskeyAuth && !signerSiweAuth) {
-    return { error: 'signer has no enrolled auth method' };
+  const { account, action, innerArgs, signers, setPhase } = args;
+
+  if (signers.length === 0) {
+    return { error: 'at least one signer required' };
   }
-  if (!signerPasskeyAuth && !signTypedDataAsync) {
-    return { error: 'SIWE-only signer requires signTypedDataAsync callback' };
+
+  // Pre-flight 1: validate every signer's enrolment + sig method.
+  for (let i = 0; i < signers.length; i++) {
+    const s = signers[i]!;
+    const passkeyAuth = getPasskeyAuth(s.seat);
+    const siweAuth = getSiweAuth(s.seat);
+    if (!passkeyAuth && !siweAuth) {
+      return { error: `signer #${i + 1} has no enrolled auth method` };
+    }
+    if (passkeyAuth && !s.passkey) {
+      return { error: `signer #${i + 1} has a passkey identity but no local DemoPasskey in storage` };
+    }
+    if (!passkeyAuth && !s.signTypedDataAsync) {
+      return { error: `signer #${i + 1} is SIWE-only but no signTypedDataAsync was supplied` };
+    }
   }
-  if (signerPasskeyAuth && !signerPasskey) {
-    return { error: 'signer has a passkey identity but no local DemoPasskey in storage' };
+
+  // Pre-flight 2: every signer's identity must be a custodian of the
+  // target account. Mismatch usually means a stale SeatClaim — fail
+  // loudly so the user can reset state rather than chase an opaque
+  // `AdminUnauthorizedSigner` revert from the relay endpoint.
+  setPhase?.('computing-hash');
+  for (let i = 0; i < signers.length; i++) {
+    const ident = signerIdentity(signers[i]!);
+    if (!ident) return { error: `signer #${i + 1} has no enrolled identity` };
+    const onTarget = await readIsCustodian({ account, signer: ident });
+    if (!onTarget) {
+      return {
+        error:
+          `Stale state: signer #${i + 1}'s identity (${ident}) isn't a custodian of ` +
+          `${account}. The seat was re-claimed after this account was deployed, so the local ` +
+          `record points at a stale Smart Agent. Click "Reset demo" in the top bar (or clear ` +
+          `localStorage) and re-deploy with the current seats.`,
+      };
+    }
   }
+
   const argsHash = keccak256(innerArgs);
 
-  // Pre-flight: verify the signer's seat-bound identity (PIA or EOA)
-  // is actually a custodian of the target account on chain. Mismatch
-  // means the local SeatClaim was re-claimed after the target was
-  // deployed (the target has the OLD identity, the seat has a NEW one).
-  // Fail loudly so the user knows to reset state rather than chase
-  // an opaque `AdminUnauthorizedSigner` revert from the relay endpoint.
-  setPhase?.('computing-hash');
-  const signerIdentity = signerPasskeyAuth?.pia ?? signerSiweAuth?.eoa;
-  if (!signerIdentity) {
-    return { error: 'signer has no enrolled identity' };
-  }
-  const signerOnTarget = await readIsCustodian({
-    account,
-    signer: signerIdentity,
-  });
-  if (!signerOnTarget) {
-    return {
-      error:
-        `Stale state: the signer's identity (${signerIdentity}) isn't a custodian of ` +
-        `${account}. The seat was re-claimed after this account was deployed, so the local ` +
-        `record points at a stale Smart Agent. Click "Reset demo" in the top bar (or clear ` +
-        `localStorage) and re-deploy the Org / Treasury with the current seat.`,
-    };
-  }
+  // Resume detection: if a matching un-executed scheduled change
+  // already exists, skip the schedule step and apply against it.
   const lastChangeId = await readScheduledChangeCount({
     custodyPolicy: config.custodyPolicy,
     account,
@@ -258,7 +270,6 @@ export async function scheduleAndApply(
   let expectedChangeId = lastChangeId + 1n;
   let skipSchedule = false;
   let existingEta: bigint | null = null;
-  // Resume: scan recent un-executed matching changes (last 5).
   const scanTo = lastChangeId > 5n ? lastChangeId - 5n : 0n;
   for (let id = lastChangeId; id > scanTo; id--) {
     const sc = await readScheduledChange({
@@ -295,56 +306,34 @@ export async function scheduleAndApply(
     scheduleTx = ('0x' + '00'.repeat(32)) as Hex; // resumed; no fresh tx
   } else {
     setPhase?.('signing-schedule');
-    const scheduleSlot = await signCeremonyHash({
-      seat: signer,
-      seatPasskey: signerPasskey,
-      signTypedDataAsync,
-      getWalletAddress,
-      promptSwitchWalletAccount,
-      domain: { chainId: config.chainId, verifyingContract: config.custodyPolicy },
-      types: ScheduleCustodyChangeRequest,
-      primaryType: 'ScheduleCustodyChangeRequest',
-      message: { account, action, argsHash, changeId: expectedChangeId },
-      hash: scheduleHash,
-    });
-    const scheduleSigs = packQuorumSigs([scheduleSlot]);
+    const scheduleSlots: QuorumSlot[] = [];
+    for (let i = 0; i < signers.length; i++) {
+      setPhase?.('signing-schedule', i);
+      const slot = await signCeremonyHash({
+        signer: signers[i]!,
+        domain: { chainId: config.chainId, verifyingContract: config.custodyPolicy },
+        types: ScheduleCustodyChangeRequest,
+        primaryType: 'ScheduleCustodyChangeRequest',
+        message: { account, action, argsHash, changeId: expectedChangeId },
+        hash: scheduleHash,
+      });
+      scheduleSlots.push(slot);
+    }
+    const scheduleSigs = packQuorumSigs(scheduleSlots);
 
     setPhase?.('submitting-schedule');
-    // Branch on whether the signer has a passkey:
-    //   - Passkey → dispatch via Alice.PSA.execute(...) userOp (paymaster pays gas)
-    //   - SIWE-only → relay the call through demo-a2a's /session/custody-schedule
-    //     endpoint (worker pays gas with the deployer EOA). CustodyPolicy's
-    //     schedule/apply don't constrain msg.sender, so direct relay is safe.
-    let scheduleResult: { ok: boolean; transactionHash?: Hex; reason?: string; error?: string };
-    if (signerPasskey) {
-      const scheduleCallData = encodeScheduleCall({
+    const scheduleResult = await submitCeremonyTx({
+      payload: encodeScheduleCall({ account, action, innerArgs, quorumSigs: scheduleSigs }),
+      relayPath: '/session/custody-schedule',
+      relayBody: {
+        custodyPolicy: config.custodyPolicy,
         account,
         action,
-        innerArgs,
+        args: innerArgs,
         quorumSigs: scheduleSigs,
-      });
-      const scheduleOuter = encodeExecuteCall({
-        target: config.custodyPolicy,
-        value: 0n,
-        innerData: scheduleCallData,
-      });
-      scheduleResult = await executeCallFromAgent({
-        sender: signer.personAgent,
-        passkey: signerPasskey,
-        callData: scheduleOuter,
-      });
-    } else {
-      scheduleResult = await relayCustodyCall({
-        path: '/session/custody-schedule',
-        body: {
-          custodyPolicy: config.custodyPolicy,
-          account,
-          action,
-          args: innerArgs,
-          quorumSigs: scheduleSigs,
-        },
-      });
-    }
+      },
+      signers,
+    });
     if (!scheduleResult.ok || !scheduleResult.transactionHash) {
       return { error: scheduleResult.reason || scheduleResult.error || 'schedule failed' };
     }
@@ -369,51 +358,68 @@ export async function scheduleAndApply(
   });
 
   setPhase?.('signing-apply');
-  const applySlot = await signCeremonyHash({
-    seat: signer,
-    seatPasskey: signerPasskey,
-    signTypedDataAsync,
-    domain: { chainId: config.chainId, verifyingContract: config.custodyPolicy },
-    types: ApplyCustodyChangeRequest,
-    primaryType: 'ApplyCustodyChangeRequest',
-    message: { account, action, argsHash, changeId: expectedChangeId, eta: resolvedEta },
-    hash: applyHash,
-  });
-  const applySigs = packQuorumSigs([applySlot]);
+  const applySlots: QuorumSlot[] = [];
+  for (let i = 0; i < signers.length; i++) {
+    setPhase?.('signing-apply', i);
+    const slot = await signCeremonyHash({
+      signer: signers[i]!,
+      domain: { chainId: config.chainId, verifyingContract: config.custodyPolicy },
+      types: ApplyCustodyChangeRequest,
+      primaryType: 'ApplyCustodyChangeRequest',
+      message: { account, action, argsHash, changeId: expectedChangeId, eta: resolvedEta },
+      hash: applyHash,
+    });
+    applySlots.push(slot);
+  }
+  const applySigs = packQuorumSigs(applySlots);
 
   setPhase?.('submitting-apply');
-  let applyResult: { ok: boolean; transactionHash?: Hex; reason?: string; error?: string };
-  if (signerPasskey) {
-    const applyCallData = encodeApplyCall({
+  const applyResult = await submitCeremonyTx({
+    payload: encodeApplyCall({ account, changeId: expectedChangeId, quorumSigs: applySigs }),
+    relayPath: '/session/custody-apply',
+    relayBody: {
+      custodyPolicy: config.custodyPolicy,
       account,
-      changeId: expectedChangeId,
+      changeId: expectedChangeId.toString(),
       quorumSigs: applySigs,
-    });
-    const applyOuter = encodeExecuteCall({
-      target: config.custodyPolicy,
-      value: 0n,
-      innerData: applyCallData,
-    });
-    applyResult = await executeCallFromAgent({
-      sender: signer.personAgent,
-      passkey: signerPasskey,
-      callData: applyOuter,
-    });
-  } else {
-    applyResult = await relayCustodyCall({
-      path: '/session/custody-apply',
-      body: {
-        custodyPolicy: config.custodyPolicy,
-        account,
-        changeId: expectedChangeId.toString(),
-        quorumSigs: applySigs,
-      },
-    });
-  }
+    },
+    signers,
+  });
   if (!applyResult.ok || !applyResult.transactionHash) {
     return { error: applyResult.reason || applyResult.error || 'apply failed' };
   }
   return { scheduleTx, applyTx: applyResult.transactionHash };
+}
+
+/**
+ * Submit a custody-policy call. Picks the first signer with a passkey
+ * as the userOp dispatcher (gasless via paymaster); falls back to the
+ * worker relay if no signer has a passkey. Either way the on-chain
+ * authority is the packed `quorumSigs` blob — msg.sender doesn't
+ * affect CustodyPolicy's check.
+ */
+async function submitCeremonyTx(args: {
+  payload: Hex;
+  relayPath: '/session/custody-schedule' | '/session/custody-apply';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  relayBody: any;
+  signers: CeremonySigner[];
+}): Promise<{ ok: boolean; transactionHash?: Hex; reason?: string; error?: string }> {
+  if (!config.custodyPolicy) return { ok: false, error: 'custodyPolicy missing' };
+  const passkeySigner = args.signers.find((s) => getPasskeyAuth(s.seat) && s.passkey);
+  if (passkeySigner) {
+    const outer = encodeExecuteCall({
+      target: config.custodyPolicy,
+      value: 0n,
+      innerData: args.payload,
+    });
+    return executeCallFromAgent({
+      sender: passkeySigner.seat.personAgent,
+      passkey: passkeySigner.passkey!,
+      callData: outer,
+    });
+  }
+  return relayCustodyCall({ path: args.relayPath, body: args.relayBody });
 }
 
 /**

@@ -5,7 +5,14 @@ import type { PolicyContext, ToolClassification } from '../../src/types';
 function ctx(overrides: Partial<PolicyContext>): PolicyContext {
   return {
     toolName: 'test_tool',
-    classification: { '@sa-tool': 'delegation-verified', '@sa-auth': 'session-token' },
+    // Fully-qualified classification: tool + auth + risk tier.
+    // (Pre-Wave-2 fixture omitted risk-tier; that's now a deny condition
+    // for user-facing tools per the fail-closed shape gate.)
+    classification: {
+      '@sa-tool': 'delegation-verified',
+      '@sa-auth': 'session-token',
+      '@sa-risk-tier': 'low',
+    },
     callerKind: 'user-session',
     ...overrides,
   };

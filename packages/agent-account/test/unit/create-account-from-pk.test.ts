@@ -1,5 +1,5 @@
 /**
- * createPersonAgentFromPrivateKey — bootstrap-relayer deploy path.
+ * createAgentAccountFromPrivateKey — bootstrap-relayer deploy path.
  *
  * Mocks viem so this runs without a real RPC. The system layer (Anvil
  * + e2e Playwright tests) exercises the live broadcast path.
@@ -32,7 +32,7 @@ vi.mock('viem', async (importOriginal) => {
     createWalletClient: vi.fn(() => fakeWalletClient),
     getContract: vi.fn(() => ({
       read: {
-        getAddressForPersonAgent: vi.fn(async () => PREDICTED),
+        getAddressForAgentAccount: vi.fn(async () => PREDICTED),
       },
     })),
     http: vi.fn(() => ({})),
@@ -43,7 +43,7 @@ vi.mock('viem/accounts', () => ({
   privateKeyToAccount: vi.fn(() => ({ address: BOOTSTRAP_ADDR })),
 }));
 
-describe('AgentAccountClient.createPersonAgentFromPrivateKey', () => {
+describe('AgentAccountClient.createAgentAccountFromPrivateKey', () => {
   let client: AgentAccountClient;
   beforeEach(() => {
     client = new AgentAccountClient({
@@ -61,8 +61,8 @@ describe('AgentAccountClient.createPersonAgentFromPrivateKey', () => {
 
   it('skips the tx when the account is already deployed (idempotent)', async () => {
     fakePublicClient.getCode.mockResolvedValueOnce('0x6080604052' as `0x${string}`);
-    const addr = await client.createPersonAgentFromPrivateKey(
-      { externalCustodians: [OWNER], salt: 0n },
+    const addr = await client.createAgentAccountFromPrivateKey(
+      { custodians: [OWNER], salt: 0n },
       BOOTSTRAP_PK,
     );
     expect(addr).toBe(PREDICTED);
@@ -70,10 +70,10 @@ describe('AgentAccountClient.createPersonAgentFromPrivateKey', () => {
     expect(fakePublicClient.waitForTransactionReceipt).not.toHaveBeenCalled();
   });
 
-  it('broadcasts factory.createPersonAgent when undeployed', async () => {
+  it('broadcasts factory.createAgentAccount when undeployed', async () => {
     fakePublicClient.getCode.mockResolvedValueOnce('0x' as `0x${string}`);
-    const addr = await client.createPersonAgentFromPrivateKey(
-      { externalCustodians: [OWNER], salt: 42n },
+    const addr = await client.createAgentAccountFromPrivateKey(
+      { custodians: [OWNER], salt: 42n },
       BOOTSTRAP_PK,
     );
     expect(addr).toBe(PREDICTED);
@@ -85,17 +85,21 @@ describe('AgentAccountClient.createPersonAgentFromPrivateKey', () => {
       account: { address: string };
     };
     expect(call.address).toBe(FACTORY);
-    expect(call.functionName).toBe('createPersonAgent');
-    // args: [externalCustodians, credIdDigest, x, y, salt]
-    expect(call.args[0]).toEqual([OWNER]);
-    expect(call.args[4]).toBe(42n);
+    expect(call.functionName).toBe('createAgentAccount');
+    // args: [initParamsTuple, safetyDelaySeconds, salt]
+    const params = call.args[0] as { custodians: unknown[]; mode: number; trustees: unknown[] };
+    expect(params.custodians).toEqual([OWNER]);
+    expect(params.mode).toBe(0);
+    expect(params.trustees).toEqual([]);
+    expect(call.args[1]).toBe(0);
+    expect(call.args[2]).toBe(42n);
     expect(call.account.address).toBe(BOOTSTRAP_ADDR);
   });
 
   it('waits for receipt before returning', async () => {
     fakePublicClient.getCode.mockResolvedValueOnce('0x' as `0x${string}`);
-    await client.createPersonAgentFromPrivateKey(
-      { externalCustodians: [OWNER], salt: 0n },
+    await client.createAgentAccountFromPrivateKey(
+      { custodians: [OWNER], salt: 0n },
       BOOTSTRAP_PK,
     );
     expect(fakePublicClient.waitForTransactionReceipt).toHaveBeenCalledWith({ hash: TX_HASH });

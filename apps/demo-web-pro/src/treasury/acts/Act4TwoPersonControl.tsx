@@ -245,11 +245,13 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
               bobPasskeyAuth.pubKeyX,
               bobPasskeyAuth.pubKeyY,
             ),
-            signer: aliceClaim,
-            signerPasskey: alicePasskey,
-            signTypedDataAsync: std,
-            getWalletAddress,
-            promptSwitchWalletAccount,
+            signers: [{
+              seat: aliceClaim,
+              passkey: alicePasskey,
+              signTypedDataAsync: std,
+              getWalletAddress,
+              promptSwitchWalletAccount,
+            }],
             setPhase,
           });
           if ('error' in step) {
@@ -270,11 +272,13 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
             account: treasury.address,
             action: CustodyAction.AddCustodian,
             innerArgs: buildAddCustodianArgs(bobSiweAuth.eoa),
-            signer: aliceClaim,
-            signerPasskey: alicePasskey,
-            signTypedDataAsync: std,
-            getWalletAddress,
-            promptSwitchWalletAccount,
+            signers: [{
+              seat: aliceClaim,
+              passkey: alicePasskey,
+              signTypedDataAsync: std,
+              getWalletAddress,
+              promptSwitchWalletAccount,
+            }],
             setPhase,
           });
           if ('error' in step) {
@@ -314,11 +318,13 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
         account: org.address,
         action: CustodyAction.ChangeApprovalsRequired,
         innerArgs: buildChangeApprovalsRequiredArgs(4, 2),
-        signer: aliceClaim,
-        signerPasskey: alicePasskey,
-        signTypedDataAsync: std,
-        getWalletAddress,
-        promptSwitchWalletAccount,
+        signers: [{
+          seat: aliceClaim,
+          passkey: alicePasskey,
+          signTypedDataAsync: std,
+          getWalletAddress,
+          promptSwitchWalletAccount,
+        }],
         setPhase,
       });
       if ('error' in step2) {

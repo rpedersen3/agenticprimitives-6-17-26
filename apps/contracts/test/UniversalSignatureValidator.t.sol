@@ -8,8 +8,11 @@ import "../src/UniversalSignatureValidator.sol";
 import "../src/AgentAccount.sol";
 import "../src/AgentAccountFactory.sol";
 import "../src/agency/DelegationManager.sol";
+import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
+import {AgentAccountInitParams} from "../src/IAgentAccount.sol";
 
 contract UniversalSignatureValidatorTest is Test {
+    function _defaultTimelocks() internal pure returns (uint32[7] memory tl) {}
     UniversalSignatureValidator validator;
     AgentAccountFactory factory;
     DelegationManager dm;
@@ -26,20 +29,35 @@ contract UniversalSignatureValidatorTest is Test {
         EntryPoint ep = new EntryPoint();
         dm = new DelegationManager();
         owner = vm.addr(OWNER_PK);
+        CustodyPolicy cp = new CustodyPolicy();
         factory = new AgentAccountFactory(
             IEntryPoint(address(ep)),
             address(dm),
+            address(cp),
             address(0xBB),
             address(0xCC),
             address(0xDD)
         );
         address[] memory _c = new address[](1);
         _c[0] = owner;
-        acct = factory.createPersonAgent(_c, bytes32(0), 0, 0, 1);
+        acct = factory.createAgentAccount(_simpleParams(_c, bytes32(0), 0, 0), _defaultTimelocks(), 1);
     }
 
     function _eoaArr(address a) internal pure returns (address[] memory r) {
         r = new address[](1); r[0] = a;
+    }
+
+    function _simpleParams(address[] memory custodians, bytes32 cred, uint256 x, uint256 y)
+        internal pure returns (AgentAccountInitParams memory)
+    {
+        return AgentAccountInitParams({
+            mode: 0,
+            custodians: custodians,
+            trustees: new address[](0),
+            initialPasskeyCredentialIdDigest: cred,
+            initialPasskeyX: x,
+            initialPasskeyY: y
+        });
     }
 
     function _signRaw(uint256 pk, bytes32 hash) internal pure returns (bytes memory) {
@@ -88,7 +106,7 @@ contract UniversalSignatureValidatorTest is Test {
     function test_erc6492_path_deploys_then_verifies() public {
         // Predict address of a not-yet-deployed account.
         address[] memory custodians = _eoaArr(owner);
-        address predicted = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 99);
+        address predicted = factory.getAddressForAgentAccount(_simpleParams(custodians, bytes32(0), 0, 0), 99);
         assertEq(predicted.code.length, 0);
 
         bytes32 hash = keccak256("6492");
@@ -96,7 +114,7 @@ contract UniversalSignatureValidatorTest is Test {
 
         // Build 6492-wrapped sig: abi.encode(factory, factoryCalldata, innerSig) || MAGIC
         bytes memory factoryCalldata = abi.encodeCall(
-            factory.createPersonAgent, (custodians, bytes32(0), 0, 0, 99)
+            factory.createAgentAccount, (_simpleParams(custodians, bytes32(0), 0, 0), _defaultTimelocks(), 99)
         );
         bytes memory prefix = abi.encode(address(factory), factoryCalldata, innerSig);
         bytes memory wrapped = abi.encodePacked(prefix, ERC6492_MAGIC);
@@ -108,11 +126,11 @@ contract UniversalSignatureValidatorTest is Test {
 
     function test_erc6492_path_view_returns_false_when_not_deployed() public view {
         address[] memory custodians = _eoaArr(owner);
-        address predicted = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 100);
+        address predicted = factory.getAddressForAgentAccount(_simpleParams(custodians, bytes32(0), 0, 0), 100);
         bytes32 hash = keccak256("6492-view");
         bytes memory innerSig = _signRaw(OWNER_PK, hash);
         bytes memory factoryCalldata = abi.encodeCall(
-            factory.createPersonAgent, (custodians, bytes32(0), 0, 0, 100)
+            factory.createAgentAccount, (_simpleParams(custodians, bytes32(0), 0, 0), _defaultTimelocks(), 100)
         );
         bytes memory prefix = abi.encode(address(factory), factoryCalldata, innerSig);
         bytes memory wrapped = abi.encodePacked(prefix, ERC6492_MAGIC);
@@ -131,12 +149,12 @@ contract UniversalSignatureValidatorTest is Test {
 
     function test_erc6492_path_reverts_when_factory_call_does_not_deploy() public {
         address[] memory custodians = _eoaArr(owner);
-        address predicted = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 101);
+        address predicted = factory.getAddressForAgentAccount(_simpleParams(custodians, bytes32(0), 0, 0), 101);
         bytes32 hash = keccak256("6492-bad-factory");
         bytes memory innerSig = _signRaw(OWNER_PK, hash);
         // Wrong factoryCalldata — deploy at a different salt:
         bytes memory wrongCalldata = abi.encodeCall(
-            factory.createPersonAgent, (custodians, bytes32(0), 0, 0, 9999)
+            factory.createAgentAccount, (_simpleParams(custodians, bytes32(0), 0, 0), _defaultTimelocks(), 9999)
         );
         bytes memory prefix = abi.encode(address(factory), wrongCalldata, innerSig);
         bytes memory wrapped = abi.encodePacked(prefix, ERC6492_MAGIC);

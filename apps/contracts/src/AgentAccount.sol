@@ -133,6 +133,12 @@ contract AgentAccount is
     error ZeroAddress();
     error PasskeyAlreadyRegistered(bytes32 credentialIdDigest);
     error PasskeyNotRegistered(bytes32 credentialIdDigest);
+    /// @dev Contract audit C-6: `bytes32(0)` is the absence sentinel in
+    ///      `piaToCredentialId`. Registering a passkey with a zero
+    ///      digest poisons the mapping — count++ but isCustodian(pia)
+    ///      returns false because `piaToCredentialId[pia] == 0`. Reject
+    ///      at every entry point that writes the digest.
+    error InvalidCredentialIdDigest();
     error InvalidPasskeyPublicKey();
     error CannotRemoveLastSigner();
     error UnknownSignatureType(uint8 sigType);
@@ -152,6 +158,15 @@ contract AgentAccount is
     error UpgradeNotReady(uint64 readyAt, uint256 nowTs);
     error PendingUpgradeMismatch(address pending, address attempted);
     error UpgradePending();
+
+    // Wave 2A — on-chain authority closure (contract audit C-1..C-3).
+    error ValidatorRequired();
+    error LegacyUpgradePathDisabled();
+    error ModuleOperationNotAllowed();
+
+    /// @notice Emitted when `setDelegationManager` rotates the DM via a
+    ///         self-call (the only authorized path post-Wave-2A).
+    event DelegationManagerRotated(address indexed newDelegationManager);
 
     // ─── Phase A events ─────────────────────────────────────────────
 
@@ -248,6 +263,8 @@ contract AgentAccount is
         _externalCustodianCount = externalCustodians.length;
 
         if (withPasskey) {
+            // Audit C-6: reject zero digest at every passkey-write site.
+            if (passkeyCredentialIdDigest == bytes32(0)) revert InvalidCredentialIdDigest();
             PasskeyStorage storage $ = _passkeyStorage();
             address pia = _passkeyIdentity(passkeyX, passkeyY);
             // Architectural invariant: a PIA never appears in both the
@@ -295,58 +312,28 @@ contract AgentAccount is
     function _authorizeUpgrade(address) internal view override onlySelf {}
 
     /**
-     * @notice Upgrade the implementation, gated by an explicit owner
-     *         signature. Spec 007 Phase A (D2 / acceptance criterion
-     *         "test_MasterCannotUpgrade").
+     * @notice DEPRECATED — single-signature upgrade path (contract audit C-3).
      *
-     *         The owner signs `keccak256(abi.encode("UPGRADE",
-     *         newImpl, address(this), block.chainid))` (raw or
-     *         eth-signed wrap, both accepted by `_verifyEcdsa`). Any
-     *         caller can submit the tx — what matters is whose
-     *         signature the bytes recover to. Master / bundler /
-     *         session-issuer can submit but cannot authorize.
+     * @dev The legacy behavior verified ONE ECDSA signature against any
+     *      external custodian. For multi-custodian / treasury / org
+     *      accounts that meant a single compromised key could swap the
+     *      implementation out from under the entire custody quorum —
+     *      catastrophic. Removed entirely.
      *
-     * @param newImpl The new implementation address.
-     * @param ownerSig The owner's ECDSA signature over the upgrade
-     *                 digest. Bare 65-byte or 0x00-type-byte-prefixed
-     *                 forms both accepted (matches `_verifyEcdsa`).
+     *      Per-account upgrade paths post-Wave-2A:
+     *        - Person accounts (single custodian, no CustodyPolicy):
+     *          submit an owner-signed UserOp that calls
+     *          `upgradeToAndCall(newImpl, "")` from `address(this)`.
+     *        - Multi-custodian accounts with CustodyPolicy installed:
+     *          route through `CustodyPolicy.ApplySystemUpdate` which
+     *          requires the full T4/T5 quorum + timelock + audit and
+     *          dispatches a self-call into `upgradeToAndCall`.
+     *
+     *      The function is retained for ABI compat (tooling that probes
+     *      the selector won't break) but always reverts.
      */
-    function upgradeToWithAuthorization(address newImpl, bytes calldata ownerSig) external {
-        if (newImpl == address(0)) revert ZeroAddress();
-        bytes32 digest = keccak256(
-            abi.encode(
-                bytes32("UPGRADE"),
-                newImpl,
-                address(this),
-                block.chainid
-            )
-        );
-        if (!_verifyEcdsa(digest, ownerSig)) revert NotOwnerSig();
-
-        // Phase A.5 — if a per-account timelock is configured, queue
-        // the upgrade instead of executing immediately. The user can
-        // cancel it during the window via `cancelPendingUpgrade`; the
-        // execution happens via `executePendingUpgrade()` after the
-        // window expires.
-        if (_upgradeTimelock != 0) {
-            // Refuse to queue if an upgrade is already pending. The
-            // owner must cancel the current one first; otherwise a
-            // stolen owner-sig could displace a benign pending upgrade.
-            if (_pendingUpgrade.readyAt != 0) revert UpgradePending();
-            uint64 readyAt = uint64(block.timestamp + _upgradeTimelock);
-            _pendingUpgrade = PendingUpgrade({
-                newImplementation: newImpl,
-                readyAt: readyAt
-            });
-            emit UpgradeProposed(newImpl, readyAt);
-            return;
-        }
-
-        emit UpgradeAuthorized(newImpl);
-        // Self-call into the standard UUPS path so the `_authorizeUpgrade`
-        // `onlySelf` gate is satisfied. `upgradeToAndCall(newImpl, "")`
-        // is equivalent to the historical `upgradeTo(newImpl)`.
-        this.upgradeToAndCall(newImpl, "");
+    function upgradeToWithAuthorization(address /* newImpl */, bytes calldata /* ownerSig */) external pure {
+        revert LegacyUpgradePathDisabled();
     }
 
     /// @notice Execute a previously-queued upgrade. Permissionless once
@@ -419,15 +406,24 @@ contract AgentAccount is
 
     /**
      * @notice Set the DelegationManager authorized to execute on behalf of this account.
-     *         Following ERC-7710 pattern: DelegationManager calls execute() after
-     *         validating the delegation chain and caveats.
-     *         Can be called by an owner (for initial setup) or by the account itself.
+     *         Per contract audit C-1: this MUST be `onlySelf`. Previously any
+     *         external custodian could call this directly, then point at an
+     *         attacker-controlled manager that calls back through
+     *         `account.execute(...)` — bypassing CustodyPolicy quorum + timelock
+     *         entirely. A single custodian on a multi-sig account was a
+     *         catastrophic escape hatch.
+     *
+     *         For initial wiring the factory routes through the unified
+     *         initializer (which sets `_delegationManager` directly). For
+     *         post-deploy rotation, route through
+     *         `CustodyPolicy.RotateDelegationManager`, which requires the
+     *         account's full T4 quorum + timelock + audit, then dispatches
+     *         a self-call into this function.
      */
-    function setDelegationManager(address dm) external {
-        if (msg.sender != address(this) && !_externalCustodians[msg.sender]) {
-            revert NotCustodianOrSelf();
-        }
+    function setDelegationManager(address dm) external onlySelf {
+        if (dm.code.length == 0) revert ValidatorRequired();
         _delegationManager = dm;
+        emit DelegationManagerRotated(dm);
     }
 
     /// @notice Get the currently authorized DelegationManager.
@@ -620,18 +616,44 @@ contract AgentAccount is
     error ModuleOnInstallFailed(bytes reason);
     error ModuleOnUninstallFailed(bytes reason);
 
-    // ─── Auth modifier ────────────────────────────────────────────────
+    // ─── Auth modifier (post Wave 2A) ─────────────────────────────────
+    //
+    // Per contract audit C-2: module install/uninstall MUST NOT be
+    // callable by an external custodian. Previously any single
+    // custodian on a multi-sig account could:
+    //   1. Call `installModule(EXECUTOR, attackerContract, data)`.
+    //   2. Have the attacker module call `executeFromModule(account, ...)`
+    //      against any privileged self-only function (addCustodian,
+    //      addPasskey, upgradeToAndCall, …).
+    //   3. Drain the account or replace the custodian set.
+    //
+    // The new gate: only `address(this)` (self-calls routed through the
+    // custody quorum + CustodyPolicy.execute) OR the factory ONCE during
+    // initial deployment. After the first factory-driven install, the
+    // factory exception is consumed and post-deploy module changes can
+    // only land via a full self-call.
 
-    /// @dev Allows the canonical factory to install/uninstall modules
-    ///      during the same tx that deployed the account. Per spec 209
-    ///      § 4 the factory is the install-time root of trust for the
-    ///      mode-specific module set; once the account is in use, the
-    ///      threshold validator's quorum gate replaces this surface.
-    modifier onlyOwnerOrSelf() {
-        if (msg.sender != address(this) && !_externalCustodians[msg.sender] && msg.sender != _factory) {
-            revert NotCustodianOrSelf();
+    /**
+     * @notice True once the factory has consumed its one-time module-install
+     *         exception. After this flips, the factory is treated like any
+     *         non-self caller — `onlySelf` is the only path in.
+     */
+    bool private _factoryInitConsumed;
+
+    /// @dev Factory's narrow init window: a single install call per
+    ///      account, used during the unified deploy tx. After this slot
+    ///      flips true, future factory calls are rejected.
+    modifier onlySelfOrFactoryInit() {
+        if (msg.sender == address(this)) {
+            _;
+            return;
         }
-        _;
+        if (msg.sender == _factory && !_factoryInitConsumed) {
+            _factoryInitConsumed = true;
+            _;
+            return;
+        }
+        revert ModuleOperationNotAllowed();
     }
 
     /**
@@ -645,7 +667,7 @@ contract AgentAccount is
         uint256 moduleTypeId,
         address module,
         bytes calldata initData
-    ) external onlyOwnerOrSelf {
+    ) external onlySelfOrFactoryInit {
         if (module == address(0)) revert ZeroAddress();
         if (!_isSupportedModuleType(moduleTypeId)) revert UnsupportedModuleType(moduleTypeId);
 
@@ -688,7 +710,13 @@ contract AgentAccount is
         uint256 moduleTypeId,
         address module,
         bytes calldata deInitData
-    ) external onlyOwnerOrSelf {
+    ) external {
+        // Post-Wave-2A: uninstall is ALWAYS `onlySelf`. The factory's
+        // narrow init exception is install-only — uninstall would be
+        // an exit ramp out of the policy stack the factory wired in
+        // at deploy time, and there's never a legitimate reason for
+        // the factory to do that.
+        if (msg.sender != address(this)) revert ModuleOperationNotAllowed();
         if (!_isSupportedModuleType(moduleTypeId)) revert UnsupportedModuleType(moduleTypeId);
 
         ModulesStorage storage $ = _modulesStorage();
@@ -1036,12 +1064,42 @@ contract AgentAccount is
         return err == ECDSA.RecoverError.NoError && recovered == expected;
     }
 
+    /**
+     * @dev Audit C-7: malformed `0x01||abi.encode(Assertion)` payloads
+     *      previously reverted inside this function during `abi.decode`,
+     *      which propagated out of `validateUserOp` instead of returning
+     *      `SIG_VALIDATION_FAILED` (= 1) per ERC-4337. Bundlers treat a
+     *      revert during validation as a banned account — much worse
+     *      than a clean "this sig is invalid" return.
+     *
+     *      Solidity can't try/catch an internal `abi.decode`, so we
+     *      route the decode through an external self-call (which CAN
+     *      be try/catch'd). Gas overhead is ~700 in the success path;
+     *      the security win is bounded reverts.
+     */
     function _verifyWebAuthn(bytes32 hash, bytes memory payload) internal view returns (bool) {
-        WebAuthnLib.Assertion memory a = abi.decode(payload, (WebAuthnLib.Assertion));
-        PasskeyStorage storage $ = _passkeyStorage();
-        PasskeyEntry storage key = $.keys[a.credentialIdDigest];
-        if (key.x == 0 && key.y == 0) return false;
-        return WebAuthnLib.verify(a, hash, key.x, key.y);
+        try this.decodeWebAuthnAssertion(payload) returns (WebAuthnLib.Assertion memory a) {
+            PasskeyStorage storage $ = _passkeyStorage();
+            PasskeyEntry storage key = $.keys[a.credentialIdDigest];
+            if (key.x == 0 && key.y == 0) return false;
+            return WebAuthnLib.verify(a, hash, key.x, key.y);
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * @notice External decoder wrapper used by `_verifyWebAuthn` to
+     *         bound `abi.decode` reverts. MUST stay `external` so the
+     *         caller can wrap it in `try { … } catch { … }`. Marked
+     *         pure — no state access, just decode.
+     */
+    function decodeWebAuthnAssertion(bytes calldata payload)
+        external
+        pure
+        returns (WebAuthnLib.Assertion memory)
+    {
+        return abi.decode(payload, (WebAuthnLib.Assertion));
     }
 
     // ─── Owner Management ───────────────────────────────────────────
@@ -1186,6 +1244,8 @@ contract AgentAccount is
     ///         slots can count this passkey as a distinct signer.
     function addPasskey(bytes32 credentialIdDigest, uint256 x, uint256 y) external onlySelf {
         if (x == 0 || y == 0) revert InvalidPasskeyPublicKey();
+        // Audit C-6: zero digest poisons piaToCredentialId mapping.
+        if (credentialIdDigest == bytes32(0)) revert InvalidCredentialIdDigest();
         PasskeyStorage storage $ = _passkeyStorage();
         if ($.registered[credentialIdDigest]) revert PasskeyAlreadyRegistered(credentialIdDigest);
         address pia = _passkeyIdentity(x, y);

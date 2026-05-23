@@ -358,17 +358,19 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
               bobPasskeyAuth.pubKeyX,
               bobPasskeyAuth.pubKeyY,
             ),
-            signer: aliceClaim,
-            signerPasskey: alicePasskey,
-            signTypedDataAsync: async (a) =>
-              (await signTypedDataAsync({
-                domain: a.domain,
-                types: a.types,
-                primaryType: a.primaryType,
-                message: a.message,
-              })) as Hex,
-            getWalletAddress,
-            promptSwitchWalletAccount,
+            signers: [{
+              seat: aliceClaim,
+              passkey: alicePasskey,
+              signTypedDataAsync: async (a) =>
+                (await signTypedDataAsync({
+                  domain: a.domain,
+                  types: a.types,
+                  primaryType: a.primaryType,
+                  message: a.message,
+                })) as Hex,
+              getWalletAddress,
+              promptSwitchWalletAccount,
+            }],
             setPhase: setPhase as (p: 'computing-hash' | 'signing-schedule' | 'submitting-schedule' | 'reading-eta' | 'signing-apply' | 'submitting-apply') => void,
           });
           if ('error' in step) {
@@ -391,17 +393,19 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
             account: org.address,
             action: CustodyAction.AddCustodian,
             innerArgs: buildAddCustodianArgs(bobSiweAuth.eoa),
-            signer: aliceClaim,
-            signerPasskey: alicePasskey,
-            signTypedDataAsync: async (a) =>
-              (await signTypedDataAsync({
-                domain: a.domain,
-                types: a.types,
-                primaryType: a.primaryType,
-                message: a.message,
-              })) as Hex,
-            getWalletAddress,
-            promptSwitchWalletAccount,
+            signers: [{
+              seat: aliceClaim,
+              passkey: alicePasskey,
+              signTypedDataAsync: async (a) =>
+                (await signTypedDataAsync({
+                  domain: a.domain,
+                  types: a.types,
+                  primaryType: a.primaryType,
+                  message: a.message,
+                })) as Hex,
+              getWalletAddress,
+              promptSwitchWalletAccount,
+            }],
             setPhase: setPhase as (p: 'computing-hash' | 'signing-schedule' | 'submitting-schedule' | 'reading-eta' | 'signing-apply' | 'submitting-apply') => void,
           });
           if ('error' in step) {

@@ -114,19 +114,11 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     // Phase 6f.4 — Org's initial custodian set = Alice's enrolled
     // human-signer authorities. Each PasskeyAuth registers via
     // `initialPasskey*` (one passkey per init slot); SiweAuth methods
-    // go in `externalCustodians`. Per the 2026-05-22 product decision
+    // go in `custodians`. Per the 2026-05-22 product decision
     // ("register both"), if Alice enrolled both we set both on chain.
     const alicePasskey = alicePasskeyMethod;
     const aliceSiwe = aliceSiweMethod;
-    const externalCustodians = aliceSiwe ? ([aliceSiwe.eoa] as Address[]) : ([] as Address[]);
-    const initParams = {
-      mode: 1, // hybrid
-      custodians: externalCustodians,
-      trustees: [] as Address[],
-      initialPasskeyCredentialIdDigest: alicePasskey?.credentialIdDigest ?? (('0x' + '00'.repeat(32)) as Hex),
-      initialPasskeyX: alicePasskey?.pubKeyX ?? 0n,
-      initialPasskeyY: alicePasskey?.pubKeyY ?? 0n,
-    } as const;
+    const custodians = aliceSiwe ? ([aliceSiwe.eoa] as Address[]) : ([] as Address[]);
     // Salt-version still keys off whichever identity is canonical.
     // Pick PIA if passkey, else EOA — the salt just needs to be
     // deterministic for the (Alice, version) pair.
@@ -136,6 +128,18 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
       setError('Founder has no enrolled identity — re-claim her seat with passkey and/or wallet.');
       return;
     }
+    // Wave R0 — mode>0 requires ≥1 trustee at deploy. Bootstrap with
+    // Alice's own identity as the founding trustee (self-trustee
+    // pattern). Bob's identity gets added to trustees in Act 3+ via
+    // T6 admin once Bob's PSA is enrolled.
+    const initParams = {
+      mode: 1, // hybrid
+      custodians: custodians,
+      trustees: [aliceIdentityForSalt] as Address[],
+      initialPasskeyCredentialIdDigest: alicePasskey?.credentialIdDigest ?? (('0x' + '00'.repeat(32)) as Hex),
+      initialPasskeyX: alicePasskey?.pubKeyX ?? 0n,
+      initialPasskeyY: alicePasskey?.pubKeyY ?? 0n,
+    } as const;
 
     // Salt derived from (org name, founder PSA, version tag). The
     // version tag bumps whenever the deploy parameters change in a
@@ -145,7 +149,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     // doesn\'t affect the predicted address. Bumping the tag forces
     // a fresh address so visitors don\'t inherit a stale on-chain
     // Org that was deployed before today\'s 0s-safety-delay fix.
-    const SALT_VERSION = 'v7-multi-auth';
+    const SALT_VERSION = 'v8-r0-unified-factory';
     const salt = BigInt(
       '0x' +
         [...new TextEncoder().encode(`${orgConfig.name}:${aliceIdentityForSalt}:${SALT_VERSION}`)]
@@ -154,15 +158,16 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
           .slice(0, 16),
     );
 
-    // Encode factory.createMultiSigSmartAgent with a 1-second T4 safety
+    // Encode factory.createAgentAccount with a 1-second T4 safety
     // delay. KNOWN CONTRACT QUIRK: safetyDelaySeconds==0 means "use spec
     // default (1 hour)"; 1 second is the smallest legal demo value, and
     // Base Sepolia mines every ~2s so the eta passes before any apply
     // userOp bundles. Production must NEVER use this.
+    // Wave R0 — the validator is factory-immutable; no per-call override.
     const factoryCallData = encodeFunctionData({
       abi: agentAccountFactoryAbi,
-      functionName: 'createMultiSigSmartAgent',
-      args: [initParams, custodyPolicyAddress, 1, salt],
+      functionName: 'createAgentAccount',
+      args: [initParams, [0, 0, 0, 0, 1, 0, 0] as const, salt],
     });
 
     // Wrap as Alice.PSA.execute(factory, 0, factoryCallData).
@@ -178,7 +183,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
 
     // Branch on Alice's auth method:
     //   - Passkey: gasless userOp from Alice.PSA → factory (paymaster pays)
-    //   - SIWE-only: worker calls factory.createMultiSigSmartAgent directly
+    //   - SIWE-only: worker calls factory.createAgentAccount directly
     //     from its deployer EOA. No signature needed from Alice; the
     //     factory call is permissionless. Worker pays gas.
     let result: { ok: boolean; transactionHash?: `0x${string}`; reason?: string; error?: string };
@@ -197,7 +202,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
       }
       const { ensureCsrfToken, csrfHeaders } = await import('../../lib/csrf');
       await ensureCsrfToken();
-      const res = await fetch(`${base}/session/direct-deploy-multisig`, {
+      const res = await fetch(`${base}/session/direct-deploy`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
@@ -208,8 +213,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
           initialPasskeyCredentialIdDigest: initParams.initialPasskeyCredentialIdDigest,
           initialPasskeyX: initParams.initialPasskeyX.toString(),
           initialPasskeyY: initParams.initialPasskeyY.toString(),
-          validator: custodyPolicyAddress,
-          safetyDelaySeconds: 1,
+          timelockOverrides: [0, 0, 0, 0, 1, 0, 0],
           salt: salt.toString(),
         }),
       });

@@ -16,7 +16,7 @@ import type { Address, Hex } from '@agenticprimitives/types';
 import { verifyDelegationToken } from '@agenticprimitives/delegation';
 import { evaluatePolicy, evaluateThresholdPolicy } from '@agenticprimitives/tool-policy';
 import type { ToolClassification } from '@agenticprimitives/tool-policy';
-import { buildEvent, type AuditSink } from '@agenticprimitives/audit';
+import { buildEvent, type AuditSink, type MetricsSink } from '@agenticprimitives/audit';
 import type { DataScopeGrant, McpResourceVerifyConfig } from './types';
 
 export class McpAuthError extends Error {
@@ -51,18 +51,86 @@ export function withDelegation<A extends Record<string, unknown>>(
     auditSink?: AuditSink;
     /** Correlation ID threaded into emitted events. */
     correlationId?: string;
+    /**
+     * Metrics sink (production-readiness wave 1). When provided, the
+     * wrapper emits:
+     *   - counter `mcp_runtime.with_delegation.calls` per call
+     *     (tags: tool, audience, outcome ∈ accept|reject)
+     *   - histogram `mcp_runtime.with_delegation.duration_ms` per call
+     *     (tags: tool, audience, outcome)
+     * Cardinality is bounded by the tool registry; safe for production
+     * Prometheus / Datadog / OpenTelemetry pipelines.
+     */
+    metricsSink?: MetricsSink;
+    /**
+     * W3C traceparent header value (`00-{trace-id}-{parent-id}-{flags}`)
+     * captured from the inbound request. Forwarded on outbound calls
+     * the handler makes and stamped into emitted audit events so the
+     * full session→token→tool chain stitches together end-to-end.
+     */
+    traceparent?: string;
+    /**
+     * Production-readiness gate (audit P0-2). When set to `'production'`,
+     * `withDelegation` throws at WRAPPER CONSTRUCTION TIME (not first
+     * call) if `classification` or `auditSink` is missing. This makes
+     * the package API impossible to misuse from a production consumer
+     * — you cannot register a tool wrapper without the metadata the
+     * policy engine + audit pipeline need.
+     *
+     * Mode `'development'` (default) preserves the back-compat path:
+     * missing classification logs a warning + skips policy; missing
+     * audit silently drops events. Use only in tests + local dev.
+     */
+    environment?: 'production' | 'development';
   },
 ): (args: A & { token: string }) => Promise<unknown> {
+  // Wrapper-construction-time enforcement. Throws BEFORE the route
+  // handler is registered, so misconfigured consumers fail at boot
+  // rather than at first request.
+  if (opts?.environment === 'production') {
+    if (!opts.classification) {
+      throw new Error(
+        '[mcp-runtime] withDelegation in production mode requires `classification`. ' +
+          'The policy engine (tool-policy.evaluatePolicy) MUST run; an unclassified tool ' +
+          'is a security regression. Pass `opts.classification = declareTool(...)` or ' +
+          "switch `opts.environment` to 'development' for tests.",
+      );
+    }
+    if (!opts.auditSink) {
+      throw new Error(
+        '[mcp-runtime] withDelegation in production mode requires `auditSink`. ' +
+          'Audit emission is the only forensic trail for delegation accept/reject; ' +
+          'production deployments MUST persist these. Pass a durable sink (D1, ' +
+          'Cloud Logging, etc.) — wrap with composeSinks(durable, console) if you ' +
+          'still want a tail-friendly mirror.',
+      );
+    }
+  }
   return async (args) => {
     const { token, ...rest } = args;
     const toolName = opts?.toolName ?? 'unknown';
     const correlationId = opts?.correlationId;
+    const startedAt = Date.now();
+    const metric = opts?.metricsSink;
 
     const emit = async (
       outcome: 'success' | 'denied' | 'error',
       reason: string | undefined,
       principal: Address | undefined,
     ) => {
+      // Metrics fire in lockstep with audit emissions so a single
+      // observability pipeline sees both the structured event AND the
+      // counter/histogram. Cardinality is bounded by tool name +
+      // audience + outcome — safe for production Prometheus.
+      if (metric) {
+        const tags = {
+          tool: toolName,
+          audience: config.audience ?? 'unknown',
+          outcome: outcome === 'success' ? 'accept' : 'reject',
+        };
+        try { metric.increment('mcp_runtime.with_delegation.calls', 1, tags); } catch { /* fail-soft */ }
+        try { metric.observe('mcp_runtime.with_delegation.duration_ms', Date.now() - startedAt, tags); } catch { /* fail-soft */ }
+      }
       if (!opts?.auditSink) return;
       try {
         await opts.auditSink.write(
@@ -78,6 +146,9 @@ export function withDelegation<A extends Record<string, unknown>>(
             audience: config.audience,
             chainId: config.chainId,
             reason,
+            // Traceparent (W3C) stamped into context for downstream
+            // trace correlation. Reject events still carry the trace.
+            context: opts?.traceparent ? { traceparent: opts.traceparent } : undefined,
           }),
         );
       } catch {

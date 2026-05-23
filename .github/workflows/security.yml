@@ -136,3 +136,34 @@ jobs:
           name: sbom-cyclonedx
           path: sbom.cyclonedx.json
           retention-days: 90
+
+  # ─── Strict peer-dependency check (audit P1-7) ──────────────────
+  # The repo's `.npmrc` keeps `auto-install-peers=true` +
+  # `strict-peer-dependencies=false` so day-to-day local + CI
+  # installs aren't disrupted by transitive peer mismatches. But
+  # security-sensitive packages (mcp-runtime, delegation, key-custody)
+  # bind peer ranges that need to resolve cleanly without auto-fill.
+  # This job runs a parallel strict install in a clean working tree
+  # and fails the PR if any required peer is unmet.
+  strict-peers:
+    runs-on: ubuntu-latest
+    name: Strict peer-dependency check
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Install with strict peers (no auto-fill)
+        run: |
+          pnpm install \
+            --frozen-lockfile \
+            --strict-peer-dependencies \
+            --config.auto-install-peers=false

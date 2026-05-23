@@ -7,6 +7,8 @@ import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import "../src/AgentAccountFactory.sol";
 import "../src/AgentAccount.sol";
 import "../src/agency/DelegationManager.sol";
+import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
+import {AgentAccountInitParams} from "../src/IAgentAccount.sol";
 
 // ─── Mocks ───────────────────────────────────────────────────────────
 
@@ -110,6 +112,7 @@ contract ReentrantExecutorMock {
 // ─── Test suite ──────────────────────────────────────────────────────
 
 contract ExecuteFromModuleTest is Test {
+    function _defaultTimelocks() internal pure returns (uint32[7] memory tl) {}
     AgentAccountFactory factory;
     DelegationManager   dm;
     AgentAccount        acct;
@@ -130,23 +133,35 @@ contract ExecuteFromModuleTest is Test {
         EntryPoint ep = new EntryPoint();
         dm = new DelegationManager();
         owner = vm.addr(OWNER_PK);
+        CustodyPolicy cp = new CustodyPolicy();
         factory = new AgentAccountFactory(
             IEntryPoint(address(ep)),
             address(dm),
+            address(cp),
             address(0xBB),
             address(0xCC),
             address(0xDD)
         );
         address[] memory _c = new address[](1);
         _c[0] = owner;
-        acct = factory.createPersonAgent(_c, bytes32(0), 0, 0, 42);
+        AgentAccountInitParams memory p = AgentAccountInitParams({
+            mode: 0,
+            custodians: _c,
+            trustees: new address[](0),
+            initialPasskeyCredentialIdDigest: bytes32(0),
+            initialPasskeyX: 0,
+            initialPasskeyY: 0
+        });
+        acct = factory.createAgentAccount(p, _defaultTimelocks(), 42);
 
         executor      = new MockExecutorModule();
         validatorOnly = new MockValidatorModule();
         echo          = new TargetEcho();
 
-        // Owner installs the executor — `onlyOwnerOrSelf` gate.
-        vm.prank(owner);
+        // Wave 2A: install is `onlySelfOrFactoryInit`. Custodian can no
+        // longer install directly. Simulate the self-call (in production
+        // routed via CustodyPolicy.ApplySystemUpdate quorum).
+        vm.prank(address(acct));
         acct.installModule(MODULE_TYPE_EXECUTOR, address(executor), hex"");
     }
 
@@ -165,7 +180,7 @@ contract ExecuteFromModuleTest is Test {
     function test_executeFromModule_revertsForValidatorOnlyModule() public {
         // Install validatorOnly as VALIDATOR (not EXECUTOR). Even though
         // it's installed, the EXECUTOR-type gate must reject.
-        vm.prank(owner);
+        vm.prank(address(acct));
         acct.installModule(MODULE_TYPE_VALIDATOR, address(validatorOnly), hex"");
 
         vm.expectRevert(
@@ -276,7 +291,7 @@ contract ExecuteFromModuleTest is Test {
 
     function test_executeFromModule_nonReentrantBlocksReentry() public {
         ReentrantExecutorMock attacker = new ReentrantExecutorMock();
-        vm.prank(owner);
+        vm.prank(address(acct));
         acct.installModule(MODULE_TYPE_EXECUTOR, address(attacker), abi.encode(address(echo)));
 
         // The inner executeFromModule call inside `callback` should
@@ -290,8 +305,8 @@ contract ExecuteFromModuleTest is Test {
     // ─── 8. Uninstall stops the executor ──────────────────────────────
 
     function test_executeFromModule_uninstalledExecutorIsRejected() public {
-        // Confirm install path is reversible.
-        vm.prank(owner);
+        // Confirm install path is reversible (via self-call only post-Wave-2A).
+        vm.prank(address(acct));
         acct.uninstallModule(MODULE_TYPE_EXECUTOR, address(executor), hex"");
         assertFalse(acct.isModuleInstalled(MODULE_TYPE_EXECUTOR, address(executor), hex""));
 

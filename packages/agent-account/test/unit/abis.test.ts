@@ -2,31 +2,27 @@ import { describe, it, expect } from 'vitest';
 import { agentAccountFactoryAbi, agentAccountAbi, ERC1271_MAGIC_VALUE } from '../../src/abis';
 
 describe('abis', () => {
-  it('exposes createPersonAgent on the factory', () => {
-    const fn = agentAccountFactoryAbi.find((e) => e.type === 'function' && e.name === 'createPersonAgent');
+  it('exposes createAgentAccount on the factory', () => {
+    const fn = agentAccountFactoryAbi.find((e) => e.type === 'function' && e.name === 'createAgentAccount');
     expect(fn).toBeDefined();
     expect(fn!.stateMutability).toBe('nonpayable');
-    // (externalCustodians[], credentialIdDigest, x, y, salt)
-    expect(fn!.inputs).toHaveLength(5);
-    expect(fn!.inputs[0]?.type).toBe('address[]');
-    expect(fn!.inputs[1]?.type).toBe('bytes32');
-    expect(fn!.inputs[4]?.type).toBe('uint256');
+    // (initParams tuple, safetyDelaySeconds, salt)
+    expect(fn!.inputs).toHaveLength(3);
+    expect(fn!.inputs[0]?.type).toBe('tuple');
+    expect(fn!.inputs[1]?.type).toBe('uint32');
+    expect(fn!.inputs[2]?.type).toBe('uint256');
   });
 
-  it('exposes getAddressForPersonAgent as a view', () => {
-    const fn = agentAccountFactoryAbi.find((e) => e.type === 'function' && e.name === 'getAddressForPersonAgent');
+  it('exposes getAddressForAgentAccount as a view', () => {
+    const fn = agentAccountFactoryAbi.find((e) => e.type === 'function' && e.name === 'getAddressForAgentAccount');
     expect(fn).toBeDefined();
     expect(fn!.stateMutability).toBe('view');
+    expect(fn!.inputs).toHaveLength(2);
+    expect(fn!.inputs[0]?.type).toBe('tuple');
   });
 
-  it('exposes createMultiSigSmartAgent on the factory', () => {
-    const fn = agentAccountFactoryAbi.find((e) => e.type === 'function' && e.name === 'createMultiSigSmartAgent');
-    expect(fn).toBeDefined();
-    expect(fn!.stateMutability).toBe('nonpayable');
-  });
-
-  it('exposes getAddressForMultiSigSmartAgent as a view', () => {
-    const fn = agentAccountFactoryAbi.find((e) => e.type === 'function' && e.name === 'getAddressForMultiSigSmartAgent');
+  it('exposes custodyPolicy view (factory-immutable validator address)', () => {
+    const fn = agentAccountFactoryAbi.find((e) => e.type === 'function' && e.name === 'custodyPolicy');
     expect(fn).toBeDefined();
     expect(fn!.stateMutability).toBe('view');
   });
@@ -40,6 +36,10 @@ describe('abis', () => {
       'createAccountWithPasskey',
       'getAddressForPasskey',
       'getAddressForMode',
+      'createPersonAgent',
+      'getAddressForPersonAgent',
+      'createMultiSigSmartAgent',
+      'getAddressForMultiSigSmartAgent',
     ];
     for (const name of deleted) {
       const found = agentAccountFactoryAbi.find(

@@ -20,6 +20,7 @@ import {AgentAccountInitParams, AgentAccountRecoveryArgs, AgentAccountRecoveryPa
 ///      window. The signature scheme is unchanged from the pre-d.1
 ///      contract — Safe-compatible packed slots, sorted-ascending.
 contract AdminFlowsViaValidatorTest is Test {
+    function _defaultTimelocks() internal pure returns (uint32[7] memory tl) {}
     AgentAccountFactory factory;
     DelegationManager   dm;
     CustodyPolicy  validator;
@@ -39,14 +40,15 @@ contract AdminFlowsViaValidatorTest is Test {
     function setUp() public {
         EntryPoint ep = new EntryPoint();
         dm = new DelegationManager();
+        validator = new CustodyPolicy();
         factory = new AgentAccountFactory(
             IEntryPoint(address(ep)),
             address(dm),
+            address(validator),
             address(0xBB),
             address(0xCC),
             address(0xDD)
         );
-        validator = new CustodyPolicy();
 
         owner1    = vm.addr(OWNER1_PK);
         guardian1 = vm.addr(GUARDIAN1_PK);
@@ -54,15 +56,18 @@ contract AdminFlowsViaValidatorTest is Test {
 
         address[] memory owners = new address[](1);
         owners[0] = owner1;
+        address[] memory trustees = new address[](2);
+        trustees[0] = guardian1;
+        trustees[1] = guardian2;
         AgentAccountInitParams memory p = AgentAccountInitParams({
             mode: 1,
-           custodians: owners,
-           trustees: new address[](0),
+            custodians: owners,
+            trustees: trustees,
             initialPasskeyCredentialIdDigest: bytes32(0),
             initialPasskeyX: 0,
             initialPasskeyY: 0
         });
-        acct = factory.createMultiSigSmartAgent(p, address(validator), 0, 1);
+        acct = factory.createAgentAccount(p, _defaultTimelocks(), 1);
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────
@@ -180,11 +185,14 @@ contract AdminFlowsViaValidatorTest is Test {
     // ─── 2. AddTrustee writes to validator's per-account state ─────
 
     function test_admin_addGuardian_writes_to_validator_storage() public {
+        // setUp wires guardian1+guardian2 as factory-installed trustees
+        // (required for mode>0 post-R0). Adding newGuardian bumps the
+        // count from 2 → 3.
         _proposeAndExecuteByOwner(
             CustodyPolicy.CustodyAction.AddTrustee, abi.encode(newGuardian)
         );
         assertTrue(validator.isTrustee(address(acct), newGuardian));
-        assertEq(validator.trusteeCount(address(acct)), 1);
+        assertEq(validator.trusteeCount(address(acct)), 3);
     }
 
     // ─── 3. ChangeCustodyMode writes to validator's per-account state ──────
@@ -266,18 +274,12 @@ contract AdminFlowsViaValidatorTest is Test {
     // ─── 7. T6 RecoverAccount via guardians (full round-trip) ───────
 
     function test_admin_recoverAccount_via_guardians() public {
-        // Add 2 guardians, set recoveryApprovals = 2.
-        _proposeAndExecuteByOwner(
-            CustodyPolicy.CustodyAction.AddTrustee, abi.encode(guardian1)
-        );
-        _proposeAndExecuteByOwner(
-            CustodyPolicy.CustodyAction.AddTrustee, abi.encode(guardian2)
-        );
-        _proposeAndExecuteByOwner(
-            CustodyPolicy.CustodyAction.SetRecoveryApprovals, abi.encode(uint8(2))
-        );
+        // setUp already wires guardian1+guardian2 as trustees with
+        // recoveryApprovals=2 (factory's default = floor(N/2)+1). The
+        // pre-R0 setup ceremony — AddTrustee×2 + SetRecoveryApprovals
+        // — is now implicit at deploy.
 
-        // Now T6 RecoverAccount.
+        // T6 RecoverAccount.
         AgentAccountRecoveryArgs memory r = AgentAccountRecoveryArgs({
             addOwners: _arr(newOwner),
             removeOwners: new address[](0),
@@ -313,15 +315,7 @@ contract AdminFlowsViaValidatorTest is Test {
     // ─── 8. T6 dual cancel window — primary owner short-circuit ─────
 
     function test_admin_recoverAccount_primaryOwner_can_cancel_in_24h_window() public {
-        _proposeAndExecuteByOwner(
-            CustodyPolicy.CustodyAction.AddTrustee, abi.encode(guardian1)
-        );
-        _proposeAndExecuteByOwner(
-            CustodyPolicy.CustodyAction.AddTrustee, abi.encode(guardian2)
-        );
-        _proposeAndExecuteByOwner(
-            CustodyPolicy.CustodyAction.SetRecoveryApprovals, abi.encode(uint8(2))
-        );
+        // setUp wires guardian1+guardian2 with recoveryApprovals=2.
 
         AgentAccountRecoveryArgs memory r = AgentAccountRecoveryArgs({
             addOwners: _arr(newOwner),
@@ -448,23 +442,32 @@ contract AdminFlowsViaValidatorTest is Test {
     }
 
     /// @notice Reverts when newCount = 0 (would brick the tier).
+    /// @dev Audit C-8 update: a REDUCTION of approvals (newCount=0 <
+    ///      currentValue=1) now escalates to T5 quorum + T5 timelock
+    ///      (24h default). The invariant under test is still that
+    ///      `_applyChangeApprovalsRequired` rejects zero at apply time;
+    ///      we just have to wait out the bigger timelock + use the
+    ///      contract-computed eta in the apply hash.
     function test_admin_changeApprovalsRequired_revertsOnZero() public {
         bytes memory args = abi.encode(uint8(4), uint8(0));
         uint64 nowTs = uint64(block.timestamp);
-        uint64 eta = nowTs + 1 hours;
+        // T5 default timelock is 24h (Phase A.5 spec). Schedule first,
+        // then read the eta the contract actually stored.
         uint256 changeId = validator.scheduledChangeCount(address(acct)) + 1;
         bytes32 ph = _payloadHash(
             bytes32("ADMIN_PROPOSE"), changeId,
-            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args, eta
+            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args, 0 /* eta unused in propose hash */
         );
         validator.scheduleCustodyChange(
             address(acct), CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args,
             _signRaw(OWNER1_PK, ph)
         );
-        vm.warp(nowTs + 1 hours + 1);
+        // Read the actually-stored eta + warp past it.
+        (, , , uint64 actualEta, , , ) = validator.getScheduledChange(address(acct), changeId);
+        vm.warp(uint256(actualEta) + 1);
         bytes32 eh = _payloadHash(
             bytes32("ADMIN_EXECUTE"), changeId,
-            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args, eta
+            CustodyPolicy.CustodyAction.ChangeApprovalsRequired, args, actualEta
         );
         vm.expectRevert(abi.encodeWithSelector(
             CustodyPolicy.InvalidThresholdValue.selector, uint8(0)

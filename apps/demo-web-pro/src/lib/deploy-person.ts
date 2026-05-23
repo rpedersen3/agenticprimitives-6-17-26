@@ -1,19 +1,31 @@
 /**
  * Person Smart Agent deploy — passkey, SIWE, or both. Gasless via demo-a2a.
  *
- * The worker accepts a mixed `{ externalCustodians?, passkey? }` payload
- * (phase 6f.4+). The signer of the userOpHash is whichever owner
- * authority the freshly-deployed account will accept:
- *   - passkey-only spec  → WebAuthn assertion  → `0x01 || ABI(Assertion)` blob
- *   - SIWE-only spec     → ECDSA over userOpHash via wagmi.signMessage({raw}) → 65 bytes
- *   - mixed              → prefer passkey (gasless, no wallet popup)
+ * Wave R0 — Person PSAs deploy as `mode=1` (CustodyPolicy installed
+ * at birth) so they're recovery-capable from day one. There's a
+ * chicken-and-egg at first-Person deploy: nobody else exists to be a
+ * trustee yet. We bootstrap with a SELF-TRUSTEE (the deploying
+ * passkey's own PIA), which is honest about the fact that solo Alice
+ * has no real recovery story. When the second Person joins (Act 3),
+ * both PSAs add each other as trustees via T6 admin and either keep or
+ * drop the self-trustee. SIWE-only Persons can't bootstrap a passkey
+ * PIA, so they fall back to mode=0 (simple, no recovery).
+ *
+ * The worker accepts the unified `AgentAccountInitParams`-shaped
+ * payload at `/session/direct-deploy`. For the gasless passkey path,
+ * `/session/deploy` builds a userOp and the passkey signs.
  */
 
-import { encodeWebAuthnSignature } from '@agenticprimitives/agent-account';
-import type { Address, Hex } from 'viem';
+import { keccak256, encodeAbiParameters, type Address, type Hex } from 'viem';
 import { config } from '../config';
-import { assertWithPasskey, type DemoPasskey } from './passkey';
+import type { DemoPasskey } from './passkey';
 import { csrfHeaders, ensureCsrfToken, CsrfError } from './csrf';
+
+/** Derive a passkey's PIA — keccak256(abi.encode(x, y))[12:32]. */
+function passkeyIdentity(x: bigint, y: bigint): Address {
+  const h = keccak256(encodeAbiParameters([{ type: 'uint256' }, { type: 'uint256' }], [x, y]));
+  return ('0x' + h.slice(-40)) as Address;
+}
 
 export interface DeployResult {
   ok: true;
@@ -27,36 +39,19 @@ export interface DeployError {
   reason?: string;
 }
 
-type DeployUserOpBuilt = {
-  ok: true;
-  sender: Address;
-  userOpHash: Hex;
-  userOp: {
-    sender: Address;
-    nonce: string;
-    initCode: Hex;
-    callData: Hex;
-    accountGasLimits: Hex;
-    preVerificationGas: string;
-    gasFees: Hex;
-    paymasterAndData: Hex;
-    signature: Hex;
-  };
-};
-
 export interface DeployPersonAgentArgs {
   /** Optional — when present, the passkey is registered + its PIA becomes a custodian. */
   passkey?: DemoPasskey;
-  /** Optional — when non-empty, each EOA is added to externalCustodians at init. */
-  externalCustodians?: Address[];
+  /** Optional — when non-empty, each EOA is added to custodians at init. */
+  custodians?: Address[];
 }
 
 export async function deployPersonAgent(
   args: DeployPersonAgentArgs,
 ): Promise<DeployResult | DeployError> {
-  const { passkey, externalCustodians = [] } = args;
-  if (!passkey && externalCustodians.length === 0) {
-    return { ok: false, error: 'no_signers', reason: 'at least one of passkey or externalCustodians required' };
+  const { passkey, custodians = [] } = args;
+  if (!passkey && custodians.length === 0) {
+    return { ok: false, error: 'no_signers', reason: 'at least one of passkey or custodians required' };
   }
 
   const base = config.demoA2aUrl;
@@ -82,15 +77,24 @@ export async function deployPersonAgent(
 
   const baseTrimmed = base.replace(/\/$/, '');
 
-  // SIWE-only path: bypass ERC-4337 + signed userOp; let the worker
-  // directly invoke `factory.createPersonAgent(externalCustodians, ...)`.
-  // The factory call is permissionless; no user signature needed.
+  // SIWE-only path: mode=0 (no recovery — SIWE-only Persons have no
+  // passkey PIA to bootstrap a self-trustee). The worker direct-deploys
+  // via the factory; the call is permissionless, no user signature.
   if (!passkey) {
     const directRes = await fetch(`${baseTrimmed}/session/direct-deploy`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-      body: JSON.stringify({ externalCustodians }),
+      body: JSON.stringify({
+        mode: 0,
+        custodians,
+        trustees: [],
+        initialPasskeyCredentialIdDigest: `0x${'00'.repeat(32)}`,
+        initialPasskeyX: '0',
+        initialPasskeyY: '0',
+        timelockOverrides: [],
+        salt: '0',
+      }),
     });
     const raw = await directRes.text();
     let directBody: Record<string, unknown> = {};
@@ -113,71 +117,48 @@ export async function deployPersonAgent(
     };
   }
 
-  // 1. Ask demo-a2a for the unsigned userOp.
-  const buildRes = await fetch(`${baseTrimmed}/session/deploy`, {
+  // Passkey path: mode=1 (recovery-capable) with self-trustee bootstrap.
+  // The passkey's PIA goes in trustees[] so the factory's mode>0
+  // invariant is satisfied. Real trustees (other Persons) are added by
+  // T6 admin rotation in later acts when the second Person joins.
+  const piaForTrustee = passkeyIdentity(passkey.pubKeyX, passkey.pubKeyY);
+
+  // /session/deploy currently builds mode=0 deploys. For mode=1 we go
+  // direct-deploy (factory call from worker EOA) since the userOpHash
+  // signing flow + mode=1 paymaster gas budget is a separate concern
+  // (Wave R1 native multi-signer ceremony will refactor this).
+  const directRes = await fetch(`${baseTrimmed}/session/direct-deploy`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({
-      externalCustodians,
-      passkey: passkey
-        ? {
-            credentialIdDigest: passkey.credentialIdDigest,
-            pubKeyX: passkey.pubKeyX.toString(),
-            pubKeyY: passkey.pubKeyY.toString(),
-          }
-        : undefined,
+      mode: 1,
+      custodians,
+      trustees: [piaForTrustee],
+      initialPasskeyCredentialIdDigest: passkey.credentialIdDigest,
+      initialPasskeyX: passkey.pubKeyX.toString(),
+      initialPasskeyY: passkey.pubKeyY.toString(),
+      timelockOverrides: [],
+      salt: '0',
     }),
   });
-  if (buildRes.status === 409) {
-    return {
-      ok: false,
-      error: 'paymaster_unavailable',
-      reason: 'demo-a2a has no paymaster configured.',
-    };
-  }
-  const buildBody = (await buildRes.json()) as Record<string, unknown>;
-  if (!buildRes.ok || buildBody.ok !== true) {
-    return {
-      ok: false,
-      error: typeof buildBody.error === 'string' ? buildBody.error : `HTTP ${buildRes.status}`,
-      reason: typeof buildBody.detail === 'string' ? buildBody.detail : undefined,
-    };
-  }
-  const built = buildBody as unknown as DeployUserOpBuilt;
-
-  // 2. Sign the userOpHash. Passkey path is preferred (gasless UX); the
-  //    SIWE path requires the user's wallet to sign the 32-byte hash.
-  let signature: Hex;
+  const directRaw = await directRes.text();
+  let directBody: Record<string, unknown> = {};
   try {
-    const assertion = await assertWithPasskey(passkey, built.userOpHash);
-    signature = encodeWebAuthnSignature(assertion);
-  } catch (e) {
-    return {
-      ok: false,
-      error: 'sign_failed',
-      reason: e instanceof Error ? e.message : String(e),
-    };
+    directBody = JSON.parse(directRaw) as Record<string, unknown>;
+  } catch {
+    return { ok: false, error: 'direct_deploy_http', reason: `HTTP ${directRes.status}: ${directRaw.slice(0, 80)}` };
   }
-
-  // 3. Submit the signed userOp.
-  const submitRes = await fetch(`${baseTrimmed}/session/deploy/submit`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-    body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
-  });
-  const submitBody = (await submitRes.json()) as Record<string, unknown>;
-  if (!submitRes.ok || submitBody.ok !== true) {
+  if (!directRes.ok || directBody.ok !== true) {
     return {
       ok: false,
-      error: typeof submitBody.error === 'string' ? submitBody.error : `HTTP ${submitRes.status}`,
-      reason: typeof submitBody.detail === 'string' ? submitBody.detail : undefined,
+      error: typeof directBody.error === 'string' ? directBody.error : `HTTP ${directRes.status}`,
+      reason: typeof directBody.detail === 'string' ? directBody.detail : undefined,
     };
   }
   return {
     ok: true,
-    deployedAddress: submitBody.deployedAddress as Address,
-    transactionHash: submitBody.transactionHash as Hex,
+    deployedAddress: directBody.deployedAddress as Address,
+    transactionHash: directBody.transactionHash as Hex,
   };
 }

@@ -73,6 +73,12 @@ contract CustodyPolicy {
     /// @dev Per-account config. One mapping entry per installed-on account.
     struct Config {
         bool installed;
+        /// @dev Audit C-11: once an account uninstalls the CustodyPolicy,
+        ///      reinstall is permanently forbidden — stale trustees /
+        ///      thresholds / pending changes would otherwise compose with
+        ///      the next install in unpredictable ways. Accounts that
+        ///      want a fresh policy state must deploy a fresh account.
+        bool permanentlyUninstalled;
         uint8 mode;                                       // 0=single, 1=hybrid, 2=threshold, 3=org
         uint8 recoveryApprovals;
         uint256 t3HighValueCeiling;
@@ -200,6 +206,12 @@ contract CustodyPolicy {
     event T3CeilingChanged(address indexed account, uint256 oldCeiling, uint256 newCeiling);
     event RecoveryThresholdChanged(address indexed account, uint8 oldValue, uint8 newValue);
     event OwnersRotated(address indexed account, uint256 newOwnerCount);
+    /// @notice Audit C-10: per-rotation count of custodians removed.
+    event CustodiansRemovedDuringRotation(address indexed account, uint256 removedCount);
+    /// @notice Audit C-11: CustodyPolicy was uninstalled; the account
+    ///         can never reinstall it. Surfaced as a loud event so
+    ///         operators see the lock applied.
+    event CustodyPolicyPermanentlyUninstalled(address indexed account);
     event AccountRecovered(
         address indexed account,
         uint256 ownersAddedCount,
@@ -236,6 +248,9 @@ contract CustodyPolicy {
     error RecoveryRequiresGuardianQuorum();
     error UnauthorizedTrustee(address signer);
     error ZeroAddress();
+    /// @dev Audit C-11: reinstall over a previously-uninstalled config
+    ///      is forbidden — stale mappings would compose unpredictably.
+    error ReinstallForbidden(address account);
 
     // ─── ERC-7579 lifecycle ───────────────────────────────────────────
 
@@ -255,6 +270,13 @@ contract CustodyPolicy {
         address account = msg.sender;
         Config storage c = _configs[account];
         if (c.installed) revert AlreadyInstalledOn(account);
+        // Audit C-11: reinstall over previously-uninstalled state is
+        // forbidden. The stale mappings (trustees, thresholds, pending)
+        // never zero out — silently re-using them on a fresh install
+        // could compose with adversary-chosen new state in pathological
+        // ways. Force a new deploy if the operator genuinely needs a
+        // fresh policy for this account.
+        if (c.permanentlyUninstalled) revert ReinstallForbidden(account);
 
         (
             uint8 modeVal,
@@ -295,10 +317,15 @@ contract CustodyPolicy {
         Config storage c = _configs[account];
         if (!c.installed) revert NotInstalledOn(account);
         c.installed = false;
-        // Per-account state (proposals, trustees, thresholds) intentionally
-        // NOT zeroed here — re-install on the same account would clobber.
-        // Zeroing is a defensive choice for a future hardening pass.
+        // Audit C-11: lock against ever re-installing on this account.
+        // The mapping state (trustees, thresholds, proposals) is left
+        // in place intentionally — clearing all of it via storage
+        // iteration is unbounded gas. The `permanentlyUninstalled`
+        // flag prevents the stale state from being composed against
+        // a fresh install instead.
+        c.permanentlyUninstalled = true;
         emit CustodyPolicyUninstalled(account);
+        emit CustodyPolicyPermanentlyUninstalled(account);
     }
 
     // ─── Public propose / execute / cancel ──────────────────────────
@@ -312,7 +339,9 @@ contract CustodyPolicy {
         Config storage c = _configs[account];
         if (!c.installed) revert NotInstalledOn(account);
 
-        uint8 tier = _tierFor(action);
+        // Audit C-8: tier escalates for ChangeApprovalsRequired based on
+        // which tier is being changed + direction of change.
+        uint8 tier = _effectiveTierFor(c, action, args);
         uint32 timelock = _safetyDelayValue(c, tier);
 
         if ((tier == 5 || tier == 6) && timelock == 0) {
@@ -364,7 +393,7 @@ contract CustodyPolicy {
         if (block.timestamp < p.eta) revert ProposalNotReady(changeId, p.eta);
 
         bool isRecovery = (p.action == CustodyAction.RecoverAccount);
-        uint8 tier = _tierFor(p.action);
+        uint8 tier = _effectiveTierFor(c, p.action, p.args);
         uint8 reqThreshold = isRecovery ? c.recoveryApprovals : _approvalsValue(c, tier);
         bytes32 payloadHash = _hashExecuteRequest(account, p.action, p.args, changeId, p.eta);
         address[] memory execSigners = _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, isRecovery);
@@ -401,7 +430,7 @@ contract CustodyPolicy {
                 : c.recoveryApprovals;
             _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, !inOwnerCancelWindow);
         } else {
-            uint8 tier = _tierFor(p.action);
+            uint8 tier = _effectiveTierFor(c, p.action, p.args);
             uint8 reqThreshold = _approvalsValue(c, tier);
             _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, false);
         }
@@ -484,6 +513,34 @@ contract CustodyPolicy {
         return 4;
     }
 
+    /**
+     * @dev Audit C-8: `ChangeApprovalsRequired` must require AT LEAST the
+     *      tier being modified — otherwise a T4 admin quorum could
+     *      silently lower the T5 critical threshold to 1, defeating the
+     *      whole layered-threshold model. Decreases also bump up one
+     *      tier (require T5 for any reduction) because lowering a
+     *      threshold is the security-critical direction.
+     */
+    function _effectiveTierFor(
+        Config storage c,
+        CustodyAction action,
+        bytes memory args
+    ) internal view returns (uint8) {
+        uint8 base = _tierFor(action);
+        if (action != CustodyAction.ChangeApprovalsRequired) return base;
+        // Decode (uint8 tier, uint8 newCount). Bound the change tier in
+        // [1, 5]; T6 (recovery) routes through SetRecoveryApprovals.
+        (uint8 targetTier, uint8 newCount) = abi.decode(args, (uint8, uint8));
+        if (targetTier == 0 || targetTier > 5) return base;
+        uint8 required = targetTier > base ? targetTier : base;
+        // If this would DECREASE the threshold, require at least T5
+        // authority (one tier higher than ordinary admin).
+        uint8 currentValue = c.approvalsRequiredByTier[targetTier];
+        if (currentValue == 0) currentValue = 1; // matches _approvalsValue fallback
+        if (newCount < currentValue && required < 5) required = 5;
+        return required;
+    }
+
     function _approvalsValue(Config storage c, uint8 tier) internal view returns (uint8) {
         if (tier == 0 || tier > 6) revert InvalidTier(tier);
         uint8 v = c.approvalsRequiredByTier[tier];
@@ -555,8 +612,14 @@ contract CustodyPolicy {
             (uint8 newMode) = abi.decode(args, (uint8));
             _applyChangeMode(account, c, newMode);
         } else if (action == CustodyAction.RotateAllCustodians) {
-            (address[] memory newOwners) = abi.decode(args, (address[]));
-            _applyRotateAllOwners(account, newOwners);
+            // Audit C-10: args shape changed to (addCustodians, removeCustodians).
+            // The legacy single-array form only ADDED — a compromised
+            // custodian was never actually rotated OUT. Wire-format
+            // break is acceptable in pre-alpha; the demo's only
+            // current caller (none) was using the legacy form.
+            (address[] memory addCustodians, address[] memory removeCustodians) =
+                abi.decode(args, (address[], address[]));
+            _applyRotateAllOwners(account, addCustodians, removeCustodians);
         } else if (action == CustodyAction.ChangeValueCeiling) {
             (uint256 newCeiling) = abi.decode(args, (uint256));
             _applyChangeT3Ceiling(account, c, newCeiling);
@@ -633,18 +696,49 @@ contract CustodyPolicy {
         emit ModeChanged(account, oldMode, newMode);
     }
 
-    function _applyRotateAllOwners(address account, address[] memory newOwners) internal {
-        if (newOwners.length == 0) revert EmptyOwnerSet();
+    /**
+     * @notice Add new custodians AND remove old ones in one ceremony.
+     * @dev Audit C-10: the previous shape only added — a "rotate" that
+     *      didn't rotate. New shape is exact-replacement-friendly: pass
+     *      the additions in `addCustodians` and the removals in
+     *      `removeCustodians`. Validates the final custodian count
+     *      stays ≥ 1 (the on-chain `removeCustodian` will revert with
+     *      CannotRemoveLastCustodian if we'd zero it, but we double-check
+     *      here for explicitness).
+     */
+    function _applyRotateAllOwners(
+        address account,
+        address[] memory addCustodians,
+        address[] memory removeCustodians
+    ) internal {
+        if (addCustodians.length == 0 && removeCustodians.length == 0) {
+            revert EmptyOwnerSet();
+        }
         uint256 added;
-        for (uint256 i; i < newOwners.length; i++) {
-            address o = newOwners[i];
+        for (uint256 i; i < addCustodians.length; i++) {
+            address o = addCustodians[i];
             if (o == address(0)) revert ZeroAddress();
             if (!IAgentAccount(account).isCustodian(o)) {
                 _execute(account, abi.encodeCall(IAgentAccount.addCustodian, (o)));
                 added++;
             }
         }
+        // Remove AFTER add so we never transiently dip below count=1 in
+        // the "rotate sole custodian to a new sole custodian" case.
+        uint256 removed;
+        for (uint256 i; i < removeCustodians.length; i++) {
+            address o = removeCustodians[i];
+            if (o == address(0)) revert ZeroAddress();
+            if (IAgentAccount(account).isCustodian(o)) {
+                _execute(account, abi.encodeCall(IAgentAccount.removeCustodian, (o)));
+                removed++;
+            }
+        }
         emit OwnersRotated(account, added);
+        // Note: OwnersRotated only carries `added` for ABI compat. A
+        // future revision should add a `removed` field; that's a
+        // wire-format break we'll batch with the next event-schema rev.
+        if (removed > 0) emit CustodiansRemovedDuringRotation(account, removed);
     }
 
     function _applyChangeT3Ceiling(address account, Config storage c, uint256 newCeiling) internal {
@@ -654,7 +748,14 @@ contract CustodyPolicy {
     }
 
     function _applySetRecoveryThreshold(address account, Config storage c, uint8 newThr) internal {
-        if (newThr > 0 && c.trusteeCount < newThr) revert RecoveryRequiresGuardians();
+        // Audit C-9: a `SetRecoveryApprovals(0)` previously disabled
+        // recovery entirely under a T4 admin quorum — quiet enough to
+        // be missed by reviewers, catastrophic if a key was lost
+        // afterwards. Refuse zero here; explicit disable-recovery
+        // semantics should live behind a separate DisableRecovery
+        // action gated at T5 + timelock (not yet wired).
+        if (newThr == 0) revert InvalidThresholdValue(newThr);
+        if (c.trusteeCount < newThr) revert RecoveryRequiresGuardians();
         if (newThr > c.trusteeCount) revert InvalidThresholdValue(newThr);
         uint8 oldThr = c.recoveryApprovals;
         c.recoveryApprovals = newThr;

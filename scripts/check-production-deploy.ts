@@ -27,7 +27,23 @@ import { execSync } from 'node:child_process';
 const REPO_ROOT = process.cwd();
 const ARGS = new Set(process.argv.slice(2));
 const WARN_ONLY = ARGS.has('--warn-only');
-const SKIP = process.env.AGENTICPRIMITIVES_SKIP_PREFLIGHT === '1';
+const SKIP_REQUESTED = process.env.AGENTICPRIMITIVES_SKIP_PREFLIGHT === '1';
+// CI must NEVER honor the skip (audit production preflight item).
+// Common CI indicators across runners: GITHUB_ACTIONS / CI / BUILDKITE / etc.
+const IN_CI =
+  process.env.CI === 'true' ||
+  process.env.GITHUB_ACTIONS === 'true' ||
+  process.env.BUILDKITE === 'true' ||
+  process.env.CIRCLECI === 'true';
+const SKIP = SKIP_REQUESTED && !IN_CI;
+if (SKIP_REQUESTED && IN_CI) {
+  console.error(
+    '\n[preflight] ✗ AGENTICPRIMITIVES_SKIP_PREFLIGHT=1 is set but CI was ' +
+      'detected (CI / GITHUB_ACTIONS / BUILDKITE / CIRCLECI). The skip is ' +
+      'IGNORED in CI environments — production preflight is mandatory at ' +
+      'merge time. Remove the env var or run locally for advisory mode.\n',
+  );
+}
 
 interface Finding {
   audit: string;        // e.g. "C4", "M3", "N1"
@@ -196,19 +212,70 @@ function fail(audit: string, check: string, message: string) {
   }
 })();
 
-// ─── N1.1: warn if known-leaked deployer key is in .env.deploy.local ──
+// ─── N1.1: HARD-FAIL on known-leaked deployer key in production deploy ──
+//
+// External audit P0-3: the disclosed deployer EOA (0x31ed…8b44) controls
+// live demo governance, bundler signer, session issuer, and paymaster
+// authority. A production deploy MUST rotate or redeploy contracts under
+// a clean deployer. The previous behavior here was a soft warning,
+// which the audit correctly flagged as a non-gate. Promoted to a hard
+// fail unless explicitly overridden with the demo-only flag.
+//
+// Override (for live demo runs that the operator has explicitly
+// accepted): `AGENTICPRIMITIVES_DEMO_KEYS_ACCEPTED=true`. The flag is
+// NOT honored in CI — same logic as AGENTICPRIMITIVES_SKIP_PREFLIGHT.
 
-(function warnLeakedDeployerKey() {
-  // Soft warning — we know the key was leaked but the user explicitly
-  // accepts this as a demo-only risk. Surface it in the preflight
-  // output so anyone reviewing the deploy log sees the warning.
+(function gateOnLeakedDeployerKey() {
   const envFile = join(REPO_ROOT, '.env.deploy.local');
   if (!existsSync(envFile)) return;
   const text = readFileSync(envFile, 'utf8');
-  if (text.includes('0x31ed17fb99e82E02085Ab4B3cbdaB05489098b44')) {
+  if (!text.includes('0x31ed17fb99e82E02085Ab4B3cbdaB05489098b44')) return;
+
+  const accepted = process.env.AGENTICPRIMITIVES_DEMO_KEYS_ACCEPTED === 'true';
+  if (accepted && !IN_CI) {
     console.warn(
-      `[preflight] WARNING (N1): .env.deploy.local references the demo deployer 0x31ed…8b44, ` +
-        `which has been disclosed in chat transcripts. Rotate before any non-demo use.`,
+      `[preflight] ⚠ DEMO-KEY OVERRIDE: .env.deploy.local references the disclosed ` +
+        `deployer 0x31ed…8b44; running with AGENTICPRIMITIVES_DEMO_KEYS_ACCEPTED=true. ` +
+        `This MUST be removed before any non-demo deploy. Audit P0-3.`,
+    );
+    return;
+  }
+  fail(
+    'N1',
+    'leaked-deployer-key',
+    `.env.deploy.local references the disclosed demo deployer 0x31ed…8b44 ` +
+      `(controls governance + bundler + paymaster authority). Rotate or redeploy ` +
+      `with a clean deployer before continuing. Demo runs may set ` +
+      `AGENTICPRIMITIVES_DEMO_KEYS_ACCEPTED=true outside CI to override.`,
+  );
+})();
+
+// ─── N1.2: HARD-FAIL on local key-custody escape flags in production ───
+//
+// External audit P0-3 + key-custody CLAUDE.md security invariant: the
+// local AES envelope provider and local secp256k1 signer MUST NOT be in
+// use in production. Each has an opt-in flag (A2A_ALLOW_LOCAL_*) that
+// the package consults at runtime — if either is set when the preflight
+// runs, the production deploy is unsafe.
+
+(function gateOnLocalKeyCustodyFlags() {
+  const allow = (k: string) => process.env[k] === 'true';
+  if (allow('A2A_ALLOW_LOCAL_MASTER_KEY')) {
+    fail(
+      'N1',
+      'local-master-key-flag',
+      `A2A_ALLOW_LOCAL_MASTER_KEY=true is set. The local secp256k1 signer ` +
+        `signs as the bundler/paymaster master in production — compromise = forged bundler txs. ` +
+        `Replace with a managed KMS backend (gcp-kms / aws-kms) and unset the flag.`,
+    );
+  }
+  if (allow('A2A_ALLOW_LOCAL_ENVELOPE_KEY')) {
+    fail(
+      'N1',
+      'local-envelope-key-flag',
+      `A2A_ALLOW_LOCAL_ENVELOPE_KEY=true is set. The HKDF-from-process-secret ` +
+        `envelope wraps every session keypair at rest — compromise = decrypt all sessions = ` +
+        `forge any delegation. Replace with managed KMS encryption and unset the flag.`,
     );
   }
 })();

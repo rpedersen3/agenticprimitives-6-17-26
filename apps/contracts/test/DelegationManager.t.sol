@@ -83,16 +83,24 @@ contract DelegationManagerTest is Test {
         assertFalse(dm.isRevoked(bytes32(uint256(0xdeadbeef))));
     }
 
-    function test_revokeDelegation_marks_hash_revoked() public {
+    function test_revokeDelegation_legacy_path_reverts() public {
+        // Production-readiness pass: the permissionless `revokeDelegation(bytes32)`
+        // path is disabled (DoS surface — anyone who reconstructs a hash could
+        // mark a delegation revoked). Callers must use `revokeDelegationByOwner`.
         bytes32 hash = bytes32(uint256(0x1234));
+        vm.expectRevert(DelegationManager.LegacyRevocationDisabled.selector);
         dm.revokeDelegation(hash);
-        assertTrue(dm.isRevoked(hash));
+        // And the hash MUST NOT be marked revoked as a side-effect.
+        assertFalse(dm.isRevoked(hash));
     }
 
-    function test_revokeDelegation_emits_events() public {
+    function test_revokeDelegation_legacy_path_blocks_arbitrary_caller() public {
+        // Any randomly-supplied EOA pre-deprecation could revoke any hash; now
+        // even authenticated callers (delegator/delegate) hit the deprecation
+        // guard on this entrypoint.
         bytes32 hash = bytes32(uint256(0xbabe));
-        vm.expectEmit(true, false, false, false);
-        emit IDelegationManager.DelegationRevoked(hash);
+        vm.prank(delegator);
+        vm.expectRevert(DelegationManager.LegacyRevocationDisabled.selector);
         dm.revokeDelegation(hash);
     }
 

@@ -7,16 +7,18 @@ import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import "../src/AgentAccountFactory.sol";
 import "../src/AgentAccount.sol";
 import "../src/agency/DelegationManager.sol";
+import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
+import {AgentAccountInitParams} from "../src/IAgentAccount.sol";
 
-/// @dev Phase 6f.4 — the factory was collapsed to two entries
-///      (`createPersonAgent` + `createMultiSigSmartAgent`). These tests
-///      cover deterministic address derivation, idempotency, event
-///      emission, and the factory-level capability roles.
-///      Tests for `createMultiSigSmartAgent` (CustodyPolicy install)
-///      live in `AgentAccountFactoryMode.t.sol`.
+/// @dev Wave R0 — `createAgentAccount` (unified entry replacing
+///      `createPersonAgent` + `createMultiSigSmartAgent`). This file
+///      covers mode=0 (simple, no CustodyPolicy installed). Mode 1-3
+///      tests live in `AgentAccountFactoryMode.t.sol`.
 contract AgentAccountFactoryTest is Test {
+    function _defaultTimelocks() internal pure returns (uint32[7] memory tl) {}
     AgentAccountFactory factory;
     DelegationManager dm;
+    CustodyPolicy custodyPolicy;
 
     address internal owner = address(0xAA);
     address internal bundlerSigner = address(0xBB);
@@ -30,9 +32,11 @@ contract AgentAccountFactoryTest is Test {
     function setUp() public {
         EntryPoint ep = new EntryPoint();
         dm = new DelegationManager();
+        custodyPolicy = new CustodyPolicy();
         factory = new AgentAccountFactory(
             IEntryPoint(address(ep)),
             address(dm),
+            address(custodyPolicy),
             bundlerSigner,
             sessionIssuer,
             governance
@@ -47,55 +51,72 @@ contract AgentAccountFactoryTest is Test {
         r = new address[](0);
     }
 
-    // ─── createPersonAgent: EOA-only path ─────────────────────────────
+    /// @dev Build a mode=0 (simple) AgentAccountInitParams. Trustees are
+    ///      not required for mode=0 — CustodyPolicy is never installed.
+    function _simpleParams(address[] memory custodians, bytes32 cred, uint256 x, uint256 y)
+        internal pure returns (AgentAccountInitParams memory)
+    {
+        return AgentAccountInitParams({
+            mode: 0,
+            custodians: custodians,
+            trustees: new address[](0),
+            initialPasskeyCredentialIdDigest: cred,
+            initialPasskeyX: x,
+            initialPasskeyY: y
+        });
+    }
 
-    function test_createPersonAgent_eoa_at_predicted_address() public {
-        address[] memory custodians = _eoaArr(owner);
-        address predicted = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 7);
+    // ─── mode=0: EOA-only path ────────────────────────────────────────
+
+    function test_createAgentAccount_mode0_eoa_at_predicted_address() public {
+        AgentAccountInitParams memory p = _simpleParams(_eoaArr(owner), bytes32(0), 0, 0);
+        address predicted = factory.getAddressForAgentAccount(p, 7);
         assertEq(predicted.code.length, 0);
-        AgentAccount acct = factory.createPersonAgent(custodians, bytes32(0), 0, 0, 7);
+        AgentAccount acct = factory.createAgentAccount(p, _defaultTimelocks(), 7);
         assertEq(address(acct), predicted);
         assertGt(predicted.code.length, 0);
         assertTrue(acct.isCustodian(owner));
         assertEq(acct.custodianCount(), 1);
         assertEq(acct.passkeyCount(), 0);
+        // mode=0 → CustodyPolicy NOT installed.
+        assertFalse(custodyPolicy.isInstalledOn(address(acct)));
     }
 
-    function test_createPersonAgent_eoa_idempotent() public {
-        address[] memory custodians = _eoaArr(owner);
-        AgentAccount a1 = factory.createPersonAgent(custodians, bytes32(0), 0, 0, 8);
-        AgentAccount a2 = factory.createPersonAgent(custodians, bytes32(0), 0, 0, 8);
+    function test_createAgentAccount_mode0_eoa_idempotent() public {
+        AgentAccountInitParams memory p = _simpleParams(_eoaArr(owner), bytes32(0), 0, 0);
+        AgentAccount a1 = factory.createAgentAccount(p, _defaultTimelocks(), 8);
+        AgentAccount a2 = factory.createAgentAccount(p, _defaultTimelocks(), 8);
         assertEq(address(a1), address(a2));
     }
 
-    function test_createPersonAgent_address_changes_with_salt() public view {
-        address[] memory custodians = _eoaArr(owner);
-        address a1 = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 0);
-        address a2 = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 1);
+    function test_createAgentAccount_mode0_address_changes_with_salt() public view {
+        AgentAccountInitParams memory p = _simpleParams(_eoaArr(owner), bytes32(0), 0, 0);
+        address a1 = factory.getAddressForAgentAccount(p, 0);
+        address a2 = factory.getAddressForAgentAccount(p, 1);
         assertTrue(a1 != a2);
     }
 
-    function test_createPersonAgent_address_changes_with_custodian() public view {
-        address a1 = factory.getAddressForPersonAgent(_eoaArr(owner), bytes32(0), 0, 0, 0);
-        address a2 = factory.getAddressForPersonAgent(_eoaArr(address(0x99)), bytes32(0), 0, 0, 0);
+    function test_createAgentAccount_mode0_address_changes_with_custodian() public view {
+        address a1 = factory.getAddressForAgentAccount(_simpleParams(_eoaArr(owner), bytes32(0), 0, 0), 0);
+        address a2 = factory.getAddressForAgentAccount(_simpleParams(_eoaArr(address(0x99)), bytes32(0), 0, 0), 0);
         assertTrue(a1 != a2);
     }
 
-    function test_createPersonAgent_emits_event() public {
-        address[] memory custodians = _eoaArr(owner);
-        address predicted = factory.getAddressForPersonAgent(custodians, bytes32(0), 0, 0, 9);
+    function test_createAgentAccount_mode0_emits_event() public {
+        AgentAccountInitParams memory p = _simpleParams(_eoaArr(owner), bytes32(0), 0, 0);
+        address predicted = factory.getAddressForAgentAccount(p, 9);
         vm.expectEmit(true, false, false, true);
-        emit AgentAccountFactory.AgentAccountCreated(predicted, /*withValidator=*/ false, 1, /*withPasskey=*/ false, 9);
-        factory.createPersonAgent(custodians, bytes32(0), 0, 0, 9);
+        emit AgentAccountFactory.AgentAccountCreated(predicted, /*mode=*/ 0, 1, /*withPasskey=*/ false, 9);
+        factory.createAgentAccount(p, _defaultTimelocks(), 9);
     }
 
-    // ─── createPersonAgent: passkey-only path ─────────────────────────
+    // ─── mode=0: passkey-only path ────────────────────────────────────
 
-    function test_createPersonAgent_passkey_at_predicted_address() public {
-        address[] memory empty = _emptyArr();
-        address predicted = factory.getAddressForPersonAgent(empty, CRED, PX, PY, 0);
+    function test_createAgentAccount_mode0_passkey_at_predicted_address() public {
+        AgentAccountInitParams memory p = _simpleParams(_emptyArr(), CRED, PX, PY);
+        address predicted = factory.getAddressForAgentAccount(p, 0);
         assertEq(predicted.code.length, 0);
-        AgentAccount acct = factory.createPersonAgent(empty, CRED, PX, PY, 0);
+        AgentAccount acct = factory.createAgentAccount(p, _defaultTimelocks(), 0);
         assertEq(address(acct), predicted);
         assertTrue(acct.hasPasskey(CRED));
         assertEq(acct.passkeyCount(), 1);
@@ -103,58 +124,52 @@ contract AgentAccountFactoryTest is Test {
         assertTrue(acct.isCustodian(acct.passkeyIdentity(PX, PY)));
     }
 
-    function test_createPersonAgent_passkey_idempotent() public {
-        address[] memory empty = _emptyArr();
-        AgentAccount a1 = factory.createPersonAgent(empty, CRED, PX, PY, 11);
-        AgentAccount a2 = factory.createPersonAgent(empty, CRED, PX, PY, 11);
+    function test_createAgentAccount_mode0_passkey_idempotent() public {
+        AgentAccountInitParams memory p = _simpleParams(_emptyArr(), CRED, PX, PY);
+        AgentAccount a1 = factory.createAgentAccount(p, _defaultTimelocks(), 11);
+        AgentAccount a2 = factory.createAgentAccount(p, _defaultTimelocks(), 11);
         assertEq(address(a1), address(a2));
     }
 
-    function test_createPersonAgent_passkey_address_changes_with_credId() public view {
-        address[] memory empty = _emptyArr();
-        address a1 = factory.getAddressForPersonAgent(empty, CRED, PX, PY, 0);
-        address a2 = factory.getAddressForPersonAgent(empty, keccak256("other"), PX, PY, 0);
+    function test_createAgentAccount_mode0_passkey_address_changes_with_credId() public view {
+        address a1 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), CRED, PX, PY), 0);
+        address a2 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), keccak256("other"), PX, PY), 0);
         assertTrue(a1 != a2);
     }
 
-    function test_createPersonAgent_passkey_address_changes_with_pubkey() public view {
-        address[] memory empty = _emptyArr();
-        address a1 = factory.getAddressForPersonAgent(empty, CRED, PX, PY, 0);
-        address a2 = factory.getAddressForPersonAgent(empty, CRED, PX + 1, PY, 0);
+    function test_createAgentAccount_mode0_passkey_address_changes_with_pubkey() public view {
+        address a1 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), CRED, PX, PY), 0);
+        address a2 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), CRED, PX + 1, PY), 0);
         assertTrue(a1 != a2);
     }
 
     function test_passkey_account_carries_factory_and_dm() public {
-        address[] memory empty = _emptyArr();
-        AgentAccount acct = factory.createPersonAgent(empty, CRED, PX, PY, 14);
+        AgentAccount acct = factory.createAgentAccount(_simpleParams(_emptyArr(), CRED, PX, PY), _defaultTimelocks(), 14);
         assertEq(acct.factory(), address(factory));
         assertEq(acct.delegationManager(), address(dm));
         assertEq(acct.bundlerSigner(), bundlerSigner);
         assertEq(acct.sessionIssuer(), sessionIssuer);
     }
 
-    function test_createPersonAgent_rejects_zero_x() public {
-        address[] memory empty = _emptyArr();
+    function test_createAgentAccount_mode0_rejects_zero_x() public {
         vm.expectRevert();
-        factory.createPersonAgent(empty, CRED, 0, PY, 0);
+        factory.createAgentAccount(_simpleParams(_emptyArr(), CRED, 0, PY), _defaultTimelocks(), 0);
     }
 
-    function test_createPersonAgent_rejects_zero_y() public {
-        address[] memory empty = _emptyArr();
+    function test_createAgentAccount_mode0_rejects_zero_y() public {
         vm.expectRevert();
-        factory.createPersonAgent(empty, CRED, PX, 0, 0);
+        factory.createAgentAccount(_simpleParams(_emptyArr(), CRED, PX, 0), _defaultTimelocks(), 0);
     }
 
-    function test_createPersonAgent_rejects_no_signers() public {
-        address[] memory empty = _emptyArr();
+    function test_createAgentAccount_rejects_no_signers() public {
         vm.expectRevert(AgentAccountFactory.NoInitialSigner.selector);
-        factory.createPersonAgent(empty, bytes32(0), 0, 0, 0);
+        factory.createAgentAccount(_simpleParams(_emptyArr(), bytes32(0), 0, 0), _defaultTimelocks(), 0);
     }
 
-    // ─── createPersonAgent: mixed (EOA + passkey) ─────────────────────
+    // ─── mode=0: mixed (EOA + passkey) ────────────────────────────────
 
-    function test_createPersonAgent_mixed_custodianCount_unions() public {
-        AgentAccount acct = factory.createPersonAgent(_eoaArr(owner), CRED, PX, PY, 50);
+    function test_createAgentAccount_mode0_mixed_custodianCount_unions() public {
+        AgentAccount acct = factory.createAgentAccount(_simpleParams(_eoaArr(owner), CRED, PX, PY), _defaultTimelocks(), 50);
         assertEq(acct.custodianCount(), 2, "EOA + PIA");
         assertTrue(acct.isCustodian(owner));
         assertTrue(acct.isCustodian(acct.passkeyIdentity(PX, PY)));
@@ -166,6 +181,7 @@ contract AgentAccountFactoryTest is Test {
         assertEq(factory.bundlerSigner(), bundlerSigner);
         assertEq(factory.sessionIssuer(), sessionIssuer);
         assertEq(factory.delegationManager(), address(dm));
+        assertEq(factory.custodyPolicy(), address(custodyPolicy));
     }
 
     function test_setBundlerSigner_requires_governance() public {
@@ -195,5 +211,19 @@ contract AgentAccountFactoryTest is Test {
         emit AgentAccountFactory.BundlerSignerChanged(bundlerSigner, address(0xFF));
         vm.prank(governance);
         factory.setBundlerSigner(address(0xFF));
+    }
+
+    function test_factory_constructor_rejects_zero_custodyPolicy() public {
+        EntryPoint ep = new EntryPoint();
+        DelegationManager dm2 = new DelegationManager();
+        vm.expectRevert(AgentAccountFactory.ZeroAddress.selector);
+        new AgentAccountFactory(
+            IEntryPoint(address(ep)),
+            address(dm2),
+            address(0),
+            bundlerSigner,
+            sessionIssuer,
+            governance
+        );
     }
 }

@@ -200,6 +200,148 @@ export function composeSinks(...sinks: AuditSink[]): AuditSink {
   };
 }
 
+// ─── Metrics primitive (production-readiness wave 1) ─────────────────
+//
+// Sibling to `AuditSink`: same fail-soft contract, different abstraction.
+// Audit events answer "what happened, who did it, did it succeed?"
+// Metrics answer "how often / how fast / how many?". Production
+// observability pipelines (OpenTelemetry, Datadog, Prometheus, etc.)
+// typically consume both side-by-side from the same hot paths.
+//
+// Why this lives here: same fail-soft + flat-keys design principles
+// as AuditSink, no domain knowledge needed, single adapter surface
+// for consumers to wire one observability backend. The pair stays
+// in lockstep at the base of the dep graph.
+//
+// Cardinality discipline (read this twice):
+//   - `tags` keys MUST be a small, bounded vocabulary per metric name.
+//     A metric whose tag-cardinality explodes (e.g. tagging by user-id)
+//     will overwhelm any storage backend. Treat tags like enum values,
+//     not free-text.
+
+export interface MetricsSink {
+  /**
+   * Increment a monotonic counter. `value` defaults to 1.
+   * Typical use: request count, error count, retry count.
+   */
+  increment(name: string, value?: number, tags?: Record<string, string>): void;
+  /**
+   * Record a single observation in a histogram / distribution.
+   * Typical use: latency, payload size, response bytes.
+   */
+  observe(name: string, value: number, tags?: Record<string, string>): void;
+  /**
+   * Set a gauge — a value that can go up or down. The latest value wins.
+   * Typical use: queue depth, in-flight session count, active connections.
+   */
+  gauge(name: string, value: number, tags?: Record<string, string>): void;
+}
+
+/**
+ * No-op sink. The default when consumers haven't wired metrics yet —
+ * runtime always succeeds, never observably affects throughput.
+ */
+export const noopMetricsSink: MetricsSink = {
+  increment: () => undefined,
+  observe: () => undefined,
+  gauge: () => undefined,
+};
+
+/**
+ * Console-out metrics sink for local dev. NOT a production sink — the
+ * volume in production overwhelms console output and provides no
+ * aggregation. Production wires `composeMetricsSinks(prometheusSink, …)`.
+ */
+export function createConsoleMetricsSink(opts?: { prefix?: string }): MetricsSink {
+  const prefix = opts?.prefix ?? '[METRIC]';
+  const fmt = (kind: string, name: string, value: number, tags?: Record<string, string>) =>
+    `${prefix} ${kind} ${name}=${value}${tags ? ' ' + JSON.stringify(tags) : ''}`;
+  return {
+    increment: (name, value = 1, tags) => {
+      // eslint-disable-next-line no-console
+      console.log(fmt('count', name, value, tags));
+    },
+    observe: (name, value, tags) => {
+      // eslint-disable-next-line no-console
+      console.log(fmt('hist', name, value, tags));
+    },
+    gauge: (name, value, tags) => {
+      // eslint-disable-next-line no-console
+      console.log(fmt('gauge', name, value, tags));
+    },
+  };
+}
+
+/**
+ * Fan-out to multiple metrics sinks. Same fail-soft semantics as
+ * `composeSinks` for audit: a failure in one sink doesn't short-circuit
+ * the others. Metrics emissions are synchronous + must never block
+ * the request path; sinks that need async work MUST queue internally.
+ */
+export function composeMetricsSinks(...sinks: MetricsSink[]): MetricsSink {
+  const safely = (fn: () => void) => {
+    try { fn(); } catch { /* fail-soft */ }
+  };
+  return {
+    increment: (name, value, tags) => {
+      for (const s of sinks) safely(() => s.increment(name, value, tags));
+    },
+    observe: (name, value, tags) => {
+      for (const s of sinks) safely(() => s.observe(name, value, tags));
+    },
+    gauge: (name, value, tags) => {
+      for (const s of sinks) safely(() => s.gauge(name, value, tags));
+    },
+  };
+}
+
+/**
+ * In-memory metrics sink for test assertions. Counts + histograms +
+ * gauges are captured in plain Maps; `.snapshot()` returns the
+ * accumulated state for assertions. NOT a production sink.
+ */
+export interface MemoryMetricsSink extends MetricsSink {
+  snapshot(): {
+    counts: Map<string, number>;
+    observations: Map<string, number[]>;
+    gauges: Map<string, number>;
+  };
+  reset(): void;
+}
+
+export function createMemoryMetricsSink(): MemoryMetricsSink {
+  const counts = new Map<string, number>();
+  const observations = new Map<string, number[]>();
+  const gauges = new Map<string, number>();
+  const key = (name: string, tags?: Record<string, string>) =>
+    tags && Object.keys(tags).length > 0
+      ? `${name}|${Object.keys(tags).sort().map((k) => `${k}=${tags[k]}`).join(',')}`
+      : name;
+  return {
+    increment(name, value = 1, tags) {
+      const k = key(name, tags);
+      counts.set(k, (counts.get(k) ?? 0) + value);
+    },
+    observe(name, value, tags) {
+      const k = key(name, tags);
+      const arr = observations.get(k) ?? [];
+      arr.push(value);
+      observations.set(k, arr);
+    },
+    gauge(name, value, tags) {
+      gauges.set(key(name, tags), value);
+    },
+    snapshot() {
+      return { counts: new Map(counts), observations: new Map(observations), gauges: new Map(gauges) };
+    },
+    reset() {
+      counts.clear();
+      observations.clear();
+      gauges.clear();
+    },
+  };
+}
+
 // ─── PII guardrail (defense-in-depth) ────────────────────────────────
 
 /**

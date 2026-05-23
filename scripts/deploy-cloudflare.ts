@@ -40,11 +40,13 @@ const PAGES_PROJECT = process.env.PAGES_PROJECT ?? 'agenticprimitives-demo';
 const DEMO_WEB_URL = process.env.DEMO_WEB_URL ?? `https://${PAGES_PROJECT}.pages.dev`;
 const PAGES_PROJECT_PRO = process.env.PAGES_PROJECT_PRO ?? 'agenticprimitives-demo-pro';
 const DEMO_WEB_PRO_URL = process.env.DEMO_WEB_PRO_URL ?? `https://${PAGES_PROJECT_PRO}.pages.dev`;
+const PAGES_PROJECT_RECOVERY = process.env.PAGES_PROJECT_RECOVERY ?? 'agenticprimitives-demo-recovery';
+const DEMO_WEB_RECOVERY_URL = process.env.DEMO_WEB_RECOVERY_URL ?? `https://${PAGES_PROJECT_RECOVERY}.pages.dev`;
 
 const DEPLOYMENTS_PATH = join(REPO_ROOT, 'apps', 'contracts', `deployments-${NETWORK}.json`);
 const STATE_PATH = join(REPO_ROOT, 'cloudflare-urls.json');
 
-const TOTAL = 9;
+const TOTAL = 11;
 function step(n: number, msg: string): void {
   console.log(`\n[${n}/${TOTAL}] ${msg}`);
 }
@@ -200,7 +202,7 @@ const a2aVars: Record<string, string> = {
   ...contractVars,
   MCP_URL: demoMcpUrl,
   // Both demo-web and demo-web-pro Pages projects need CSRF clearance.
-  ALLOWED_ORIGINS: `${DEMO_WEB_URL},${DEMO_WEB_PRO_URL}`,
+  ALLOWED_ORIGINS: `${DEMO_WEB_URL},${DEMO_WEB_PRO_URL},${DEMO_WEB_RECOVERY_URL}`,
 };
 const a2aBackend = process.env.A2A_KMS_BACKEND;
 if (a2aBackend === 'gcp-kms') {
@@ -371,11 +373,45 @@ run(
   { cwd: join(REPO_ROOT, 'apps', 'demo-web-pro') },
 );
 
+// 10. Build demo-web-recovery with the same VITE_* env. Same deploy
+//     shape as demo-web-pro; the recovery app uses identical
+//     deployment addresses + worker URLs.
+step(10, 'Building demo-web-recovery with deployment addresses…');
+execSync('pnpm --filter @agenticprimitives-demo/web-recovery build', {
+  cwd: REPO_ROOT,
+  stdio: 'inherit',
+  env: proBuildEnv, // identical to demo-web-pro — same chain, same workers
+});
+
+try {
+  execSync(
+    `wrangler pages project create ${PAGES_PROJECT_RECOVERY} --production-branch=master`,
+    { cwd: REPO_ROOT, stdio: 'pipe' },
+  );
+  console.log(`  ✓ created Pages project ${PAGES_PROJECT_RECOVERY}`);
+} catch (err: unknown) {
+  const msg = (err as { stderr?: Buffer; stdout?: Buffer }).stderr?.toString() ?? '';
+  if (msg.includes('already') || msg.includes('exists')) {
+    console.log(`  ✓ Pages project ${PAGES_PROJECT_RECOVERY} already exists`);
+  } else {
+    process.stderr.write(msg);
+    fail(`wrangler pages project create ${PAGES_PROJECT_RECOVERY} failed (see above).`);
+  }
+}
+
+// 11. Deploy demo-web-recovery to Pages.
+step(11, 'Deploying demo-web-recovery to Pages…');
+run(
+  `wrangler pages deploy dist --project-name=${PAGES_PROJECT_RECOVERY} --branch=master --commit-dirty=true`,
+  { cwd: join(REPO_ROOT, 'apps', 'demo-web-recovery') },
+);
+
 console.log('\n────────────────────────────────────────────────────────────');
-console.log(`demo-web      ${DEMO_WEB_URL}`);
-console.log(`demo-web-pro  ${DEMO_WEB_PRO_URL}`);
-console.log(`demo-a2a      ${demoA2aUrl}`);
-console.log(`demo-mcp      ${demoMcpUrl}`);
+console.log(`demo-web           ${DEMO_WEB_URL}`);
+console.log(`demo-web-pro       ${DEMO_WEB_PRO_URL}`);
+console.log(`demo-web-recovery  ${DEMO_WEB_RECOVERY_URL}`);
+console.log(`demo-a2a           ${demoA2aUrl}`);
+console.log(`demo-mcp           ${demoMcpUrl}`);
 console.log('────────────────────────────────────────────────────────────\n');
 console.log('Deploy state: cloudflare-urls.json (gitignored)');
 console.log('Rollback:     wrangler deployments list --env production');

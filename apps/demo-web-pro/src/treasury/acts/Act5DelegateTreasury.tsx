@@ -80,8 +80,26 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
   const [stepLabel, setStepLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(true);
-  const existing = loadAllDelegations();
-  const [alreadyIssued, setAlreadyIssued] = useState(existing.length >= 8);
+
+  // Only count delegations issued against the CURRENT Alice / Bob / Org
+  // / Treasury addresses. Anything else is stranded state from an
+  // earlier contract redeploy or salt bump — it'd pile up to 8+ but
+  // none would actually validate, leaving the user stuck. Re-counting
+  // against the live addresses lets the button re-enable automatically
+  // when state goes stale.
+  const currentAddresses = new Set(
+    [aliceClaim?.personAgent, bobClaim?.personAgent, org?.address, treasury?.address]
+      .filter((a): a is `0x${string}` => !!a)
+      .map((a) => a.toLowerCase()),
+  );
+  const countFreshDelegations = (): number =>
+    loadAllDelegations().filter(
+      (d) =>
+        currentAddresses.has(d.delegator.toLowerCase()) &&
+        currentAddresses.has(d.delegate.toLowerCase()),
+    ).length;
+
+  const [alreadyIssued, setAlreadyIssued] = useState(() => countFreshDelegations() >= 8);
 
   const { signTypedDataAsync } = useSignTypedData();
   const { address: walletAddress } = useAccount();
@@ -90,8 +108,11 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
   const connectors = useConnectors();
 
   useEffect(() => {
-    setAlreadyIssued(loadAllDelegations().length >= 8);
-  }, []);
+    setAlreadyIssued(countFreshDelegations() >= 8);
+    // Recompute when the current account set changes (e.g., after a
+    // Reset demo + re-deploy lands new addresses).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aliceClaim?.personAgent, bobClaim?.personAgent, org?.address, treasury?.address]);
 
   if (!org || !treasury || !aliceClaim || !bobClaim) {
     return (

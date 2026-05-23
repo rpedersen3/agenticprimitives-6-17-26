@@ -3,7 +3,7 @@
  *
  * Phase 6f.4 SIWE extension: the visitor picks 1+ auth methods at the
  * start (passkey, wallet, or both). Person.PSA deploys with the chosen
- * mix as `externalCustodians` + `initialPasskey*`, baking the mix into
+ * mix as `custodians` + `initialPasskey*`, baking the mix into
  * the CREATE2 address. The seat is stored with the matching
  * `authMethods: AuthMethod[]`.
  */
@@ -198,7 +198,7 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
 
     const result = await deployPersonAgent({
       passkey,
-      externalCustodians: eoa ? [eoa] : [],
+      custodians: eoa ? [eoa] : [],
     });
     setWorkingPhase('awaiting-receipt');
     if (!result.ok) {

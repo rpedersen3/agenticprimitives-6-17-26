@@ -1,6 +1,6 @@
 # agenticprimitives
 
-Composable primitives for building agentic web3 apps. Six capability packages + one shared types package, each independently consumable, each backed by competitive-landscape research.
+Composable primitives for building agentic web3 apps. Eight capability packages + one shared types package, each independently consumable, each backed by competitive-landscape research.
 
 | Package | Purpose |
 | --- | --- |
@@ -10,6 +10,8 @@ Composable primitives for building agentic web3 apps. Six capability packages + 
 | [`@agenticprimitives/key-custody`](./packages/key-custody) | Envelope encryption + signers + HMAC (local-AES / AWS KMS / GCP KMS) |
 | [`@agenticprimitives/tool-policy`](./packages/tool-policy) | Protocol-agnostic classification + risk tiers + exact-call DSL |
 | [`@agenticprimitives/mcp-runtime`](./packages/mcp-runtime) | Delegation-aware middleware around the official MCP SDK |
+| [`@agenticprimitives/custody`](./packages/custody) | Custody-layer SDK: CustodyPolicy ABI, action enum + arg builders, EIP-712 typed-data, custodian/trustee/recovery types |
+| [`@agenticprimitives/audit`](./packages/audit) | Audit-event schema, sink interface, in-band sinks (console / memory / PII guardrail), plus the `MetricsSink` observability primitive |
 | [`@agenticprimitives/types`](./packages/types) | Cross-cutting branded primitives |
 
 See [`specs/`](./specs) for the full design. Start with [`000-product-overview.md`](./specs/000-product-overview.md) and [`100-package-boundary-doctrine.md`](./specs/100-package-boundary-doctrine.md).
@@ -18,7 +20,7 @@ See [`specs/`](./specs) for the full design. Start with [`000-product-overview.m
 
 ```
 agenticprimitives/
-├── packages/         # The seven @agenticprimitives/* packages
+├── packages/         # The nine @agenticprimitives/* packages
 ├── apps/             # Demo apps (web + a2a + mcp + contracts)
 ├── specs/            # Doctrine, per-package contracts, archive
 ├── docs/             # Usage guides, ADRs
@@ -43,7 +45,7 @@ Live deploy targets: Vercel (web) + Fly.io (a2a + mcp) + Base Sepolia (contracts
 
 ## Status
 
-Pre-alpha. Specifications and skeletons in place; implementation lands package by package. No working code yet — these are scaffolds with declared public APIs.
+Pre-alpha, but materially implemented. Specs and APIs are stable; the demo apps exercise the full chain (SIWE/passkey auth → smart-account deploy → custody policy + multi-sig → off-chain delegations + MCP tool calls) end-to-end on Base Sepolia. **Not production-ready** — see the in-repo audit ([`docs/architecture/product-readiness-audit.md`](./docs/architecture/product-readiness-audit.md)) for the open P0/P1 list. Appropriate for controlled internal demos and architecture review only.
 
 ## Provenance
 

@@ -74,6 +74,9 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
     // Phase A.5 errors.
     error NotDelegatorOrDelegate();
     error HashMismatch();
+    /// @dev Thrown by the deprecated permissionless `revokeDelegation(bytes32)`
+    ///      path. Migrate callers to `revokeDelegationByOwner(Delegation)`.
+    error LegacyRevocationDisabled();
 
     /// @dev Storage gap reserves 50 slots for future state. The contract
     ///      is currently NOT upgradeable (SC4 § 4.3.4 — DelegationManager
@@ -122,17 +125,20 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
     }
 
     /// @inheritdoc IDelegationManager
-    /// @dev Legacy permissionless revocation by hash. Kept for backward-
-    ///      compat with on-chain Variant B delegations (whose existence
-    ///      is publicly registered, so revocation already requires the
-    ///      submitter to have known the hash from a registration tx
-    ///      they observed). New callers SHOULD use
-    ///      `revokeDelegationByOwner` so the contract authenticates the
-    ///      submitter against the delegation struct.
-    function revokeDelegation(bytes32 delegationHash) external {
-        _revoked[delegationHash] = true;
-        emit DelegationRevoked(delegationHash);
-        emit DelegationRevokedBy(delegationHash, msg.sender);
+    /// @notice DEPRECATED — permissionless revocation by hash.
+    /// @dev Production-readiness pass: the permissionless legacy path is a
+    ///      DoS surface — a mempool observer or any party who reconstructs
+    ///      a Variant A delegation hash can mark it revoked. The original
+    ///      rationale (Variant B delegations register on-chain so the
+    ///      hash is already public) doesn't hold for Variant A, which is
+    ///      now the default.
+    ///
+    ///      We retain the function selector for ABI compatibility with
+    ///      existing tooling, but always revert with `LegacyRevocationDisabled()`.
+    ///      Callers MUST migrate to `revokeDelegationByOwner(Delegation)`
+    ///      which authenticates `msg.sender` against the delegation struct.
+    function revokeDelegation(bytes32 /* delegationHash */) external pure {
+        revert LegacyRevocationDisabled();
     }
 
     /// @notice Phase A.5 — authenticated revocation path that works for

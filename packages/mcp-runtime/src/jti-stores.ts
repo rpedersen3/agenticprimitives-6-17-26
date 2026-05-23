@@ -5,7 +5,41 @@
 import type { JtiStore } from '@agenticprimitives/delegation';
 import type { BetterSqlite3DatabaseLike, PgPoolLike } from './types';
 
+/**
+ * Sentinel env var. When set to "true", `createMemoryJtiStore` will
+ * construct in production without throwing. Required for one-off
+ * scenarios (CI smoke tests against a prod-built bundle, isolated dev
+ * worker instances). All callers MUST treat this as a loud opt-in — a
+ * one-time `console.warn` is emitted on construction.
+ */
+export const ALLOW_MEMORY_JTI_ENV = 'AGENTIC_ALLOW_MEMORY_JTI_STORE';
+
+let memoryStoreWarnedOnce = false;
+
 export function createMemoryJtiStore(): JtiStore {
+  // Production guard. The memory store has zero replay protection
+  // across worker isolates / restarts / horizontal pods. Wiring it in
+  // production silently disables JTI tracking — a critical-severity
+  // regression — so we fail loud at construction.
+  const env = typeof process !== 'undefined' ? (process.env ?? {}) : {};
+  if (env.NODE_ENV === 'production' && env[ALLOW_MEMORY_JTI_ENV] !== 'true') {
+    throw new Error(
+      '[mcp-runtime] createMemoryJtiStore refused: NODE_ENV=production. ' +
+        'The memory store offers no cross-process replay protection. Use ' +
+        'createSqliteJtiStore / createPostgresJtiStore / a D1-backed store in ' +
+        `production. If you genuinely need to override (e.g., isolated test ` +
+        `worker), set ${ALLOW_MEMORY_JTI_ENV}=true and accept that delegation ` +
+        'tokens are replay-vulnerable across restarts.',
+    );
+  }
+  if (env.NODE_ENV === 'production' && !memoryStoreWarnedOnce) {
+    console.warn(
+      `[mcp-runtime] ⚠ MEMORY JTI STORE in production — ${ALLOW_MEMORY_JTI_ENV} ` +
+        'is set; delegation-token replay protection is non-durable. Remove this ' +
+        'flag before handling real-value workloads.',
+    );
+    memoryStoreWarnedOnce = true;
+  }
   const usage = new Map<string, number>();
   return {
     async trackUsage(jti: string, limit: number) {

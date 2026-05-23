@@ -48,8 +48,14 @@ function base64urlDecodeBytes(s: string): Uint8Array {
 }
 
 /** Sorted-key JSON; BigInt → numeric string. Both sides must produce the
- *  exact same bytes for the signature to round-trip. */
-function canonicalJSON(value: unknown): string {
+ *  exact same bytes for the signature to round-trip.
+ *
+ *  Exported for cross-runtime golden-test fixtures. Stability of this
+ *  function is a SECURITY INVARIANT — any byte-level drift across
+ *  runtimes (Node, Bun, browser, Cloudflare Workers) means the same
+ *  claims hash to different signatures, breaking token verification
+ *  silently. */
+export function canonicalJSON(value: unknown): string {
   const seen = new WeakSet<object>();
   const stringify = (v: unknown): string => {
     if (v === null) return 'null';
@@ -108,6 +114,18 @@ function randomJti(): string {
 
 // ─── Mint ──────────────────────────────────────────────────────────────────
 
+/**
+ * Production hard-ceilings on token lifespan + reuse. Callers may set
+ * tighter limits via `opts.maxAllowedTtlSeconds` / `opts.maxAllowedUsageLimit`;
+ * setting LOOSER values requires explicit `opts.acceptElevatedRisk: true`.
+ *
+ * Rationale: a leaked long-lived high-usage token is an authority leak
+ * for its full window. Today's defaults (1h TTL, 100 uses) are aggressive
+ * enough that a missed-rotation incident has bounded blast radius.
+ */
+const DEFAULT_MAX_TTL_SECONDS = 60 * 60; // 1 hour
+const DEFAULT_MAX_USAGE_LIMIT = 100;
+
 export async function mintDelegationToken(
   claims: Omit<DelegationTokenClaims, 'iat' | 'exp' | 'jti'> & { jti?: string; ttlSeconds?: number },
   signMessage: (msg: string) => Promise<Hex>,
@@ -115,10 +133,56 @@ export async function mintDelegationToken(
     /** Audit sink (C3 pass 3c). Emits `delegation.mint` per call. */
     auditSink?: AuditSink;
     correlationId?: string;
+    /**
+     * Production guard — reject mints whose `ttlSeconds` exceeds this.
+     * Defaults to `DEFAULT_MAX_TTL_SECONDS` (1h). Set higher only with
+     * `acceptElevatedRisk: true`.
+     */
+    maxAllowedTtlSeconds?: number;
+    /**
+     * Production guard — reject mints whose `usageLimit` exceeds this.
+     * Defaults to `DEFAULT_MAX_USAGE_LIMIT` (100). Set higher only with
+     * `acceptElevatedRisk: true`.
+     */
+    maxAllowedUsageLimit?: number;
+    /**
+     * Required when caller wants TTL > 1h OR usage > 100. Forces a
+     * deliberate "I know this is a long-lived elevated-blast-radius
+     * token" decision rather than silent permissive defaults.
+     */
+    acceptElevatedRisk?: boolean;
   },
 ): Promise<{ token: string; jti: string }> {
   const jti = claims.jti ?? randomJti();
   const ttl = claims.ttlSeconds ?? 600; // 10 minutes default; tokens are short-lived
+
+  // Production ceiling enforcement.
+  const ttlCeiling = opts?.maxAllowedTtlSeconds ?? DEFAULT_MAX_TTL_SECONDS;
+  if (ttl > ttlCeiling && !opts?.acceptElevatedRisk) {
+    throw new Error(
+      `mintDelegationToken: ttlSeconds=${ttl} exceeds ceiling=${ttlCeiling}. ` +
+        `Tighten TTL or set { acceptElevatedRisk: true } to acknowledge ` +
+        `the elevated blast-radius of a long-lived token.`,
+    );
+  }
+  if (
+    typeof claims.usageLimit === 'number' &&
+    claims.usageLimit > (opts?.maxAllowedUsageLimit ?? DEFAULT_MAX_USAGE_LIMIT) &&
+    !opts?.acceptElevatedRisk
+  ) {
+    throw new Error(
+      `mintDelegationToken: usageLimit=${claims.usageLimit} exceeds ceiling=` +
+        `${opts?.maxAllowedUsageLimit ?? DEFAULT_MAX_USAGE_LIMIT}. ` +
+        `Tighten usageLimit or set { acceptElevatedRisk: true }.`,
+    );
+  }
+  if (ttl <= 0) {
+    throw new Error(`mintDelegationToken: ttlSeconds must be positive; got ${ttl}`);
+  }
+  if (typeof claims.usageLimit === 'number' && claims.usageLimit <= 0) {
+    throw new Error(`mintDelegationToken: usageLimit must be positive when set; got ${claims.usageLimit}`);
+  }
+
   const iat = Math.floor(Date.now() / 1000);
   const exp = iat + ttl;
   const full: DelegationTokenClaims = {

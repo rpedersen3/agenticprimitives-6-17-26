@@ -1,9 +1,10 @@
 // AgentAccountClient — ERC-4337 substrate. Deterministic address + lazy
 // deploy + ERC-1271 verification + UserOp building.
 //
-// This client delegates CREATE2 math to the factory's
-// `getAddressForPersonAgent` / `getAddressForMultiSigSmartAgent` views
-// so TS and Solidity stay in lock-step.
+// Wave R0 — unified API around `createAgentAccount`. The legacy
+// `createPersonAgent` + `createMultiSigSmartAgent` split is gone; mode
+// on the spec picks the shape (0=simple, 1-3=CustodyPolicy installed,
+// trustees required for mode>0).
 
 import {
   createPublicClient,
@@ -91,33 +92,65 @@ export interface AgentAccountClientOpts {
 }
 
 /**
- * Phase 6f.4 — the unified person-agent specification. Mirrors the
- * factory's `createPersonAgent` signature. At least one of
- * `externalCustodians` (non-empty) or `passkey` (non-zero pubkey) must
- * be supplied; both is the mixed-mode account (SIWE wallet plus a
- * passkey on the same Person.PSA).
+ * Wave R0 — unified AgentAccount specification. Mirrors the factory's
+ * `AgentAccountInitParams` struct + the salt + the optional T4
+ * safetyDelay override.
+ *
+ *   - `mode = 0` → simple (no CustodyPolicy installed; trustees ignored)
+ *   - `mode = 1` → hybrid    (CustodyPolicy installed; ≥1 trustee required)
+ *   - `mode = 2` → threshold (CustodyPolicy installed; ≥2 trustees required)
+ *   - `mode = 3` → org       (CustodyPolicy installed; ≥3 trustees required)
+ *
+ * At least one signer (non-empty `custodians` OR non-zero `passkey`) is
+ * required. Defaults: mode=0, custodians=[], trustees=[],
+ * timelockOverrides=[] (factory uses spec defaults T4=1h / T5=24h / T6=48h).
  */
-export interface PersonAgentSpec {
-  externalCustodians?: readonly Address[];
+export interface AgentAccountSpec {
+  mode?: number;
+  custodians?: readonly Address[];
+  trustees?: readonly Address[];
   passkey?: {
     credentialIdDigest: Hex;
     x: bigint;
     y: bigint;
   };
   salt: bigint;
+  /**
+   * Per-tier timelock override array (index 0 unused; tier t uses index
+   * t for t in 1..6). Where the override is 0 the factory falls back to
+   * the spec default per tier (T4=1h / T5=24h / T6=48h). Omit entirely
+   * for production deploys; demos can shorten any tier independently.
+   */
+  timelockOverrides?: readonly number[];
 }
 
-function _custodiansArg(spec: PersonAgentSpec): readonly Address[] {
-  return spec.externalCustodians ?? [];
+const ZERO_BYTES32 = ('0x' + '00'.repeat(32)) as Hex;
+
+function _timelockOverridesTuple(spec: AgentAccountSpec): readonly [
+  number, number, number, number, number, number, number,
+] {
+  const src = spec.timelockOverrides ?? [];
+  return [0, 1, 2, 3, 4, 5, 6].map((i) => src[i] ?? 0) as unknown as readonly [
+    number, number, number, number, number, number, number,
+  ];
 }
-function _credIdArg(spec: PersonAgentSpec): Hex {
-  return (spec.passkey?.credentialIdDigest ?? ('0x' + '00'.repeat(32))) as Hex;
-}
-function _xArg(spec: PersonAgentSpec): bigint {
-  return spec.passkey?.x ?? 0n;
-}
-function _yArg(spec: PersonAgentSpec): bigint {
-  return spec.passkey?.y ?? 0n;
+
+function _initParamsTuple(spec: AgentAccountSpec): {
+  mode: number;
+  custodians: readonly Address[];
+  trustees: readonly Address[];
+  initialPasskeyCredentialIdDigest: Hex;
+  initialPasskeyX: bigint;
+  initialPasskeyY: bigint;
+} {
+  return {
+    mode: spec.mode ?? 0,
+    custodians: spec.custodians ?? [],
+    trustees: spec.trustees ?? [],
+    initialPasskeyCredentialIdDigest: spec.passkey?.credentialIdDigest ?? ZERO_BYTES32,
+    initialPasskeyX: spec.passkey?.x ?? 0n,
+    initialPasskeyY: spec.passkey?.y ?? 0n,
+  };
 }
 
 export class AgentAccountClient {
@@ -130,62 +163,56 @@ export class AgentAccountClient {
   }
 
   /**
-   * Deterministic CREATE2 address for a Person Smart Agent (passkey-only,
-   * external-only, or mixed). Delegates to the factory's view so TS +
-   * Solidity stay in lock-step.
+   * Deterministic CREATE2 address for any AgentAccount (any mode). Delegates
+   * to the factory's view so TS + Solidity stay in lock-step.
    */
-  async getAddressForPersonAgent(spec: PersonAgentSpec): Promise<Address> {
+  async getAddressForAgentAccount(spec: AgentAccountSpec): Promise<Address> {
     const factory = getContract({
       address: this.opts.factory,
       abi: agentAccountFactoryAbi,
       client: this.publicClient,
     });
-    return (await factory.read.getAddressForPersonAgent([
-      _custodiansArg(spec),
-      _credIdArg(spec),
-      _xArg(spec),
-      _yArg(spec),
+    return (await factory.read.getAddressForAgentAccount([
+      _initParamsTuple(spec),
       spec.salt,
     ])) as Address;
   }
 
   /**
-   * Deploy a Person.PSA via the factory using a raw bootstrap private key.
+   * Deploy an AgentAccount via the factory using a raw bootstrap private key.
    * Idempotent — skips the tx if the predicted address already has code.
-   * Prefer `createPersonAgentFromAccount` with a KMS-backed viem account
+   * Prefer `createAgentAccountFromAccount` with a KMS-backed viem account
    * in production (no private-key material in process memory).
    */
-  async createPersonAgentFromPrivateKey(
-    spec: PersonAgentSpec,
+  async createAgentAccountFromPrivateKey(
+    spec: AgentAccountSpec,
     bootstrapPrivateKey: Hex,
   ): Promise<Address> {
     const account = privateKeyToAccount(bootstrapPrivateKey);
-    return this.createPersonAgentFromAccount(spec, account);
+    return this.createAgentAccountFromAccount(spec, account);
   }
 
   /**
-   * Deploy a Person.PSA via the factory using any viem-compatible account.
+   * Deploy an AgentAccount via the factory using any viem-compatible account.
    * The signer pays gas; the deployed account is custodian-of-spec, not
    * custodian-of-relayer. Idempotent.
    */
-  async createPersonAgentFromAccount(
-    spec: PersonAgentSpec,
+  async createAgentAccountFromAccount(
+    spec: AgentAccountSpec,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     account: any,
   ): Promise<Address> {
-    const predicted = await this.getAddressForPersonAgent(spec);
+    const predicted = await this.getAddressForAgentAccount(spec);
     if (await this.isDeployed(predicted)) return predicted;
 
     const wallet = createWalletClient({ account, transport: http(this.opts.rpcUrl) });
     const hash = await wallet.writeContract({
       address: this.opts.factory,
       abi: agentAccountFactoryAbi,
-      functionName: 'createPersonAgent',
+      functionName: 'createAgentAccount',
       args: [
-        _custodiansArg(spec),
-        _credIdArg(spec),
-        _xArg(spec),
-        _yArg(spec),
+        _initParamsTuple(spec),
+        _timelockOverridesTuple(spec),
         spec.salt,
       ],
       account,
@@ -250,9 +277,9 @@ export class AgentAccountClient {
 
   /**
    * Build an unsigned UserOp targeting an ALREADY-DEPLOYED AgentAccount.
-   * Counterpart to `buildDeployUserOp` (which deploys the account); this
-   * is for calls AFTER deploy: addCustodian, addPasskey, validator.proposeAdmin,
-   * arbitrary execute(target, value, data), etc.
+   * Counterpart to `buildDeployUserOpForAgentAccount` (which deploys the
+   * account); this is for calls AFTER deploy: addCustodian, addPasskey,
+   * validator.proposeAdmin, arbitrary execute(target, value, data), etc.
    *
    * @param opts.sender    Existing AgentAccount address.
    * @param opts.callData  Calldata for the account's execute path. Typically
@@ -297,8 +324,8 @@ export class AgentAccountClient {
     //
     // callGasLimit is sized for the most common heavy demo path: an Org or
     // Treasury AgentAccount deploy dispatched as Account.execute(factory,
-    // 0, createMultiSigSmartAgent(...)). Factory deploy + custody-policy
-    // install lands around 600-700k; 800k leaves headroom.
+    // 0, createAgentAccount(...)). Factory deploy + custody-policy install
+    // lands around 600-700k; 800k leaves headroom.
     //
     // Callers can override either via opts.verificationGasLimit /
     // opts.callGasLimit if they know the call is cheaper (saves paymaster
@@ -444,10 +471,10 @@ export class AgentAccountClient {
   }
 
   /**
-   * Build an UNSIGNED ERC-4337 v0.9 UserOperation that deploys a Person.PSA
-   * via `factory.createPersonAgent(...)`. Works for any custodian shape
-   * (passkey-only, external-only, mixed) — the signature on `userOpHash`
-   * uses whatever owner authority the resulting account will accept.
+   * Build an UNSIGNED ERC-4337 v0.9 UserOperation that deploys an
+   * AgentAccount via `factory.createAgentAccount(...)`. Works for any
+   * mode and signer shape — the signature on `userOpHash` uses whatever
+   * owner authority the resulting account will accept.
    *
    * Paymaster sponsorship: `paymasterAndData` is set to the configured
    * paymaster. Pass `verifyingPaymaster.signFn` to opt into audit C2's
@@ -456,10 +483,11 @@ export class AgentAccountClient {
    * Gas defaults are sized for the worst-case validateUserOp path: a
    * WebAuthn passkey-init account verified by Daimo's pure-Solidity P-256
    * fallback (~350-400k) plus ERC1967Proxy deploy + storage writes
-   * (~300k). Override via `verificationGasLimit` for cheaper paths.
+   * (~300k) + (for mode>0) the CustodyPolicy install (~250k). Override via
+   * `verificationGasLimit` for cheaper paths.
    */
-  async buildDeployUserOpForPersonAgent(opts: {
-    spec: PersonAgentSpec;
+  async buildDeployUserOpForAgentAccount(opts: {
+    spec: AgentAccountSpec;
     paymaster: Address;
     verificationGasLimit?: bigint;
     preVerificationGas?: bigint;
@@ -471,22 +499,20 @@ export class AgentAccountClient {
     };
   }): Promise<{ userOp: PackedUserOperation; userOpHash: Hex; sender: Address }> {
     const { spec, paymaster } = opts;
-    const sender = await this.getAddressForPersonAgent(spec);
+    const sender = await this.getAddressForAgentAccount(spec);
 
     const factoryCalldata = encodeFunctionData({
       abi: agentAccountFactoryAbi,
-      functionName: 'createPersonAgent',
+      functionName: 'createAgentAccount',
       args: [
-        _custodiansArg(spec),
-        _credIdArg(spec),
-        _xArg(spec),
-        _yArg(spec),
+        _initParamsTuple(spec),
+        _timelockOverridesTuple(spec),
         spec.salt,
       ],
     });
     const initCode = (this.opts.factory + factoryCalldata.slice(2)) as Hex;
 
-    const verificationGasLimit = opts.verificationGasLimit ?? 1_200_000n;
+    const verificationGasLimit = opts.verificationGasLimit ?? 1_500_000n;
     const callGasLimit = 0n;
     const accountGasLimits = packGasLimits(verificationGasLimit, callGasLimit);
     const preVerificationGas = opts.preVerificationGas ?? 60_000n;
@@ -527,35 +553,6 @@ export class AgentAccountClient {
     const userOpHash = await bundler.getUserOpHash(userOp);
     return { userOp, userOpHash, sender };
   }
-
-  /**
-   * Counterfactual address for a multi-sig Smart Agent (Org / Treasury /
-   * any account with a CustodyPolicy module). The init-params bundle
-   * carries the initial custodian set + initial passkey + mode etc.;
-   * factory derivation matches the actual deploy bytecode exactly.
-   */
-  async getAddressForMultiSigSmartAgent(
-    params: {
-      mode: number;
-      custodians: readonly Address[];
-      trustees: readonly Address[];
-      initialPasskeyCredentialIdDigest: Hex;
-      initialPasskeyX: bigint;
-      initialPasskeyY: bigint;
-    },
-    salt: bigint,
-  ): Promise<Address> {
-    const factory = getContract({
-      address: this.opts.factory,
-      abi: agentAccountFactoryAbi,
-      client: this.publicClient,
-    });
-    return (await factory.read.getAddressForMultiSigSmartAgent([
-      params,
-      salt,
-    ])) as Address;
-  }
-
 
   /**
    * Submit a (now-signed) deploy UserOp via EntryPoint.handleOps. The
