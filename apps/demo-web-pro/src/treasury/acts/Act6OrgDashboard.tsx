@@ -32,10 +32,13 @@ import {
   readScheduledChangeCount,
 } from '../../lib/chain-reads';
 import {
-  loadTreasuryDelegations,
-  subscribeTreasuryDelegations,
-  type StoredTreasuryDelegation,
-} from '../../lib/treasury-delegations';
+  loadAllDelegations,
+  loadDelegationsByKind,
+  findDelegation,
+  subscribeDelegations,
+  clearDelegations,
+  type StoredDelegation,
+} from '../../lib/delegations';
 import { shortAddress } from '../../components';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { config } from '../../config';
@@ -76,12 +79,16 @@ export function Act6OrgDashboard() {
   const [treasuryBalance, setTreasuryBalance] = useState<bigint | null>(null);
   const [custodyChecks, setCustodyChecks] = useState<Map<string, boolean>>(new Map());
   const [pending, setPending] = useState<PendingChange[]>([]);
-  const [delegations, setDelegations] = useState<StoredTreasuryDelegation[]>([]);
+  const [delegations, setDelegations] = useState<StoredDelegation[]>([]);
+  const [fetchInFlight, setFetchInFlight] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [fetchedRecords, setFetchedRecords] = useState<Record<string, any>>({});
+  const [fetchErrors, setFetchErrors] = useState<Record<string, string>>({});
 
   // Live re-load delegations on change.
   useEffect(() => {
-    setDelegations(loadTreasuryDelegations());
-    return subscribeTreasuryDelegations(() => setDelegations(loadTreasuryDelegations()));
+    setDelegations(loadAllDelegations());
+    return subscribeDelegations(() => setDelegations(loadAllDelegations()));
   }, []);
 
   useEffect(() => {
@@ -304,21 +311,66 @@ export function Act6OrgDashboard() {
 
         <section className="card" style={{ gridColumn: '1 / -1' }}>
           <p className="eyebrow">
-            Active Treasury permissions · Act 5 output{' '}
-            <LiveStatusBadge status="simulated" />
+            Delegation-gated capabilities · live MCP-style flows{' '}
+            <LiveStatusBadge status="live" />
           </p>
-          <h3>Stewardship delegations</h3>
+          <h3>Exercise the delegations</h3>
+          <p className="muted small">
+            Each button posts the matching delegation envelope to the worker. The worker
+            recomputes the EIP-712 hash, calls{' '}
+            <code>delegator.isValidSignature(hash, sig)</code> via ERC-1271, checks the
+            timestamp caveat, and returns mock data tied to the delegator address. Caveats
+            are bound by the off-chain envelope; on-chain enforcer invocation lights up
+            with the USDC redeem path (next slice).
+          </p>
+          <DelegationActions
+            aliceClaim={aliceClaim}
+            bobClaim={bobClaim}
+            org={org}
+            aliceSeat={aliceSeat}
+            bobSeat={bobSeat}
+            fetchInFlight={fetchInFlight}
+            setFetchInFlight={setFetchInFlight}
+            fetchedRecords={fetchedRecords}
+            setFetchedRecords={setFetchedRecords}
+            fetchErrors={fetchErrors}
+            setFetchErrors={setFetchErrors}
+          />
+        </section>
+
+        <section className="card" style={{ gridColumn: '1 / -1' }}>
+          <p className="eyebrow">
+            Active permissions · Act 5 output{' '}
+            <LiveStatusBadge status="live" />
+          </p>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <h3 style={{ margin: 0 }}>Issued delegations</h3>
+            {delegations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Wipe all stored delegations? You\'ll need to re-run Act 5 to re-issue them.')) {
+                    clearDelegations();
+                  }
+                }}
+                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                data-testid="clear-delegations"
+                title="Wipe localStorage delegations. Useful when re-issuing after a signing-format fix."
+              >
+                Wipe stored delegations
+              </button>
+            )}
+          </div>
           {delegations.length === 0 ? (
             <p className="muted">
-              No delegations issued yet. Run Act 5 to grant the Person Smart Agents
-              standing access to a bounded slice of the Treasury.{' '}
+              No delegations issued yet. Run Act 5 to mint the six-delegation surface.{' '}
               <a href="#/acts/delegate-treasury">→ Issue delegations</a>
             </p>
           ) : (
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
               {delegations.map((d) => (
                 <div
-                  key={d.delegate}
+                  key={`${d.kind}-${d.delegator}-${d.delegate}`}
                   style={{
                     padding: 12,
                     background: '#fafafa',
@@ -327,7 +379,8 @@ export function Act6OrgDashboard() {
                   }}
                 >
                   <p className="eyebrow" style={{ marginTop: 0 }}>
-                    Treasury → {d.delegateLabel}
+                    {d.delegatorLabel} → {d.delegateLabel}
+                    <span className="muted small" style={{ marginLeft: 6 }}>· {d.kind}</span>
                   </p>
                   <p className="muted small">
                     Hash <code title={d.delegationHash}>{shortAddress(d.delegationHash)}</code>
@@ -392,3 +445,235 @@ export function Act6OrgDashboard() {
     </section>
   );
 }
+
+// ─── Delegation actions panel ─────────────────────────────────────────
+
+interface SeatLite {
+  personAgent: Address;
+}
+
+interface DelegationActionsProps {
+  aliceClaim?: SeatLite;
+  bobClaim?: SeatLite;
+  org: { address: Address };
+  aliceSeat: { name: string };
+  bobSeat: { name: string };
+  fetchInFlight: string | null;
+  setFetchInFlight: (k: string | null) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fetchedRecords: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  setFetchedRecords: (m: Record<string, any>) => void;
+  fetchErrors: Record<string, string>;
+  setFetchErrors: (m: Record<string, string>) => void;
+}
+
+function DelegationActions(p: DelegationActionsProps) {
+  if (!p.aliceClaim || !p.bobClaim) {
+    return <p className="muted">Need both seats claimed first.</p>;
+  }
+  const callMcp = async (args: {
+    label: string;
+    endpoint: '/mcp/person/pii' | '/mcp/org/sensitive';
+    delegatorKind: 'pii-read' | 'org-sensitive';
+    delegator: Address;
+    delegate: Address;
+  }) => {
+    const baseUrl = config.demoA2aUrl;
+    if (!baseUrl) {
+      p.setFetchErrors({ ...p.fetchErrors, [args.label]: 'demo-a2a URL not configured' });
+      return;
+    }
+    const delegation = findDelegation({
+      kind: args.delegatorKind,
+      delegator: args.delegator,
+      delegate: args.delegate,
+    });
+    if (!delegation) {
+      p.setFetchErrors({
+        ...p.fetchErrors,
+        [args.label]: `No matching ${args.delegatorKind} delegation stored. Run Act 5.`,
+      });
+      return;
+    }
+    p.setFetchInFlight(args.label);
+    p.setFetchErrors({ ...p.fetchErrors, [args.label]: '' });
+    try {
+      const { ensureCsrfToken, csrfHeaders } = await import('../../lib/csrf');
+      await ensureCsrfToken();
+      const base = baseUrl.replace(/\/$/, '');
+      // Stringify with bigint → string for the salt field.
+      const body = JSON.stringify({
+        delegation: {
+          delegator: delegation.delegation.delegator,
+          delegate: delegation.delegation.delegate,
+          authority: delegation.delegation.authority,
+          caveats: delegation.delegation.caveats.map((c) => ({
+            enforcer: c.enforcer,
+            terms: c.terms,
+            args: c.args ?? '0x',
+          })),
+          salt: delegation.delegation.salt.toString(),
+          signature: delegation.delegation.signature,
+        },
+        requester: args.delegate,
+      });
+      const res = await fetch(`${base}${args.endpoint}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body,
+      });
+      const raw = await res.text();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let parsed: any;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        p.setFetchErrors({ ...p.fetchErrors, [args.label]: `HTTP ${res.status}: ${raw.slice(0, 100)}` });
+        return;
+      }
+      if (!res.ok || parsed.ok !== true) {
+        p.setFetchErrors({
+          ...p.fetchErrors,
+          [args.label]:
+            typeof parsed.detail === 'string'
+              ? parsed.detail
+              : typeof parsed.error === 'string'
+                ? parsed.error
+                : `HTTP ${res.status}`,
+        });
+        return;
+      }
+      p.setFetchedRecords({ ...p.fetchedRecords, [args.label]: parsed });
+    } catch (e) {
+      p.setFetchErrors({ ...p.fetchErrors, [args.label]: e instanceof Error ? e.message : String(e) });
+    } finally {
+      p.setFetchInFlight(null);
+    }
+  };
+
+  const buttons = [
+    {
+      key: 'alice-pii',
+      label: `Read ${p.aliceSeat.name}\'s PII via ${p.bobSeat.name}\'s delegation`,
+      description: `${p.aliceSeat.name}.PSA → ${p.bobSeat.name}.PSA · pii-read`,
+      go: () =>
+        callMcp({
+          label: `${p.aliceSeat.name} PII`,
+          endpoint: '/mcp/person/pii',
+          delegatorKind: 'pii-read',
+          delegator: p.aliceClaim!.personAgent,
+          delegate: p.bobClaim!.personAgent,
+        }),
+      recordKey: `${p.aliceSeat.name} PII`,
+    },
+    {
+      key: 'bob-pii',
+      label: `Read ${p.bobSeat.name}\'s PII via ${p.aliceSeat.name}\'s delegation`,
+      description: `${p.bobSeat.name}.PSA → ${p.aliceSeat.name}.PSA · pii-read`,
+      go: () =>
+        callMcp({
+          label: `${p.bobSeat.name} PII`,
+          endpoint: '/mcp/person/pii',
+          delegatorKind: 'pii-read',
+          delegator: p.bobClaim!.personAgent,
+          delegate: p.aliceClaim!.personAgent,
+        }),
+      recordKey: `${p.bobSeat.name} PII`,
+    },
+    {
+      key: 'org-alice',
+      label: `Read Org sensitive data as ${p.aliceSeat.name}`,
+      description: `Org → ${p.aliceSeat.name}.PSA · org-sensitive`,
+      go: () =>
+        callMcp({
+          label: `Org data (${p.aliceSeat.name})`,
+          endpoint: '/mcp/org/sensitive',
+          delegatorKind: 'org-sensitive',
+          delegator: p.org.address,
+          delegate: p.aliceClaim!.personAgent,
+        }),
+      recordKey: `Org data (${p.aliceSeat.name})`,
+    },
+    {
+      key: 'org-bob',
+      label: `Read Org sensitive data as ${p.bobSeat.name}`,
+      description: `Org → ${p.bobSeat.name}.PSA · org-sensitive`,
+      go: () =>
+        callMcp({
+          label: `Org data (${p.bobSeat.name})`,
+          endpoint: '/mcp/org/sensitive',
+          delegatorKind: 'org-sensitive',
+          delegator: p.org.address,
+          delegate: p.bobClaim!.personAgent,
+        }),
+      recordKey: `Org data (${p.bobSeat.name})`,
+    },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+        {buttons.map((b) => {
+          const busy = p.fetchInFlight === b.label;
+          const record = p.fetchedRecords[b.recordKey];
+          const err = p.fetchErrors[b.recordKey];
+          return (
+            <div
+              key={b.key}
+              style={{
+                padding: 10,
+                background: '#fafafa',
+                borderRadius: 8,
+                border: '1px solid #e6e6ea',
+              }}
+            >
+              <p className="muted small" style={{ margin: 0 }}>
+                {b.description}
+              </p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void b.go()}
+                style={{ marginTop: 6 }}
+              >
+                {busy ? 'Fetching…' : b.label}
+              </button>
+              {err && (
+                <p className="err" style={{ marginTop: 6, fontSize: '0.8rem' }}>
+                  {err}
+                </p>
+              )}
+              {record && (
+                <pre
+                  style={{
+                    marginTop: 6,
+                    fontSize: '0.75rem',
+                    background: '#fff',
+                    padding: 8,
+                    borderRadius: 6,
+                    overflowX: 'auto',
+                    maxHeight: 220,
+                  }}
+                >
+                  {JSON.stringify(record.record, null, 2)}
+                </pre>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="muted small">
+        Try it as Alice: only Alice's delegations (incoming from Bob or Org) will succeed
+        — the other side\'s wallet/passkey isn\'t signing here, the worker just verifies the
+        envelope's existing signature via ERC-1271. The same delegations are reusable for
+        the lifetime of their timestamp caveat (90 days).
+      </p>
+    </div>
+  );
+}
+
+// Keep loadDelegationsByKind from being tree-shaken if unused elsewhere — it's referenced
+// indirectly by future panels.
+void loadDelegationsByKind;

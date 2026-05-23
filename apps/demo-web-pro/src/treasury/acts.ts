@@ -69,10 +69,10 @@ export const ACTS: ActDef[] = [
   {
     id: 6,
     slug: 'delegate-treasury',
-    title: 'Act 5 — Delegate Treasury',
+    title: 'Act 5 — Issue delegation surface',
     modality: 'Admin',
-    status: 'simulated',
-    oneLiner: 'Treasury issues stewardship delegations to Alice + Bob\'s Person Agents (live object construction + signing; runtime enforcement deferred).',
+    status: 'live',
+    oneLiner: 'Six Variant A delegations signed across Person, Org, and Treasury. PII + Org reads redeem live via demo-mcp; Treasury-spend redeem ships in the next slice.',
   },
   {
     id: 7,

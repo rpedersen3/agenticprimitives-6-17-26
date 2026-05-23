@@ -1,41 +1,29 @@
 /**
- * Act 5 — Delegate Treasury Management (spec 211 § Act 5 / phase 6f.5).
+ * Act 5 — Issue the demo's full delegation surface (phase 6f.5+ LIVE).
  *
- * 🟡 LIVE object construction + signing · SIMULATED runtime enforcement.
+ * One ceremony issues five Variant A delegations:
  *
- * What lands:
- *   - Two Delegation envelopes are constructed (delegator = Treasury,
- *     delegate = Alice's PSA, Bob's PSA).
- *   - Each carries caveats: a 90-day timestamp window, a 0.05 ETH
- *     per-tx value cap, allowed-targets restricted to the Treasury
- *     itself, allowed-methods restricted to ERC-20 transfer.
- *   - The EIP-712 hash is computed (live, against the deployed
- *     AgentDelegationManager).
- *   - Each delegation is signed by Alice's enrolled method (passkey
- *     v=2 slot or SIWE v=27/28 slot) — single-signer for the demo
- *     since the Treasury's T4 quorum defaults to 1 of 2.
- *   - The signed delegations are stored in localStorage and rendered
- *     as Permission Cards in Act 6.
+ *   1. Alice.PSA → Bob.PSA     · scope: read Alice's PII (Person MCP)
+ *   2. Bob.PSA   → Alice.PSA   · scope: read Bob's PII   (Person MCP)
+ *   3. Org       → Alice.PSA   · scope: read Org sensitive data
+ *   4. Org       → Bob.PSA     · scope: read Org sensitive data
+ *   5. Treasury  → Alice.PSA   · scope: spend (target=Treasury, max 0.05 ETH, transfer)
+ *   6. Treasury  → Bob.PSA     · same as #5
  *
- * What's deferred (📋 phase 6f.7):
- *   - On-chain registration via DelegationManager.
- *   - Runtime enforcement (the caveats are just data here; the
- *     enforcers don't actually gate calls until Treasury starts
- *     redeeming delegations via the DelegationManager).
- *   - Org's 2-of-2 quorum signing (today only Alice signs since the
- *     Treasury's T4 approvalsRequired stays at the n=2 default = 1
- *     after Act 4).
+ * Each envelope is signed by the delegator smart account (passkey v=2
+ * or wallet ECDSA v=27/28 quorum slot — same `signCeremonyHash`
+ * machinery as Acts 3/4). The Person MCP / Org MCP / Treasury redeem
+ * paths verify these via ERC-1271 on the delegator address.
+ *
+ * Phase 6f.7 will add a 7th `usdc-quorum` delegation requiring a
+ * QuorumCaveat (Bob co-signature). That ships in the next slice.
  */
 
 import { useEffect, useState } from 'react';
-import { keccak256, toHex, encodeAbiParameters, type Address, type Hex } from 'viem';
+import { keccak256, encodeAbiParameters, type Address, type Hex } from 'viem';
 import { useAccount, useConnect, useConnectors, useDisconnect, useSignTypedData } from 'wagmi';
 import { orgConfig } from '../../org-config';
-import {
-  getPasskeyAuth,
-  getSiweAuth,
-  loadSeats,
-} from '../../lib/seats';
+import { getPasskeyAuth, getSiweAuth, loadSeats } from '../../lib/seats';
 import { loadOrg, loadTreasury } from '../../lib/demo-state';
 import { getPasskeyForSeat, assertWithPasskey } from '../../lib/passkey';
 import {
@@ -51,37 +39,31 @@ import {
   type Caveat,
   type Delegation,
 } from '@agenticprimitives/delegation';
-import { packQuorumSigs } from '@agenticprimitives/custody';
+import { encodeWebAuthnSignature } from '@agenticprimitives/agent-account';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
-import { saveTreasuryDelegation, loadTreasuryDelegations } from '../../lib/treasury-delegations';
+import {
+  saveDelegation,
+  loadAllDelegations,
+  type DelegationKind,
+  type StoredDelegation,
+} from '../../lib/delegations';
 import { config } from '../../config';
 import { shortAddress } from '../../components';
 
-type WorkingPhase =
-  | 'building'
-  | 'hashing-alice'
-  | 'signing-alice'
-  | 'hashing-bob'
-  | 'signing-bob'
-  | 'persisting';
-
+type WorkingPhase = 'building' | 'signing' | 'persisting';
 const PHASE_LABEL: Record<WorkingPhase, string> = {
-  'building': 'Building delegation envelopes…',
-  'hashing-alice': 'Hashing Alice\'s delegation (EIP-712)…',
-  'signing-alice': 'Signing Alice\'s delegation…',
-  'hashing-bob': 'Hashing Bob\'s delegation (EIP-712)…',
-  'signing-bob': 'Signing Bob\'s delegation…',
-  'persisting': 'Persisting permission cards…',
+  building: 'Building delegation envelopes…',
+  signing: 'Signing each delegation…',
+  persisting: 'Persisting permission cards…',
 };
 
-// 90-day window for the delegation.
+// Window for every delegation.
 const VALID_SECONDS = 90 * 24 * 60 * 60;
-// Per-tx cap: 0.05 ETH (Base Sepolia funny-money).
+// Per-tx ETH cap (spend delegations only).
 const MAX_VALUE_WEI = 50_000_000_000_000_000n;
-// ERC-20 transfer selector — handy default for a "Treasury can pay
-// stewards" delegation. Real production usage would pick selectors
-// matching the actual tokens involved.
+// ERC-20 transfer selector — included on spend delegations so the
+// allowed-methods enforcer would accept exactly that call.
 const TRANSFER_SELECTOR: Hex = '0xa9059cbb';
 
 export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void }) {
@@ -95,9 +77,11 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
 
   const [stage, setStage] = useState<ConnectionStage>('consent');
   const [phase, setPhase] = useState<WorkingPhase>('building');
+  const [stepLabel, setStepLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(true);
-  const [alreadyIssued, setAlreadyIssued] = useState(loadTreasuryDelegations().length >= 2);
+  const existing = loadAllDelegations();
+  const [alreadyIssued, setAlreadyIssued] = useState(existing.length >= 6);
 
   const { signTypedDataAsync } = useSignTypedData();
   const { address: walletAddress } = useAccount();
@@ -106,87 +90,106 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
   const connectors = useConnectors();
 
   useEffect(() => {
-    setAlreadyIssued(loadTreasuryDelegations().length >= 2);
+    setAlreadyIssued(loadAllDelegations().length >= 6);
   }, []);
 
   if (!org || !treasury || !aliceClaim || !bobClaim) {
     return (
       <section className="card">
         <h2>Act 5 prerequisites missing</h2>
-        <p className="muted">
-          Need Org, Treasury, and both seats claimed. Go back through Acts 1 → 4 first.
-        </p>
+        <p className="muted">Need Org, Treasury, and both seats claimed.</p>
         <a href="#/" className="primary">← Back</a>
       </section>
     );
   }
-  const alicePsa = aliceClaim.personAgent;
-  const bobPsa = bobClaim.personAgent;
 
-  // ── Build caveats (shared shape; only the delegate differs) ──────
+  // ─── Caveat builders ────────────────────────────────────────────
   const issuedAt = Math.floor(Date.now() / 1000);
   const validUntil = issuedAt + VALID_SECONDS;
+  const expiryHuman = new Date(validUntil * 1000).toISOString().slice(0, 10);
 
-  const buildCaveats = (): Caveat[] => [
+  const timestampCaveat = (): Caveat =>
     buildCaveat(
-      (config.timestampEnforcer ?? ('0x' + '00'.repeat(20)) as Address),
+      (config.timestampEnforcer ?? ('0x' + '00'.repeat(20))) as Address,
       encodeTimestampTerms(issuedAt, validUntil),
-    ),
+    );
+  const readScopeCaveats = (): Caveat[] => [timestampCaveat()];
+  const treasurySpendCaveats = (): Caveat[] => [
+    timestampCaveat(),
     buildCaveat(
-      (config.valueEnforcer ?? ('0x' + '00'.repeat(20)) as Address),
+      (config.valueEnforcer ?? ('0x' + '00'.repeat(20))) as Address,
       encodeValueTerms(MAX_VALUE_WEI),
     ),
     buildCaveat(
-      (config.allowedTargetsEnforcer ?? ('0x' + '00'.repeat(20)) as Address),
+      (config.allowedTargetsEnforcer ?? ('0x' + '00'.repeat(20))) as Address,
       encodeAllowedTargetsTerms([treasury.address]),
     ),
     buildCaveat(
-      (config.allowedMethodsEnforcer ?? ('0x' + '00'.repeat(20)) as Address),
+      (config.allowedMethodsEnforcer ?? ('0x' + '00'.repeat(20))) as Address,
       encodeAllowedMethodsTerms([TRANSFER_SELECTOR]),
     ),
   ];
 
+  // ─── Signing path (passkey OR SIWE) ─────────────────────────────
   /**
-   * Sign the delegation hash with Alice's enrolled method. Pack as a
-   * single-slot quorum sig — Treasury's T4 defaults to 1-of-2 for n=2
-   * custodians, so one signer is enough to issue. Future hardening
-   * could require both Alice + Bob to sign.
+   * Sign a delegation hash on behalf of an arbitrary `signerSeat` —
+   * the seat whose authority is being delegated FROM. Used when the
+   * delegator is Alice/Bob's PSA (PII delegations). For Org/Treasury
+   * delegators we use whichever seat is currently active (since the
+   * Org's quorum is 1-of-N by default, any single custodian's signature
+   * suffices).
    */
-  const signDelegation = async (delegation: Delegation, delegationHash: Hex): Promise<Hex> => {
-    const alicePasskeyAuth = getPasskeyAuth(aliceClaim);
-    const aliceSiweAuth = getSiweAuth(aliceClaim);
-    if (alicePasskeyAuth) {
-      const alicePasskey = getPasskeyForSeat(aliceSeat.id);
-      if (!alicePasskey) throw new Error('Alice\'s passkey is missing on this device.');
-      const assertion = await assertWithPasskey(alicePasskey, delegationHash);
-      return packQuorumSigs([
-        {
-          type: 'passkey',
-          pia: alicePasskeyAuth.pia,
-          x: alicePasskey.pubKeyX,
-          y: alicePasskey.pubKeyY,
-          assertion,
-        },
-      ]);
+  const signForSeat = async (
+    signerSeat: typeof aliceClaim,
+    delegation: Delegation,
+    delegationHash: Hex,
+  ): Promise<Hex> => {
+    if (!signerSeat) throw new Error('signer seat missing');
+    const passkeyAuth = getPasskeyAuth(signerSeat);
+    const siweAuth = getSiweAuth(signerSeat);
+    if (passkeyAuth) {
+      // Delegation signatures are consumed by `AgentAccount.isValidSignature`
+      // (ERC-1271), which expects ONE of:
+      //   - raw 65-byte ECDSA (legacy fast path),
+      //   - `0x00 || ECDSA` (type-prefixed ECDSA),
+      //   - `0x01 || abi.encode(WebAuthnLib.Assertion)` (passkey).
+      // The Safe-style `packQuorumSigs` shape is for the multi-slot
+      // CustodyPolicy quorum surface, which is a DIFFERENT entry point
+      // — using it here makes Alice's isValidSignature return 0xffffffff.
+      const passkey = getPasskeyForSeat(signerSeat.seatId);
+      if (!passkey) throw new Error(`Passkey for seat ${signerSeat.seatId} missing on this device.`);
+      const assertion = await assertWithPasskey(passkey, delegationHash);
+      return encodeWebAuthnSignature(assertion);
     }
-    if (aliceSiweAuth) {
-      if (!walletAddress) {
-        // Auto-prompt MetaMask account picker.
+    if (siweAuth) {
+      // Wallet-account guard with auto-switch.
+      let active = walletAddress;
+      if (!active || active.toLowerCase() !== siweAuth.eoa.toLowerCase()) {
         const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0];
         if (injected) {
           await disconnectAsync().catch(() => undefined);
-          await connectAsync({ connector: injected });
+          const provider = (await injected.getProvider()) as
+            | { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> }
+            | undefined;
+          if (provider?.request) {
+            await provider
+              .request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
+              .catch(() => undefined);
+          }
+          const result = await connectAsync({ connector: injected });
+          active = result.accounts[0];
         }
       }
-      const active = walletAddress?.toLowerCase();
-      if (!active || active !== aliceSiweAuth.eoa.toLowerCase()) {
+      if (!active || active.toLowerCase() !== siweAuth.eoa.toLowerCase()) {
         throw new Error(
-          `MetaMask is on ${walletAddress ?? '(none)'} but Alice\'s seat expects ${aliceSiweAuth.eoa}. Switch accounts and retry.`,
+          `Wrong wallet account for seat ${signerSeat.seatId}: need ${siweAuth.eoa}, got ${active ?? '(none)'}.`,
         );
       }
-      if (!config.delegationManager) throw new Error('delegationManager not configured');
+      if (!config.delegationManager || !config.chainId) {
+        throw new Error('delegationManager / chainId not configured');
+      }
       const sig = (await signTypedDataAsync({
-        domain: delegationDomain(config.chainId ?? 84532, config.delegationManager),
+        domain: delegationDomain(config.chainId, config.delegationManager),
         types: DELEGATION_EIP712_TYPES,
         primaryType: 'Delegation',
         message: {
@@ -201,9 +204,57 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
           salt: delegation.salt,
         },
       })) as Hex;
-      return packQuorumSigs([{ type: 'ecdsa', signer: aliceSiweAuth.eoa, signature: sig }]);
+      // Raw 65-byte ECDSA matches the legacy fast path of
+      // `AgentAccount._validateSig` — no extra wrapping needed.
+      return sig;
     }
-    throw new Error('Alice has no enrolled auth method to sign the delegation.');
+    throw new Error(`Seat ${signerSeat.seatId} has no enrolled signing method.`);
+  };
+
+  const saltFor = (delegator: Address, delegate: Address, kind: string): bigint => {
+    const packed = encodeAbiParameters(
+      [{ type: 'address' }, { type: 'address' }, { type: 'string' }],
+      [delegator, delegate, `act-5/${kind}/v1`],
+    );
+    return BigInt(keccak256(packed));
+  };
+
+  const issueOne = async (args: {
+    kind: DelegationKind;
+    delegator: Address;
+    delegatorLabel: string;
+    delegate: Address;
+    delegateLabel: string;
+    signerSeat: typeof aliceClaim;
+    caveats: Caveat[];
+    summary: StoredDelegation['summary'];
+  }): Promise<void> => {
+    if (!config.delegationManager || !config.chainId) {
+      throw new Error('delegationManager / chainId not configured');
+    }
+    setStepLabel(`${args.delegatorLabel} → ${args.delegateLabel} (${args.kind})`);
+    const delegation: Delegation = {
+      delegator: args.delegator,
+      delegate: args.delegate,
+      authority: ROOT_AUTHORITY,
+      caveats: args.caveats,
+      salt: saltFor(args.delegator, args.delegate, args.kind),
+      signature: '0x' as Hex,
+    };
+    setPhase('signing');
+    const dHash = hashDelegation(delegation, config.chainId, config.delegationManager);
+    delegation.signature = await signForSeat(args.signerSeat, delegation, dHash);
+    saveDelegation({
+      kind: args.kind,
+      delegator: args.delegator,
+      delegatorLabel: args.delegatorLabel,
+      delegate: args.delegate,
+      delegateLabel: args.delegateLabel,
+      delegation,
+      delegationHash: dHash,
+      issuedAt: new Date().toISOString(),
+      summary: args.summary,
+    });
   };
 
   const runCeremony = async () => {
@@ -217,85 +268,111 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
 
     try {
       setPhase('building');
-      // Salt distinguishes Alice's delegation from Bob's so they hash
-      // to distinct slots; use a deterministic value bound to (treasury, delegate).
-      const saltFor = (delegate: Address): bigint => {
-        const packed = encodeAbiParameters(
-          [{ type: 'address' }, { type: 'address' }, { type: 'string' }],
-          [treasury.address, delegate, 'act-5/v1'],
-        );
-        return BigInt(keccak256(packed));
-      };
-
-      const aliceCaveats = buildCaveats();
-      const aliceDelegation: Delegation = {
-        delegator: treasury.address,
-        delegate: alicePsa,
-        authority: ROOT_AUTHORITY,
-        caveats: aliceCaveats,
-        salt: saltFor(alicePsa),
-        signature: ('0x' as Hex),
-      };
-
-      setPhase('hashing-alice');
-      const aliceHash = hashDelegation(aliceDelegation, config.chainId, config.delegationManager);
-
-      setPhase('signing-alice');
-      aliceDelegation.signature = await signDelegation(aliceDelegation, aliceHash);
-
-      const bobCaveats = buildCaveats();
-      const bobDelegation: Delegation = {
-        delegator: treasury.address,
-        delegate: bobPsa,
-        authority: ROOT_AUTHORITY,
-        caveats: bobCaveats,
-        salt: saltFor(bobPsa),
-        signature: ('0x' as Hex),
-      };
-
-      setPhase('hashing-bob');
-      const bobHash = hashDelegation(bobDelegation, config.chainId, config.delegationManager);
-
-      setPhase('signing-bob');
-      bobDelegation.signature = await signDelegation(bobDelegation, bobHash);
-
-      setPhase('persisting');
-      const expiryHuman = new Date(validUntil * 1000).toISOString().slice(0, 10);
-      const summary = {
+      const readSummary = (subjectLabel: string): StoredDelegation['summary'] => ({
         actions: [
-          'Initiate ERC-20 transfer calls from the Treasury (selector 0xa9059cbb).',
-          'Read Treasury state via view calls.',
+          `Read ${subjectLabel} via the Person/Org MCP endpoint (delegate must present this token).`,
         ],
         limits: [
-          'Per-call value cap: 0.05 ETH equivalent.',
-          `Target restricted to Treasury ${shortAddress(treasury.address)}.`,
           `Window: now → ${expiryHuman} (90 days).`,
+          'Read-only — the MCP server enforces no mutations.',
         ],
         notPermitted: [
+          'Move funds.',
           'Add or remove custodians.',
-          'Change approvals required (admin-tier action).',
-          'Issue further delegations on behalf of the Treasury.',
-          'Move funds to addresses outside the Treasury contract\'s own transfer surface.',
+          'Re-delegate this authority to a third party.',
         ],
         expiry: expiryHuman,
-      };
-      saveTreasuryDelegation({
-        delegate: alicePsa,
-        delegateLabel: `${aliceSeat.name}\'s Person Smart Agent`,
-        delegation: aliceDelegation,
-        delegationHash: aliceHash,
-        issuedAt: new Date().toISOString(),
-        summary,
       });
-      saveTreasuryDelegation({
-        delegate: bobPsa,
+      const spendSummary = (): StoredDelegation['summary'] => ({
+        actions: ['ERC-20 transfer call against Treasury (selector 0xa9059cbb).'],
+        limits: [
+          `Per-call value cap: 0.05 ETH equivalent.`,
+          `Target restricted to Treasury ${shortAddress(treasury.address)}.`,
+          `Window: now → ${expiryHuman}.`,
+        ],
+        notPermitted: [
+          'Change Treasury custody.',
+          'Issue further delegations.',
+          'Hit any target outside the Treasury contract.',
+        ],
+        expiry: expiryHuman,
+      });
+
+      // 1 + 2. Cross-person PII delegations — Alice signs Alice→Bob,
+      //        Bob signs Bob→Alice. Each opens a Person MCP read scope.
+      await issueOne({
+        kind: 'pii-read',
+        delegator: aliceClaim.personAgent,
+        delegatorLabel: `${aliceSeat.name}\'s Person Smart Agent`,
+        delegate: bobClaim.personAgent,
         delegateLabel: `${bobSeat.name}\'s Person Smart Agent`,
-        delegation: bobDelegation,
-        delegationHash: bobHash,
-        issuedAt: new Date().toISOString(),
-        summary,
+        signerSeat: aliceClaim,
+        caveats: readScopeCaveats(),
+        summary: readSummary(`${aliceSeat.name}\'s PII`),
       });
+      await issueOne({
+        kind: 'pii-read',
+        delegator: bobClaim.personAgent,
+        delegatorLabel: `${bobSeat.name}\'s Person Smart Agent`,
+        delegate: aliceClaim.personAgent,
+        delegateLabel: `${aliceSeat.name}\'s Person Smart Agent`,
+        signerSeat: bobClaim,
+        caveats: readScopeCaveats(),
+        summary: readSummary(`${bobSeat.name}\'s PII`),
+      });
+
+      // 3 + 4. Org sensitive-data delegations — Org signs (any custodian
+      //        suffices since T4=1-of-N by default). Active seat signs.
+      const orgSigner = aliceClaim; // active seat — Alice was the founder
+      await issueOne({
+        kind: 'org-sensitive',
+        delegator: org.address,
+        delegatorLabel: orgConfig.name,
+        delegate: aliceClaim.personAgent,
+        delegateLabel: `${aliceSeat.name}\'s Person Smart Agent`,
+        signerSeat: orgSigner,
+        caveats: readScopeCaveats(),
+        summary: readSummary(`${orgConfig.name}\'s sensitive data`),
+      });
+      await issueOne({
+        kind: 'org-sensitive',
+        delegator: org.address,
+        delegatorLabel: orgConfig.name,
+        delegate: bobClaim.personAgent,
+        delegateLabel: `${bobSeat.name}\'s Person Smart Agent`,
+        signerSeat: orgSigner,
+        caveats: readScopeCaveats(),
+        summary: readSummary(`${orgConfig.name}\'s sensitive data`),
+      });
+
+      // 5 + 6. Treasury spend delegations — single-signer issuance
+      //        against Treasury's default 1-of-N quorum. Phase 6f.7 will
+      //        upgrade these to QuorumCaveat-gated 2-of-2 redemption.
+      const treasurySigner = aliceClaim;
+      await issueOne({
+        kind: 'treasury-spend',
+        delegator: treasury.address,
+        delegatorLabel: 'Acme Treasury',
+        delegate: aliceClaim.personAgent,
+        delegateLabel: `${aliceSeat.name}\'s Person Smart Agent`,
+        signerSeat: treasurySigner,
+        caveats: treasurySpendCaveats(),
+        summary: spendSummary(),
+      });
+      await issueOne({
+        kind: 'treasury-spend',
+        delegator: treasury.address,
+        delegatorLabel: 'Acme Treasury',
+        delegate: bobClaim.personAgent,
+        delegateLabel: `${bobSeat.name}\'s Person Smart Agent`,
+        signerSeat: treasurySigner,
+        caveats: treasurySpendCaveats(),
+        summary: spendSummary(),
+      });
+
+      setPhase('persisting');
       setAlreadyIssued(true);
+      setStepLabel(null);
       setStage('success');
     } catch (e) {
       setStage('error');
@@ -306,25 +383,40 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
   return (
     <section>
       <div className="hero">
-        <p className="eyebrow">Act 5 · Admin · <LiveStatusBadge status="simulated" /></p>
-        <h1>Delegate Treasury management to {aliceSeat.name} + {bobSeat.name}.</h1>
+        <p className="eyebrow">Act 5 · Admin · <LiveStatusBadge status="live" /></p>
+        <h1>Issue the demo\'s delegation surface.</h1>
         <p>
-          Treasury issues two stewardship delegations — one for each Person Smart
-          Agent — bounded by caveats: a 90-day window, a 0.05 ETH per-call cap, a
-          target allowlist restricted to the Treasury itself, and a method
-          allowlist restricted to ERC-20 <code>transfer</code>. Construction +
-          hashing + signing all happen for real; runtime enforcement against
-          on-chain enforcers lights up in phase 6f.7.
+          Six Variant A delegations get signed in one ceremony:
+        </p>
+        <ul>
+          <li>
+            <strong>{aliceSeat.name}\'s PSA → {bobSeat.name}\'s PSA</strong> and reverse —
+            read-PII on the Person MCP. Each Person Smart Agent grants the other
+            access to their own PII record.
+          </li>
+          <li>
+            <strong>{orgConfig.name} → {aliceSeat.name}/{bobSeat.name}\'s PSAs</strong> —
+            read-sensitive-data on the Org MCP.
+          </li>
+          <li>
+            <strong>Acme Treasury → {aliceSeat.name}/{bobSeat.name}\'s PSAs</strong> —
+            ERC-20 transfer scope on Treasury (0.05 ETH per-call cap, 90-day window).
+          </li>
+        </ul>
+        <p>
+          Every envelope is signed via the same EIP-712 path the on-chain
+          DelegationManager uses; the Person/Org MCP endpoints verify each
+          via ERC-1271 on the delegator smart account.
         </p>
       </div>
 
       {alreadyIssued && !dialogOpen && (
         <section className="card">
           <p className="eyebrow">Already complete</p>
-          <h2>Stewardship delegations issued.</h2>
+          <h2>All six delegations issued.</h2>
           <p className="muted">
-            Two delegations sit in local state, each signed by {aliceSeat.name}\'s enrolled
-            method. The Org Dashboard (Act 6) renders them as permission cards.
+            Open the Org Dashboard to exercise them — fetch PII, fetch Org sensitive data,
+            see the permission cards.
           </p>
           <a href="#/acts/dashboard" className="primary">Open Org Dashboard (Act 6) →</a>
         </section>
@@ -333,22 +425,21 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
       <ConnectionDialog
         open={dialogOpen}
         stage={stage}
-        title={`Issue Treasury delegations`}
+        title="Issue delegation surface"
         scopeList={[
-          `Build two Delegation envelopes — one for ${aliceSeat.name}\'s PSA, one for ${bobSeat.name}\'s PSA.`,
-          `Hash each via AgentDelegationManager EIP-712 domain.`,
-          `${aliceSeat.name} signs both (single-slot quorum — Treasury T4=1).`,
-          `Store the signed envelopes locally so Act 6 can render permission cards.`,
+          `Sign delegations from ${aliceSeat.name}\'s PSA, ${bobSeat.name}\'s PSA, ${orgConfig.name}, and Treasury.`,
+          'Each delegation is EIP-712 hashed and verifiable via ERC-1271.',
+          'Stored locally; the worker verifies them on every MCP call.',
+          'No funds move during issuance — these are signed permission slips.',
         ]}
-        grantee={`${aliceSeat.name}\'s + ${bobSeat.name}\'s Person Smart Agents`}
-        duration={`90 days from now`}
+        grantee={`${aliceSeat.name} + ${bobSeat.name}\'s Person Smart Agents`}
+        duration="90 days from now"
         limits={[
-          'Move funds outside the Treasury contract\'s transfer surface.',
-          'Add or remove custodians on Treasury or Org (those are admin-tier).',
-          'Bypass the per-call value cap (0.05 ETH).',
-          'Cross the target allowlist (only the Treasury itself).',
+          'Move funds during issuance (this ceremony is metadata-only).',
+          'Bypass the per-call value cap on spend delegations.',
+          'Re-delegate authority outside this exchange.',
         ]}
-        revokeNote={`Each delegation can be revoked by the Treasury via AgentDelegationManager.revokeDelegation. Phase 6f.7 wires the on-chain path.`}
+        revokeNote="Any delegator can revoke via AgentDelegationManager.revokeDelegationByOwner. UI for that ships in 6f.7."
         onAccept={() => {
           if (!alreadyIssued) void runCeremony();
         }}
@@ -356,13 +447,13 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
           setDialogOpen(false);
           onComplete();
         }}
-        acceptLabel={alreadyIssued ? 'Already issued' : 'Allow'}
+        acceptLabel={alreadyIssued ? 'Already issued' : 'Sign all six'}
         acceptDisabled={alreadyIssued}
-        phaseLabel={PHASE_LABEL[phase]}
+        phaseLabel={`${PHASE_LABEL[phase]}${stepLabel ? ` — ${stepLabel}` : ''}`}
         successExtra={
           stage === 'success' ? (
             <p className="muted">
-              Two Delegation envelopes signed and stored. Continue to the dashboard.
+              All six delegations signed and stored. Continue to the dashboard to exercise them.
             </p>
           ) : undefined
         }
@@ -383,6 +474,3 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
     </section>
   );
 }
-
-// Suppress unused-import warning for `toHex` if vite-tree-shaker keeps it.
-void toHex;
