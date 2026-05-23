@@ -48,3 +48,8 @@ export type {
   VerifyError,
   VerifyOpts,
 } from './types';
+
+// Wave H3 — full verifier opts (quorum proof + tier gates). Exported
+// for consumers that need the extended shape (mcp-runtime); the
+// minimal `VerifyOpts` above stays for external callers.
+export type { VerifyOptsExt } from './token';

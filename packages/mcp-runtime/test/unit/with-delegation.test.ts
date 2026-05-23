@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { withDelegation, McpAuthError } from '../../src/with-delegation';
 import { createMemoryJtiStore } from '../../src/jti-stores';
 import type { McpResourceVerifyConfig } from '../../src/types';
@@ -143,5 +143,154 @@ describe('withDelegation', () => {
     await expect(wrapped({ token: 'fake' })).rejects.toBeInstanceOf(McpAuthError);
     // verify should not even have been called.
     expect(verifyDelegationToken).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Wave H1 — production-default gate ─────────────────────────────────
+
+describe('withDelegation production-default gate (audit H1)', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+  });
+
+  it('throws at construction time when production-mode and classification missing', () => {
+    process.env.NODE_ENV = 'production';
+    expect(() =>
+      withDelegation(config, vi.fn(async () => 'ok'), {
+        toolName: 'unclassified',
+        // no classification, no auditSink → must throw
+      }),
+    ).toThrow(/requires `classification` in production/);
+  });
+
+  it('throws at construction time when production-mode and auditSink missing', () => {
+    process.env.NODE_ENV = 'production';
+    expect(() =>
+      withDelegation(config, vi.fn(async () => 'ok'), {
+        toolName: 'classified-no-sink',
+        classification: {
+          '@sa-tool': 'delegation-verified',
+          '@sa-auth': 'session-token',
+          '@sa-risk-tier': 'low',
+        },
+        // no auditSink → must throw
+      }),
+    ).toThrow(/requires `auditSink` in production/);
+  });
+
+  it('does NOT throw in production-mode when both classification + auditSink are supplied', () => {
+    process.env.NODE_ENV = 'production';
+    const auditSink = { write: vi.fn(async () => {}) };
+    expect(() =>
+      withDelegation(config, vi.fn(async () => 'ok'), {
+        toolName: 'classified-with-sink',
+        classification: {
+          '@sa-tool': 'delegation-verified',
+          '@sa-auth': 'session-token',
+          '@sa-risk-tier': 'low',
+        },
+        auditSink,
+      }),
+    ).not.toThrow();
+  });
+
+  it('developmentMode: true escapes the production gate', () => {
+    process.env.NODE_ENV = 'production';
+    expect(() =>
+      withDelegation(config, vi.fn(async () => 'ok'), {
+        toolName: 'dev-escape',
+        developmentMode: true,
+        // no classification, no auditSink — but developmentMode opts out
+      }),
+    ).not.toThrow();
+  });
+
+  it('environment: "development" escapes the production gate', () => {
+    process.env.NODE_ENV = 'production';
+    expect(() =>
+      withDelegation(config, vi.fn(async () => 'ok'), {
+        toolName: 'env-escape',
+        environment: 'development',
+      }),
+    ).not.toThrow();
+  });
+
+  it('environment: "production" forces strict gate even when NODE_ENV is unset', () => {
+    delete process.env.NODE_ENV;
+    expect(() =>
+      withDelegation(config, vi.fn(async () => 'ok'), {
+        toolName: 'forced-prod',
+        environment: 'production',
+      }),
+    ).toThrow(/requires `classification` in production/);
+  });
+
+  it('NODE_ENV=test inherits development mode (no throw on missing metadata)', () => {
+    process.env.NODE_ENV = 'test';
+    expect(() =>
+      withDelegation(config, vi.fn(async () => 'ok'), { toolName: 'test-mode' }),
+    ).not.toThrow();
+  });
+});
+
+// ─── Wave H3 — quorumProof threading ─────────────────────────────────
+
+describe('withDelegation quorumProof passthrough (audit H3)', () => {
+  beforeEach(() => {
+    (verifyDelegationToken as ReturnType<typeof vi.fn>).mockClear();
+  });
+
+  it('does NOT pass quorumProof when caller omits it', async () => {
+    const mock = verifyDelegationToken as ReturnType<typeof vi.fn>;
+    mock.mockResolvedValueOnce({ principal: '0xabc' });
+    const quorumEnforcer = '0x9999999999999999999999999999999999999999' as const;
+    const cfg = { ...config, quorumEnforcer };
+    const wrapped = withDelegation(cfg, vi.fn(async () => 'ok'), {
+      classification: {
+        '@sa-tool': 'delegation-verified',
+        '@sa-auth': 'session-token',
+        '@sa-risk-tier': 'high',
+      },
+    });
+    await wrapped({ token: 'fake' });
+    const verifyOpts = mock.mock.calls[0]![1];
+    expect(verifyOpts.requireQuorumCaveat).toEqual({ enforcer: quorumEnforcer });
+    expect(verifyOpts.quorumProof).toBeUndefined();
+  });
+
+  it('threads quorumProof from caller args into delegation verifier', async () => {
+    const mock = verifyDelegationToken as ReturnType<typeof vi.fn>;
+    mock.mockResolvedValueOnce({ principal: '0xabc' });
+    const quorumEnforcer = '0x9999999999999999999999999999999999999999' as const;
+    const cfg = { ...config, quorumEnforcer };
+    const wrapped = withDelegation(cfg, vi.fn(async () => 'ok'), {
+      classification: {
+        '@sa-tool': 'delegation-verified',
+        '@sa-auth': 'session-token',
+        '@sa-risk-tier': 'high',
+      },
+    });
+    await wrapped({ token: 'fake', quorumProof: { mode: 'on-chain-redeemed' } } as never);
+    const verifyOpts = mock.mock.calls[0]![1];
+    expect(verifyOpts.quorumProof).toEqual({ mode: 'on-chain-redeemed' });
+  });
+
+  it('quorumProof is stripped from args before reaching the handler', async () => {
+    const mock = verifyDelegationToken as ReturnType<typeof vi.fn>;
+    mock.mockResolvedValueOnce({ principal: '0xabc' });
+    const inner = vi.fn(async (args: Record<string, unknown>) => args);
+    const wrapped = withDelegation(config, inner, {
+      classification: {
+        '@sa-tool': 'delegation-verified',
+        '@sa-auth': 'session-token',
+        '@sa-risk-tier': 'low',
+      },
+    });
+    await wrapped({ token: 'fake', extra: 'kept', quorumProof: { mode: 'on-chain-redeemed' } } as never);
+    const innerArgs = inner.mock.calls[0]![0];
+    expect(innerArgs).toMatchObject({ principal: '0xabc', extra: 'kept' });
+    expect((innerArgs as Record<string, unknown>).quorumProof).toBeUndefined();
   });
 });

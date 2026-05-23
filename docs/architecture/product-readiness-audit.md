@@ -1,10 +1,10 @@
 # Product Readiness Architecture Audit
 
 **Status:** living document — refreshed at the end of each hardening pass
-**Last refreshed:** 2026-05-20 (hardening pass 5c — audit reconciliation + deploy-script hygiene)
+**Last refreshed:** 2026-05-23 (Wave H1-H4 — production-default packages, custody hardening, peer-strict release CI)
 **Original draft:** 2026-05-19
-**Scope:** all `@agenticprimitives/*` packages, demo apps, contracts, deploy path, CI, architecture docs, live production deployment
-**Verdict:** strong pre-alpha architecture with a working vertical slice end-to-end on Base Sepolia; not product-ready until the P0/P1 controls below are closed.
+**Scope:** all `@agenticprimitives/*` packages (including `audit`, `custody`), demo apps (web, web-pro, web-recovery, a2a, mcp), contracts, deploy path, CI, architecture docs, live production deployment
+**Verdict:** credible pre-production architecture. Most package-boundary footguns are now structural rather than opt-in. Remaining launch blockers concentrate in operational readiness (durable A2A audit, off-chain quorum semantics, contract dossier for external audit), not in obvious broken checks.
 
 This document is intentionally direct. It treats the repo as if it were preparing for a third-party security and technical architecture review.
 
@@ -24,9 +24,39 @@ cross-cutting concerns.
   [delegation](../../packages/delegation/AUDIT.md) ·
   [key-custody](../../packages/key-custody/AUDIT.md) ·
   [tool-policy](../../packages/tool-policy/AUDIT.md) ·
-  [mcp-runtime](../../packages/mcp-runtime/AUDIT.md)
+  [mcp-runtime](../../packages/mcp-runtime/AUDIT.md) ·
+  [audit](../../packages/audit/AUDIT.md) ·
+  [custody](../../packages/custody/AUDIT.md)
 - **Template for new package audits:** [`docs/audits/_template.md`](../audits/_template.md)
 - **Findings ID convention:** system-level findings use letter+number (C1, H3, N2); package-local findings use `<PKG>-N` (e.g. `DEL-1`, `KC-1`).
+
+---
+
+## What's Closed Since 2026-05-20 (Waves 2A–2C, R0–R3, H1–H4)
+
+External audit pass on 2026-05-23 noted material improvement and reclassified several previously-open findings. The list below reconciles the audit's "what improved" section with the in-repo state at this commit.
+
+### Wave 2 — contract authority + custody hardening
+| ID | Change | Impact on audit |
+| --- | --- | --- |
+| **C-1/C-2/C-3** | `AgentAccount.setDelegationManager`, `installModule`/`uninstallModule`, `upgradeToWithAuthorization` are all `onlySelf` (factory-init exception for first install). 12 Forge regression tests in `AuthorityClosureWave2A.t.sol`. | Closes the three single-custodian on-chain escape paths the prior audit had flagged as the highest-severity contract findings. |
+| **C-4** | `QuorumEnforcer` binds signatures to the canonical execution payload hash (delegationHash + delegator + redeemer + target + value + keccak(callData) + chainId + enforcer). 6 regression tests in `QuorumEnforcerBindingWave2B.t.sol`. | Closes the cross-call replay path the prior audit flagged. |
+| **C-6–C-11** | CustodyPolicy hardening — zero credentialIdDigest rejected, malformed WebAuthn returns false (no revert), ChangeApprovalsRequired tier escalation, SetRecoveryApprovals(0) rejected, RotateAllCustodians actually removes, CustodyPolicy reinstall forbidden post-uninstall. 8 regression tests in `CustodyPolicyWave2C.t.sol`. | Closes the audit's CustodyPolicy P1 cluster. |
+
+### Wave R0–R3 — factory unification + recovery demo
+| ID | Change | Impact on audit |
+| --- | --- | --- |
+| **R0** | Single `createAgentAccount(params, timelockOverrides, salt)` entry replaces `createPersonAgent` + `createMultiSigSmartAgent`. CustodyPolicy address factory-immutable. `mode>0 ⇒ trustees>0` invariant. 208 Forge tests passing on the unified surface. | Architectural cleanup — every Person/Org/Treasury now goes through one path with the same validation. |
+| **R1** | `custody-ceremony.ts` natively multi-signer; `signers: CeremonySigner[]` replaces the single-signer arg shape. 1-of-1 is the trivial case. | Required substrate for the recovery demo + future N-of-M flows. |
+| **R2-R3** | `apps/demo-web-recovery` shipped end-to-end on Base Sepolia. 6-act ladder: enroll Alice + Bob, onboard Sam recovery-capable, declare loss, register replacement passkey, 2-of-2 trustee T6 RecoverAccount, on-chain verify. | Integration evidence that the custody + agent-account + key-custody + identity-auth packages compose correctly for a real recovery flow. |
+
+### Wave H1–H4 — production-default packages + audit reconciliation
+| ID | Change | Impact on audit |
+| --- | --- | --- |
+| **H1 (mcp-runtime)** | `withDelegation` is now **production by default**. `inferEnvironment()` resolves to 'production' unless `environment: 'development'` or `developmentMode: true` is set OR `process.env.NODE_ENV !== 'production'`. Production mode throws at wrapper construction if `classification` or `auditSink` is missing. 7 new tests cover the inverted default + escape paths. | **Closes the audit's P0 finding "production-safe behavior is opt-in"** for mcp-runtime. The package API is now structurally impossible to misuse — a forgotten env option produces production gates, not silent permissive defaults. |
+| **H1 (key-custody)** | `buildKeyProvider` / `buildSignerBackend` use the same `inferEnvironment()` shape. In production with no explicit `opts.backend` AND no `A2A_KMS_BACKEND` env, `backendOrEnv()` **throws** instead of falling back to `local-aes`. The existing `LocalAesProvider` NODE_ENV=production guard stays as a second line of defense. | **Closes the audit's P1 finding "key-custody default is too permissive."** Production consumers cannot silently get a dev signer; they must opt in. |
+| **H2 (custody)** | Every action builder in `@agenticprimitives/custody/src/actions.ts` validates inputs at the wire-format boundary: `uint8`/`uint256` range, address/`bytes32` shape, semantic guards (e.g. C-6 zero-digest rejection). New `buildRecoverAccountArgs` + `buildRotateAllCustodiansArgs`. **60 custody tests passing** (was 28). The recovery demo now imports `buildRecoverAccountArgs` instead of inlining ABI encoding. | **Closes the audit's P1 finding "custody package lacks enough test evidence."** Wire-format mistakes now surface as `RangeError` at call time instead of opaque on-chain reverts. |
+| **H4** | Release-CI job runs `pnpm install --frozen-lockfile --strict-peer-dependencies`. Local `.npmrc` stays permissive for dev ergonomics; release builds re-resolve strictly. | **Closes the audit's P1 finding "peer strictness still unresolved."** |
 
 ---
 
@@ -59,11 +89,11 @@ cross-cutting concerns.
 | **N5** | **P2** | **No live canary / deployed smoke test.** Live deploy state is only verified by the user manually trying the demo. Silent failures (RPC quota burned, paymaster drained, GCP KMS quota exhausted, certificate expiry) only surface when a real user hits them. | Absence of post-deploy hook in `scripts/deploy-cloudflare.ts`. | Intersects M4 (test pyramid). Should run after every deploy + on a schedule. |
 | **N6** | **P2** | **Old orphaned contracts on Base Sepolia.** Previous deploy at `0x4879fCAe.../0x06fc483b65...` (factory / paymaster) is unused but still exists. The old paymaster has stake. Same `0x31ed` deployer controls both old and new — see N1. | `cloudflare-urls.json` (current) vs prior commit messages noting old addresses. | Funds recoverable via `withdrawStake` after the unstake delay. |
 | **N7** | **P3** | **No documented account recovery for passkey-only smart accounts.** If a user loses their only registered passkey, the account is bricked. The contract supports `addPasskey` / `removePasskey` (both `onlySelf`) and a single passkey-only account can be promoted to multi-sig via `addOwner`, but no UI flow exists. | `apps/contracts/src/AgentAccount.sol` `_passkeyStorage`; absence of recovery in `apps/demo-web`. | Will surface on first real-user passkey loss. |
-| **N8** | **P0** | **`tool-policy.evaluatePolicy()` still fails open for unknown or incomplete classification metadata.** `withDelegation()` now calls the policy engine when a classification is provided, but the pure policy engine returns `allow` for empty objects, unknown tags, missing risk tier, or missing auth/tool tags. | `packages/tool-policy/src/decision.ts`; `packages/mcp-runtime/src/with-delegation.ts` makes classification optional for back-compat. | H2 is closed at the runtime integration layer, but policy correctness still needs a fail-closed default. |
-| **N9** | **P1** | **`/session/package` stores delegations even when ERC-1271 verification fails.** The route calculates `isValidSignature()` and returns `erc1271Verified`, but persists the package regardless of false. | `apps/demo-a2a/src/index.ts` `/session/package`. | This can create misleading or invalid session state; production should reject failed signature verification. |
+| **N8** | **P0** | **`tool-policy.evaluatePolicy()` still fails open for unknown or incomplete classification metadata.** `withDelegation()` now calls the policy engine when a classification is provided, but the pure policy engine returns `allow` for empty objects, unknown tags, missing risk tier, or missing auth/tool tags. | `packages/tool-policy/src/decision.ts`; `packages/mcp-runtime/src/with-delegation.ts` makes classification optional for back-compat. | **CLOSED 2026-05-23.** `evaluatePolicy()` now validates classification shape and denies missing/unknown `@sa-tool`, `@sa-auth`, risk tier. Negative-test matrix in `packages/tool-policy/test/decision.test.ts`. **Wave H1 additionally inverts `withDelegation`'s default to production-strict** — unclassified tools throw at construction time in production. |
+| **N9** | **P1** | **`/session/package` stores delegations even when ERC-1271 verification fails.** | `apps/demo-a2a/src/index.ts` `/session/package`. | **CLOSED 2026-05-23.** `/session/package` rejects with HTTP 400 + `erc1271_failed` before persistence when `isValidSignature` returns false. |
 | **N10** | **P1** | **Production preflight exists but is not yet strict enough.** The script checks several shapes, but does not fully prove production secrets are present, `A2A_KMS_BACKEND=gcp-kms` is enforced at runtime, the paymaster is non-dev/locked down, every production tool has classification + audit sink, or the skip flag is policy-controlled. | `scripts/check-production-deploy.ts`. | C4 moved from "missing" to "partial"; it is still a launch gate, not a completed control. |
-| **N11** | **P1** | **A2A BigInt parsing remains unsafe outside `/account/derive-address`.** `/session/deploy` and `/session/deploy/submit` still parse user-supplied strings with `BigInt(...)` directly. | `apps/demo-a2a/src/index.ts` deploy routes. | N2 is closed for one endpoint; the same validation pattern must cover all browser-facing numeric input. |
-| **N12** | **P1** | **Credentialed CORS still reflects the request origin.** `cors({ origin: (origin) => origin ?? '*', credentials: true })` is too broad for cookie-authenticated APIs. | `apps/demo-a2a/src/index.ts` CORS middleware. | CSRF is now wired, but CORS should still be exact-whitelist when credentials are enabled. |
+| **N11** | **P1** | **A2A BigInt parsing remains unsafe outside `/account/derive-address`.** | `apps/demo-a2a/src/index.ts` deploy routes. | **CLOSED 2026-05-23.** Shared `validate.ts` module: `parseAddress`, `parseBytes32`, `parseHex`, `parseUint256Decimal`, `parseUint48`, `parseAddressArray` + standard `badInputResponse` shape. `/session/direct-deploy` (unified post-R0) uses these for every field. |
+| **N12** | **P1** | **Credentialed CORS still reflects the request origin.** | `apps/demo-a2a/src/index.ts` CORS middleware. | **CLOSED 2026-05-23.** Exact-allowlist CORS via `ALLOWED_ORIGINS` env. Demo-web, demo-web-pro, demo-web-recovery pages.dev origins are explicitly listed; non-HTTPS origins blocked outside localhost. |
 | **N13** | **P2** | **Managed production MAC key support is not yet implemented.** Shared-secret HMAC is acceptable for production service auth, but there is no GCP KMS HMAC backend, key rotation story, or key-id verification policy yet. | `key-custody` local MAC implementation; demo apps use `A2A_MAC_SECRET`. | Not a blocker for internal demo, but needed before scale and multi-service key rotation. |
 | **N14** | **P2** | **Passkey ceremonies use user verification as preferred rather than required.** | `identity-auth` passkey flow and demo-web passkey signer path. | Decide whether production requires UV or document the accepted risk. |
 | **N15** | **P2** | **Contracts lack a dedicated audit dossier.** | `apps/contracts` has tests and architecture docs, but no `AUDIT.md` covering invariants, upgrade/governance assumptions, paymaster economics, and `UniversalSignatureValidator`. | Needed before third-party review. |
@@ -97,7 +127,7 @@ It is not product-ready yet. The highest risks are:
 - **C3/C4/N10**: audit coverage is mostly closed, but production preflight is not complete enough to be a launch gate.
 - **N8/N9/N11/N12**: policy fail-closed behavior, delegation packaging, deploy-route validation, and credentialed CORS need a focused hardening pass.
 
-Board-style launch decision: **Internal demo only.** The repository can support controlled demos and architecture review, but it should not be used for external pilots until the top-5 hardening pass lands AND production key rotation, stricter preflight, and full audit coverage are closed.
+Board-style launch decision (2026-05-23 revision): **Internal demo + controlled technical pilot on testnet only.** Wave H1 closed the "production-safe defaults are opt-in" P0 finding for the two highest-risk packages (mcp-runtime, key-custody). The repository can now support technical pilots that bind ONLY testnet value, with the remaining launch blockers tracked in the H3/H5 work items (off-chain quorum semantics, durable A2A audit). Real funds / real organization authority / real PII remains blocked pending: a dedicated contract audit dossier, durable A2A audit sink, completion of off-chain quorum enforcement semantics, and operator-side key rotation + governance procedures.
 
 Severity language used in this audit:
 

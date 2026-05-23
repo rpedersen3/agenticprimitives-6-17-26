@@ -33,6 +33,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Wave H4 — release CI gate. .npmrc still allows permissive
+      # peer-dep resolution locally (auto-install-peers=true,
+      # strict-peer-dependencies=false) so dev installs don't snag,
+      # but every release-bound build re-resolves under strict mode
+      # to catch peer drift before it ships.
+      - name: Strict peer-dep resolution (release-CI gate)
+        run: pnpm install --frozen-lockfile --strict-peer-dependencies
+
       - name: Doctrine checks (capability manifests, boundaries, exports, vocabulary firewall)
         run: pnpm check:all
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { encodeAbiParameters, type Hex } from 'viem';
-import { CustodyAction } from '@agenticprimitives/custody';
+import type { Hex } from 'viem';
+import { CustodyAction, buildRecoverAccountArgs } from '@agenticprimitives/custody';
 import { loadSeats } from '../lib/seats';
 import { loadRecoveryState, saveRecoveryState } from '../lib/recovery-state';
 import { getPasskeyForSeat } from '../lib/passkey';
@@ -90,13 +90,16 @@ export function Act4Recovery({ onComplete }: { onComplete: () => void }) {
       }
 
       // Build AgentAccountRecoveryArgs: atomic add-new + remove-old.
-      const innerArgs = encodeRecoveryArgs({
-        addPasskey: {
+      // Wave H2 — single canonical encoder in @agenticprimitives/custody,
+      // tested + range-checked. Wire-format mistakes surface here as
+      // RangeError instead of opaque on-chain reverts.
+      const innerArgs = buildRecoverAccountArgs({
+        addPasskeys: [{
           credentialIdDigest: recovery.replacementCredentialIdDigest!,
           x: BigInt(recovery.replacementPubKeyX!),
           y: BigInt(recovery.replacementPubKeyY!),
-        },
-        removeCredentialIdDigest: recovery.lostCredentialIdDigest!,
+        }],
+        removePasskeyCredentialIdDigests: [recovery.lostCredentialIdDigest!],
       });
 
       const result = await scheduleAndApply({
@@ -172,54 +175,9 @@ export function Act4Recovery({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-/**
- * ABI-encode the AgentAccountRecoveryArgs struct for a single-passkey
- * swap. Shape per apps/contracts/src/IAgentAccount.sol:
- *
- *   struct AgentAccountRecoveryArgs {
- *     address[] addOwners;
- *     address[] removeOwners;
- *     AgentAccountRecoveryPasskeyAdd[] addPasskeys;
- *     bytes32[] removePasskeyCredentialIdDigests;
- *   }
- *   struct AgentAccountRecoveryPasskeyAdd {
- *     bytes32 credentialIdDigest;
- *     uint256 x;
- *     uint256 y;
- *   }
- */
-function encodeRecoveryArgs(args: {
-  addPasskey: { credentialIdDigest: Hex; x: bigint; y: bigint };
-  removeCredentialIdDigest: Hex;
-}): Hex {
-  return encodeAbiParameters(
-    [
-      {
-        type: 'tuple',
-        components: [
-          { name: 'addOwners', type: 'address[]' },
-          { name: 'removeOwners', type: 'address[]' },
-          {
-            name: 'addPasskeys',
-            type: 'tuple[]',
-            components: [
-              { name: 'credentialIdDigest', type: 'bytes32' },
-              { name: 'x', type: 'uint256' },
-              { name: 'y', type: 'uint256' },
-            ],
-          },
-          { name: 'removePasskeyCredentialIdDigests', type: 'bytes32[]' },
-        ],
-      },
-    ],
-    [{
-      addOwners: [],
-      removeOwners: [],
-      addPasskeys: [args.addPasskey],
-      removePasskeyCredentialIdDigests: [args.removeCredentialIdDigest],
-    }],
-  );
-}
+// Recovery args encoding moved to @agenticprimitives/custody
+// (buildRecoverAccountArgs) under Wave H2. The previous inline encoder
+// is removed.
 
 function phaseLabel(
   phase: CeremonyPhase | null,

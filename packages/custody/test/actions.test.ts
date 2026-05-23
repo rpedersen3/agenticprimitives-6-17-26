@@ -176,3 +176,169 @@ describe('buildRemovePasskeyCredentialArgs', () => {
     expect((back as string).toLowerCase()).toBe(credId.toLowerCase());
   });
 });
+
+// ─── Wave H2 — range/shape guards ──────────────────────────────────────
+
+import {
+  buildChangeCustodyModeArgs,
+  buildSetRecoveryApprovalsArgs,
+  buildChangeApprovalsRequiredArgs,
+  buildAddPasskeyCredentialArgs,
+  buildRemovePasskeyCredentialArgs,
+  buildAddCustodianArgs,
+  buildRotateAllCustodiansArgs,
+  buildRecoverAccountArgs,
+  buildChangeValueCeilingArgs,
+} from '../src/actions';
+
+const A = '0x1111111111111111111111111111111111111111' as const;
+const A2 = '0x2222222222222222222222222222222222222222' as const;
+const ZERO_BYTES32 = ('0x' + '00'.repeat(32)) as `0x${string}`;
+const REAL_DIGEST = ('0x' + 'ab'.repeat(32)) as `0x${string}`;
+
+describe('action builder range guards (audit H2)', () => {
+  describe('buildChangeCustodyModeArgs', () => {
+    it('accepts modes 0-3', () => {
+      for (const m of [0, 1, 2, 3] as const) {
+        expect(() => buildChangeCustodyModeArgs(m)).not.toThrow();
+      }
+    });
+    it('rejects mode 4 (above max)', () => {
+      // @ts-expect-error — runtime guard catches out-of-range
+      expect(() => buildChangeCustodyModeArgs(4)).toThrow(/uint8 in \[0, 3\]/);
+    });
+    it('rejects non-integer mode', () => {
+      // @ts-expect-error — runtime guard catches non-integer
+      expect(() => buildChangeCustodyModeArgs(1.5)).toThrow(/uint8/);
+    });
+  });
+
+  describe('buildSetRecoveryApprovalsArgs', () => {
+    it('accepts 1-255', () => {
+      expect(() => buildSetRecoveryApprovalsArgs(1)).not.toThrow();
+      expect(() => buildSetRecoveryApprovalsArgs(255)).not.toThrow();
+    });
+    it('accepts 0 (on-chain rejects but builder is wire-format-only)', () => {
+      expect(() => buildSetRecoveryApprovalsArgs(0)).not.toThrow();
+    });
+    it('rejects 256 + negatives', () => {
+      expect(() => buildSetRecoveryApprovalsArgs(256)).toThrow(/uint8/);
+      expect(() => buildSetRecoveryApprovalsArgs(-1)).toThrow(/uint8/);
+    });
+  });
+
+  describe('buildChangeApprovalsRequiredArgs', () => {
+    it('accepts tier [1, 5] and newCount ≥ 1', () => {
+      expect(() => buildChangeApprovalsRequiredArgs(1, 1)).not.toThrow();
+      expect(() => buildChangeApprovalsRequiredArgs(5, 99)).not.toThrow();
+    });
+    it('rejects tier 0 (out of low bound)', () => {
+      expect(() => buildChangeApprovalsRequiredArgs(0, 1)).toThrow(/tier.*uint8 in \[1, 5\]/);
+    });
+    it('rejects tier 6 (T6 is recovery, separate slot)', () => {
+      expect(() => buildChangeApprovalsRequiredArgs(6, 1)).toThrow(/tier.*uint8 in \[1, 5\]/);
+    });
+    it('rejects newCount 0', () => {
+      expect(() => buildChangeApprovalsRequiredArgs(4, 0)).toThrow(/newCount.*uint8/);
+    });
+  });
+
+  describe('buildAddPasskeyCredentialArgs', () => {
+    it('accepts non-zero credential + non-zero x/y', () => {
+      expect(() => buildAddPasskeyCredentialArgs(REAL_DIGEST, 1n, 2n)).not.toThrow();
+    });
+    it('rejects zero credentialIdDigest (C-6)', () => {
+      expect(() => buildAddPasskeyCredentialArgs(ZERO_BYTES32, 1n, 2n)).toThrow(/C-6/);
+    });
+    it('rejects malformed bytes32', () => {
+      expect(() =>
+        // @ts-expect-error — runtime guard catches malformed
+        buildAddPasskeyCredentialArgs('0xabc', 1n, 2n),
+      ).toThrow(/not a 32-byte hex/);
+    });
+    it('rejects x = 0 or y = 0', () => {
+      expect(() => buildAddPasskeyCredentialArgs(REAL_DIGEST, 0n, 2n)).toThrow(/uint256 in \[1/);
+      expect(() => buildAddPasskeyCredentialArgs(REAL_DIGEST, 1n, 0n)).toThrow(/uint256 in \[1/);
+    });
+  });
+
+  describe('buildRemovePasskeyCredentialArgs', () => {
+    it('accepts any non-malformed bytes32 (including zero — on-chain rejects)', () => {
+      expect(() => buildRemovePasskeyCredentialArgs(REAL_DIGEST)).not.toThrow();
+      expect(() => buildRemovePasskeyCredentialArgs(ZERO_BYTES32)).not.toThrow();
+    });
+    it('rejects malformed bytes32', () => {
+      // @ts-expect-error — runtime catches malformed
+      expect(() => buildRemovePasskeyCredentialArgs('0xabc')).toThrow(/32-byte hex/);
+    });
+  });
+
+  describe('buildAddCustodianArgs', () => {
+    it('accepts checksummed and lowercase 20-byte hex', () => {
+      expect(() => buildAddCustodianArgs(A)).not.toThrow();
+    });
+    it('rejects malformed address', () => {
+      // @ts-expect-error — runtime catches malformed
+      expect(() => buildAddCustodianArgs('0x123')).toThrow(/20-byte hex/);
+    });
+  });
+
+  describe('buildChangeValueCeilingArgs', () => {
+    it('accepts any uint256', () => {
+      expect(() => buildChangeValueCeilingArgs(0n)).not.toThrow();
+      expect(() => buildChangeValueCeilingArgs((1n << 256n) - 1n)).not.toThrow();
+    });
+    it('rejects 2^256 (overflow)', () => {
+      expect(() => buildChangeValueCeilingArgs(1n << 256n)).toThrow(/uint256/);
+    });
+    it('rejects negative', () => {
+      expect(() => buildChangeValueCeilingArgs(-1n)).toThrow(/uint256/);
+    });
+  });
+
+  describe('buildRotateAllCustodiansArgs', () => {
+    it('accepts empty arrays', () => {
+      expect(() => buildRotateAllCustodiansArgs([], [])).not.toThrow();
+    });
+    it('encodes add+remove together', () => {
+      const out = buildRotateAllCustodiansArgs([A], [A2]);
+      expect(out).toMatch(/^0x[0-9a-f]+$/);
+    });
+    it('rejects malformed addresses', () => {
+      expect(() =>
+        // @ts-expect-error — runtime catches malformed
+        buildRotateAllCustodiansArgs([A, '0xbad'], []),
+      ).toThrow(/20-byte hex/);
+    });
+  });
+
+  describe('buildRecoverAccountArgs', () => {
+    it('accepts a single-passkey atomic swap', () => {
+      const out = buildRecoverAccountArgs({
+        addPasskeys: [{ credentialIdDigest: REAL_DIGEST, x: 1n, y: 2n }],
+        removePasskeyCredentialIdDigests: [('0x' + 'cd'.repeat(32)) as `0x${string}`],
+      });
+      expect(out).toMatch(/^0x[0-9a-f]+$/);
+    });
+    it('accepts owner-only recovery', () => {
+      expect(() => buildRecoverAccountArgs({ addOwners: [A], removeOwners: [A2] })).not.toThrow();
+    });
+    it('rejects all-empty args (would be a no-op tx)', () => {
+      expect(() => buildRecoverAccountArgs({})).toThrow(/at least one add\/remove field/);
+    });
+    it('rejects zero credentialIdDigest in addPasskeys', () => {
+      expect(() =>
+        buildRecoverAccountArgs({
+          addPasskeys: [{ credentialIdDigest: ZERO_BYTES32, x: 1n, y: 2n }],
+        }),
+      ).toThrow(/C-6/);
+    });
+    it('rejects x = 0 in addPasskeys', () => {
+      expect(() =>
+        buildRecoverAccountArgs({
+          addPasskeys: [{ credentialIdDigest: REAL_DIGEST, x: 0n, y: 2n }],
+        }),
+      ).toThrow(/uint256 in \[1/);
+    });
+  });
+});

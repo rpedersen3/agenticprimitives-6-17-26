@@ -4,7 +4,13 @@ import type { AuditSink } from '@agenticprimitives/audit';
 export type KmsBackend = 'local-aes' | 'aws-kms' | 'gcp-kms';
 
 export interface BuildOpts {
-  backend: KmsBackend;
+  /**
+   * Backend selection. Recommended explicit value. When omitted, the
+   * factory falls back to `A2A_KMS_BACKEND` env, then to `local-aes` in
+   * development. In production with neither set, the factory THROWS at
+   * construction time (audit H1: no silent local-aes default).
+   */
+  backend?: KmsBackend;
   config?: Record<string, string>;
   /**
    * Optional audit sink threaded into signers so every signing op emits
@@ -12,6 +18,19 @@ export interface BuildOpts {
    * so rows land in one trail. Fail-soft if the sink throws.
    */
   auditSink?: AuditSink;
+  /**
+   * Production-readiness gate (audit H1). Inverted default: factories
+   * treat the runtime as `'production'` unless either:
+   *   - `developmentMode: true` is set explicitly, or
+   *   - `process.env.NODE_ENV !== 'production'`.
+   * In production with no explicit backend AND no `A2A_KMS_BACKEND`
+   * env, the factory throws. Pass `environment: 'production'` to force
+   * production semantics in tests; pass `'development'` (or
+   * `developmentMode: true`) to opt into the dev fallback.
+   */
+  environment?: 'production' | 'development';
+  /** Shorthand for `environment: 'development'`. */
+  developmentMode?: boolean;
 }
 
 export interface A2AKeyProvider {

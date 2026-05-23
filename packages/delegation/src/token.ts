@@ -334,6 +334,38 @@ export interface VerifyOptsExt extends VerifyOpts {
   requireQuorumCaveat?: { enforcer: Address };
 
   /**
+   * Quorum-enforcement proof (audit H3). Required whenever
+   * `requireQuorumCaveat` is set. Picks ONE of two enforcement models:
+   *
+   *   - `{ mode: 'on-chain-redeemed' }` — the caller asserts that the
+   *     authorized call will go through `DelegationManager.redeemDelegation`,
+   *     which invokes `QuorumEnforcer.beforeHook` and verifies the
+   *     packed signatures on chain against the bound execution payload.
+   *     Use this for any flow that actually broadcasts a UserOp /
+   *     transaction that hits the on-chain enforcer.
+   *
+   *   - `{ mode: 'off-chain', payloadHash, packedSignatures }` — for
+   *     MCP-only / data-tool flows that never reach the on-chain
+   *     enforcer. The verifier MUST validate the packed signatures
+   *     off-chain against `payloadHash` (which the caller binds to
+   *     the tool/action context) AND against the signer set encoded
+   *     in the QuorumCaveat terms. This mode currently throws with
+   *     `quorum_off_chain_not_implemented` — wire-format is reserved
+   *     so consumers can plan migration; the verification logic
+   *     ships in a follow-up wave once the bound payload format is
+   *     spec'd in `specs/207-smart-account-threshold-policy.md` §
+   *     "off-chain quorum".
+   *
+   * If `requireQuorumCaveat` is set without a `quorumProof`, the
+   * verifier rejects. This makes the off-chain enforcement gap
+   * structural — a consumer can't silently rely on caveat presence
+   * as a substitute for signature verification.
+   */
+  quorumProof?:
+    | { mode: 'on-chain-redeemed' }
+    | { mode: 'off-chain'; payloadHash: Hex; packedSignatures: Hex };
+
+  /**
    * When `true`, verify that the delegator's smart account has
    * pre-blessed this delegation hash on-chain via
    * `acceptSessionDelegation(hash)`. Spec 207 § 6 high-risk gate —
@@ -539,6 +571,31 @@ export async function verifyDelegationToken(
         eip712Hash,
       );
     }
+
+    // Audit H3 — caveat presence alone is NOT proof of quorum. The
+    // caller must declare ONE of two enforcement models so the gap
+    // is structural rather than implicit.
+    if (!opts.quorumProof) {
+      return rejectWith(
+        'quorum caveat present but no quorumProof supplied — refusing to assume on-chain enforcement',
+        claims.delegation.delegator,
+        eip712Hash,
+      );
+    }
+    if (opts.quorumProof.mode === 'off-chain') {
+      // Off-chain verification is a planned mode; the wire-format
+      // (payloadHash + packedSignatures) is reserved here so consumers
+      // can migrate when the implementation lands. Failing closed
+      // until the spec'd off-chain payload format is implemented.
+      return rejectWith(
+        'quorum_off_chain_not_implemented',
+        claims.delegation.delegator,
+        eip712Hash,
+      );
+    }
+    // mode === 'on-chain-redeemed' — caller asserts the call will
+    // pass through QuorumEnforcer.beforeHook on chain. Accept; the
+    // on-chain layer is responsible for the actual signature check.
   }
 
   //   - requireAcceptedOnChain: account.isAcceptedSessionDelegation(hash)

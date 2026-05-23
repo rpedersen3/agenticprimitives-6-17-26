@@ -23,6 +23,9 @@ export {
   buildChangeApprovalsRequiredArgs,
   buildAddPasskeyCredentialArgs,
   buildRemovePasskeyCredentialArgs,
+  buildRotateAllCustodiansArgs,
+  buildRecoverAccountArgs,
+  type RecoveryPasskeyAdd,
 } from './actions.js';
 
 export {

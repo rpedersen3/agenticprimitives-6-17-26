@@ -19,6 +19,32 @@ import type { ToolClassification } from '@agenticprimitives/tool-policy';
 import { buildEvent, type AuditSink, type MetricsSink } from '@agenticprimitives/audit';
 import type { DataScopeGrant, McpResourceVerifyConfig } from './types';
 
+/**
+ * Resolve the effective environment for production-mode gates. Order
+ * of precedence:
+ *   1. Explicit `opts.environment` value.
+ *   2. `developmentMode: true` → 'development'.
+ *   3. `process.env.NODE_ENV` if readable.
+ *   4. Default to 'production' — safe-by-default when the runtime is
+ *      ambiguous (Cloudflare Workers, Deno, browser). Consumers who
+ *      want a permissive wrapper MUST opt out explicitly.
+ */
+function inferEnvironment(opts?: {
+  environment?: 'production' | 'development';
+  developmentMode?: boolean;
+}): 'production' | 'development' {
+  if (opts?.environment) return opts.environment;
+  if (opts?.developmentMode === true) return 'development';
+  try {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV) {
+      return process.env.NODE_ENV === 'production' ? 'production' : 'development';
+    }
+  } catch {
+    /* SES / Workers may throw on process access */
+  }
+  return 'production';
+}
+
 export class McpAuthError extends Error {
   constructor(public readonly reason: string) {
     super('mcp: auth failed');
@@ -70,35 +96,47 @@ export function withDelegation<A extends Record<string, unknown>>(
      */
     traceparent?: string;
     /**
-     * Production-readiness gate (audit P0-2). When set to `'production'`,
-     * `withDelegation` throws at WRAPPER CONSTRUCTION TIME (not first
-     * call) if `classification` or `auditSink` is missing. This makes
-     * the package API impossible to misuse from a production consumer
-     * — you cannot register a tool wrapper without the metadata the
-     * policy engine + audit pipeline need.
+     * Production-readiness gate (audit H1). Inverted default behaviour:
+     * `withDelegation` runs in PRODUCTION mode unless the consumer
+     * explicitly opts out via `developmentMode: true` (test/dev shim)
+     * OR the runtime reports `NODE_ENV !== 'production'`. In
+     * production, the wrapper throws at construction time if
+     * `classification` or `auditSink` is missing. This makes the
+     * package API impossible to misuse: you can't register a tool
+     * wrapper without the metadata the policy engine + audit pipeline
+     * need.
      *
-     * Mode `'development'` (default) preserves the back-compat path:
-     * missing classification logs a warning + skips policy; missing
-     * audit silently drops events. Use only in tests + local dev.
+     * Pass `environment: 'production'` to force production (the
+     * canonical override; useful for tests that need to exercise prod
+     * gates without setting NODE_ENV). Pass `environment: 'development'`
+     * or `developmentMode: true` to opt out — required only for tests.
      */
     environment?: 'production' | 'development';
+    /**
+     * Explicit opt-out shorthand for non-production callers. Equivalent
+     * to `environment: 'development'`. Useful so test code reads as
+     * "this is intentionally a dev wrapper" rather than referencing
+     * the environment axis directly.
+     */
+    developmentMode?: boolean;
   },
 ): (args: A & { token: string }) => Promise<unknown> {
-  // Wrapper-construction-time enforcement. Throws BEFORE the route
-  // handler is registered, so misconfigured consumers fail at boot
-  // rather than at first request.
-  if (opts?.environment === 'production') {
-    if (!opts.classification) {
+  // Inferred environment — production-by-default per audit H1. The
+  // construction-time gate now fires unless the consumer explicitly
+  // opts into development.
+  const env = inferEnvironment(opts);
+  if (env === 'production') {
+    if (!opts?.classification) {
       throw new Error(
-        '[mcp-runtime] withDelegation in production mode requires `classification`. ' +
+        '[mcp-runtime] withDelegation requires `classification` in production. ' +
           'The policy engine (tool-policy.evaluatePolicy) MUST run; an unclassified tool ' +
-          'is a security regression. Pass `opts.classification = declareTool(...)` or ' +
-          "switch `opts.environment` to 'development' for tests.",
+          'is a security regression. Pass `opts.classification = declareTool(...)`. ' +
+          'For tests, pass `developmentMode: true` to opt out of the strict gate.',
       );
     }
-    if (!opts.auditSink) {
+    if (!opts?.auditSink) {
       throw new Error(
-        '[mcp-runtime] withDelegation in production mode requires `auditSink`. ' +
+        '[mcp-runtime] withDelegation requires `auditSink` in production. ' +
           'Audit emission is the only forensic trail for delegation accept/reject; ' +
           'production deployments MUST persist these. Pass a durable sink (D1, ' +
           'Cloud Logging, etc.) — wrap with composeSinks(durable, console) if you ' +
@@ -107,7 +145,12 @@ export function withDelegation<A extends Record<string, unknown>>(
     }
   }
   return async (args) => {
-    const { token, ...rest } = args;
+    // Pull `quorumProof` off args (audit H3). It's a delegation-layer
+    // concern, not handler input. Either the caller serializes proof
+    // alongside the token, or there's no proof — and the verifier
+    // rejects accordingly when `requireQuorumCaveat` is set.
+    const { token, quorumProof, ...rest } =
+      args as A & { token: string; quorumProof?: import('@agenticprimitives/delegation').VerifyOptsExt['quorumProof'] };
     const toolName = opts?.toolName ?? 'unknown';
     const correlationId = opts?.correlationId;
     const startedAt = Date.now();
@@ -214,6 +257,12 @@ export function withDelegation<A extends Record<string, unknown>>(
       // `@sa-risk-tier` classification.
       requireQuorumCaveat,
       requireAcceptedOnChain,
+      // Audit H3 — when requireQuorumCaveat is set, delegation refuses
+      // without an explicit proof. Forward the caller-supplied proof
+      // through; if missing, the verifier rejects (a Wave H1 production
+      // wrapper would have already thrown at construction if the tool
+      // is unclassified).
+      quorumProof,
     });
     if ('error' in result) {
       // Internal log retains the reason; external surface stays opaque.
