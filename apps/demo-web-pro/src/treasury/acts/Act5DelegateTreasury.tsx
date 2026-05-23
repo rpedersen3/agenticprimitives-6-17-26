@@ -81,7 +81,7 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(true);
   const existing = loadAllDelegations();
-  const [alreadyIssued, setAlreadyIssued] = useState(existing.length >= 6);
+  const [alreadyIssued, setAlreadyIssued] = useState(existing.length >= 8);
 
   const { signTypedDataAsync } = useSignTypedData();
   const { address: walletAddress } = useAccount();
@@ -90,7 +90,7 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
   const connectors = useConnectors();
 
   useEffect(() => {
-    setAlreadyIssued(loadAllDelegations().length >= 6);
+    setAlreadyIssued(loadAllDelegations().length >= 8);
   }, []);
 
   if (!org || !treasury || !aliceClaim || !bobClaim) {
@@ -298,8 +298,35 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
         expiry: expiryHuman,
       });
 
-      // 1 + 2. Cross-person PII delegations — Alice signs Alice→Bob,
-      //        Bob signs Bob→Alice. Each opens a Person MCP read scope.
+      // 1 + 2. Self-delegations — each Person Smart Agent issues an
+      //        Alice→Alice / Bob→Bob delegation. Per spec 212 every
+      //        data access flows through a delegation; for self-access
+      //        the delegator and delegate are the same agent. Demos
+      //        the "I authorize my agent to fetch my own data" path.
+      await issueOne({
+        kind: 'pii-read',
+        delegator: aliceClaim.personAgent,
+        delegatorLabel: `${aliceSeat.name}\'s Person Smart Agent`,
+        delegate: aliceClaim.personAgent,
+        delegateLabel: `${aliceSeat.name}\'s Person Smart Agent (self)`,
+        signerSeat: aliceClaim,
+        caveats: readScopeCaveats(),
+        summary: readSummary(`${aliceSeat.name}\'s own PII`),
+      });
+      await issueOne({
+        kind: 'pii-read',
+        delegator: bobClaim.personAgent,
+        delegatorLabel: `${bobSeat.name}\'s Person Smart Agent`,
+        delegate: bobClaim.personAgent,
+        delegateLabel: `${bobSeat.name}\'s Person Smart Agent (self)`,
+        signerSeat: bobClaim,
+        caveats: readScopeCaveats(),
+        summary: readSummary(`${bobSeat.name}\'s own PII`),
+      });
+
+      // 3 + 4. Cross-person PII delegations — Alice signs Alice→Bob,
+      //        Bob signs Bob→Alice. Each opens a Person MCP read scope
+      //        on a peer's data through the same MCP tool.
       await issueOne({
         kind: 'pii-read',
         delegator: aliceClaim.personAgent,
@@ -386,13 +413,19 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
         <p className="eyebrow">Act 5 · Admin · <LiveStatusBadge status="live" /></p>
         <h1>Issue the demo\'s delegation surface.</h1>
         <p>
-          Six Variant A delegations get signed in one ceremony:
+          Eight Variant A delegations get signed in one ceremony:
         </p>
         <ul>
           <li>
+            <strong>{aliceSeat.name}\'s PSA → {aliceSeat.name}\'s PSA</strong> and{' '}
+            <strong>{bobSeat.name}\'s → {bobSeat.name}\'s</strong> — self-delegations
+            so each Person Smart Agent can fetch its own PII through the same
+            delegation-token path peers use.
+          </li>
+          <li>
             <strong>{aliceSeat.name}\'s PSA → {bobSeat.name}\'s PSA</strong> and reverse —
-            read-PII on the Person MCP. Each Person Smart Agent grants the other
-            access to their own PII record.
+            cross-person read-PII on the Person MCP. Each Person Smart Agent grants
+            the other access to their own PII record.
           </li>
           <li>
             <strong>{orgConfig.name} → {aliceSeat.name}/{bobSeat.name}\'s PSAs</strong> —
@@ -447,7 +480,7 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
           setDialogOpen(false);
           onComplete();
         }}
-        acceptLabel={alreadyIssued ? 'Already issued' : 'Sign all six'}
+        acceptLabel={alreadyIssued ? 'Already issued' : 'Sign all eight'}
         acceptDisabled={alreadyIssued}
         phaseLabel={`${PHASE_LABEL[phase]}${stepLabel ? ` — ${stepLabel}` : ''}`}
         successExtra={

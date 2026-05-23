@@ -553,38 +553,77 @@ function DelegationActions(p: DelegationActionsProps) {
     }
   };
 
+  // Buttons grouped by SUBJECT (the data owner). Each subject can be
+  // accessed by the subject themselves (self-delegation) or by another
+  // agent that holds a delegation issued by the subject.
   const buttons = [
+    // ── Subject: Alice's PII ────────────────────────────────────
     {
-      key: 'alice-pii',
-      label: `Read ${p.aliceSeat.name}\'s PII via ${p.bobSeat.name}\'s delegation`,
-      description: `${p.aliceSeat.name}.PSA → ${p.bobSeat.name}.PSA · pii-read`,
+      key: 'alice-pii-as-alice',
+      group: `${p.aliceSeat.name}'s PII`,
+      label: `${p.aliceSeat.name} reads her own PII`,
+      description: `self-delegation · ${p.aliceSeat.name}.PSA → ${p.aliceSeat.name}.PSA`,
       go: () =>
         callMcp({
-          label: `${p.aliceSeat.name} PII`,
+          label: `${p.aliceSeat.name} PII (self)`,
+          endpoint: '/mcp/person/pii',
+          delegatorKind: 'pii-read',
+          delegator: p.aliceClaim!.personAgent,
+          delegate: p.aliceClaim!.personAgent,
+        }),
+      recordKey: `${p.aliceSeat.name} PII (self)`,
+    },
+    {
+      key: 'alice-pii-as-bob',
+      group: `${p.aliceSeat.name}'s PII`,
+      label: `${p.bobSeat.name} reads ${p.aliceSeat.name}'s PII`,
+      description: `cross-person · ${p.aliceSeat.name}.PSA → ${p.bobSeat.name}.PSA`,
+      go: () =>
+        callMcp({
+          label: `${p.aliceSeat.name} PII (via ${p.bobSeat.name})`,
           endpoint: '/mcp/person/pii',
           delegatorKind: 'pii-read',
           delegator: p.aliceClaim!.personAgent,
           delegate: p.bobClaim!.personAgent,
         }),
-      recordKey: `${p.aliceSeat.name} PII`,
+      recordKey: `${p.aliceSeat.name} PII (via ${p.bobSeat.name})`,
     },
+    // ── Subject: Bob's PII ──────────────────────────────────────
     {
-      key: 'bob-pii',
-      label: `Read ${p.bobSeat.name}\'s PII via ${p.aliceSeat.name}\'s delegation`,
-      description: `${p.bobSeat.name}.PSA → ${p.aliceSeat.name}.PSA · pii-read`,
+      key: 'bob-pii-as-bob',
+      group: `${p.bobSeat.name}'s PII`,
+      label: `${p.bobSeat.name} reads his own PII`,
+      description: `self-delegation · ${p.bobSeat.name}.PSA → ${p.bobSeat.name}.PSA`,
       go: () =>
         callMcp({
-          label: `${p.bobSeat.name} PII`,
+          label: `${p.bobSeat.name} PII (self)`,
+          endpoint: '/mcp/person/pii',
+          delegatorKind: 'pii-read',
+          delegator: p.bobClaim!.personAgent,
+          delegate: p.bobClaim!.personAgent,
+        }),
+      recordKey: `${p.bobSeat.name} PII (self)`,
+    },
+    {
+      key: 'bob-pii-as-alice',
+      group: `${p.bobSeat.name}'s PII`,
+      label: `${p.aliceSeat.name} reads ${p.bobSeat.name}'s PII`,
+      description: `cross-person · ${p.bobSeat.name}.PSA → ${p.aliceSeat.name}.PSA`,
+      go: () =>
+        callMcp({
+          label: `${p.bobSeat.name} PII (via ${p.aliceSeat.name})`,
           endpoint: '/mcp/person/pii',
           delegatorKind: 'pii-read',
           delegator: p.bobClaim!.personAgent,
           delegate: p.aliceClaim!.personAgent,
         }),
-      recordKey: `${p.bobSeat.name} PII`,
+      recordKey: `${p.bobSeat.name} PII (via ${p.aliceSeat.name})`,
     },
+    // ── Subject: Org sensitive data ─────────────────────────────
     {
       key: 'org-alice',
-      label: `Read Org sensitive data as ${p.aliceSeat.name}`,
+      group: 'Org sensitive data',
+      label: `${p.aliceSeat.name} reads Org sensitive data`,
       description: `Org → ${p.aliceSeat.name}.PSA · org-sensitive`,
       go: () =>
         callMcp({
@@ -598,7 +637,8 @@ function DelegationActions(p: DelegationActionsProps) {
     },
     {
       key: 'org-bob',
-      label: `Read Org sensitive data as ${p.bobSeat.name}`,
+      group: 'Org sensitive data',
+      label: `${p.bobSeat.name} reads Org sensitive data`,
       description: `Org → ${p.bobSeat.name}.PSA · org-sensitive`,
       go: () =>
         callMcp({
@@ -612,63 +652,79 @@ function DelegationActions(p: DelegationActionsProps) {
     },
   ];
 
+  // Bucket buttons by their `group` (subject) so the UI reads
+  // "Alice's PII can be fetched two ways: by Alice, or by Bob".
+  const groups = new Map<string, typeof buttons>();
+  for (const b of buttons) {
+    const list = groups.get(b.group) ?? [];
+    list.push(b);
+    groups.set(b.group, list);
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-        {buttons.map((b) => {
-          const busy = p.fetchInFlight === b.label;
-          const record = p.fetchedRecords[b.recordKey];
-          const err = p.fetchErrors[b.recordKey];
-          return (
-            <div
-              key={b.key}
-              style={{
-                padding: 10,
-                background: '#fafafa',
-                borderRadius: 8,
-                border: '1px solid #e6e6ea',
-              }}
-            >
-              <p className="muted small" style={{ margin: 0 }}>
-                {b.description}
-              </p>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void b.go()}
-                style={{ marginTop: 6 }}
-              >
-                {busy ? 'Fetching…' : b.label}
-              </button>
-              {err && (
-                <p className="err" style={{ marginTop: 6, fontSize: '0.8rem' }}>
-                  {err}
-                </p>
-              )}
-              {record && (
-                <pre
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {Array.from(groups.entries()).map(([groupName, groupButtons]) => (
+        <div key={groupName}>
+          <p className="eyebrow" style={{ marginTop: 0, marginBottom: 6 }}>
+            Subject: <strong>{groupName}</strong>
+          </p>
+          <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+            {groupButtons.map((b) => {
+              const busy = p.fetchInFlight === b.label;
+              const record = p.fetchedRecords[b.recordKey];
+              const err = p.fetchErrors[b.recordKey];
+              return (
+                <div
+                  key={b.key}
                   style={{
-                    marginTop: 6,
-                    fontSize: '0.75rem',
-                    background: '#fff',
-                    padding: 8,
-                    borderRadius: 6,
-                    overflowX: 'auto',
-                    maxHeight: 220,
+                    padding: 10,
+                    background: '#fafafa',
+                    borderRadius: 8,
+                    border: '1px solid #e6e6ea',
                   }}
                 >
-                  {JSON.stringify(record.record, null, 2)}
-                </pre>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                  <p className="muted small" style={{ margin: 0 }}>
+                    {b.description}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void b.go()}
+                    style={{ marginTop: 6 }}
+                  >
+                    {busy ? 'Fetching…' : b.label}
+                  </button>
+                  {err && (
+                    <p className="err" style={{ marginTop: 6, fontSize: '0.8rem' }}>
+                      {err}
+                    </p>
+                  )}
+                  {record && (
+                    <pre
+                      style={{
+                        marginTop: 6,
+                        fontSize: '0.75rem',
+                        background: '#fff',
+                        padding: 8,
+                        borderRadius: 6,
+                        overflowX: 'auto',
+                        maxHeight: 220,
+                      }}
+                    >
+                      {JSON.stringify(record.record, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
       <p className="muted small">
-        Try it as Alice: only Alice's delegations (incoming from Bob or Org) will succeed
-        — the other side\'s wallet/passkey isn\'t signing here, the worker just verifies the
-        envelope's existing signature via ERC-1271. The same delegations are reusable for
-        the lifetime of their timestamp caveat (90 days).
+        Both routes — self-delegation and cross-person delegation — go through the same
+        Person MCP tool. The MCP doesn\'t care WHO is calling, only that a valid delegation
+        from the subject exists for the principal. That\'s spec 212\'s "every access flows
+        through a delegation" rule in practice.
       </p>
     </div>
   );

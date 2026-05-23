@@ -208,7 +208,7 @@ export function TreasuryShell() {
       const raw = localStorage.getItem('agenticprimitives:demo-web-pro:treasury-delegations');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length >= 2) {
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length >= 8) {
           set.add('delegate-treasury');
         }
       }
