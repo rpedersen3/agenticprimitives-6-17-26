@@ -55,7 +55,9 @@
     "RelationshipTypeSemantics",
     "InvalidEdgeError",
     "UnauthorizedActorError",
-    "UnknownRelationshipTypeError"
+    "UnknownRelationshipTypeError",
+    "agentRelationshipAbi",
+    "relationshipTypeRegistryAbi"
   ],
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },

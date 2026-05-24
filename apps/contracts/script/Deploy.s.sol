@@ -23,6 +23,11 @@ import {AgentNamePredicates} from "../src/naming/AgentNamePredicates.sol";
 import {OntologyTermRegistry} from "../src/ontology/OntologyTermRegistry.sol";
 import {ShapeRegistry} from "../src/ontology/ShapeRegistry.sol";
 import {AttributeStorage} from "../src/ontology/AttributeStorage.sol";
+import {AgentRelationship} from "../src/relationships/AgentRelationship.sol";
+import {RelationshipTypeRegistry} from "../src/relationships/RelationshipTypeRegistry.sol";
+import {AgentRelationshipPredicates} from "../src/relationships/AgentRelationshipPredicates.sol";
+import {AgentProfileResolver} from "../src/identity/AgentProfileResolver.sol";
+import {AgentProfilePredicates} from "../src/identity/AgentProfilePredicates.sol";
 // JSON output key is now "custodyPolicy" (was "thresholdValidator"
 // pre-6g.4). On the next testnet redeploy the existing
 // `deployments-base-sepolia.json` field will be overwritten under the
@@ -175,6 +180,20 @@ contract Deploy is Script {
         //      optional cardinality initially (gradual adoption).
         _bootstrapAgentNameOntology(ontology, shapes, address(nameResolver));
 
+        // 6.8. Agent Relationships (RL Phase 3, spec 216) — trust-fabric
+        //      edge store + governance-gated type semantics registry.
+        RelationshipTypeRegistry relTypes = new RelationshipTypeRegistry(deployer);
+        console2.log("RelationshipTypeRegistry: %s", address(relTypes));
+        AgentRelationship relationships = new AgentRelationship();
+        console2.log("AgentRelationship:    %s", address(relationships));
+        _bootstrapRelationshipTypes(relTypes);
+
+        // 6.9. Agent Identity profiles (ID Phase 3, spec 217) — typed
+        //      profile resolver reusing the ontology stack.
+        AgentProfileResolver profileResolver = new AgentProfileResolver(address(ontology));
+        console2.log("AgentProfileResolver: %s", address(profileResolver));
+        _bootstrapAgentProfileOntology(ontology, shapes, address(profileResolver));
+
         // Stake + deposit so the paymaster can sponsor UserOps immediately.
         // - addStake locks ETH for the unstake-delay window (anti-DoS for bundlers
         //   that want to know the paymaster has skin in the game).
@@ -227,7 +246,10 @@ contract Deploy is Script {
         vm.serializeAddress(key, "shapeRegistry", address(shapes));
         vm.serializeAddress(key, "agentNameRegistry", address(nameRegistry));
         vm.serializeAddress(key, "agentNameResolver", address(nameResolver));
-        string memory out = vm.serializeAddress(key, "agentNameUniversalResolver", address(nameUniversal));
+        vm.serializeAddress(key, "agentNameUniversalResolver", address(nameUniversal));
+        vm.serializeAddress(key, "relationshipTypeRegistry", address(relTypes));
+        vm.serializeAddress(key, "agentRelationship", address(relationships));
+        string memory out = vm.serializeAddress(key, "agentProfileResolver", address(profileResolver));
 
         string memory path = string.concat("deployments-", network, ".json");
         vm.writeFile(path, out);
@@ -322,5 +344,87 @@ contract Deploy is Script {
             keccak256(bytes("AgentName-shape-v1"))
         );
         console2.log("  defined atl:AgentName shape with %s properties", vm.toString(props.length));
+    }
+
+    /**
+     * @dev Register the six well-known relationship types in the
+     *      RelationshipTypeRegistry. Semantics chosen to match
+     *      spec 216 § 5 + the TS taxonomy in
+     *      `agent-relationships/src/taxonomy.ts`.
+     */
+    function _bootstrapRelationshipTypes(RelationshipTypeRegistry reg) internal {
+        reg.registerType(AgentRelationshipPredicates.HAS_MEMBER,             "HAS_MEMBER",             false, false, false);
+        reg.registerType(AgentRelationshipPredicates.HAS_GOVERNANCE_OVER,    "HAS_GOVERNANCE_OVER",    true,  false, false);
+        reg.registerType(AgentRelationshipPredicates.VALIDATION_TRUST,       "VALIDATION_TRUST",       false, false, false);
+        reg.registerType(AgentRelationshipPredicates.PARTNERSHIP,            "PARTNERSHIP",            false, false, true);
+        reg.registerType(AgentRelationshipPredicates.OPERATES_ON_BEHALF_OF,  "OPERATES_ON_BEHALF_OF",  false, false, false);
+        reg.registerType(AgentRelationshipPredicates.RECOMMENDS,             "RECOMMENDS",             false, false, false);
+        console2.log("  registered 6 well-known relationship types");
+    }
+
+    /**
+     * @dev Register the identity-only predicates (the shared ones —
+     *      atl:displayName, atl:agentKind, atl:metadataURI,
+     *      atl:metadataHash — already exist from
+     *      `_bootstrapAgentNameOntology`). Then define the
+     *      atl:AgentProfile shape.
+     */
+    function _bootstrapAgentProfileOntology(
+        OntologyTermRegistry ontology,
+        ShapeRegistry shapes,
+        address profileAddr
+    ) internal {
+        bytes32[] memory ids = new bytes32[](6);
+        string[] memory curies = new string[](6);
+        string[] memory uris = new string[](6);
+        string[] memory labels = new string[](6);
+        string[] memory datatypes = new string[](6);
+
+        ids[0] = AgentProfilePredicates.ATL_DESCRIPTION;
+        curies[0] = "atl:description"; uris[0] = "https://agentictrust.io/ontology/core#description"; labels[0] = "Description"; datatypes[0] = "string";
+
+        ids[1] = AgentProfilePredicates.ATL_HOMEPAGE;
+        curies[1] = "atl:homepage"; uris[1] = "https://agentictrust.io/ontology/core#homepage"; labels[1] = "Homepage"; datatypes[1] = "string";
+
+        ids[2] = AgentProfilePredicates.ATL_AVATAR;
+        curies[2] = "atl:avatar"; uris[2] = "https://agentictrust.io/ontology/core#avatar"; labels[2] = "Avatar URI"; datatypes[2] = "string";
+
+        ids[3] = AgentProfilePredicates.ATL_PROFILE_SCHEMA_URI;
+        curies[3] = "atl:profileSchemaURI"; uris[3] = "https://agentictrust.io/ontology/core#profileSchemaURI"; labels[3] = "Profile Schema URI"; datatypes[3] = "string";
+
+        ids[4] = AgentProfilePredicates.ATL_PROFILE_ACTIVE;
+        curies[4] = "atl:profileActive"; uris[4] = "https://agentictrust.io/ontology/core#profileActive"; labels[4] = "Profile Active"; datatypes[4] = "bool";
+
+        ids[5] = AgentProfilePredicates.ATL_PROFILE_REGISTERED_AT;
+        curies[5] = "atl:profileRegisteredAt"; uris[5] = "https://agentictrust.io/ontology/core#profileRegisteredAt"; labels[5] = "Profile Registered At"; datatypes[5] = "uint256";
+
+        ontology.registerTermBatch(ids, curies, uris, labels, datatypes);
+        console2.log("  registered %s AgentProfile predicates", vm.toString(ids.length));
+
+        // Define the AgentProfile shape (all OPTIONAL, gradual adoption).
+        uint8 DT_STRING = AttributeStorage(profileAddr).DT_STRING_PUB();
+        uint8 DT_BOOL = AttributeStorage(profileAddr).DT_BOOL_PUB();
+        uint8 DT_BYTES32 = AttributeStorage(profileAddr).DT_BYTES32_PUB();
+        uint8 DT_UINT = AttributeStorage(profileAddr).DT_UINT256_PUB();
+
+        ShapeRegistry.PropertyConstraint[] memory props = new ShapeRegistry.PropertyConstraint[](10);
+        props[0] = ShapeRegistry.PropertyConstraint(AgentProfilePredicates.ATL_DISPLAY_NAME,           DT_STRING,  ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[1] = ShapeRegistry.PropertyConstraint(AgentProfilePredicates.ATL_DESCRIPTION,            DT_STRING,  ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[2] = ShapeRegistry.PropertyConstraint(AgentProfilePredicates.ATL_AGENT_KIND,             DT_BYTES32, ShapeRegistry.Cardinality.OPTIONAL, AgentNamePredicates.AGENT_KIND_ENUM, bytes32(0));
+        props[3] = ShapeRegistry.PropertyConstraint(AgentProfilePredicates.ATL_HOMEPAGE,               DT_STRING,  ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[4] = ShapeRegistry.PropertyConstraint(AgentProfilePredicates.ATL_AVATAR,                 DT_STRING,  ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[5] = ShapeRegistry.PropertyConstraint(AgentProfilePredicates.ATL_METADATA_URI,           DT_STRING,  ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[6] = ShapeRegistry.PropertyConstraint(AgentProfilePredicates.ATL_METADATA_HASH,          DT_BYTES32, ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[7] = ShapeRegistry.PropertyConstraint(AgentProfilePredicates.ATL_PROFILE_SCHEMA_URI,     DT_STRING,  ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[8] = ShapeRegistry.PropertyConstraint(AgentProfilePredicates.ATL_PROFILE_ACTIVE,         DT_BOOL,    ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[9] = ShapeRegistry.PropertyConstraint(AgentProfilePredicates.ATL_PROFILE_REGISTERED_AT,  DT_UINT,    ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+
+        shapes.defineShape(
+            AgentProfilePredicates.CLASS_AGENT_PROFILE,
+            props,
+            "https://agentictrust.io/ontology/shapes/AgentProfile#v1",
+            keccak256(bytes("AgentProfile-shape-v1"))
+        );
+        console2.log("  defined atl:AgentProfile shape with %s properties", vm.toString(props.length));
     }
 }

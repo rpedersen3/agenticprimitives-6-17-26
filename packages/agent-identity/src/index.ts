@@ -45,3 +45,9 @@ export type {
 } from './types';
 
 export { AgentIdentityClient } from './client';
+
+// Phase 3 contract ABIs (live at deployed addresses recorded in
+// apps/contracts/deployments-<network>.json). Profile resolver
+// inherits AttributeStorage; predicates governed by the shared
+// OntologyTermRegistry from agent-naming.
+export { agentProfileResolverAbi } from './abis';

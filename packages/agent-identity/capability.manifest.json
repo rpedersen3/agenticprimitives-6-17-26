@@ -58,7 +58,8 @@
     "EndpointVerificationError",
     "InvalidCaip10Error",
     "CAIP10_NAMESPACE_ALLOWLIST",
-    "AGENT_CARD_SCHEMA_VERSION"
+    "AGENT_CARD_SCHEMA_VERSION",
+    "agentProfileResolverAbi"
   ],
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },
