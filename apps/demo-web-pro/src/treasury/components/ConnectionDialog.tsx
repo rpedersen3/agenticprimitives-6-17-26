@@ -321,9 +321,23 @@ function ErrorBody({ errorMessage, onRetry, onCancel, onSwitchWallet }: Connecti
               copy
             </button>
           </div>
-          <div style={{ marginTop: 4, opacity: 0.85 }}>
-            If MetaMask doesn't show this account, you may need to import
-            it (its private key) into MetaMask first.
+          <div style={{ marginTop: 6, opacity: 0.85, lineHeight: 1.5 }}>
+            <strong>If MetaMask doesn't show this account</strong> you
+            probably claimed an earlier seat with an EOA you don't have
+            the private key for. Two ways out:
+            <ol style={{ margin: '4px 0 0 18px', padding: 0 }}>
+              <li>
+                Open the <strong>Reset demo</strong> menu (top-right
+                chevron next to <em>Acting as</em>) and start over —
+                claim each seat with EOAs that exist in your MetaMask.
+              </li>
+              <li>
+                If you have the private key for{' '}
+                <code style={{ fontSize: 11 }}>{targetAddr}</code>,{' '}
+                import it into MetaMask via{' '}
+                <em>Account menu → Import account</em> and retry.
+              </li>
+            </ol>
           </div>
         </div>
       )}
