@@ -137,18 +137,22 @@ export function Act4Recovery({ onComplete }: { onComplete: () => void }) {
 
   return (
     <section className="card act-section">
-      <h2>Act 4 · Recovery</h2>
+      <h2>Act 4 · Credential recovery (trustee quorum)</h2>
       <p className="act-intro">
-        Alice and Bob both sign the T6 RecoverAccount schedule, the demo's
-        1-second safety delay elapses, then both sign the apply. Sam's PSA
-        atomically swaps from his lost passkey to his replacement passkey.
+        Custody-policy-governed credential rotation — <em>not</em> a delegation.
+        Alice and Bob both sign the T6 <code>RecoverAccount</code> schedule, the
+        demo's 1-second safety delay elapses, then both sign the apply. The
+        atomic transaction binds the replacement credential to Sam's Smart Agent
+        and retires the lost one. Sam's Smart Agent address, name, profile, and
+        any delegations he holds are unchanged.
       </p>
       <ul className="trustee-list">
-        <li>Target Smart Agent: <code>{sam.personAgent}</code></li>
-        <li>Remove credential: <code>{recovery.lostCredentialIdDigest}</code></li>
+        <li>Canonical Smart Agent: <code>{sam.personAgent}</code> (unchanged after recovery)</li>
+        <li>Retire credential: <code>{recovery.lostCredentialIdDigest}</code></li>
         <li>Add credential: <code>{recovery.replacementCredentialIdDigest}</code></li>
-        <li>New PIA: <code>{recovery.replacementPia}</code></li>
-        <li>Required: 2-of-2 trustee approval (Alice + Bob)</li>
+        <li>New credential PIA: <code>{recovery.replacementPia}</code></li>
+        <li>Recovery mode: <strong>trustee-quorum</strong> (2-of-2 — Alice + Bob)</li>
+        <li>Authorized by: <strong>custody policy</strong> · <code>CustodyAction.RecoverAccount</code></li>
       </ul>
       {!alreadyApplied ? (
         <button type="button" disabled={busy} onClick={handleRecover}>

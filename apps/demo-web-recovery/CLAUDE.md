@@ -2,9 +2,12 @@
 
 ## What this app is
 
-The recovery demo: assumes `demo-web-pro` has already created Alice, Bob, Acme,
-and Treasury state. It adds Sam, simulates passkey loss, and demonstrates
-custody-level recovery.
+The **credential recovery** demo. It demonstrates [ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) end-to-end via the trustee-quorum recovery mode of [spec 221](../../specs/221-credential-recovery.md): Sam loses a passkey credential, Alice + Bob (recovery trustees) co-authorize a custody-policy-governed `CustodyAction.RecoverAccount`, and the new credential is bound to Sam's UNCHANGED canonical Smart Agent.
+
+Headline doctrine the UI must teach:
+
+> **Canonical identity persists. Credentials rotate.**
+> Smart Agent address is the identity; passkeys / EOAs / hardware wallets are control credential facets. Recovery is a custody-policy operation, not a delegation.
 
 ## What this app owns
 
@@ -23,11 +26,12 @@ custody-level recovery.
 
 ## Read These First
 
-1. `package.json` — scripts and package deps.
-2. `src/App.tsx` — top-level recovery shell.
-3. `src/acts/` — act ladder.
-4. `src/lib/custody-ceremony.ts` — multi-signer ceremony helper.
-5. `../../specs/207-smart-account-threshold-policy.md`.
+1. [ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) + [spec 221](../../specs/221-credential-recovery.md) — the doctrine the demo embodies.
+2. `package.json` — scripts and package deps.
+3. `src/App.tsx` — top-level recovery shell + `DoctrineBanner`.
+4. `src/acts/` — act ladder.
+5. `src/lib/custody-ceremony.ts` — multi-signer ceremony helper.
+6. `../../specs/207-smart-account-threshold-policy.md`.
 
 ## Validate
 

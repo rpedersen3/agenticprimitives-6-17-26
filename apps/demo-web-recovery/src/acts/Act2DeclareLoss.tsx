@@ -46,12 +46,14 @@ export function Act2DeclareLoss({ onComplete }: { onComplete: () => void }) {
 
   return (
     <section className="card act-section">
-      <h2>Act 2 · Sam's passkey is lost</h2>
+      <h2>Act 2 · Sam's credential is lost</h2>
       <p className="act-intro">
-        Sam can no longer access his passkey (lost device, factory reset, broken
-        biometric, whatever). The on-chain record of the passkey still exists —
-        but Sam isn't able to produce a WebAuthn assertion against it any more.
-        Recovery in Act 4 will rotate his Smart Agent's custody away from it.
+        Sam can no longer access his passkey credential (lost device, factory reset,
+        broken biometric, whatever). His Smart Agent's identity is unchanged — the
+        SA address still exists, still holds its delegations, still owns its name.
+        Only the control credential is unusable. The on-chain custodian record
+        still references the lost credential; Act 4 rotates it out through the
+        trustee-quorum custody policy.
       </p>
       <ul className="trustee-list">
         <li>Original credential digest: <code>{samPasskey.credentialIdDigest}</code></li>

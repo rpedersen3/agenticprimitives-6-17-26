@@ -19,12 +19,12 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { id: 'act0', number: 0, title: 'Prereqs', blurb: 'Enroll Alice + Bob' },
-  { id: 'act1', number: 1, title: 'Sam joins', blurb: 'Recovery-capable PSA' },
-  { id: 'act2', number: 2, title: 'Lost passkey', blurb: 'Mark Sam locked out' },
-  { id: 'act3', number: 3, title: 'New passkey', blurb: 'Register replacement' },
-  { id: 'act4', number: 4, title: 'Recover', blurb: 'Alice + Bob 2-of-2' },
-  { id: 'act5', number: 5, title: 'Verify', blurb: 'New key authoritative' },
+  { id: 'act0', number: 0, title: 'Trustees', blurb: 'Enroll Alice + Bob' },
+  { id: 'act1', number: 1, title: 'Onboard Sam', blurb: 'Recovery-capable Smart Agent' },
+  { id: 'act2', number: 2, title: 'Credential lost', blurb: 'Mark passkey unusable' },
+  { id: 'act3', number: 3, title: 'Replacement credential', blurb: 'Register new passkey' },
+  { id: 'act4', number: 4, title: 'Rotate credential', blurb: 'Trustee-quorum custody op' },
+  { id: 'act5', number: 5, title: 'Verify', blurb: 'Same SA, new credential' },
 ];
 
 export function App() {
@@ -55,13 +55,15 @@ export function App() {
       <header className="topbar">
         <a className="brand" href="/">
           agenticprimitives
-          <span>recovery demo</span>
+          <span>credential recovery demo</span>
         </a>
         <div className="topbar-right">
           <ChainPill />
           <ResetButton />
         </div>
       </header>
+
+      <DoctrineBanner />
 
       <div className="layout">
         <nav className="step-rail" aria-label="Acts">
@@ -115,6 +117,43 @@ export function App() {
           {activeAct === 'act4' && <Act4Recovery onComplete={() => advance('act5')} />}
           {activeAct === 'act5' && <Act5Verify />}
         </main>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Doctrine banner — surfaces ADR-0011 / spec 221 framing directly in
+ * the UI so the user reads the rule before the flow starts:
+ *
+ *   Canonical identity persists. Credentials rotate.
+ *
+ * The demo does not "recover an identity" — the Smart Agent's address
+ * stays put. Recovery is a custody-policy-governed credential-set
+ * change, not a delegation.
+ */
+function DoctrineBanner() {
+  return (
+    <div
+      style={{
+        background: '#eff6ff',
+        borderBottom: '1px solid #bfdbfe',
+        padding: '10px 16px',
+        fontSize: 13,
+        color: '#1e3a8a',
+        lineHeight: 1.45,
+      }}
+    >
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <strong>Canonical identity persists. Credentials rotate.</strong>{' '}
+        Your Smart Agent's address stays the same. Recovery binds a new
+        control credential (passkey / EOA / hardware wallet) to that
+        existing Smart Agent through its custody policy — it does
+        <em> not </em>
+        create a new agent, and it is <em>not</em> a delegation.{' '}
+        <span style={{ opacity: 0.75 }}>
+          (Doctrine: ADR-0011 · spec 221)
+        </span>
       </div>
     </div>
   );

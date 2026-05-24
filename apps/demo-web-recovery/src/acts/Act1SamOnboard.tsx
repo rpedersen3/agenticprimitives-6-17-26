@@ -102,11 +102,12 @@ export function Act1SamOnboard({ onComplete }: { onComplete: () => void }) {
 
   return (
     <section className="card act-section">
-      <h2>Act 1 · Sam joins</h2>
+      <h2>Act 1 · Sam joins (recovery-capable)</h2>
       <p className="act-intro">
-        Sam registers his passkey and deploys his Person Smart Agent. Recovery is
-        configured at birth: Alice + Bob together (2-of-2) can rotate Sam's custody
-        if Sam ever loses his passkey.
+        Sam's canonical Smart Agent is deployed with a passkey as its control
+        credential. Recovery is configured at birth: Alice + Bob together (2-of-2)
+        are trustees authorized to rotate Sam's control credential set if his passkey
+        is lost. Sam's Smart Agent address is the identity; the passkey is a facet.
       </p>
       <ul className="trustee-list">
         <li>Trustee 1 · Alice <code>{shortAddr(alicePia)}</code></li>

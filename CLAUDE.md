@@ -9,7 +9,7 @@ pnpm-workspace monorepo: publishable capability packages + Foundry contracts + d
 | Unsure which package owns it         | `docs/architecture/task-routing.md`                                                   |
 | Contract code                        | Relevant `specs/2XX-*.md` + `apps/contracts/src/`                                     |
 | A specific package                   | `packages/<name>/CLAUDE.md` only — it routes to the spec + key files                  |
-| Multi-sig / custody / recovery       | `specs/207` (product) + `specs/209` (impl) + `specs/213` (package split)              |
+| Multi-sig / custody / recovery       | `specs/207` (product) + `specs/209` (impl) + `specs/213` (package split) + `specs/221` (credential recovery process) |
 | Audit / forensics                    | `specs/206` + `apps/demo-mcp/docs/audit/guide.md`                                     |
 | Cross-cutting capability (multi-pkg) | `docs/architecture/cross-cutting-capabilities.md`                                     |
 | Deploy / live wiring                 | `apps/contracts/script/Deploy.s.sol` + `apps/contracts/deployments-base-sepolia.json` |
@@ -18,6 +18,7 @@ pnpm-workspace monorepo: publishable capability packages + Foundry contracts + d
 ## Hard rules
 
 - **Smart Agent address is the canonical identifier.** Every person, org, service agent, and treasury IS its ERC-4337 SA address. Names, profiles, ERC-8004 entries, ANS handles, HCS topics — all facets pointing AT the canonical address. Cross-package APIs take `Address`, not names. See [ADR-0010](docs/architecture/decisions/0010-smart-agent-canonical-identifier.md) + [spec 220](specs/220-agent-identity-bootstrap.md) for the bootstrap process (deploy → forced-unique name → custody → optional facets).
+- **Canonical identity persists; credentials rotate.** Passkeys, SIWE EOAs, hardware wallets are control credential facets — replaceable, not the identity. Credential add / replace / remove is a custody-policy-governed operation (trustee quorum, guardian quorum, multi-credential self-recovery, or multi-sig), NEVER a delegation. The SA address NEVER changes during credential recovery. Delegations issued by the SA remain valid after rotation. See [ADR-0011](docs/architecture/decisions/0011-credential-recovery-and-re-association.md) + [spec 221](specs/221-credential-recovery.md).
 - **Specs precede non-trivial code.** New `specs/2XX-*.md` before architecture changes; the spec is the architect-of-record.
 - **Always check smart-agent first.** Before designing any non-trivial capability look at the analog in `/home/barb/smart-agent`. New specs MUST include a "Reference: smart-agent patterns to port" section. Deliberate divergence must say why.
 - **Package boundaries** are one-directional: `types ← identity-auth ← agent-account ← delegation ← mcp-runtime`, plus `key-custody → delegation`, `tool-policy → mcp-runtime`, and the custody-layer fork `types ← custody` (depended on by `agent-account` and `delegation`; see [spec 213](specs/213-custody-layer-carve-out.md) for the firewall). No back-edges. `tool-policy` and `types` are transport-agnostic (no MCP/A2A/LangChain/Vercel imports).

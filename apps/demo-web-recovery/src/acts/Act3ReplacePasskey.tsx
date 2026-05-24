@@ -45,12 +45,14 @@ export function Act3ReplacePasskey({ onComplete }: { onComplete: () => void }) {
 
   return (
     <section className="card act-section">
-      <h2>Act 3 · Sam registers a replacement passkey</h2>
+      <h2>Act 3 · Register a replacement credential</h2>
       <p className="act-intro">
-        Sam creates a brand-new passkey on his current device. It isn't
-        authoritative yet — until Act 4's recovery ceremony runs, Sam's PSA still
-        only trusts the (lost) original. Pre-registering means Act 4 can rotate
-        in one atomic T6 action instead of leaving Sam in a half-recovered state.
+        Sam creates a brand-new passkey credential on his current device. It is
+        staged — not yet authoritative. Until Act 4's trustee-quorum custody
+        ceremony adds it to Sam's Smart Agent and removes the lost credential, the
+        Smart Agent's on-chain custodian set still only recognizes the original.
+        Pre-registering here lets Act 4 do the rotation atomically (add new +
+        remove old in one transaction) so there's no half-recovered state.
       </p>
       {registered ? (
         <div className="act-success">

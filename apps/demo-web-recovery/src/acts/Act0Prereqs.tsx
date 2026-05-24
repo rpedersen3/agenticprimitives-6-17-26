@@ -103,11 +103,12 @@ export function Act0Prereqs({ onComplete }: { onComplete: () => void }) {
 
   return (
     <section className="card act-section">
-      <h2>Act 0 · Prereqs</h2>
+      <h2>Act 0 · Recovery trustees</h2>
       <p className="act-intro">
-        Before Sam can onboard, his recovery trustees — Alice + Bob — need to be enrolled
-        in this demo. Each one registers a passkey on this device. Their PSAs will deploy
-        the first time they need to sign on chain (Act 4 recovery).
+        Before Sam can onboard, his recovery trustees — Alice + Bob — need their own
+        canonical Smart Agents. Each one enrolls a passkey credential on this device;
+        the credential is a control facet of that trustee's Smart Agent. We deploy
+        their Smart Agents now so they can co-sign Sam's credential recovery in Act 4.
       </p>
       <div className="seat-grid">
         {recoverySeats

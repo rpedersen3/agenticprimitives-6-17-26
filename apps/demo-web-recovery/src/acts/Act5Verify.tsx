@@ -76,23 +76,25 @@ export function Act5Verify() {
 
   return (
     <section className="card act-section">
-      <h2>Act 5 · Verify</h2>
+      <h2>Act 5 · Verify (same Smart Agent, new credential)</h2>
       <p className="act-intro">
-        On-chain probes confirm the rotation. The replacement passkey's PIA is now a
-        custodian; the lost passkey's PIA is no longer recognized.
+        On-chain probes confirm the rotation. The replacement credential's PIA is
+        now a custodian of Sam's Smart Agent; the lost credential's PIA is no
+        longer recognized. Sam's canonical Smart Agent address is unchanged.
       </p>
       <ul className="trustee-list">
-        <li>Sam's PSA: <code>{sam.personAgent}</code></li>
-        <li>New PIA <code>{newPia}</code>: <strong>{verdictNew}</strong></li>
-        <li>Old PIA <code>{oldPia}</code>: <strong>{verdictOld}</strong></li>
+        <li>Canonical Smart Agent: <code>{sam.personAgent}</code> (unchanged)</li>
+        <li>New credential PIA <code>{newPia}</code>: <strong>{verdictNew}</strong></li>
+        <li>Old credential PIA <code>{oldPia}</code>: <strong>{verdictOld}</strong></li>
         <li>Recovery applied at: {recovery.recoveredAt ?? '(not yet)'}</li>
       </ul>
       {checking && <div>Querying chain…</div>}
       {error && <div className="act-error">{error}</div>}
       {newOk === true && oldOk === false && (
         <div className="act-success">
-          ✓ Recovery verified. Sam's PSA address is unchanged; only the controlling
-          passkey rotated. Any delegations Sam holds elsewhere remain valid.
+          ✓ Credential recovery verified. Sam's canonical Smart Agent identity is
+          unchanged — same address, same name, same profile, same delegations.
+          The control-credential set rotated through the SA's custody policy.
         </div>
       )}
       <div className="act-footer">

@@ -1,5 +1,8 @@
 # @agenticprimitives/custody — Claude guide
 
+## Owns credential recovery
+This package is the **authorization layer for credential add / replace / remove** on a Smart Agent ([ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) + [spec 221](../../specs/221-credential-recovery.md)). `CustodyAction.RecoverAccount` + `buildRecoverAccountArgs` perform an atomic add-new + remove-old credential rotation, gated by the SA's custody policy (trustee quorum / guardian quorum / multi-credential self-recovery / multi-sig). The canonical SA address NEVER changes; only the credential set does. Recovery MUST NOT be modeled as a delegation or routed through `@agenticprimitives/delegation`.
+
 ## Owns
 
 - `custodyPolicyAbi`: ABI for `apps/contracts/src/custody/CustodyPolicy.sol`.

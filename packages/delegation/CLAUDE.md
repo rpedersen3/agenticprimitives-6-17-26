@@ -1,5 +1,8 @@
 # @agenticprimitives/delegation — Claude guide
 
+## NOT the credential-recovery layer
+A delegation is **agent → agent** authority: SA A grants SA B the right to take scoped actions on A's behalf. It is NOT a credential change. Adding, replacing, or removing a passkey / SIWE EOA / hardware wallet on an SA is a [credential-recovery operation](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) routed through [`@agenticprimitives/custody`](../custody) — NEVER through a Caveat, Steward grant, session, or token here. A delegation issued by an SA MUST remain valid across that SA's credential rotation (principal = SA address, not the credential). A delegated party MUST NOT gain custody powers through delegation. See [ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) + [spec 221](../../specs/221-credential-recovery.md).
+
 ## What this package owns
 - `Delegation` struct, `Caveat` types, `DataScopeGrant`. EIP-712 hashing.
 - Caveat builders (8 on-chain enforcers + 3 off-chain sentinels) and the **fail-closed** evaluator.
