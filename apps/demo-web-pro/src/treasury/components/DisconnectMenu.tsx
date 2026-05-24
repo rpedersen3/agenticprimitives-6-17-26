@@ -25,6 +25,8 @@ import {
 import { clearPasskeyForSeat } from '../../lib/passkey';
 import { clearDemoState } from '../../lib/demo-state';
 import { clearAllCachedNames } from '../../lib/name-cache';
+import { clearDelegations } from '../../lib/delegations';
+import { clearTreasuryDelegations } from '../../lib/treasury-delegations';
 
 export function DisconnectMenu({
   activeSeatId,
@@ -65,6 +67,7 @@ export function DisconnectMenu({
   };
 
   const onResetAll = () => {
+    // Wipe every per-seat passkey first.
     for (const seat of orgConfig.seats) {
       if (seats[seat.id]) {
         clearPasskeyForSeat(seat.id);
@@ -72,11 +75,28 @@ export function DisconnectMenu({
       }
     }
     clearActiveSeat();
-    clearDemoState();
-    clearAllCachedNames();
+    clearDemoState();         // org + treasury records
+    clearAllCachedNames();    // address → .agent name cache
+    clearDelegations();       // act-5 delegation envelopes
+    clearTreasuryDelegations(); // treasury stewardship delegations
+    // Defensive nuke: any other key under our prefix that we might
+    // have missed. Demo state lives entirely under this namespace, so
+    // wiping the whole prefix is correct + future-proof for any new
+    // storage added later.
+    try {
+      const prefix = 'agenticprimitives:demo-web-pro:';
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(prefix)) localStorage.removeItem(k);
+      }
+    } catch {}
     setOpen(false);
     setConfirm(null);
-    window.location.hash = '';
+    // Hard reload guarantees React state + react-query cache + wagmi
+    // connector state all reset to a clean boot. Without this, the
+    // next claim flow can pick up stale runtime objects (wagmi's
+    // connector cache especially) even though localStorage is empty.
+    window.location.href = '/';
   };
 
   return (
