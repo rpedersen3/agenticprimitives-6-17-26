@@ -22,7 +22,22 @@ export type {
   SetSubregistryInput,
   AgentNamingClientOpts,
 } from './types';
-export { AgentNamingClient } from './client';
+export { AgentNamingClient, type WriteContext } from './client';
+
+// Phase 4 pure call builders (subpath `@agenticprimitives/agent-naming/custody`
+// re-exported from top-level for convenience).
+export {
+  buildRegisterSubnameCall,
+  buildRotateNameOwnerCall,
+  buildRotateNameResolverCall,
+  buildSetSubregistryCall,
+  buildSetPrimaryNameCall,
+  buildSetStringAttributeCall,
+  buildSetAddressAttributeCall,
+  buildSetBytes32AttributeCall,
+  buildRecordCalls,
+  type ContractCall,
+} from './custody';
 
 // Phase 3 contract ABIs (live at deployed addresses recorded in
 // apps/contracts/deployments-<network>.json). ADR-0009 pivot: the

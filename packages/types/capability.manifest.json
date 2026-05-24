@@ -12,31 +12,37 @@
   },
   "imports": [],
   "allowedImports": [],
-  "forbiddenImports": [
-    "apps/*",
-    "@agenticprimitives/*"
-  ],
-  "publicExports": [
-    "Address",
-    "Hex",
-    "ChainId",
-    "BrandedId",
-    "AgentType",
-    "NameContext"
-  ],
+  "forbiddenImports": ["apps/*", "@agenticprimitives/*"],
+  "publicExports": ["Address", "Hex", "ChainId", "BrandedId", "AgentType", "NameContext"],
   "forbiddenTerms": [
-    { "term": "Delegation", "reason": "Domain concept; types-only package has no domain types.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "Signer", "reason": "Belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth" },
-    { "term": "AccountClient", "reason": "Belongs in agent-account.", "owningPackage": "@agenticprimitives/agent-account" },
-    { "term": "KMS", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
-    { "term": "RiskTier", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" }
+    {
+      "term": "Delegation",
+      "reason": "Domain concept; types-only package has no domain types.",
+      "owningPackage": "@agenticprimitives/delegation",
+      "allowInPaths": ["src/index.ts"]
+    },
+    {
+      "term": "Signer",
+      "reason": "Belongs in identity-auth.",
+      "owningPackage": "@agenticprimitives/identity-auth"
+    },
+    {
+      "term": "AccountClient",
+      "reason": "Belongs in agent-account.",
+      "owningPackage": "@agenticprimitives/agent-account"
+    },
+    {
+      "term": "KMS",
+      "reason": "Belongs in key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "RiskTier",
+      "reason": "Belongs in tool-policy.",
+      "owningPackage": "@agenticprimitives/tool-policy"
+    }
   ],
-  "ignoreForAgentContext": [
-    "dist/**",
-    "node_modules/**",
-    "coverage/**",
-    "*.tsbuildinfo"
-  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
   "contextBudget": {
     "claudeMdMaxWords": 900,
     "readmeMaxWords": 1800,

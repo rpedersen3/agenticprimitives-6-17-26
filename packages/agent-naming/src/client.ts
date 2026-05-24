@@ -1,4 +1,4 @@
-import { createPublicClient, http, parseAbiItem, type Address, type Hex, type PublicClient } from 'viem';
+import { createPublicClient, http, parseAbiItem, type Address, type Hex, type PublicClient, type WalletClient } from 'viem';
 import {
   agentNameAttributeResolverAbi,
   agentNameRegistryAbi,
@@ -9,6 +9,12 @@ import {
   decodeRecords,
   type DecodeInput,
 } from './records';
+import {
+  buildRegisterSubnameCall,
+  buildRecordCalls,
+  buildSetPrimaryNameCall,
+  buildSetSubregistryCall,
+} from './custody';
 import type {
   AgentNameRecords,
   AgentNamingClientOpts,
@@ -19,6 +25,17 @@ import type {
 } from './types';
 import { namehash, ZERO_NODE } from './namehash';
 import { normalizeAgentName } from './normalize';
+
+/**
+ * Optional per-call submission context. When provided, the write
+ * method submits the encoded call via `walletClient.sendTransaction`.
+ * When omitted, the method throws — callers who want to submit via a
+ * different path (AgentAccount.execute, CustodyPolicy ceremony,
+ * relayer, etc.) should use the pure builders in `./custody` instead.
+ */
+export interface WriteContext {
+  walletClient: WalletClient;
+}
 
 /**
  * Read + write client for the Agent Naming Service.
@@ -179,26 +196,136 @@ export class AgentNamingClient {
     return decodeRecords(input);
   }
 
-  // ─── Writes (wire in Phase 4) ────────────────────────────────────
+  // ─── Writes (Phase 4 — live) ─────────────────────────────────────
 
-  async registerSubname(input: RegisterSubnameInput): Promise<Hex> {
-    void input;
-    throw new Error('NS Phase 4 — wire to AgentNameRegistry.register + initial-records writes');
+  /**
+   * Register `<label>.<parent>` under the parent namespace. The
+   * provided `walletClient`'s account MUST be authorized to register
+   * children under `parent` (either direct owner OR subregistry
+   * delegate). Returns the registration tx hash; the new child node
+   * can be computed off-chain as
+   * `keccak256(parentNode || keccak256(label))` — equal to
+   * `namehash(label + '.' + parentName)`.
+   *
+   * For PSA-controlled registrations (where the parent's owner is a
+   * Smart Agent gated by CustodyPolicy), use the builders in
+   * `./custody` directly and compose them into the appropriate
+   * AgentAccount.execute / CustodyPolicy ceremony instead.
+   */
+  async registerSubname(input: RegisterSubnameInput, ctx: WriteContext): Promise<Hex> {
+    const parentNode = namehash(input.parent);
+    const call = buildRegisterSubnameCall({
+      registry: this.opts.registry,
+      parentNode,
+      label: input.label,
+      newOwner: input.owner,
+      resolver: input.resolver,
+    });
+    const hash = await this._submit(ctx, call);
+    if (input.initialRecords) {
+      // Compute the new child node off-chain so we don't have to
+      // re-read against a possibly-lagging RPC.
+      const childNode = namehash(`${input.label}.${input.parent}`);
+      const resolver = input.resolver ?? this.opts.universalResolver; // best-effort default
+      const calls = buildRecordCalls({ resolver, node: childNode, records: input.initialRecords });
+      for (const c of calls) await this._submit(ctx, c);
+    }
+    return hash;
   }
 
-  async setPrimaryName(input: SetPrimaryNameInput): Promise<Hex> {
-    void input;
-    throw new Error('NS Phase 4 — wire to AgentNameRegistry.setPrimaryName');
+  /**
+   * Set the caller's primary name (reverse record). The wallet
+   * client's account MUST equal `input.agent` — the contract enforces
+   * `msg.sender == agent` (i.e. an agent sets its OWN primary name;
+   * authority over reverse records is per-account by construction).
+   */
+  async setPrimaryName(input: SetPrimaryNameInput, ctx: WriteContext): Promise<Hex> {
+    const node = namehash(input.name);
+    const call = buildSetPrimaryNameCall({ registry: this.opts.registry, node });
+    return await this._submit(ctx, call);
   }
 
-  async setAgentRecords(input: SetAgentRecordsInput): Promise<Hex[]> {
-    void input;
-    throw new Error('NS Phase 4 — wire to AgentNameAttributeResolver typed setters');
+  /**
+   * Write the typed record bundle for `input.name`. The
+   * `walletClient`'s account MUST be the current name owner
+   * (`REGISTRY.owner(node) == msg.sender`). Returns one tx hash per
+   * record set — the caller may parallelize submission via a multi-call
+   * upstream if/when one becomes available.
+   */
+  async setAgentRecords(input: SetAgentRecordsInput, ctx: WriteContext): Promise<Hex[]> {
+    const node = namehash(input.name);
+    // Resolve the resolver address for this name via the registry.
+    const resolverAddr = await this.publicClient.readContract({
+      address: this.opts.registry,
+      abi: agentNameRegistryAbi,
+      functionName: 'resolver',
+      args: [node],
+    });
+    if (resolverAddr === '0x0000000000000000000000000000000000000000') {
+      throw new Error(`[agent-naming] no resolver set for "${input.name}"; install one via setResolver first`);
+    }
+    const calls = buildRecordCalls({
+      resolver: resolverAddr as Address,
+      node,
+      records: input.records,
+    });
+    const hashes: Hex[] = [];
+    for (const c of calls) hashes.push(await this._submit(ctx, c));
+    return hashes;
   }
 
-  async setSubregistry(input: SetSubregistryInput): Promise<Hex> {
-    void input;
-    throw new Error('NS Phase 4 — wire to AgentNameRegistry.setSubregistry');
+  /**
+   * Delegate child-name issuance authority for the subtree at
+   * `input.name` to a subregistry contract. The wallet client's
+   * account MUST be the current name owner.
+   */
+  async setSubregistry(input: SetSubregistryInput, ctx: WriteContext): Promise<Hex> {
+    const node = namehash(input.name);
+    const call = buildSetSubregistryCall({
+      registry: this.opts.registry,
+      node,
+      subregistry: input.subregistry,
+    });
+    return await this._submit(ctx, call);
+  }
+
+  /**
+   * Submit a single ContractCall via the bound walletClient. Uses
+   * explicit nonce fetch + retry on "replacement underpriced" to
+   * tolerate Base Sepolia's read-after-write lag.
+   */
+  private async _submit(ctx: WriteContext, call: { to: Address; value: bigint; data: Hex }): Promise<Hex> {
+    const { walletClient } = ctx;
+    const account = (walletClient as { account?: { address: Address } }).account;
+    if (!account) throw new Error('[agent-naming] walletClient has no account; cannot sign tx');
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const nonce = await this.publicClient.getTransactionCount({
+          address: account.address,
+          blockTag: 'pending',
+        });
+        const hash = await walletClient.sendTransaction({
+          to: call.to,
+          value: call.value,
+          data: call.data,
+          nonce,
+          account: walletClient.account!,
+          chain: walletClient.chain ?? null,
+        });
+        await this.publicClient.waitForTransactionReceipt({ hash });
+        return hash;
+      } catch (err) {
+        lastErr = err;
+        const msg = (err as Error).message ?? '';
+        if (msg.includes('replacement') || msg.includes('underpriced')) {
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error('[agent-naming] _submit: exceeded retries');
   }
 
   // ─── Internals ──────────────────────────────────────────────────

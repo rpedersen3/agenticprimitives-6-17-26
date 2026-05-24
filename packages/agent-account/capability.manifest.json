@@ -10,10 +10,7 @@
     "source": ["src/**"],
     "tests": ["test/**"]
   },
-  "imports": [
-    "@agenticprimitives/types",
-    "@agenticprimitives/identity-auth"
-  ],
+  "imports": ["@agenticprimitives/types", "@agenticprimitives/identity-auth"],
   "allowedImports": [
     "@agenticprimitives/types",
     "@agenticprimitives/identity-auth",
@@ -30,7 +27,7 @@
   "publicExports": [
     "AgentAccountClient",
     "AgentAccountClientOpts",
-    "CreateAgentAccountParams",
+    "AgentAccountSpec",
     "UserOperation",
     "Address",
     "Hex",
@@ -39,6 +36,9 @@
     "PackedUserOperation",
     "packGasLimits",
     "unpackGasLimits",
+    "agentAccountAbi",
+    "agentAccountFactoryAbi",
+    "approvedHashRegistryAbi",
     "entryPointAbi",
     "SIG_TYPE_WEBAUTHN",
     "encodeAssertion",
@@ -51,24 +51,75 @@
     "SafeSignatureSlot"
   ],
   "forbiddenTerms": [
-    { "term": "Caveat", "reason": "Belongs in delegation. agent-account may reference the term in cross-cutting-capability docstrings (spec 207 quorum integration).", "owningPackage": "@agenticprimitives/delegation", "allowInPaths": ["src/quorum.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"] },
-    { "term": "Enforcer", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "SessionManager", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "DelegationToken", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "A2AKeyProvider", "reason": "Belongs in key-custody. agent-account consumes signers via identity-auth's Signer interface only.", "owningPackage": "@agenticprimitives/key-custody" },
-    { "term": "envelope encryption", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
-    { "term": "RiskTier", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
-    { "term": "withDelegation", "reason": "Belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
-    { "term": "MCP", "reason": "Transport-specific; this package is transport-free.", "owningPackage": "@agenticprimitives/mcp-runtime", "allowInPaths": ["spec.md", "README.md"] },
-    { "term": "passkey", "reason": "Auth method internals belong in identity-auth. The on-chain factory methods (createAccountWithPasskey / getAddressForPasskey) and the signature dispatch ABI are agent-account's contract surface; the WebAuthn signature encoder may reference identity-auth's subpath URL.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md", "CLAUDE.md", "src/webauthn-signature.ts", "src/abis.ts", "src/client.ts", "test/unit/webauthn-signature.test.ts"] },
-    { "term": "OAuth", "reason": "Auth method internals belong in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] }
+    {
+      "term": "Caveat",
+      "reason": "Belongs in delegation. agent-account may reference the term in cross-cutting-capability docstrings (spec 207 quorum integration).",
+      "owningPackage": "@agenticprimitives/delegation",
+      "allowInPaths": ["src/quorum.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"]
+    },
+    {
+      "term": "Enforcer",
+      "reason": "Belongs in delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "SessionManager",
+      "reason": "Belongs in delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "DelegationToken",
+      "reason": "Belongs in delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "A2AKeyProvider",
+      "reason": "Belongs in key-custody. agent-account consumes signers via identity-auth's Signer interface only.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "envelope encryption",
+      "reason": "Belongs in key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "RiskTier",
+      "reason": "Belongs in tool-policy.",
+      "owningPackage": "@agenticprimitives/tool-policy"
+    },
+    {
+      "term": "withDelegation",
+      "reason": "Belongs in mcp-runtime.",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    },
+    {
+      "term": "MCP",
+      "reason": "Transport-specific; this package is transport-free.",
+      "owningPackage": "@agenticprimitives/mcp-runtime",
+      "allowInPaths": ["spec.md", "README.md"]
+    },
+    {
+      "term": "passkey",
+      "reason": "Auth method internals belong in identity-auth. The on-chain factory methods (createAccountWithPasskey / getAddressForPasskey) and the signature dispatch ABI are agent-account's contract surface; the WebAuthn signature encoder may reference identity-auth's subpath URL.",
+      "owningPackage": "@agenticprimitives/identity-auth",
+      "allowInPaths": [
+        "spec.md",
+        "README.md",
+        "CLAUDE.md",
+        "src/webauthn-signature.ts",
+        "src/abis.ts",
+        "src/client.ts",
+        "test/unit/webauthn-signature.test.ts"
+      ]
+    },
+    {
+      "term": "OAuth",
+      "reason": "Auth method internals belong in identity-auth.",
+      "owningPackage": "@agenticprimitives/identity-auth",
+      "allowInPaths": ["spec.md", "README.md"]
+    }
   ],
-  "ignoreForAgentContext": [
-    "dist/**",
-    "node_modules/**",
-    "coverage/**",
-    "*.tsbuildinfo"
-  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
   "contextBudget": {
     "claudeMdMaxWords": 1100,
     "readmeMaxWords": 1800,

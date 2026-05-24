@@ -26,11 +26,11 @@ apps/demo-web-pro/
 
 ## Capabilities demoed here
 
-| Capability | Spec | Demo guide | Implementation |
-| --- | --- | --- | --- |
-| **Treasury Service Agent** | [`specs/211`](../../specs/211-treasury-service-agent-demo.md) | [`docs/treasury-service-agent/guide.md`](docs/treasury-service-agent/guide.md) | `src/treasury/` |
-| **Agent-centric delegation** | [`specs/212`](../../specs/212-agent-centric-delegation.md) | same guide | planned Acts 5–6 |
-| **Treasury ontology** | [`specs/210`](../../specs/210-treasury-service-agent.md) | same guide | UI vocabulary + act model |
+| Capability                   | Spec                                                          | Demo guide                                                                     | Implementation            |
+| ---------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------- |
+| **Treasury Service Agent**   | [`specs/211`](../../specs/211-treasury-service-agent-demo.md) | [`docs/treasury-service-agent/guide.md`](docs/treasury-service-agent/guide.md) | `src/treasury/`           |
+| **Agent-centric delegation** | [`specs/212`](../../specs/212-agent-centric-delegation.md)    | same guide                                                                     | planned Acts 5–6          |
+| **Treasury ontology**        | [`specs/210`](../../specs/210-treasury-service-agent.md)      | same guide                                                                     | UI vocabulary + act model |
 
 When you add an act:
 

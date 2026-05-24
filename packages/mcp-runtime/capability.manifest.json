@@ -28,9 +28,7 @@
     "pg",
     "viem"
   ],
-  "forbiddenImports": [
-    "apps/*"
-  ],
+  "forbiddenImports": ["apps/*"],
   "publicExports": [
     "withDelegation",
     "withCrossDelegation",
@@ -61,20 +59,82 @@
     "ServiceMacHeaders"
   ],
   "forbiddenTerms": [
-    { "term": "passkey", "reason": "Auth method internals belong in identity-auth. mcp-runtime may reference the term in cross-cutting-capability docstrings (spec 207 UV gate is a passkey concept).", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["src/with-delegation.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"] },
-    { "term": "SIWE", "reason": "Auth method belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] },
-    { "term": "OAuth", "reason": "Auth method belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] },
-    { "term": "AgentAccountClient", "reason": "Smart-account substrate belongs in agent-account; mcp-runtime never instantiates this client directly.", "owningPackage": "@agenticprimitives/agent-account", "allowInPaths": ["spec.md", "README.md"] },
-    { "term": "AgentAccountFactory", "reason": "Belongs in agent-account.", "owningPackage": "@agenticprimitives/agent-account" },
-    { "term": "envelope encryption", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
-    { "term": "LocalAesProvider", "reason": "Concrete KMS backend; belongs in key-custody. Use the A2AKeyProvider interface via delegation.", "owningPackage": "@agenticprimitives/key-custody" },
-    { "term": "AwsKmsProvider", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
-    { "term": "GcpKmsProvider", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
-    { "term": "AES-GCM", "reason": "Encryption algorithm specifics belong in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
-    { "term": "buildCaveat", "reason": "Caveat builders belong in delegation; mcp-runtime consumes Delegations as already-built objects.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "encodeTimestampTerms", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "RiskTier", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy", "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"] },
-    { "term": "declareTool", "reason": "Classification primitive belongs in tool-policy; mcp-runtime re-exports declareResource which composes it.", "owningPackage": "@agenticprimitives/tool-policy" }
+    {
+      "term": "passkey",
+      "reason": "Auth method internals belong in identity-auth. mcp-runtime may reference the term in cross-cutting-capability docstrings (spec 207 UV gate is a passkey concept).",
+      "owningPackage": "@agenticprimitives/identity-auth",
+      "allowInPaths": ["src/with-delegation.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"]
+    },
+    {
+      "term": "SIWE",
+      "reason": "Auth method belongs in identity-auth.",
+      "owningPackage": "@agenticprimitives/identity-auth",
+      "allowInPaths": ["spec.md", "README.md"]
+    },
+    {
+      "term": "OAuth",
+      "reason": "Auth method belongs in identity-auth.",
+      "owningPackage": "@agenticprimitives/identity-auth",
+      "allowInPaths": ["spec.md", "README.md"]
+    },
+    {
+      "term": "AgentAccountClient",
+      "reason": "Smart-account substrate belongs in agent-account; mcp-runtime never instantiates this client directly.",
+      "owningPackage": "@agenticprimitives/agent-account",
+      "allowInPaths": ["spec.md", "README.md"]
+    },
+    {
+      "term": "AgentAccountFactory",
+      "reason": "Belongs in agent-account.",
+      "owningPackage": "@agenticprimitives/agent-account"
+    },
+    {
+      "term": "envelope encryption",
+      "reason": "Belongs in key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "LocalAesProvider",
+      "reason": "Concrete KMS backend; belongs in key-custody. Use the A2AKeyProvider interface via delegation.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "AwsKmsProvider",
+      "reason": "Belongs in key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "GcpKmsProvider",
+      "reason": "Belongs in key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "AES-GCM",
+      "reason": "Encryption algorithm specifics belong in key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "buildCaveat",
+      "reason": "Caveat builders belong in delegation; mcp-runtime consumes Delegations as already-built objects.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "encodeTimestampTerms",
+      "reason": "Belongs in delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "RiskTier",
+      "reason": "Belongs in tool-policy.",
+      "owningPackage": "@agenticprimitives/tool-policy",
+      "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"]
+    },
+    {
+      "term": "declareTool",
+      "reason": "Classification primitive belongs in tool-policy; mcp-runtime re-exports declareResource which composes it.",
+      "owningPackage": "@agenticprimitives/tool-policy",
+      "allowInPaths": ["src/with-delegation.ts"]
+    }
   ],
   "ignoreForAgentContext": [
     "dist/**",

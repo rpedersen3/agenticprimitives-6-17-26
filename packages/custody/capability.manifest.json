@@ -1,0 +1,101 @@
+{
+  "name": "@agenticprimitives/custody",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/213-custody-layer-carve-out.md",
+  "summary": "Custody-layer SDK for CustodyPolicy: ABI, CustodyAction arg builders, quorum signature slots, EIP-712 typed-data helpers, and custody-domain types.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": ["@agenticprimitives/types", "viem"],
+  "allowedImports": ["@agenticprimitives/types", "viem"],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/audit",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-identity",
+    "@agenticprimitives/agent-relationships",
+    "@modelcontextprotocol/sdk"
+  ],
+  "publicExports": [
+    "custodyPolicyAbi",
+    "CustodyAction",
+    "buildAddCustodianArgs",
+    "buildRemoveCustodianArgs",
+    "buildAddTrusteeArgs",
+    "buildRemoveTrusteeArgs",
+    "buildChangeCustodyModeArgs",
+    "buildChangeValueCeilingArgs",
+    "buildSetRecoveryApprovalsArgs",
+    "buildApplySystemUpdateArgs",
+    "buildChangeApprovalsRequiredArgs",
+    "buildAddPasskeyCredentialArgs",
+    "buildRemovePasskeyCredentialArgs",
+    "buildRotateAllCustodiansArgs",
+    "buildRecoverAccountArgs",
+    "RecoveryPasskeyAdd",
+    "CUSTODY_DOMAIN_NAME",
+    "CUSTODY_DOMAIN_VERSION",
+    "custodyDomain",
+    "ScheduleCustodyChangeRequest",
+    "ApplyCustodyChangeRequest",
+    "CancelScheduledChangeRequest",
+    "ScheduleCustodyChangeMessage",
+    "ApplyCustodyChangeMessage",
+    "CancelScheduledChangeMessage",
+    "Custodian",
+    "Trustee",
+    "CustodyCouncil",
+    "ScheduledChange",
+    "CustodyMode",
+    "RiskTier",
+    "CUSTODY_MODE_BY_INDEX",
+    "EcdsaSlot",
+    "ContractSigSlot",
+    "ApprovedHashSlot",
+    "PasskeySlot",
+    "QuorumSlot",
+    "WebAuthnAssertion",
+    "packQuorumSigs",
+    "encodePasskeyTailBody",
+    "passkeyIdentity"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "Steward",
+      "reason": "Agency-layer concept. Belongs in @agenticprimitives/delegation.",
+      "owningPackage": "@agenticprimitives/delegation",
+      "allowInPaths": ["CLAUDE.md", "src/index.ts"]
+    },
+    {
+      "term": "Caveat",
+      "reason": "Delegation caveats are agency-layer permissions.",
+      "owningPackage": "@agenticprimitives/delegation",
+      "allowInPaths": ["CLAUDE.md", "src/index.ts"]
+    },
+    {
+      "term": "MCP",
+      "reason": "Transport concerns belong in @agenticprimitives/mcp-runtime or apps.",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    },
+    {
+      "term": "KMS",
+      "reason": "Key custody is separate from account custody.",
+      "owningPackage": "@agenticprimitives/key-custody",
+      "allowInPaths": ["CLAUDE.md"]
+    }
+  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

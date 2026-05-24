@@ -1,18 +1,19 @@
 # agenticprimitives — Claude guide
 
-pnpm-workspace monorepo: 7 publishable packages + Foundry contracts + demo apps. Patterns mirror `smart-agent` (branch `003-intent-marketplace-proposal`, local `/home/barb/smart-agent`); we don't fork.
+pnpm-workspace monorepo: publishable capability packages + Foundry contracts + demo apps. Patterns mirror `smart-agent` (branch `003-intent-marketplace-proposal`, local `/home/barb/smart-agent`); we port patterns, not layout.
 
 ## Where to look (by intent)
 
-| You're working on | Read first |
-| --- | --- |
-| Contract code | `apps/contracts/src/AgentAccount.sol` (thin core) + `src/modules/ThresholdValidator.sol` (admin) + `specs/209-erc7579-module-taxonomy.md` |
-| A specific package | `packages/<name>/CLAUDE.md` only — it routes to the spec + key files |
-| Multi-sig / threshold / recovery | `specs/207` (product) + `specs/209` (impl) + `apps/demo-web-pro/docs/multi-sig/guide.md` |
-| Audit / forensics | `specs/206` + `apps/demo-mcp/docs/audit/guide.md` |
-| Cross-cutting capability (multi-pkg) | `docs/architecture/cross-cutting-capabilities.md` |
-| Deploy / live wiring | `apps/contracts/script/Deploy.s.sol` + `apps/contracts/deployments-base-sepolia.json` |
-| Demo flows | `apps/demo-web-pro/CLAUDE.md` + `apps/demo-web/`, `apps/demo-a2a/`, `apps/demo-mcp/` |
+| You're working on                    | Read first                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| Unsure which package owns it         | `docs/architecture/task-routing.md`                                                   |
+| Contract code                        | Relevant `specs/2XX-*.md` + `apps/contracts/src/`                                     |
+| A specific package                   | `packages/<name>/CLAUDE.md` only — it routes to the spec + key files                  |
+| Multi-sig / custody / recovery       | `specs/207` (product) + `specs/209` (impl) + `specs/213` (package split)              |
+| Audit / forensics                    | `specs/206` + `apps/demo-mcp/docs/audit/guide.md`                                     |
+| Cross-cutting capability (multi-pkg) | `docs/architecture/cross-cutting-capabilities.md`                                     |
+| Deploy / live wiring                 | `apps/contracts/script/Deploy.s.sol` + `apps/contracts/deployments-base-sepolia.json` |
+| Demo flows                           | `apps/demo-web-pro/CLAUDE.md` + `apps/demo-web/`, `apps/demo-a2a/`, `apps/demo-mcp/`  |
 
 ## Hard rules
 
@@ -29,6 +30,15 @@ pnpm-workspace monorepo: 7 publishable packages + Foundry contracts + demo apps.
 - Solidity 0.8.28, optimizer 200 runs, via-IR ON.
 - Generated/build content (`out/`, `cache/`, `dist/`, `node_modules/`, `.next/`) is in `.claudeignore` — searches skip it.
 
-## Status (2026-05-20)
+## Validation shortcuts
 
-Phase 6c.5-d.1 landed: AgentAccount is under EIP-170 (15.2 KB runtime, was 27.1 KB). ThresholdValidator module owns the admin surface. 152 Forge tests + workspace tests passing. Next: phase 6c.5-d.1.c (factory rewires to install validator) → phase 6c.5-c (live deploy resume). See task list.
+Prefer the narrowest script before broad checks:
+
+- `pnpm check:<package-name>` for package work, e.g. `pnpm check:agent-naming`
+- `pnpm check:demo-web-pro` / `pnpm check:demo-a2a` for app work
+- `pnpm check:cross-cutting-capabilities` after routing-index edits
+- `pnpm check:all` before broad PRs
+
+## Status
+
+Pre-alpha. Specs remain the source of truth; package `CLAUDE.md` files are the fastest entry point for implementation work.

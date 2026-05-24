@@ -66,7 +66,18 @@
     "decodeRecords",
     "PredicateName",
     "EncodedRecord",
-    "DecodeInput"
+    "DecodeInput",
+    "WriteContext",
+    "ContractCall",
+    "buildRegisterSubnameCall",
+    "buildRotateNameOwnerCall",
+    "buildRotateNameResolverCall",
+    "buildSetSubregistryCall",
+    "buildSetPrimaryNameCall",
+    "buildSetStringAttributeCall",
+    "buildSetAddressAttributeCall",
+    "buildSetBytes32AttributeCall",
+    "buildRecordCalls"
   ],
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation. Naming-domain only.", "owningPackage": "@agenticprimitives/delegation" },

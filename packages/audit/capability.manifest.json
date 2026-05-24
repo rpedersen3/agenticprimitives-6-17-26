@@ -10,12 +10,8 @@
     "source": ["src/**"],
     "tests": ["test/**"]
   },
-  "imports": [
-    "@agenticprimitives/types"
-  ],
-  "allowedImports": [
-    "@agenticprimitives/types"
-  ],
+  "imports": ["@agenticprimitives/types"],
+  "allowedImports": ["@agenticprimitives/types"],
   "forbiddenImports": [
     "apps/*",
     "@agenticprimitives/identity-auth",
@@ -28,34 +24,72 @@
   "publicExports": [
     "AuditEvent",
     "AuditSink",
+    "MetricsSink",
     "MemoryAuditSink",
+    "MemoryMetricsSink",
     "PiiFinding",
     "PiiGuardrailOpts",
     "createConsoleAuditSink",
+    "createConsoleMetricsSink",
     "createMemoryAuditSink",
+    "createMemoryMetricsSink",
     "composeSinks",
+    "composeMetricsSinks",
     "createPiiGuardrailSink",
+    "noopMetricsSink",
     "generateEventId",
     "nowIso",
     "buildEvent"
   ],
   "forbiddenTerms": [
-    { "term": "Delegation", "reason": "Domain concept; audit package is structural only.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "Caveat", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "Enforcer", "reason": "Belongs in delegation.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "RiskTier", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
-    { "term": "evaluatePolicy", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
-    { "term": "withDelegation", "reason": "Belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
-    { "term": "passkey", "reason": "Belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md", "AUDIT.md", "CLAUDE.md"] },
-    { "term": "AccountClient", "reason": "Belongs in agent-account.", "owningPackage": "@agenticprimitives/agent-account" },
-    { "term": "envelope encryption", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" }
+    {
+      "term": "Delegation",
+      "reason": "Domain concept; audit package is structural only.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "Caveat",
+      "reason": "Belongs in delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "Enforcer",
+      "reason": "Belongs in delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "RiskTier",
+      "reason": "Belongs in tool-policy.",
+      "owningPackage": "@agenticprimitives/tool-policy"
+    },
+    {
+      "term": "evaluatePolicy",
+      "reason": "Belongs in tool-policy.",
+      "owningPackage": "@agenticprimitives/tool-policy"
+    },
+    {
+      "term": "withDelegation",
+      "reason": "Belongs in mcp-runtime.",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    },
+    {
+      "term": "passkey",
+      "reason": "Belongs in identity-auth.",
+      "owningPackage": "@agenticprimitives/identity-auth",
+      "allowInPaths": ["spec.md", "README.md", "AUDIT.md", "CLAUDE.md"]
+    },
+    {
+      "term": "AccountClient",
+      "reason": "Belongs in agent-account.",
+      "owningPackage": "@agenticprimitives/agent-account"
+    },
+    {
+      "term": "envelope encryption",
+      "reason": "Belongs in key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    }
   ],
-  "ignoreForAgentContext": [
-    "dist/**",
-    "node_modules/**",
-    "coverage/**",
-    "*.tsbuildinfo"
-  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
   "contextBudget": {
     "claudeMdMaxWords": 900,
     "readmeMaxWords": 1800,
