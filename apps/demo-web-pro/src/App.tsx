@@ -17,7 +17,12 @@
  */
 
 import { TreasuryShell } from './treasury/TreasuryShell';
+import { useNamingClaimListener } from './lib/use-agent-naming';
 
 export function App() {
+  // Listen for the cross-component `naming:claimed` event so cached
+  // NameDisplay reads refresh the moment a claim propagates on chain.
+  // See `claim-psa-name.ts` for the dispatch side.
+  useNamingClaimListener();
   return <TreasuryShell />;
 }

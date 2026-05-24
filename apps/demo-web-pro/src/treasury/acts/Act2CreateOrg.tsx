@@ -462,19 +462,36 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
                 {orgConfig.name} is live on Base Sepolia. {founderName}\'s Person Smart Agent
                 is its sole admin until Bob joins.
               </p>
-              {orgName ? (
-                <p className="muted" style={{ color: '#059669' }}>
-                  ✓ Agent name registered: <code>{orgName}</code>
-                </p>
-              ) : orgNameError ? (
-                <p className="muted" style={{ color: '#b45309' }}>
-                  ⚠ Agent-name auto-claim skipped: {orgNameError}
-                </p>
-              ) : (
-                <p className="muted" style={{ color: '#9ca3af' }}>
-                  Claiming <code>acme.demo.agent</code> for the Org…
-                </p>
-              )}
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: 10,
+                  border: '1px solid #d1d5db',
+                  borderRadius: 6,
+                  background: '#f9fafb',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                <div>
+                  <span style={{ color: '#6b7280' }}>Canonical Organization Smart Agent:</span>{' '}
+                  <code style={{ fontSize: 12 }}>{deployedAddress}</code>
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <span style={{ color: '#6b7280' }}>Name (facet):</span>{' '}
+                  {orgName ? (
+                    <strong style={{ color: '#059669' }}>{orgName}</strong>
+                  ) : orgNameError ? (
+                    <span style={{ color: '#b45309' }}>
+                      ⚠ auto-claim skipped — {orgNameError}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#9ca3af' }}>
+                      claiming acme.demo.agent…
+                    </span>
+                  )}
+                </div>
+              </div>
             </>
           ) : undefined
         }

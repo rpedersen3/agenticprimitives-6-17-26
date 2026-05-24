@@ -424,19 +424,36 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
                 <strong>simulated</strong> at the runtime layer — the object exists
                 on chain, the enforcement pipe is queued.
               </p>
-              {treasuryName ? (
-                <p className="muted" style={{ color: '#059669' }}>
-                  ✓ Agent name registered: <code>{treasuryName}</code>
-                </p>
-              ) : treasuryNameError ? (
-                <p className="muted" style={{ color: '#b45309' }}>
-                  ⚠ Agent-name auto-claim skipped: {treasuryNameError}
-                </p>
-              ) : (
-                <p className="muted" style={{ color: '#9ca3af' }}>
-                  Claiming <code>treasury.demo.agent</code> for the Treasury…
-                </p>
-              )}
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: 10,
+                  border: '1px solid #d1d5db',
+                  borderRadius: 6,
+                  background: '#f9fafb',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                <div>
+                  <span style={{ color: '#6b7280' }}>Canonical Treasury Smart Agent:</span>{' '}
+                  <code style={{ fontSize: 12 }}>{deployedAddress}</code>
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <span style={{ color: '#6b7280' }}>Name (facet):</span>{' '}
+                  {treasuryName ? (
+                    <strong style={{ color: '#059669' }}>{treasuryName}</strong>
+                  ) : treasuryNameError ? (
+                    <span style={{ color: '#b45309' }}>
+                      ⚠ auto-claim skipped — {treasuryNameError}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#9ca3af' }}>
+                      claiming treasury.demo.agent…
+                    </span>
+                  )}
+                </div>
+              </div>
             </>
           ) : undefined
         }

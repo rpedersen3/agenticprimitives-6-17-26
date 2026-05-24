@@ -6,6 +6,7 @@
 
 import type { SeatDef } from '../../org-config';
 import { getPasskeyAuth, getSiweAuth, type SeatClaim } from '../../lib/seats';
+import { getPasskeyForSeat } from '../../lib/passkey';
 import { shortAddress } from '../../components';
 import { NameDisplay } from './NameDisplay';
 
@@ -77,14 +78,31 @@ export function ActorCard({
 function ClaimedBody({ claim }: { claim: SeatClaim }) {
   const passkey = getPasskeyAuth(claim);
   const siwe = getSiweAuth(claim);
+  // Look up the local passkey mirror to surface the WebAuthn-level
+  // name (set in `registerPasskeyForSeat` via `user.name`). Per
+  // ADR-0010 the credential is a facet pointing AT the SA; the
+  // credential's stored `agentName` is the same `.agent` label the
+  // SA's primary name resolves to.
+  const passkeyMirror = passkey ? getPasskeyForSeat(claim.seatId) : null;
+  const passkeyAgentName = passkeyMirror?.agentName;
   return (
     <div className="actor-card-body">
-      <p className="muted">Person Smart Agent</p>
-      <code><NameDisplay address={claim.personAgent} /></code>
+      <p className="muted">Canonical Smart Agent</p>
+      <code title={claim.personAgent}><NameDisplay address={claim.personAgent} bold /></code>
+      <p className="muted small" style={{ marginTop: 2 }}>
+        {shortAddress(claim.personAgent)}
+      </p>
       {passkey && (
         <>
-          <p className="muted" style={{ marginTop: 6 }}>Passkey identity (custodian)</p>
-          <code title={passkey.pia}>{shortAddress(passkey.pia)}</code>
+          <p className="muted" style={{ marginTop: 6 }}>Passkey credential (custodian)</p>
+          {passkeyAgentName ? (
+            <code title={passkey.pia}><strong>{passkeyAgentName}</strong></code>
+          ) : (
+            <code title={passkey.pia}>{shortAddress(passkey.pia)}</code>
+          )}
+          <p className="muted small" style={{ marginTop: 2 }}>
+            PIA: {shortAddress(passkey.pia)}
+          </p>
         </>
       )}
       {siwe && (

@@ -31,6 +31,7 @@ import {
   type Hex,
 } from 'viem';
 import {
+  AgentNamingClient,
   agentNameRegistryAbi,
   buildSubregistryRegisterCall,
   buildSetPrimaryNameCall,
@@ -39,6 +40,18 @@ import { buildExecuteCallData } from '@agenticprimitives/agent-account';
 import { config } from '../config';
 import { executeCallFromAgent } from './execute-call';
 import type { DemoPasskey } from './passkey';
+
+/**
+ * Event fired AFTER the on-chain claim has propagated and a fresh
+ * reverseResolve(address) returns the expected name. Listeners (e.g.
+ * `useNamingClaimListener` in use-agent-naming.ts) invalidate cached
+ * React Query name reads so NameDisplay everywhere refreshes.
+ */
+export const NAMING_CLAIMED_EVENT = 'naming:claimed';
+export interface NamingClaimedDetail {
+  address: Address;
+  name: string;
+}
 
 export type ClaimPsaNameResult =
   | { ok: true; name: string; label: string; registerTx?: Hex; primaryTx?: Hex }
@@ -62,8 +75,28 @@ const DEMO_NODE: Hex = namehash('demo.agent');
 
 /**
  * Walk `baseLabel`, `baseLabel2`, `baseLabel3`, … against the live
- * registry to find the next free label. Per spec 220 § 5.
+ * registry to find the next free label. Per spec 220 § 5. Exported so
+ * Act 1 / Act 3 can predict the label BEFORE registering the passkey,
+ * letting the OS-level passkey name match the eventual `.agent` name
+ * (e.g. `alice3.demo.agent`).
+ *
+ * TOCTOU note: another caller may grab the label between this read
+ * and the eventual `subregistry.register` write. `claimPsaName` runs
+ * its own discovery to recover; in that case the on-chain name will
+ * be the NEXT free label and the passkey name might be off by one.
+ * That's an acceptable soft degradation for the demo.
  */
+export async function predictUniqueAgentLabel(baseLabel: string): Promise<string | null> {
+  if (!config.agentNameRegistry || !config.rpcUrl) return null;
+  if (!/^[a-z0-9-]{3,}$/.test(baseLabel)) return null;
+  const publicClient = createPublicClient({ transport: http(config.rpcUrl) });
+  try {
+    return await findUniqueLabel(publicClient, config.agentNameRegistry, baseLabel);
+  } catch {
+    return null;
+  }
+}
+
 async function findUniqueLabel(
   publicClient: ReturnType<typeof createPublicClient>,
   registry: Address,
@@ -200,6 +233,48 @@ export async function claimPsaName(args: {
       };
     }
     primaryTx = result.transactionHash;
+  }
+
+  // Step 3 — poll until the universal resolver returns the new name.
+  // Base Sepolia's RPC pool can return stale state for a few seconds
+  // after a userOp lands; without this, downstream NameDisplay reads
+  // would invalidate too early and re-cache the stale null. We wait
+  // up to ~15s. If polling doesn't see the name in time we still
+  // return ok — the event fires anyway and React Query will refetch
+  // on later interactions.
+  if (
+    config.agentNameRegistry &&
+    config.agentNameUniversalResolver &&
+    config.chainId &&
+    config.rpcUrl
+  ) {
+    const namingClient = new AgentNamingClient({
+      rpcUrl: config.rpcUrl,
+      chainId: config.chainId,
+      registry: config.agentNameRegistry,
+      universalResolver: config.agentNameUniversalResolver,
+    });
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      try {
+        const resolved = await namingClient.reverseResolve(personAgent);
+        if (resolved && resolved.toLowerCase() === fullName.toLowerCase()) break;
+      } catch {
+        // Ignore transient RPC errors; keep polling.
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+
+  // Step 4 — broadcast so cached NameDisplay reads invalidate.
+  try {
+    window.dispatchEvent(
+      new CustomEvent<NamingClaimedDetail>(NAMING_CLAIMED_EVENT, {
+        detail: { address: personAgent, name: fullName },
+      }),
+    );
+  } catch {
+    // Server / SSR / test harness without window — skip silently.
   }
 
   return { ok: true, name: fullName, label: uniqueLabel, registerTx, primaryTx };

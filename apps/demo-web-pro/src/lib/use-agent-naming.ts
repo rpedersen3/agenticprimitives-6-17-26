@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentNamingClient } from '@agenticprimitives/agent-naming';
 import { config } from '../config';
+import { NAMING_CLAIMED_EVENT, type NamingClaimedDetail } from './claim-psa-name';
 
 /**
  * Build a singleton `AgentNamingClient` from the current deployment
@@ -33,8 +34,41 @@ export function useAgentName(address: `0x${string}` | undefined) {
       if (!client || !address) return null;
       return await client.reverseResolve(address);
     },
-    staleTime: 30_000,
+    // Short staleTime + refetchOnWindowFocus so a freshly-claimed
+    // name surfaces quickly. The `naming:claimed` event listener
+    // (see `useNamingClaimListener`) covers the in-tab case too.
+    staleTime: 5_000,
+    refetchOnWindowFocus: true,
   });
+}
+
+/**
+ * Global listener that invalidates cached naming reads whenever
+ * `claim-psa-name.ts` (or any other claim helper) dispatches the
+ * `naming:claimed` event. Mount once at the app root inside the
+ * QueryClientProvider — every NameDisplay then refreshes the moment
+ * the on-chain claim has propagated.
+ */
+export function useNamingClaimListener() {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const onClaimed = (e: Event) => {
+      const ce = e as CustomEvent<NamingClaimedDetail>;
+      const addr = ce.detail?.address?.toLowerCase();
+      // Refresh the per-address reverse lookup AND any panel /
+      // record reads that may have cached "not yet registered" state.
+      if (addr) {
+        queryClient.invalidateQueries({ queryKey: ['agent-name', addr] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['agent-name'] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['naming-status'] });
+      queryClient.invalidateQueries({ queryKey: ['agent-records'] });
+      queryClient.invalidateQueries({ queryKey: ['resolve-name'] });
+    };
+    window.addEventListener(NAMING_CLAIMED_EVENT, onClaimed);
+    return () => window.removeEventListener(NAMING_CLAIMED_EVENT, onClaimed);
+  }, [queryClient]);
 }
 
 /** Forward-resolve a name to its on-chain Smart Agent address. */

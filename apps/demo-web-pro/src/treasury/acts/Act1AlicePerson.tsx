@@ -17,7 +17,7 @@ import {
 } from '../../lib/passkey';
 import { claimSeat, setActiveSeat, type AuthMethod } from '../../lib/seats';
 import { deployPersonAgent } from '../../lib/deploy-person';
-import { claimPsaName } from '../../lib/claim-psa-name';
+import { claimPsaName, predictUniqueAgentLabel } from '../../lib/claim-psa-name';
 import { passkeyIdentity } from '@agenticprimitives/custody';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
@@ -85,6 +85,7 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [psaName, setPsaName] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
+  const [predictedLabel, setPredictedLabel] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(true);
 
   const { address: walletAddress, isConnected, connector: activeConnector } = useAccount();
@@ -165,16 +166,34 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
     setStage('working');
     setError(null);
 
-    // 1. Resolve / enroll passkey if the choice includes it.
+    // 1. Resolve / enroll passkey if the choice includes it. Per
+    //    ADR-0010 + spec 220 we predict the SA's unique `.agent` name
+    //    BEFORE the WebAuthn ceremony so the OS-level passkey label
+    //    matches what NameDisplay will eventually show on chain
+    //    (`alice` / `alice2` / `alice3` / … on demo.agent).
     let passkey: import('../../lib/passkey').DemoPasskey | undefined;
     if (authChoice !== 'siwe') {
       setWorkingPhase('registering-passkey');
       try {
         passkey = getPasskeyForSeat(seat.id) ?? undefined;
         if (!passkey) {
-          const fresh = await registerPasskeyForSeat(seat.id, seat.name);
+          const predicted = await predictUniqueAgentLabel(seat.id.toLowerCase());
+          setPredictedLabel(predicted);
+          const predictedAgentName = predicted
+            ? `${predicted}.demo.agent`
+            : undefined;
+          const fresh = await registerPasskeyForSeat(
+            seat.id,
+            seat.name,
+            predictedAgentName,
+          );
           savePasskeyForSeat(seat.id, fresh);
           passkey = fresh;
+        } else if (passkey.agentName) {
+          // Pre-existing passkey with a stored agent name — surface it
+          // so the success card can show "passkey enrolled as alice3"
+          // without re-prediction.
+          setPredictedLabel(passkey.agentName.replace(/\.demo\.agent$/, ''));
         }
       } catch (e) {
         setStage('error');
@@ -462,19 +481,51 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
                 {authChoice === 'both' && ' +'}
                 {authChoice !== 'passkey' && ' wallet'}.
               </p>
-              {psaName ? (
-                <p className="muted" style={{ color: '#059669' }}>
-                  ✓ Agent name registered: <code>{psaName}</code>
-                </p>
-              ) : nameError ? (
-                <p className="muted" style={{ color: '#b45309' }}>
-                  ⚠ Agent-name auto-claim skipped: {nameError}
-                </p>
-              ) : (
-                <p className="muted" style={{ color: '#9ca3af' }}>
-                  Claiming <code>{seat.id.toLowerCase()}.demo.agent</code>…
-                </p>
-              )}
+              {/*
+                Canonical-identity callout — per ADR-0010 the SA address is
+                the identity; the `.agent` name is a facet pointing at it.
+                We surface both, side by side, in a small card so the user
+                reads the doctrine off the screen.
+              */}
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: 10,
+                  border: '1px solid #d1d5db',
+                  borderRadius: 6,
+                  background: '#f9fafb',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                <div>
+                  <span style={{ color: '#6b7280' }}>Canonical Smart Agent:</span>{' '}
+                  <code style={{ fontSize: 12 }}>{deployedAddress}</code>
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <span style={{ color: '#6b7280' }}>Name (facet):</span>{' '}
+                  {psaName ? (
+                    <strong style={{ color: '#059669' }}>{psaName}</strong>
+                  ) : nameError ? (
+                    <span style={{ color: '#b45309' }}>
+                      ⚠ auto-claim skipped — {nameError}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#9ca3af' }}>
+                      claiming{predictedLabel
+                        ? ` ${predictedLabel}.demo.agent`
+                        : ''}…
+                    </span>
+                  )}
+                </div>
+                {predictedLabel && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: '#6b7280' }}>
+                    Your passkey was enrolled as{' '}
+                    <code>{predictedLabel}.demo.agent</code> so the OS
+                    keychain entry matches.
+                  </div>
+                )}
+              </div>
             </>
           ) : undefined
         }

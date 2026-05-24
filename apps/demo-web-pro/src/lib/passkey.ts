@@ -35,6 +35,15 @@ export interface DemoPasskey {
   pubKeyY: bigint;
   /** UI label (typically the seat name). */
   label: string;
+  /**
+   * Predicted / claimed `.agent` name that this passkey controls. Set
+   * BEFORE WebAuthn registration so the OS shows the credential as
+   * "alice3.demo.agent" rather than "demo-web-pro" + a seat id. Per
+   * ADR-0010 (canonical-identifier doctrine) the credential is a
+   * facet pointing AT the SA — the credential's human label here
+   * matches the SA's primary `.agent` name.
+   */
+  agentName?: string;
   /** Person Smart Agent address — set once the account is deployed. */
   account?: string;
 }
@@ -45,6 +54,7 @@ interface StoredPasskey {
   pubKeyX: string;
   pubKeyY: string;
   label: string;
+  agentName?: string;
   account?: string;
 }
 
@@ -57,6 +67,7 @@ function toStored(p: DemoPasskey): StoredPasskey {
     pubKeyX: p.pubKeyX.toString(),
     pubKeyY: p.pubKeyY.toString(),
     label: p.label,
+    agentName: p.agentName,
     account: p.account,
   };
 }
@@ -68,6 +79,7 @@ function fromStored(s: StoredPasskey): DemoPasskey {
     pubKeyX: BigInt(s.pubKeyX),
     pubKeyY: BigInt(s.pubKeyY),
     label: s.label,
+    agentName: s.agentName,
     account: s.account,
   };
 }
@@ -114,10 +126,22 @@ export function listPasskeys(): Record<string, DemoPasskey> {
  * Register a new passkey for the given seat. Prompts the user via
  * WebAuthn (TouchID / FaceID / security key). Does NOT persist —
  * caller saves via savePasskeyForSeat after chain confirmation.
+ *
+ * `agentName` (optional, e.g. `"alice3.demo.agent"`) lets the OS-level
+ * passkey display match the SA's predicted primary `.agent` name. The
+ * caller pre-computes it via `predictUniqueAgentLabel` BEFORE this
+ * call so the WebAuthn ceremony writes the matching `user.name` /
+ * `user.displayName` (the strings the OS keychain shows). After
+ * registration the SA is deployed and `subregistry.register` claims
+ * the same label, so the passkey ↔ SA name pair lines up end-to-end.
+ *
+ * If `agentName` is omitted (older flow) the OS shows
+ * `<seatId>@agenticprimitives.demo` as before.
  */
 export async function registerPasskeyForSeat(
   seatId: string,
   label: string,
+  agentName?: string,
 ): Promise<DemoPasskey> {
   if (typeof navigator === 'undefined' || !navigator.credentials) {
     throw new Error('WebAuthn unavailable — this browser does not support passkeys.');
@@ -129,6 +153,14 @@ export async function registerPasskeyForSeat(
   // use this to display "Create credential for Alice@…" prompts.
   const userId = new TextEncoder().encode(`agenticprimitives:demo-web-pro:${seatId}`);
 
+  // Per ADR-0010 the credential is a facet pointing AT the SA. We make
+  // that explicit in the OS keychain entry by using the `.agent` name
+  // for `user.name` and a "<seat> — <agent-name>" pair for
+  // `user.displayName`. Falls back to the prior shape when no
+  // agentName was predicted.
+  const credentialUserName = agentName ?? `${seatId}@agenticprimitives.demo`;
+  const credentialDisplayName = agentName ? `${label} — ${agentName}` : label;
+
   const credential = (await navigator.credentials.create({
     publicKey: {
       challenge,
@@ -138,8 +170,8 @@ export async function registerPasskeyForSeat(
       },
       user: {
         id: userId,
-        name: `${seatId}@agenticprimitives.demo`,
-        displayName: label,
+        name: credentialUserName,
+        displayName: credentialDisplayName,
       },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256 / P-256
       authenticatorSelection: {
@@ -162,6 +194,7 @@ export async function registerPasskeyForSeat(
     pubKeyX: parsed.pubKeyX,
     pubKeyY: parsed.pubKeyY,
     label,
+    agentName,
   };
 }
 
