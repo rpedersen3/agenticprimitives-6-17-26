@@ -5,7 +5,7 @@
 export { AgentAccountClient } from './client';
 export type { AgentAccountClientOpts, AgentAccountSpec } from './client';
 export type { UserOperation, Address, Hex } from './types';
-export { buildExecuteCallData, type ContractCall } from './execute';
+export { buildExecuteCallData, buildExecuteBatchCallData, type ContractCall } from './execute';
 export { BundlerClient, packGasLimits, unpackGasLimits } from './bundler-client';
 export type { BundlerClientOpts, PackedUserOperation } from './bundler-client';
 export {

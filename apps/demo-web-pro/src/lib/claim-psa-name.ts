@@ -36,7 +36,10 @@ import {
   buildSubregistryRegisterCall,
   buildSetPrimaryNameCall,
 } from '@agenticprimitives/agent-naming';
-import { buildExecuteCallData } from '@agenticprimitives/agent-account';
+import {
+  buildExecuteCallData,
+  buildExecuteBatchCallData,
+} from '@agenticprimitives/agent-account';
 import { config } from '../config';
 import { executeCallFromAgent } from './execute-call';
 import type { DemoPasskey } from './passkey';
@@ -256,63 +259,58 @@ export async function claimPsaName(args: {
   const fullName = `${uniqueLabel}.demo.agent`;
   const node = namehash(fullName);
 
-  // Step 1 — subregistry.register(uniqueLabel, personAgent).
+  // Step 1 — ATOMIC BATCH: subregistry.register(label, sa) +
+  // registry.setPrimaryName(node) in ONE userOp via
+  // AgentAccount.executeBatch. Both calls land in the same on-chain
+  // transaction — eliminates:
+  //   - AA25 nonce mismatch between two sequential userOps
+  //   - bundler simulating setPrimaryName before subregistry.register
+  //     has propagated to its RPC view (NodeNotFound revert)
+  //   - the inter-step propagation wait that was costing ~6-12s
+  // If either inner call reverts, the whole batch reverts — there is
+  // never a "register landed but setPrimaryName didn't" half-state.
   let registerTx: Hex | undefined;
+  let primaryTx: Hex | undefined;
   {
-    const call = buildSubregistryRegisterCall({
+    const registerCall = buildSubregistryRegisterCall({
       subregistry: config.permissionlessSubregistry,
       label: uniqueLabel,
       newOwner: personAgent,
     });
-    const callData = buildExecuteCallData({
-      to: call.to as Address,
-      value: call.value,
-      data: call.data as Hex,
+    const setPrimaryCall = buildSetPrimaryNameCall({
+      registry: config.agentNameRegistry,
+      node,
     });
+    const batchCallData = buildExecuteBatchCallData([
+      { to: registerCall.to as Address, value: registerCall.value, data: registerCall.data as Hex },
+      { to: setPrimaryCall.to as Address, value: setPrimaryCall.value, data: setPrimaryCall.data as Hex },
+    ]);
     const result = await executeCallFromAgent({
       sender: personAgent,
       passkey,
-      callData,
+      callData: batchCallData,
     });
     if (!result.ok) {
       const reason = (result.reason ?? '').toLowerCase();
-      // AlreadyClaimed → this SA already has a name. Fall through to
-      // step 2; the SA may have already registered something in a
-      // prior run AND we still want primaryName to land.
+      // AlreadyClaimed → this SA already registered a name in a prior
+      // run that left a stranded record. Retry the setPrimaryName step
+      // alone (the name already exists, the SA already owns it).
       if (reason.includes('alreadyclaimed')) {
-        // No tx hash — we didn't actually send anything new on chain.
+        const fallback = await sendSetPrimaryName(personAgent, passkey, node);
+        if (!fallback.ok) return { ok: false, reason: fallback.reason };
+        primaryTx = fallback.transactionHash;
       } else if (reason.includes('nodealreadyexists')) {
-        // Race: another caller grabbed this label between our
-        // discovery and our submit. Bail with a clear error; the
-        // caller can retry, which will re-discover the next free.
         return { ok: false, reason: `"${fullName}" was taken by another caller between discovery and submit; retry.` };
       } else {
         return { ok: false, reason: result.reason ?? result.error };
       }
     } else {
       registerTx = result.transactionHash;
+      primaryTx = result.transactionHash;
     }
   }
 
-  // Inter-step propagation wait — Base Sepolia's RPC pool can return
-  // stale state for a few seconds after a userOp lands. 6 s + an AA25
-  // retry loop below gives ~14 s of slack.
-  if (registerTx) {
-    await new Promise((r) => setTimeout(r, 6000));
-  }
-
-  // Step 2 — setPrimaryName.
-  const primaryResult = await sendSetPrimaryName(personAgent, passkey, node);
-  if (!primaryResult.ok) {
-    return {
-      ok: false,
-      reason: primaryResult.reason +
-        (registerTx ? ` (register OK — ${fullName})` : ''),
-    };
-  }
-  const primaryTx: Hex | undefined = primaryResult.transactionHash;
-
-  // Step 3 — poll until the universal resolver returns the new name.
+  // Step 2 — poll until the universal resolver returns the new name.
   // Base Sepolia's RPC pool can return stale state for a few seconds
   // after a userOp lands; without this, downstream NameDisplay reads
   // would invalidate too early and re-cache the stale null. We wait
@@ -343,7 +341,7 @@ export async function claimPsaName(args: {
     }
   }
 
-  // Step 4 — broadcast so cached NameDisplay reads invalidate.
+  // Step 3 — broadcast so cached NameDisplay reads invalidate.
   try {
     window.dispatchEvent(
       new CustomEvent<NamingClaimedDetail>(NAMING_CLAIMED_EVENT, {
