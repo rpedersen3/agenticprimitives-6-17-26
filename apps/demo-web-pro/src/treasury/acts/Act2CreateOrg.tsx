@@ -35,6 +35,7 @@ import { ConnectionDialog, type ConnectionStage } from '../components/Connection
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { shortAddress } from '../../components';
 import { config } from '../../config';
+import { getSessionSalt } from '../../lib/session-salt';
 
 type WorkingPhase = 'preflight' | 'building-userop' | 'signing' | 'awaiting-receipt';
 
@@ -144,18 +145,19 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
       initialPasskeyY: alicePasskey?.pubKeyY ?? 0n,
     } as const;
 
-    // Salt derived from (org name, founder PSA, version tag). The
-    // version tag bumps whenever the deploy parameters change in a
-    // way that\'s NOT visible in the CREATE2 inputs — most notably,
-    // the safety-delay value, which changes config state after the
-    // proxy is created (via the CustodyPolicy.onInstall payload) but
-    // doesn\'t affect the predicted address. Bumping the tag forces
-    // a fresh address so visitors don\'t inherit a stale on-chain
-    // Org that was deployed before today\'s 0s-safety-delay fix.
-    const SALT_VERSION = 'v8-r0-unified-factory';
+    // Salt derived from (org name, founder identity, version tag,
+    // session salt). The session salt makes the address fresh on
+    // every Reset → re-claim cycle — without it, the SAME EOA
+    // produces the SAME Org address forever, and the user can't
+    // actually "start over" because the prior Org's custodian set is
+    // already configured on chain. See lib/session-salt.ts.
+    const SALT_VERSION = 'v9-session-scoped';
+    const sessionSalt = getSessionSalt();
     const salt = BigInt(
       '0x' +
-        [...new TextEncoder().encode(`${orgConfig.name}:${aliceIdentityForSalt}:${SALT_VERSION}`)]
+        [...new TextEncoder().encode(
+          `${orgConfig.name}:${aliceIdentityForSalt}:${SALT_VERSION}:${sessionSalt}`,
+        )]
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('')
           .slice(0, 16),

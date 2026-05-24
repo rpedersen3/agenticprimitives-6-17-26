@@ -20,6 +20,7 @@ import { keccak256, encodeAbiParameters, type Address, type Hex } from 'viem';
 import { config } from '../config';
 import type { DemoPasskey } from './passkey';
 import { csrfHeaders, ensureCsrfToken, CsrfError } from './csrf';
+import { getSessionSalt } from './session-salt';
 
 /** Derive a passkey's PIA — keccak256(abi.encode(x, y))[12:32]. */
 function passkeyIdentity(x: bigint, y: bigint): Address {
@@ -93,14 +94,11 @@ export async function deployPersonAgent(
         initialPasskeyX: '0',
         initialPasskeyY: '0',
         timelockOverrides: [],
-        // Time-bucketed salt: each fresh Act-1 claim attempt gets a
-        // distinct CREATE2 address even when re-using the same EOA.
-        // Without this, after Reset the user's same EOA → same SA →
-        // already-claimed name → AlreadyClaimed on the auto-claim
-        // batch. Salt is throwaway: we only need to ensure uniqueness
-        // per-session, not reproducibility across sessions (the SA's
-        // address is persisted in the SeatClaim after deploy).
-        salt: Date.now().toString(),
+        // Session-scoped salt: stable within one demo session (so
+        // re-claims of the same seat reproduce the same SA) but
+        // cleared by Reset → fresh address space per session. See
+        // lib/session-salt.ts.
+        salt: getSessionSalt(),
       }),
     });
     const raw = await directRes.text();
@@ -146,7 +144,7 @@ export async function deployPersonAgent(
       initialPasskeyX: passkey.pubKeyX.toString(),
       initialPasskeyY: passkey.pubKeyY.toString(),
       timelockOverrides: [],
-      salt: Date.now().toString(),
+      salt: getSessionSalt(),
     }),
   });
   const directRaw = await directRes.text();

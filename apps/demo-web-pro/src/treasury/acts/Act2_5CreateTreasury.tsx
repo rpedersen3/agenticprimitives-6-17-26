@@ -38,6 +38,7 @@ import { ConnectionDialog, type ConnectionStage } from '../components/Connection
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { shortAddress } from '../../components';
 import { config } from '../../config';
+import { getSessionSalt } from '../../lib/session-salt';
 
 const TREASURY_NAME = 'Acme Treasury';
 
@@ -133,12 +134,17 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
       initialPasskeyY: alicePasskey?.pubKeyY ?? 0n,
     } as const;
 
-    // Salt includes the Org address so a Treasury deployed for a
-    // different Org never collides at the same CREATE2 slot.
-    const SALT_VERSION = 'v8-r0-unified-factory';
+    // Salt includes the Org address (so Treasury can't collide
+    // across Orgs) AND the session salt (so Reset → re-deploy gets
+    // a fresh Treasury even when the user reuses the same EOA).
+    // See lib/session-salt.ts.
+    const SALT_VERSION = 'v9-session-scoped';
+    const sessionSalt = getSessionSalt();
     const salt = BigInt(
       '0x' +
-        [...new TextEncoder().encode(`${TREASURY_NAME}:${org.address}:${aliceIdentityForSalt}:${SALT_VERSION}`)]
+        [...new TextEncoder().encode(
+          `${TREASURY_NAME}:${org.address}:${aliceIdentityForSalt}:${SALT_VERSION}:${sessionSalt}`,
+        )]
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('')
           .slice(0, 16),
