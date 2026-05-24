@@ -19,13 +19,14 @@
 
 import { useEffect, useState } from 'react';
 import { encodeFunctionData, keccak256, toHex, type Address, type Hex } from 'viem';
+import { useWalletClient } from 'wagmi';
 import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
 import { getPasskeyAuth, getSiweAuth } from '../../lib/seats';
 import { orgConfig } from '../../org-config';
 import { loadSeats, loadActiveSeat, setActiveSeat } from '../../lib/seats';
 import { loadOrg, saveOrg } from '../../lib/demo-state';
 import { getPasskeyForSeat } from '../../lib/passkey';
-import { claimPsaName } from '../../lib/claim-psa-name';
+import { claimPsaName, claimPsaNameViaEoa } from '../../lib/claim-psa-name';
 import {
   executeCallFromAgent,
   encodeExecuteCall,
@@ -54,6 +55,10 @@ const PHASE_HINT: Record<WorkingPhase, string | undefined> = {
 };
 
 export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
+  // wagmi walletClient — used to sign the auto-claim's atomic batch
+  // userOp when Alice is SIWE-only (no passkey to sign with). For
+  // passkey-equipped Alice the claimPsaName path uses WebAuthn.
+  const { data: walletClient } = useWalletClient();
   const [stage, setStage] = useState<ConnectionStage>('consent');
   const [phase, setPhase] = useState<WorkingPhase>('preflight');
   const [error, setError] = useState<string | null>(null);
@@ -287,25 +292,36 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     setTxHash((result.transactionHash ?? ('0x' + '00'.repeat(32))) as `0x${string}`);
     setStage('success');
 
-    // Best-effort: auto-claim acme.demo.agent for the Org PSA. The Org
-    // is a fresh multi-sig with Alice as sole founding custodian, so
-    // Alice's passkey is the signing authority for the two extra
-    // gasless txs (subregistry.register + setPrimaryName). Failures
-    // are non-blocking — surfaced in the success card.
+    // Best-effort: auto-claim acmeN.demo.agent for the Org PSA. The
+    // Org is a fresh multi-sig with Alice as sole founding custodian,
+    // so Alice's auth (passkey OR SIWE EOA) signs the atomic
+    // register+setPrimaryName batch. Number-suffix uniqueness per spec
+    // 220 § 5: acme → acme2 → acme3 → …  Each session's fresh Org
+    // CREATE2 address gets the next free name.
+    const labelBase = 'acme';
     if (passkey) {
-      // Number-suffix uniqueness per spec 220 § 5: acme → acme2 → …
       void (async () => {
         const claim = await claimPsaName({
-          baseLabel: 'acme',
+          baseLabel: labelBase,
           personAgent: orgAddress,
           passkey,
         });
-        if (claim.ok) {
-          setOrgName(claim.name);
-        } else {
-          setOrgNameError(claim.reason);
-        }
+        if (claim.ok) setOrgName(claim.name);
+        else setOrgNameError(claim.reason);
       })();
+    } else if (aliceSiwe && walletClient) {
+      void (async () => {
+        const claim = await claimPsaNameViaEoa({
+          baseLabel: labelBase,
+          personAgent: orgAddress,
+          walletClient,
+          account: aliceSiwe.eoa,
+        });
+        if (claim.ok) setOrgName(claim.name);
+        else setOrgNameError(claim.reason);
+      })();
+    } else {
+      setOrgNameError('no signer (passkey or wallet) available for Org name auto-claim');
     }
   };
 

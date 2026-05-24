@@ -21,6 +21,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useWalletClient } from 'wagmi';
 import { encodeFunctionData, keccak256, toHex, type Address, type Hex } from 'viem';
 import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
 import { getPasskeyAuth, getSiweAuth } from '../../lib/seats';
@@ -28,7 +29,7 @@ import { orgConfig } from '../../org-config';
 import { loadActiveSeat, loadSeats, setActiveSeat } from '../../lib/seats';
 import { loadOrg, loadTreasury, saveTreasury } from '../../lib/demo-state';
 import { getPasskeyForSeat } from '../../lib/passkey';
-import { claimPsaName } from '../../lib/claim-psa-name';
+import { claimPsaName, claimPsaNameViaEoa } from '../../lib/claim-psa-name';
 import {
   executeCallFromAgent,
   encodeExecuteCall,
@@ -59,6 +60,9 @@ const PHASE_HINT: Record<WorkingPhase, string | undefined> = {
 };
 
 export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void }) {
+  // wagmi walletClient — used to sign the auto-claim's atomic batch
+  // userOp when Alice is SIWE-only. See Act2CreateOrg for full rationale.
+  const { data: walletClient } = useWalletClient();
   const [stage, setStage] = useState<ConnectionStage>('consent');
   const [phase, setPhase] = useState<WorkingPhase>('preflight');
   const [error, setError] = useState<string | null>(null);
@@ -259,23 +263,35 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     setTxHash((result.transactionHash ?? ('0x' + '00'.repeat(32))) as `0x${string}`);
     setStage('success');
 
-    // Best-effort: auto-claim treasury.demo.agent for the new Treasury
-    // PSA. Same passkey path as Act 2 (Alice's passkey is the founding
-    // custodian). Non-blocking — failures surface inline.
+    // Best-effort: auto-claim treasuryN.demo.agent for the new
+    // Treasury PSA. Passkey path for passkey-equipped Alice; SIWE path
+    // for wallet-only Alice. Number-suffix uniqueness per spec 220 § 5:
+    // treasury → treasury2 → treasury3 → … Each session's fresh
+    // Treasury CREATE2 address gets the next free name.
+    const labelBase = 'treasury';
     if (passkey) {
-      // Number-suffix uniqueness per spec 220 § 5: treasury → treasury2 → …
       void (async () => {
         const claim = await claimPsaName({
-          baseLabel: 'treasury',
+          baseLabel: labelBase,
           personAgent: treasuryAddress,
           passkey,
         });
-        if (claim.ok) {
-          setTreasuryName(claim.name);
-        } else {
-          setTreasuryNameError(claim.reason);
-        }
+        if (claim.ok) setTreasuryName(claim.name);
+        else setTreasuryNameError(claim.reason);
       })();
+    } else if (aliceSiwe && walletClient) {
+      void (async () => {
+        const claim = await claimPsaNameViaEoa({
+          baseLabel: labelBase,
+          personAgent: treasuryAddress,
+          walletClient,
+          account: aliceSiwe.eoa,
+        });
+        if (claim.ok) setTreasuryName(claim.name);
+        else setTreasuryNameError(claim.reason);
+      })();
+    } else {
+      setTreasuryNameError('no signer (passkey or wallet) available for Treasury name auto-claim');
     }
   };
 
