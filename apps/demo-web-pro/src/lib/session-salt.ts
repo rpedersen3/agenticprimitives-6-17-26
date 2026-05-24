@@ -29,17 +29,30 @@
 
 const STORAGE_KEY = 'agenticprimitives:demo-web-pro:session-salt';
 
+/**
+ * Generate a decimal-uint256 salt. The worker's /session/direct-deploy
+ * validator expects `salt` to be a decimal-string uint256 — anything
+ * else (hyphens, hex, etc.) returns `bad_input`. We compose:
+ *   high  = ms-since-epoch  (≈ 13 digits, fits in uint53)
+ *   low   = 64-bit random
+ *   salt  = (high << 64) | low — well inside uint256.
+ */
 function generate(): string {
-  // Time-bucketed + random — collision-proof for one user across
-  // hundreds of resets, and stable across in-session reloads.
-  return `${Date.now()}-${Math.floor(Math.random() * 1e12).toString(16)}`;
+  const high = BigInt(Date.now());
+  // Math.random gives 53 bits; shift+combine to ~64 bits.
+  const r1 = BigInt(Math.floor(Math.random() * 0x1_0000_0000));
+  const r2 = BigInt(Math.floor(Math.random() * 0x1_0000_0000));
+  const low = (r1 << 32n) | r2;
+  return ((high << 64n) | low).toString(10);
 }
 
 export function getSessionSalt(): string {
   if (typeof localStorage === 'undefined') return generate();
   try {
     const existing = localStorage.getItem(STORAGE_KEY);
-    if (existing) return existing;
+    // Guard: if any prior version stored a non-decimal salt
+    // (e.g. v21's "1716...-a3f8") replace it so the worker accepts it.
+    if (existing && /^\d+$/.test(existing)) return existing;
     const fresh = generate();
     localStorage.setItem(STORAGE_KEY, fresh);
     return fresh;
