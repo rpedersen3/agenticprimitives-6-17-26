@@ -96,6 +96,18 @@ export async function claimPsaName(args: {
   }
 
   // Step 2 — setPrimaryName for the PSA.
+  //
+  // Inter-step propagation wait: Base Sepolia's worker-side RPC pool
+  // can return stale state for a few seconds after a tx confirms. If
+  // the worker's nonce-fetch hits a node that hasn't yet observed the
+  // register userOp from step 1, it builds setPrimaryName with the
+  // same nonce — the EntryPoint then rejects with AA25 (invalid
+  // account nonce). 6 s is empirically enough; combined with the
+  // AA25 retry below it gives ~14 s of total slack.
+  if (registerTx) {
+    await new Promise((r) => setTimeout(r, 6000));
+  }
+
   const node = namehash(`${label}.demo.agent`);
   let primaryTx: Hex | undefined;
   {
@@ -108,15 +120,30 @@ export async function claimPsaName(args: {
       value: call.value,
       data: call.data as Hex,
     });
-    const result = await executeCallFromAgent({
-      sender: personAgent,
-      passkey,
-      callData,
-    });
-    if (!result.ok) {
+    // setPrimaryName is idempotent — retrying on AA25 is safe.
+    let lastErr = '';
+    let attempt = 0;
+    let result: Awaited<ReturnType<typeof executeCallFromAgent>> | null = null;
+    for (attempt = 0; attempt < 3; attempt++) {
+      result = await executeCallFromAgent({
+        sender: personAgent,
+        passkey,
+        callData,
+      });
+      if (result.ok) break;
+      lastErr = result.reason ?? result.error;
+      // AA25 = nonce mismatch (worker pool lag). Wait + retry.
+      if (lastErr.includes('AA25') || lastErr.toLowerCase().includes('invalid account nonce')) {
+        await new Promise((r) => setTimeout(r, 8000));
+        continue;
+      }
+      // Other errors: bail out.
+      break;
+    }
+    if (!result || !result.ok) {
       return {
         ok: false,
-        reason: `setPrimaryName failed: ${result.reason ?? result.error}` +
+        reason: `setPrimaryName failed${attempt > 0 ? ` after ${attempt + 1} attempts` : ''}: ${lastErr}` +
           (registerTx ? ` (register OK — node ${node.slice(0, 10)}…)` : ''),
       };
     }
