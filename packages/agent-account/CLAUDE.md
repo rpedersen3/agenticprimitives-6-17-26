@@ -1,5 +1,8 @@
 # @agenticprimitives/agent-account — Claude guide
 
+## Canonical identifier owner
+This package **owns the canonical identifier** for every person / org / service / treasury in the system: the ERC-4337 Smart Agent address. CREATE2 salt MUST be derived from auth methods + scope only — NEVER from a name (per [ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md) + [spec 220](../../specs/220-agent-identity-bootstrap.md)). All other packages reference SAs by this address; names / profiles / facet registrations point AT it.
+
 ## Owns
 - `AgentAccountClient`: address derivation, factory call, ERC-1271 sign/verify, `buildUserOp`.
 - EntryPoint v0.8 + factory client wiring (addresses by config; no Solidity here).

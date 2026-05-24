@@ -56,7 +56,7 @@ export function RegisterNameForm({ onRegistered }: { onRegistered?: (name: strin
     if (!psaInfo || !config.permissionlessSubregistry) return;
     setState('submitting');
     const result = await claimPsaName({
-      label: label.trim(),
+      baseLabel: label.trim(),
       personAgent: psaInfo.personAgent,
       passkey: psaInfo.passkey,
     });

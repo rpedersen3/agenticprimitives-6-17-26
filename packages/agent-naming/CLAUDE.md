@@ -1,5 +1,8 @@
 # @agenticprimitives/agent-naming — Claude guide
 
+## Facet, not identity
+Names are a **facet registration** that points AT the canonical Smart Agent address. The SA address is the identifier ([ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)); this package's job is to make a unique human-readable label resolvable to / from that address. Bootstrap MUST force uniqueness via the number-suffix algorithm in [spec 220 § 5](../../specs/220-agent-identity-bootstrap.md): `alice` → `alice2` → `alice3` → … No collisions, no `<random-salt>` ugliness.
+
 ## What this package owns
 
 - The `.agent` TLD constant (`AGENT_TLD`).

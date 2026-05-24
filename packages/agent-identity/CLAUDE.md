@@ -1,5 +1,8 @@
 # @agenticprimitives/agent-identity — Claude guide
 
+## Facet, not identity
+Profiles are a **facet registration** anchored at the canonical Smart Agent address ([ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)). The profile JSON describes the SA; the on-chain anchor's subject is `bytes32(uint256(uint160(canonicalAddr)))`. Cross-package APIs key off the SA address — names are decorative. ERC-8004 / GoDaddy ANS / HCS-10 / HCS-11 / HCS-14 facets, if added, MUST back-link to the canonical SA address per [spec 220 § 4](../../specs/220-agent-identity-bootstrap.md).
+
 ## What this package owns
 - `AgentCard` — the HCS-11-aligned typed off-chain profile schema,
   discriminated on `type: 'person' | 'org' | 'service' | 'treasury' |

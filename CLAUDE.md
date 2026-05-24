@@ -17,6 +17,7 @@ pnpm-workspace monorepo: publishable capability packages + Foundry contracts + d
 
 ## Hard rules
 
+- **Smart Agent address is the canonical identifier.** Every person, org, service agent, and treasury IS its ERC-4337 SA address. Names, profiles, ERC-8004 entries, ANS handles, HCS topics — all facets pointing AT the canonical address. Cross-package APIs take `Address`, not names. See [ADR-0010](docs/architecture/decisions/0010-smart-agent-canonical-identifier.md) + [spec 220](specs/220-agent-identity-bootstrap.md) for the bootstrap process (deploy → forced-unique name → custody → optional facets).
 - **Specs precede non-trivial code.** New `specs/2XX-*.md` before architecture changes; the spec is the architect-of-record.
 - **Always check smart-agent first.** Before designing any non-trivial capability look at the analog in `/home/barb/smart-agent`. New specs MUST include a "Reference: smart-agent patterns to port" section. Deliberate divergence must say why.
 - **Package boundaries** are one-directional: `types ← identity-auth ← agent-account ← delegation ← mcp-runtime`, plus `key-custody → delegation`, `tool-policy → mcp-runtime`, and the custody-layer fork `types ← custody` (depended on by `agent-account` and `delegation`; see [spec 213](specs/213-custody-layer-carve-out.md) for the firewall). No back-edges. `tool-policy` and `types` are transport-agnostic (no MCP/A2A/LangChain/Vercel imports).

@@ -289,11 +289,10 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     // gasless txs (subregistry.register + setPrimaryName). Failures
     // are non-blocking — surfaced in the success card.
     if (passkey) {
-      // Salt with the Org PSA's last-4-hex for global uniqueness.
-      const salted = `acme-${orgAddress.slice(-4).toLowerCase()}`;
+      // Number-suffix uniqueness per spec 220 § 5: acme → acme2 → …
       void (async () => {
         const claim = await claimPsaName({
-          label: salted,
+          baseLabel: 'acme',
           personAgent: orgAddress,
           passkey,
         });

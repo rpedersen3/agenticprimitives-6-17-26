@@ -257,11 +257,10 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     // PSA. Same passkey path as Act 2 (Alice's passkey is the founding
     // custodian). Non-blocking — failures surface inline.
     if (passkey) {
-      // Salt with the Treasury PSA's last-4-hex for global uniqueness.
-      const salted = `treasury-${treasuryAddress.slice(-4).toLowerCase()}`;
+      // Number-suffix uniqueness per spec 220 § 5: treasury → treasury2 → …
       void (async () => {
         const claim = await claimPsaName({
-          label: salted,
+          baseLabel: 'treasury',
           personAgent: treasuryAddress,
           passkey,
         });
