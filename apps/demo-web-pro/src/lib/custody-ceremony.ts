@@ -211,13 +211,42 @@ function signerIdentity(signer: CeremonySigner): Address | null {
   return siwe?.eoa ?? null;
 }
 
+/**
+ * Reorder signers so that the one whose EOA matches the currently-
+ * active wallet goes first. Cuts the number of MetaMask account
+ * switches per ceremony in half for the common 2-of-2 SIWE case
+ * (was 4: switch→sign→switch→sign per phase; now 2: sign→switch→sign).
+ * Passkey signers don't trigger picker prompts so order doesn't
+ * matter for them — we leave them where they are.
+ */
+function orderSignersByActiveWallet(signers: CeremonySigner[]): CeremonySigner[] {
+  if (signers.length < 2) return signers;
+  // Find the first signer that has a `getWalletAddress` returning the
+  // currently-active EOA AND whose seat is SIWE-controlled (i.e. that
+  // active EOA actually IS this signer's identity).
+  for (let i = 0; i < signers.length; i++) {
+    const s = signers[i]!;
+    const siwe = getSiweAuth(s.seat);
+    if (!siwe) continue; // passkey signer, no switch needed
+    const active = s.getWalletAddress?.();
+    if (active && active.toLowerCase() === siwe.eoa.toLowerCase() && i > 0) {
+      // Move this signer to the front.
+      const reordered = [s, ...signers.filter((_, idx) => idx !== i)];
+      return reordered;
+    }
+  }
+  return signers;
+}
+
 export async function scheduleAndApply(
   args: ScheduleAndApplyArgs,
 ): Promise<CeremonyResult | { error: string }> {
   if (!config.custodyPolicy || !config.chainId) {
     return { error: 'custody policy / chain id missing' };
   }
-  const { account, action, innerArgs, signers, setPhase } = args;
+  const { account, action, innerArgs, setPhase } = args;
+  // Adaptive signer order — see orderSignersByActiveWallet doc.
+  const signers = orderSignersByActiveWallet(args.signers);
 
   if (signers.length === 0) {
     return { error: 'at least one signer required' };
