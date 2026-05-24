@@ -25,6 +25,7 @@ import { orgConfig } from '../../org-config';
 import { loadSeats, loadActiveSeat, setActiveSeat } from '../../lib/seats';
 import { loadOrg, saveOrg } from '../../lib/demo-state';
 import { getPasskeyForSeat } from '../../lib/passkey';
+import { claimPsaName } from '../../lib/claim-psa-name';
 import {
   executeCallFromAgent,
   encodeExecuteCall,
@@ -57,6 +58,8 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [predictedAddress, setPredictedAddress] = useState<Address | null>(null);
   const [deployedAddress, setDeployedAddress] = useState<Address | null>(null);
+  const [orgName, setOrgName] = useState<string | null>(null);
+  const [orgNameError, setOrgNameError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [dialogOpen, setDialogOpen] = useState(true);
 
@@ -279,6 +282,26 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     setPredictedAddress(orgAddress);
     setTxHash((result.transactionHash ?? ('0x' + '00'.repeat(32))) as `0x${string}`);
     setStage('success');
+
+    // Best-effort: auto-claim acme.demo.agent for the Org PSA. The Org
+    // is a fresh multi-sig with Alice as sole founding custodian, so
+    // Alice's passkey is the signing authority for the two extra
+    // gasless txs (subregistry.register + setPrimaryName). Failures
+    // are non-blocking — surfaced in the success card.
+    if (passkey) {
+      void (async () => {
+        const claim = await claimPsaName({
+          label: 'acme',
+          personAgent: orgAddress,
+          passkey,
+        });
+        if (claim.ok) {
+          setOrgName(claim.name);
+        } else {
+          setOrgNameError(claim.reason);
+        }
+      })();
+    }
   };
 
   const handleAccept = () => {
@@ -433,10 +456,25 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
         successTxHash={txHash ?? undefined}
         successExtra={
           stage === 'success' && deployedAddress ? (
-            <p className="muted">
-              {orgConfig.name} is live on Base Sepolia. {founderName}\'s Person Smart Agent
-              is its sole admin until Bob joins.
-            </p>
+            <>
+              <p className="muted">
+                {orgConfig.name} is live on Base Sepolia. {founderName}\'s Person Smart Agent
+                is its sole admin until Bob joins.
+              </p>
+              {orgName ? (
+                <p className="muted" style={{ color: '#059669' }}>
+                  ✓ Agent name registered: <code>{orgName}</code>
+                </p>
+              ) : orgNameError ? (
+                <p className="muted" style={{ color: '#b45309' }}>
+                  ⚠ Agent-name auto-claim skipped: {orgNameError}
+                </p>
+              ) : (
+                <p className="muted" style={{ color: '#9ca3af' }}>
+                  Claiming <code>acme.demo.agent</code> for the Org…
+                </p>
+              )}
+            </>
           ) : undefined
         }
         onContinue={() => {

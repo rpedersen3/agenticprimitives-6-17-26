@@ -28,6 +28,7 @@ import { orgConfig } from '../../org-config';
 import { loadActiveSeat, loadSeats, setActiveSeat } from '../../lib/seats';
 import { loadOrg, loadTreasury, saveTreasury } from '../../lib/demo-state';
 import { getPasskeyForSeat } from '../../lib/passkey';
+import { claimPsaName } from '../../lib/claim-psa-name';
 import {
   executeCallFromAgent,
   encodeExecuteCall,
@@ -61,6 +62,8 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
   const [phase, setPhase] = useState<WorkingPhase>('preflight');
   const [error, setError] = useState<string | null>(null);
   const [deployedAddress, setDeployedAddress] = useState<Address | null>(null);
+  const [treasuryName, setTreasuryName] = useState<string | null>(null);
+  const [treasuryNameError, setTreasuryNameError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [dialogOpen, setDialogOpen] = useState(true);
 
@@ -249,6 +252,24 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     setDeployedAddress(treasuryAddress);
     setTxHash((result.transactionHash ?? ('0x' + '00'.repeat(32))) as `0x${string}`);
     setStage('success');
+
+    // Best-effort: auto-claim treasury.demo.agent for the new Treasury
+    // PSA. Same passkey path as Act 2 (Alice's passkey is the founding
+    // custodian). Non-blocking — failures surface inline.
+    if (passkey) {
+      void (async () => {
+        const claim = await claimPsaName({
+          label: 'treasury',
+          personAgent: treasuryAddress,
+          passkey,
+        });
+        if (claim.ok) {
+          setTreasuryName(claim.name);
+        } else {
+          setTreasuryNameError(claim.reason);
+        }
+      })();
+    }
   };
 
   const handleAccept = () => {
@@ -402,6 +423,19 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
                 <strong>simulated</strong> at the runtime layer — the object exists
                 on chain, the enforcement pipe is queued.
               </p>
+              {treasuryName ? (
+                <p className="muted" style={{ color: '#059669' }}>
+                  ✓ Agent name registered: <code>{treasuryName}</code>
+                </p>
+              ) : treasuryNameError ? (
+                <p className="muted" style={{ color: '#b45309' }}>
+                  ⚠ Agent-name auto-claim skipped: {treasuryNameError}
+                </p>
+              ) : (
+                <p className="muted" style={{ color: '#9ca3af' }}>
+                  Claiming <code>treasury.demo.agent</code> for the Treasury…
+                </p>
+              )}
             </>
           ) : undefined
         }
