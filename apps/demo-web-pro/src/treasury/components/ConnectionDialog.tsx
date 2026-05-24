@@ -76,6 +76,13 @@ export interface ConnectionDialogProps {
   onRetry?: () => void;
   /** Called on Cancel. */
   onCancel?: () => void;
+  /**
+   * Optional helper: when the error message indicates the user is on
+   * the wrong MetaMask account, this callback triggers MetaMask's
+   * account picker and then immediately re-runs `onRetry`. Surfaced
+   * as a "Switch MetaMask account" button alongside Try again.
+   */
+  onSwitchWallet?: () => Promise<void>;
 }
 
 export function ConnectionDialog(props: ConnectionDialogProps) {
@@ -247,7 +254,13 @@ function SuccessBody({
   );
 }
 
-function ErrorBody({ errorMessage, onRetry, onCancel }: ConnectionDialogProps) {
+function ErrorBody({ errorMessage, onRetry, onCancel, onSwitchWallet }: ConnectionDialogProps) {
+  // Wallet-mismatch UX: when the error spells out "Wrong MetaMask
+  // account" the user shouldn't have to leave the page. Surface a
+  // dedicated button that opens MetaMask's account picker via the
+  // injected provider then re-runs the action.
+  const isWalletMismatch =
+    !!errorMessage && /wrong metamask account/i.test(errorMessage);
   return (
     <div className="connection-dialog__body">
       <p className="connection-dialog__error" role="alert">
@@ -259,12 +272,25 @@ function ErrorBody({ errorMessage, onRetry, onCancel }: ConnectionDialogProps) {
             Cancel
           </button>
         )}
-        {onRetry && (
+        {isWalletMismatch && onSwitchWallet && (
           <button
             type="button"
             className="primary"
-            onClick={onRetry}
+            onClick={() => {
+              void onSwitchWallet().then(() => onRetry?.());
+            }}
             autoFocus
+            data-testid="connection-dialog-switch-wallet"
+          >
+            Switch MetaMask account
+          </button>
+        )}
+        {onRetry && (
+          <button
+            type="button"
+            className={isWalletMismatch && onSwitchWallet ? 'secondary' : 'primary'}
+            onClick={onRetry}
+            autoFocus={!(isWalletMismatch && onSwitchWallet)}
             data-testid="connection-dialog-retry"
           >
             Try again

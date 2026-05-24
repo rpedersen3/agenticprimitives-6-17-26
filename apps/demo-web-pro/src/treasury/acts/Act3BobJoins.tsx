@@ -526,6 +526,9 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
           onComplete();
         }}
         errorMessage={error ?? undefined}
+        onSwitchWallet={async () => {
+          await promptSwitchWalletAccount();
+        }}
         onRetry={() => {
           setStage('consent');
           setError(null);
