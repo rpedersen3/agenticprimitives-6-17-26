@@ -50,6 +50,10 @@ export interface WriteContext {
  *   `resolveName(name) === agent`. The universal resolver enforces this
  *   on chain; we additionally reconstruct the dotted name off chain by
  *   walking the `NameRegistered` event log up the parent chain.
+ *
+ * READ-PATH DEBT (ADR-0012): log walks are forbidden in product read paths
+ * except this transitional `_reconstructName` path. Exit: on-chain label
+ * storage or a naming indexer — do not add second log walkers.
  */
 export class AgentNamingClient {
   private readonly publicClient: PublicClient;
@@ -336,6 +340,9 @@ export class AgentNamingClient {
    * as its `label` field (indexed by `node`), so a single
    * `getLogs` per ancestor returns the label deterministically.
    *
+   * TRANSITIONAL (ADR-0012): product reads should not use eth_getLogs.
+   * Replace with on-chain label storage or a naming indexer.
+   *
    * Returns `null` if any ancestor's event is missing (would indicate
    * a broken chain, e.g. stale state where a node exists but
    * `NameRegistered` was never emitted — shouldn't happen).
@@ -388,18 +395,24 @@ export class AgentNamingClient {
     event: AbiEvent,
   ): Promise<{ label: string; parent: Hex } | null> {
     for await (const { fromBlock, toBlock } of this._iterChunks()) {
-      const logs = await this.publicClient.getLogs({
-        address: this.opts.registry,
-        event,
-        args: { node },
-        fromBlock,
-        toBlock,
-      });
-      if (logs.length > 0) {
-        const args = logs[0]!.args as { label?: string; parent?: Hex };
-        if (args.label !== undefined) {
-          return { label: args.label, parent: (args.parent ?? ZERO_NODE) as Hex };
+      try {
+        const logs = await this.publicClient.getLogs({
+          address: this.opts.registry,
+          event,
+          args: { node },
+          fromBlock,
+          toBlock,
+        });
+        if (logs.length > 0) {
+          const args = logs[0]!.args as { label?: string; parent?: Hex };
+          if (args.label !== undefined) {
+            return { label: args.label, parent: (args.parent ?? ZERO_NODE) as Hex };
+          }
         }
+      } catch {
+        // Ignore per-chunk RPC errors (rate limits, range caps, transient
+        // 5xx) and keep scanning. _reconstructName returns null only if
+        // EVERY chunk fails to find the event.
       }
     }
     return null;
@@ -410,16 +423,20 @@ export class AgentNamingClient {
     event: AbiEvent,
   ): Promise<string | null> {
     for await (const { fromBlock, toBlock } of this._iterChunks()) {
-      const logs = await this.publicClient.getLogs({
-        address: this.opts.registry,
-        event,
-        args: { rootNode: node },
-        fromBlock,
-        toBlock,
-      });
-      if (logs.length > 0) {
-        const args = logs[0]!.args as { label?: string };
-        if (args.label !== undefined) return args.label;
+      try {
+        const logs = await this.publicClient.getLogs({
+          address: this.opts.registry,
+          event,
+          args: { rootNode: node },
+          fromBlock,
+          toBlock,
+        });
+        if (logs.length > 0) {
+          const args = logs[0]!.args as { label?: string };
+          if (args.label !== undefined) return args.label;
+        }
+      } catch {
+        // Ignore per-chunk errors (see _findRegisteredEvent).
       }
     }
     return null;
@@ -433,8 +450,8 @@ export class AgentNamingClient {
    * eth_getLogs call.
    */
   private async *_iterChunks(): AsyncIterable<{ fromBlock: bigint; toBlock: bigint }> {
-    const chunkSize = this.opts.getLogsChunkSize ?? 10_000n;
-    const maxChunks = this.opts.getLogsMaxChunks ?? 50;
+    const chunkSize = this.opts.getLogsChunkSize ?? 9n;
+    const maxChunks = this.opts.getLogsMaxChunks ?? 250;
     const lowerBound = this.opts.fromBlock ?? 0n;
     const latest = await this.publicClient.getBlockNumber();
     let toBlock = latest;

@@ -130,14 +130,16 @@ export interface AgentNamingClientOpts {
   fromBlock?: bigint;
   /**
    * Block-window size for chunked backward `eth_getLogs` scans.
-   * Default 10_000n — matches Alchemy free / Growth tier limits and
-   * QuickNode's default. Lower if your RPC has a tighter cap.
+   * Default 9n — matches Alchemy's strictest tier ("Free" caps at 10
+   * blocks per request). Bump higher (~500-10_000) if you point at
+   * a paid Alchemy / QuickNode / public RPC with larger ranges.
    */
   getLogsChunkSize?: bigint;
   /**
-   * Maximum number of chunks to scan before giving up. Default 50.
-   * 50 × 10_000 = 500_000 blocks ≈ 12 days on Base Sepolia (2s blocks).
-   * Increase for older deployments; lower for tighter latency budgets.
+   * Maximum number of chunks to scan before giving up. Default 250.
+   * 250 × 9 = 2_250 blocks ≈ 75 min on Base Sepolia (2s blocks).
+   * Adequate for a fresh-registration UX. Bump higher for older
+   * deployments; lower for tighter latency budgets.
    */
   getLogsMaxChunks?: number;
 }
