@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@agenticprimitives/agent-naming':
+        specifier: workspace:*
+        version: link:packages/agent-naming
       '@types/node':
         specifier: ^22.7.0
         version: 22.19.19

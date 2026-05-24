@@ -21,8 +21,10 @@
  *
  * Self-contained — does NOT import @agenticprimitives/agent-naming so it
  * can run from the repo root without going through a workspace-package
- * build cycle. Predicate IDs + ABIs are derived inline to keep the
- * script standalone.
+ * ESM/CJS resolution dance. The agent-naming SDK exposes the SAME
+ * write paths (AgentNamingClient.{registerSubname, setAgentRecords,
+ * setPrimaryName}) — see packages/agent-naming/test/writes.test.ts for
+ * unit-test coverage of the SDK write paths against mocked viem.
  *
  * Usage:
  *   set -a; source .env.deploy.local; set +a
@@ -63,7 +65,6 @@ const AGENT_KIND_ID = {
 
 const ZERO_NODE = '0x0000000000000000000000000000000000000000000000000000000000000000' as const;
 
-// ─── Minimal ABIs (only the entry points we call) ───────────────────
 const REGISTRY_ABI = [
   { type: 'function', name: 'AGENT_ROOT', stateMutability: 'pure', inputs: [], outputs: [{ type: 'bytes32' }] },
   { type: 'function', name: 'owner', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ type: 'address' }] },
@@ -97,7 +98,6 @@ const UNIVERSAL_ABI = [
     inputs: [{ name: 'agent', type: 'address' }], outputs: [{ type: 'bytes32' }] },
 ] as const satisfies Abi;
 
-// ─── namehash (mirror packages/agent-naming/src/namehash.ts) ───────
 function namehash(name: string): Hex {
   if (name === '') return ZERO_NODE;
   const labels = name.split('.');
@@ -210,13 +210,8 @@ async function registerOrSkip(
     address: registry, abi: REGISTRY_ABI, functionName: 'register',
     args: [parentNode, label, owner, resolverAddr, 0n],
   });
-  // Compute the new child node off-chain rather than re-reading
-  // childNode() — Base Sepolia RPC sometimes has read-after-write lag
-  // that returns stale ZERO_NODE for a beat after the tx confirms.
   const node = keccak256(encodePacked(['bytes32', 'bytes32'], [parentNode, labelhash]));
   console.log(`    → ${node}`);
-  // Poll recordExists until the registry observation propagates to the
-  // resolver's view (cap at 10 attempts × 2 s = 20 s).
   await waitForRecord(publicClient, registry, node);
   await writeRecords(publicClient, wallet, resolverAddr, node, owner, displayName, kind);
 }
@@ -256,12 +251,6 @@ async function writeRecords(
   console.log(`    records: addr=${owner}, displayName="${displayName}", kind=${kind}`);
 }
 
-/**
- * Send a writeContract tx with explicit nonce + retry on "replacement
- * underpriced". Base Sepolia's public RPC sometimes lags in surfacing
- * the latest nonce after a confirmed tx; an explicit pendingTxCount
- * fetch each time avoids the race.
- */
 async function sendAndConfirm(
   publicClient: PublicClientT,
   wallet: WalletClientT,

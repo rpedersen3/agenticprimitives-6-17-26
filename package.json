@@ -49,6 +49,12 @@
     "check:agent-naming": "pnpm --filter @agenticprimitives/agent-naming typecheck && pnpm --filter @agenticprimitives/agent-naming test:unit",
     "check:agent-identity": "pnpm --filter @agenticprimitives/agent-identity typecheck && pnpm --filter @agenticprimitives/agent-identity test",
     "check:agent-relationships": "pnpm --filter @agenticprimitives/agent-relationships typecheck && pnpm --filter @agenticprimitives/agent-relationships test",
+    "check:demo-web": "pnpm --filter @agenticprimitives-demo/web typecheck",
+    "check:demo-web-pro": "pnpm --filter @agenticprimitives-demo/web-pro typecheck",
+    "check:demo-web-recovery": "pnpm --filter @agenticprimitives-demo/web-recovery typecheck",
+    "check:demo-a2a": "pnpm --filter @agenticprimitives-demo/a2a typecheck",
+    "check:demo-mcp": "pnpm --filter @agenticprimitives-demo/mcp typecheck",
+    "check:contracts": "pnpm --filter @agenticprimitives-demo/contracts test",
     "generate:capability-index": "tsx scripts/generate-capability-index.ts",
     "bootstrap:demo-names": "tsx scripts/bootstrap-demo-names.ts"
   },
