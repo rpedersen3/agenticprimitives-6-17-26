@@ -242,10 +242,18 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
     // PSA's passkey path. Failures don't block success — the user
     // can still proceed; the error surfaces in the success card.
     if (passkey) {
+      // Salt the label with the PSA's last-4-hex so every PSA gets a
+      // globally-unique label (e.g. alice-6c0f.demo.agent). Without
+      // the salt, two different PSAs that both claim the "alice"
+      // seat (multiple users OR a user who reset + re-enrolled with
+      // a new passkey) would race for the bare "alice" label and the
+      // loser's auto-claim would revert with NodeAlreadyExists.
+      const psa = result.deployedAddress;
+      const salted = `${seat.id.toLowerCase()}-${psa.slice(-4).toLowerCase()}`;
       void (async () => {
         const claim = await claimPsaName({
-          label: seat.id.toLowerCase(),
-          personAgent: result.deployedAddress,
+          label: salted,
+          personAgent: psa,
           passkey,
         });
         if (claim.ok) {
