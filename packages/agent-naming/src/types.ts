@@ -40,6 +40,14 @@ export interface AgentNameRecords {
   /** Address of the CustodyPolicy governing the owner Smart Agent. */
   custodyPolicy?: Address;
   /**
+   * Off-chain JSON profile content-hash
+   * (matches `agent-identity.profileContentHash(profile)`). Stored
+   * as `bytes32` via the `atl:metadataHash` predicate. Pairs with
+   * `metadataUri` for the standard URI + content-hash anchoring
+   * pattern (ADR-0009 / NS Phase 3 pivot).
+   */
+  metadataHash?: Hex;
+  /**
    * CAIP-10 chain-agnostic account identifier (e.g.
    * `eip155:84532:0xabc...`). Per ADR-0008, this enables low-cost
    * cross-resolver interop with HCS-14 / ERC-8004 indexers without

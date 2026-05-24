@@ -23,3 +23,29 @@ export type {
   AgentNamingClientOpts,
 } from './types';
 export { AgentNamingClient } from './client';
+
+// Phase 3 contract ABIs (live at deployed addresses recorded in
+// apps/contracts/deployments-<network>.json). ADR-0009 pivot: the
+// resolver inherits the shared `AttributeStorage` + ontology stack.
+export {
+  agentNameRegistryAbi,
+  agentNameAttributeResolverAbi,
+  agentNameUniversalResolverAbi,
+  ontologyTermRegistryAbi,
+  shapeRegistryAbi,
+} from './abis';
+
+// Ontology predicate ids (bytes32 mirror of AgentNamePredicates.sol) +
+// CAIP-10 helpers + typed encoder / decoder.
+export {
+  PREDICATE_ID,
+  AGENT_KIND_ID,
+  CLASS_AGENT_NAME,
+  AGENT_KIND_ENUM,
+  CAIP10_NAMESPACE_ALLOWLIST,
+  encodeRecords,
+  decodeRecords,
+  type PredicateName,
+  type EncodedRecord,
+  type DecodeInput,
+} from './records';

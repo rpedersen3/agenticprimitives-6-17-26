@@ -51,7 +51,22 @@
     "RegisterSubnameInput",
     "SetPrimaryNameInput",
     "SetAgentRecordsInput",
-    "SetSubregistryInput"
+    "SetSubregistryInput",
+    "agentNameRegistryAbi",
+    "agentNameAttributeResolverAbi",
+    "agentNameUniversalResolverAbi",
+    "ontologyTermRegistryAbi",
+    "shapeRegistryAbi",
+    "PREDICATE_ID",
+    "AGENT_KIND_ID",
+    "CLASS_AGENT_NAME",
+    "AGENT_KIND_ENUM",
+    "CAIP10_NAMESPACE_ALLOWLIST",
+    "encodeRecords",
+    "decodeRecords",
+    "PredicateName",
+    "EncodedRecord",
+    "DecodeInput"
   ],
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation. Naming-domain only.", "owningPackage": "@agenticprimitives/delegation" },

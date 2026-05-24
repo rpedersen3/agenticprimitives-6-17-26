@@ -16,6 +16,13 @@ import {UniversalSignatureValidator} from "../src/UniversalSignatureValidator.so
 import {QuorumEnforcer} from "../src/enforcers/QuorumEnforcer.sol";
 import {ApprovedHashRegistry} from "../src/ApprovedHashRegistry.sol";
 import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
+import {AgentNameRegistry} from "../src/naming/AgentNameRegistry.sol";
+import {AgentNameAttributeResolver} from "../src/naming/AgentNameAttributeResolver.sol";
+import {AgentNameUniversalResolver} from "../src/naming/AgentNameUniversalResolver.sol";
+import {AgentNamePredicates} from "../src/naming/AgentNamePredicates.sol";
+import {OntologyTermRegistry} from "../src/ontology/OntologyTermRegistry.sol";
+import {ShapeRegistry} from "../src/ontology/ShapeRegistry.sol";
+import {AttributeStorage} from "../src/ontology/AttributeStorage.sol";
 // JSON output key is now "custodyPolicy" (was "thresholdValidator"
 // pre-6g.4). On the next testnet redeploy the existing
 // `deployments-base-sepolia.json` field will be overwritten under the
@@ -132,6 +139,42 @@ contract Deploy is Script {
         UniversalSignatureValidator universalValidator = new UniversalSignatureValidator();
         console2.log("UniversalSignatureValidator: %s", address(universalValidator));
 
+        // 6.5. Shared ontology stack (ADR-0009, NS Phase 3 pivot).
+        //   OntologyTermRegistry governs which predicate bytes32 ids may
+        //   appear on AttributeStorage subclasses (the AgentName
+        //   AttributeResolver below; relationships + identity Phase 3 will
+        //   reuse this). ShapeRegistry holds SHACL-style class shapes that
+        //   validate subjects against expected predicate / datatype /
+        //   cardinality / enum constraints.
+        OntologyTermRegistry ontology = new OntologyTermRegistry(deployer);
+        console2.log("OntologyTermRegistry: %s", address(ontology));
+        ShapeRegistry shapes = new ShapeRegistry(deployer);
+        console2.log("ShapeRegistry:        %s", address(shapes));
+
+        // 6.6. Agent Naming Service (NS Phase 3, spec 215).
+        //   Registry + per-node attribute resolver (inherits AttributeStorage)
+        //   + universal read aggregator. Deployer bootstraps the .agent
+        //   root so demos can register children without chicken-and-egg.
+        AgentNameRegistry nameRegistry = new AgentNameRegistry();
+        console2.log("AgentNameRegistry:    %s", address(nameRegistry));
+        AgentNameAttributeResolver nameResolver = new AgentNameAttributeResolver(nameRegistry, address(ontology));
+        console2.log("AgentNameResolver:    %s", address(nameResolver));
+        AgentNameUniversalResolver nameUniversal = new AgentNameUniversalResolver(nameRegistry);
+        console2.log("AgentNameUniversalResolver: %s", address(nameUniversal));
+        bytes32 agentRoot = nameRegistry.initializeRoot(
+            "agent",
+            deployer,
+            address(nameResolver),
+            nameRegistry.KIND_AGENT()
+        );
+        console2.log("  .agent root node:   %s", vm.toString(agentRoot));
+
+        // 6.7. Register the AgentName predicates so resolver writes can
+        //      land. Batch-register the ten canonical atl:* predicates +
+        //      define the AGENT_KIND enum set + AgentName shape. All
+        //      optional cardinality initially (gradual adoption).
+        _bootstrapAgentNameOntology(ontology, shapes, address(nameResolver));
+
         // Stake + deposit so the paymaster can sponsor UserOps immediately.
         // - addStake locks ETH for the unstake-delay window (anti-DoS for bundlers
         //   that want to know the paymaster has skin in the game).
@@ -179,10 +222,105 @@ contract Deploy is Script {
         vm.serializeAddress(key, "quorumEnforcer", address(quorumEnforcer));
         vm.serializeAddress(key, "approvedHashRegistry", address(approvedHashRegistry));
         vm.serializeAddress(key, "custodyPolicy", address(custodyPolicy));
-        string memory out = vm.serializeAddress(key, "universalSignatureValidator", address(universalValidator));
+        vm.serializeAddress(key, "universalSignatureValidator", address(universalValidator));
+        vm.serializeAddress(key, "ontologyTermRegistry", address(ontology));
+        vm.serializeAddress(key, "shapeRegistry", address(shapes));
+        vm.serializeAddress(key, "agentNameRegistry", address(nameRegistry));
+        vm.serializeAddress(key, "agentNameResolver", address(nameResolver));
+        string memory out = vm.serializeAddress(key, "agentNameUniversalResolver", address(nameUniversal));
 
         string memory path = string.concat("deployments-", network, ".json");
         vm.writeFile(path, out);
         console2.log("wrote %s", path);
+    }
+
+    /**
+     * @dev Register the ten canonical `atl:*` predicates on the
+     *      OntologyTermRegistry, define the `AGENT_KIND` enum set, and
+     *      define the `atl:AgentName` shape on the ShapeRegistry.
+     *      Called during deploy AFTER the resolver is constructed
+     *      (the resolver address is needed to read its public DT_*_PUB
+     *      datatype discriminators).
+     */
+    function _bootstrapAgentNameOntology(
+        OntologyTermRegistry ontology,
+        ShapeRegistry shapes,
+        address resolverAddr
+    ) internal {
+        // ─── 1. Register the predicates (governance batch) ──────────
+        bytes32[] memory ids = new bytes32[](10);
+        string[] memory curies = new string[](10);
+        string[] memory uris = new string[](10);
+        string[] memory labels = new string[](10);
+        string[] memory datatypes = new string[](10);
+
+        ids[0] = AgentNamePredicates.ATL_ADDR;
+        curies[0] = "atl:addr"; uris[0] = "https://agentictrust.io/ontology/core#addr"; labels[0] = "Address"; datatypes[0] = "address";
+
+        ids[1] = AgentNamePredicates.ATL_AGENT_KIND;
+        curies[1] = "atl:agentKind"; uris[1] = "https://agentictrust.io/ontology/core#agentKind"; labels[1] = "Agent Kind"; datatypes[1] = "bytes32";
+
+        ids[2] = AgentNamePredicates.ATL_DISPLAY_NAME;
+        curies[2] = "atl:displayName"; uris[2] = "https://agentictrust.io/ontology/core#displayName"; labels[2] = "Display Name"; datatypes[2] = "string";
+
+        ids[3] = AgentNamePredicates.ATL_A2A_ENDPOINT;
+        curies[3] = "atl:a2aEndpoint"; uris[3] = "https://agentictrust.io/ontology/core#a2aEndpoint"; labels[3] = "A2A Endpoint"; datatypes[3] = "string";
+
+        ids[4] = AgentNamePredicates.ATL_MCP_ENDPOINT;
+        curies[4] = "atl:mcpEndpoint"; uris[4] = "https://agentictrust.io/ontology/core#mcpEndpoint"; labels[4] = "MCP Endpoint"; datatypes[4] = "string";
+
+        ids[5] = AgentNamePredicates.ATL_METADATA_URI;
+        curies[5] = "atl:metadataURI"; uris[5] = "https://agentictrust.io/ontology/core#metadataURI"; labels[5] = "Metadata URI"; datatypes[5] = "string";
+
+        ids[6] = AgentNamePredicates.ATL_METADATA_HASH;
+        curies[6] = "atl:metadataHash"; uris[6] = "https://agentictrust.io/ontology/core#metadataHash"; labels[6] = "Metadata Hash"; datatypes[6] = "bytes32";
+
+        ids[7] = AgentNamePredicates.ATL_PASSKEY_CREDENTIAL_DIGEST;
+        curies[7] = "atl:passkeyCredentialDigest"; uris[7] = "https://agentictrust.io/ontology/core#passkeyCredentialDigest"; labels[7] = "Passkey Credential Digest"; datatypes[7] = "bytes32";
+
+        ids[8] = AgentNamePredicates.ATL_CUSTODY_POLICY;
+        curies[8] = "atl:custodyPolicy"; uris[8] = "https://agentictrust.io/ontology/core#custodyPolicy"; labels[8] = "Custody Policy"; datatypes[8] = "address";
+
+        ids[9] = AgentNamePredicates.ATL_NATIVE_ID;
+        curies[9] = "atl:nativeId"; uris[9] = "https://agentictrust.io/ontology/core#nativeId"; labels[9] = "Native (CAIP-10) ID"; datatypes[9] = "string";
+
+        ontology.registerTermBatch(ids, curies, uris, labels, datatypes);
+        console2.log("  registered %s AgentName predicates", vm.toString(ids.length));
+
+        // ─── 2. Define the AGENT_KIND enum set ───────────────────────
+        bytes32[] memory kinds = new bytes32[](4);
+        kinds[0] = AgentNamePredicates.AGENT_KIND_PERSON;
+        kinds[1] = AgentNamePredicates.AGENT_KIND_ORG;
+        kinds[2] = AgentNamePredicates.AGENT_KIND_SERVICE;
+        kinds[3] = AgentNamePredicates.AGENT_KIND_TREASURY;
+        shapes.defineEnumSet(AgentNamePredicates.AGENT_KIND_ENUM, kinds);
+
+        // ─── 3. Define the AgentName shape ──────────────────────────
+        // All cardinalities OPTIONAL for v0 (gradual adoption); the
+        // shape exists primarily to give consumers a single read for
+        // "is this AgentName well-formed".
+        uint8 DT_STRING = AttributeStorage(resolverAddr).DT_STRING_PUB();
+        uint8 DT_ADDRESS = AttributeStorage(resolverAddr).DT_ADDRESS_PUB();
+        uint8 DT_BYTES32 = AttributeStorage(resolverAddr).DT_BYTES32_PUB();
+
+        ShapeRegistry.PropertyConstraint[] memory props = new ShapeRegistry.PropertyConstraint[](10);
+        props[0] = ShapeRegistry.PropertyConstraint(AgentNamePredicates.ATL_ADDR, DT_ADDRESS, ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[1] = ShapeRegistry.PropertyConstraint(AgentNamePredicates.ATL_AGENT_KIND, DT_BYTES32, ShapeRegistry.Cardinality.OPTIONAL, AgentNamePredicates.AGENT_KIND_ENUM, bytes32(0));
+        props[2] = ShapeRegistry.PropertyConstraint(AgentNamePredicates.ATL_DISPLAY_NAME, DT_STRING, ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[3] = ShapeRegistry.PropertyConstraint(AgentNamePredicates.ATL_A2A_ENDPOINT, DT_STRING, ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[4] = ShapeRegistry.PropertyConstraint(AgentNamePredicates.ATL_MCP_ENDPOINT, DT_STRING, ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[5] = ShapeRegistry.PropertyConstraint(AgentNamePredicates.ATL_METADATA_URI, DT_STRING, ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[6] = ShapeRegistry.PropertyConstraint(AgentNamePredicates.ATL_METADATA_HASH, DT_BYTES32, ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[7] = ShapeRegistry.PropertyConstraint(AgentNamePredicates.ATL_PASSKEY_CREDENTIAL_DIGEST, DT_BYTES32, ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[8] = ShapeRegistry.PropertyConstraint(AgentNamePredicates.ATL_CUSTODY_POLICY, DT_ADDRESS, ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+        props[9] = ShapeRegistry.PropertyConstraint(AgentNamePredicates.ATL_NATIVE_ID, DT_STRING, ShapeRegistry.Cardinality.OPTIONAL, bytes32(0), bytes32(0));
+
+        shapes.defineShape(
+            AgentNamePredicates.CLASS_AGENT_NAME,
+            props,
+            "https://agentictrust.io/ontology/shapes/AgentName#v1",
+            keccak256(bytes("AgentName-shape-v1"))
+        );
+        console2.log("  defined atl:AgentName shape with %s properties", vm.toString(props.length));
     }
 }
