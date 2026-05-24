@@ -28,7 +28,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { Address } from 'viem';
 import {
   useAgentNamingClient,
-  useAgentName,
   useResolveAgentName,
   useAgentRecords,
 } from '../../lib/use-agent-naming';
@@ -41,6 +40,7 @@ import {
 } from '../../lib/seats';
 import { getPasskeyForSeat } from '../../lib/passkey';
 import { setPrimaryNameOnly } from '../../lib/claim-psa-name';
+import { getCachedName, NAME_CACHE_EVENT } from '../../lib/name-cache';
 
 export type AgentDetailKind = 'person' | 'org' | 'service' | 'treasury';
 
@@ -188,12 +188,22 @@ function Body({
   const passkeyMirror = seatId ? getPasskeyForSeat(seatId) : null;
   const storedAgentName = passkeyMirror?.agentName;
 
-  // Reverse resolve (address → primary .agent name).
-  const reverseQ = useAgentName(address);
-  // Forward sanity check (if we know an expected name).
-  const forwardQ = useResolveAgentName(storedAgentName ?? undefined);
+  // Reverse: read from the local name cache (per ADR-0012 — no
+  // browser-side eth_getLogs). We re-render on cache updates.
+  const [cachedName, setCachedNameState] = useState<string | undefined>(() =>
+    getCachedName(address),
+  );
+  useEffect(() => {
+    setCachedNameState(getCachedName(address));
+    const onCache = () => setCachedNameState(getCachedName(address));
+    window.addEventListener(NAME_CACHE_EVENT, onCache);
+    return () => window.removeEventListener(NAME_CACHE_EVENT, onCache);
+  }, [address]);
+  // Forward sanity check (if we know an expected name) — single
+  // chain read per modal open, used to verify round-trip.
+  const forwardQ = useResolveAgentName(cachedName ?? storedAgentName ?? undefined);
   // Records bundle (displayName, agentKind, addr, nativeId, …).
-  const recordsQ = useAgentRecords(reverseQ.data ?? storedAgentName ?? undefined);
+  const recordsQ = useAgentRecords(cachedName ?? storedAgentName ?? undefined);
 
   // Recovery state for the "Set primary name now" button.
   const [setPrimaryState, setSetPrimaryState] = useState<
@@ -210,23 +220,22 @@ function Body({
     queryClient.invalidateQueries({ queryKey: ['naming-status'] });
   };
 
-  // Did the initial reverse-resolve query actually finish? Used to
-  // distinguish "still loading" from "loaded and null" — the diagnostic
-  // + recovery button should only show after we know the answer.
-  const reverseSettled = !reverseQ.isFetching && !reverseQ.isPending;
-  const reverseEmpty = reverseSettled && !reverseQ.data;
+  // Cache-based reverse: no async settle state. If cache has the
+  // name, render it; if not, show "unknown locally" hint.
+  const reverseSettled = true;
+  const reverseEmpty = !cachedName;
   const forwardMatches =
     forwardQ.data && forwardQ.data.toLowerCase() === address.toLowerCase();
 
-  // Recovery: forward record points at this SA but the SA's reverse
-  // record was never set. The fix is ONLY setPrimaryName from the SA;
-  // the passkey already signs everything else.
+  // Recovery: forward record points at this SA but we have no cached
+  // reverse — i.e. setPrimaryName may have failed in Act 1. Show the
+  // recovery button so the user can re-run setPrimaryName.
   const canRecover =
     !!passkeyMirror &&
     !!storedAgentName &&
     reverseEmpty &&
     forwardMatches &&
-    !reverseQ.data;
+    !cachedName;
 
   const runSetPrimary = async () => {
     if (!passkeyMirror || !storedAgentName) return;
@@ -296,14 +305,12 @@ function Body({
           </p>
         ) : (
           <>
-            <Field label="Primary name (reverse-resolve)">
-              {!reverseSettled ? (
-                <span style={{ color: '#9ca3af' }}>resolving…</span>
-              ) : reverseQ.data ? (
-                <strong style={{ color: '#059669' }}>{reverseQ.data}</strong>
+            <Field label="Primary name (local cache)">
+              {cachedName ? (
+                <strong style={{ color: '#059669' }}>{cachedName}</strong>
               ) : (
                 <span style={{ color: '#b45309' }}>
-                  not yet resolved
+                  no local cache entry
                   {storedAgentName ? ` (expected ${storedAgentName})` : ''}
                 </span>
               )}

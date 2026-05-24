@@ -80,7 +80,19 @@ export const config: DeploymentConfig = {
   valueEnforcer:            parseAddr(import.meta.env.VITE_VALUE_ENFORCER),
   allowedTargetsEnforcer:   parseAddr(import.meta.env.VITE_ALLOWED_TARGETS_ENFORCER),
   allowedMethodsEnforcer:   parseAddr(import.meta.env.VITE_ALLOWED_METHODS_ENFORCER),
-  rpcUrl:               import.meta.env.VITE_RPC_URL || undefined,
+  // Browser RPC: Alchemy's free tier rejects browser requests with
+  // CORS errors AND aggressively 429s eth_getLogs. Default to the
+  // public Base RPC which serves CORS headers + handles the demo's
+  // light read load. Override with VITE_BROWSER_RPC_URL for a paid
+  // CORS-enabled endpoint; VITE_RPC_URL is kept for compatibility but
+  // only used if it doesn't look like Alchemy.
+  rpcUrl: (() => {
+    const browserOverride = import.meta.env.VITE_BROWSER_RPC_URL as string | undefined;
+    if (browserOverride) return browserOverride;
+    const generic = import.meta.env.VITE_RPC_URL as string | undefined;
+    if (generic && !/alchemy\.com/i.test(generic)) return generic;
+    return 'https://sepolia.base.org';
+  })(),
   demoA2aUrl:           import.meta.env.VITE_DEMO_A2A_URL || undefined,
   demoMcpUrl:           import.meta.env.VITE_DEMO_MCP_URL || undefined,
   agentNameRegistry:          parseAddr(import.meta.env.VITE_AGENT_NAME_REGISTRY),
