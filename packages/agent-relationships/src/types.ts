@@ -27,10 +27,12 @@ export type Role = Hex & { readonly __brand: 'role' };
  * Numeric values match the on-chain enum (Phase 3 port).
  */
 export enum EdgeStatus {
-  PROPOSED = 0,
-  CONFIRMED = 1,
-  ACTIVE = 2,
-  REVOKED = 3,
+  /** Sentinel — never assigned to a real edge. Matches Solidity enum index 0. */
+  NONE = 0,
+  PROPOSED = 1,
+  CONFIRMED = 2,
+  ACTIVE = 3,
+  REVOKED = 4,
 }
 
 /**

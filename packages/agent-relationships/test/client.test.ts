@@ -5,26 +5,26 @@ import { RELATIONSHIP_TYPE } from '../src/constants';
 const A = '0x1111111111111111111111111111111111111111' as const;
 const B = '0x2222222222222222222222222222222222222222' as const;
 const ZERO_ID = '0x0000000000000000000000000000000000000000000000000000000000000001' as const;
+const REL = '0x35084a3D655240760BD3C0B24Fb8ca9776cf374E' as const;
 
-describe('AgentRelationshipsClient skeleton', () => {
+describe('AgentRelationshipsClient constructor', () => {
   it('constructs with valid opts', () => {
-    const c = new AgentRelationshipsClient({ rpcUrl: 'http://localhost:8545', chainId: 84532 });
+    const c = new AgentRelationshipsClient({ rpcUrl: 'http://localhost:8545', chainId: 84532, relationships: REL });
     expect(c.opts.chainId).toBe(84532);
   });
 
   it('rejects construction without rpcUrl', () => {
     // @ts-expect-error — testing runtime guard
-    expect(() => new AgentRelationshipsClient({ chainId: 1 })).toThrow();
+    expect(() => new AgentRelationshipsClient({ chainId: 1, relationships: REL })).toThrow(/rpcUrl/);
   });
 
-  it('reads throw R Phase 2', async () => {
-    const c = new AgentRelationshipsClient({ rpcUrl: 'http://localhost:8545', chainId: 84532 });
-    await expect(c.getEdge(ZERO_ID)).rejects.toThrow(/R Phase 2/);
-    await expect(c.listEdgesFor(A)).rejects.toThrow(/R Phase 2/);
+  it('rejects construction without relationships address', () => {
+    // @ts-expect-error — testing runtime guard
+    expect(() => new AgentRelationshipsClient({ rpcUrl: 'http://x', chainId: 1 })).toThrow(/relationships/);
   });
 
   it('writes throw R Phase 4', async () => {
-    const c = new AgentRelationshipsClient({ rpcUrl: 'http://localhost:8545', chainId: 84532 });
+    const c = new AgentRelationshipsClient({ rpcUrl: 'http://localhost:8545', chainId: 84532, relationships: REL });
     await expect(
       c.proposeEdge({ subject: A, object: B, relationshipType: RELATIONSHIP_TYPE.HAS_MEMBER as never }),
     ).rejects.toThrow(/R Phase 4/);

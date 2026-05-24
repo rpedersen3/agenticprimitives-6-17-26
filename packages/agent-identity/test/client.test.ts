@@ -1,32 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import { AgentIdentityClient } from '../src/client';
 
-describe('AgentIdentityClient skeleton', () => {
+const RESOLVER = '0x189D7c19f5B611CD85e2Ef748d1FA546F3402275' as const;
+
+describe('AgentIdentityClient constructor', () => {
   it('constructs with valid opts', () => {
-    const c = new AgentIdentityClient({ rpcUrl: 'http://localhost:8545', chainId: 84532 });
+    const c = new AgentIdentityClient({ rpcUrl: 'http://localhost:8545', chainId: 84532, profileResolver: RESOLVER });
     expect(c.opts.chainId).toBe(84532);
   });
 
   it('rejects construction without rpcUrl', () => {
     // @ts-expect-error — testing runtime guard
-    expect(() => new AgentIdentityClient({ chainId: 1 })).toThrow();
+    expect(() => new AgentIdentityClient({ chainId: 1, profileResolver: RESOLVER })).toThrow(/rpcUrl/);
   });
 
   it('rejects construction without chainId', () => {
     // @ts-expect-error — testing runtime guard
-    expect(() => new AgentIdentityClient({ rpcUrl: 'http://x' })).toThrow();
+    expect(() => new AgentIdentityClient({ rpcUrl: 'http://x', profileResolver: RESOLVER })).toThrow(/chainId/);
   });
 
-  it('reads throw I Phase 2', async () => {
-    const c = new AgentIdentityClient({ rpcUrl: 'http://localhost:8545', chainId: 84532 });
-    await expect(c.fetchProfile('0x0000000000000000000000000000000000000001')).rejects.toThrow(/I Phase 2/);
+  it('rejects construction without profileResolver address', () => {
+    // @ts-expect-error — testing runtime guard
+    expect(() => new AgentIdentityClient({ rpcUrl: 'http://x', chainId: 1 })).toThrow(/profileResolver/);
+  });
+
+  it('verifyEndpoint defers to I Phase 2.5 (separate ship)', async () => {
+    const c = new AgentIdentityClient({ rpcUrl: 'http://localhost:8545', chainId: 84532, profileResolver: RESOLVER });
     await expect(c.verifyEndpoint('0x0000000000000000000000000000000000000001', 'https://x', ['dns-txt'])).rejects.toThrow(
-      /I Phase 2/,
+      /I Phase 2\.5/,
     );
   });
 
-  it('writes throw I Phase 4', async () => {
-    const c = new AgentIdentityClient({ rpcUrl: 'http://localhost:8545', chainId: 84532 });
+  it('publishProfile throws I Phase 4', async () => {
+    const c = new AgentIdentityClient({ rpcUrl: 'http://localhost:8545', chainId: 84532, profileResolver: RESOLVER });
     await expect(
       c.publishProfile({
         agent: '0x0000000000000000000000000000000000000001',
