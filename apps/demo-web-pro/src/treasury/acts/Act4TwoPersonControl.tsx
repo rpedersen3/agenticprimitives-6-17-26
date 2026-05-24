@@ -359,6 +359,7 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
       setStep2Result(step2);
 
       setStage('success');
+      try { window.dispatchEvent(new Event('chain-state:update')); } catch {}
     } catch (e) {
       setStage('error');
       setError(e instanceof Error ? e.message : String(e));

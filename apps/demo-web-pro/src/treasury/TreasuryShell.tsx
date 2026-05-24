@@ -200,10 +200,23 @@ export function TreasuryShell() {
       setChainCompletedSlugs(next);
     };
     void probe();
-    // 60s — chain state doesn't change tx-by-tx for these probes; the
-    // user-facing reads are event-driven (success cards on each Act).
-    const interval = setInterval(probe, 60_000);
-    return () => clearInterval(interval);
+    // Polling cadence + event-driven re-probes:
+    //  - 20s interval as a safety net (chain state can change without
+    //    a UI-side event when an act completes in a different tab).
+    //  - Custom `chain-state:update` event for in-tab notifications:
+    //    each act dispatches it on success → probe runs immediately,
+    //    no waiting for the interval to tick.
+    //  - Window focus triggers a re-probe too (user comes back to
+    //    the tab and wants fresh state).
+    const interval = setInterval(probe, 20_000);
+    const onChainEvent = () => { void probe(); };
+    window.addEventListener('chain-state:update', onChainEvent);
+    window.addEventListener('focus', onChainEvent);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('chain-state:update', onChainEvent);
+      window.removeEventListener('focus', onChainEvent);
+    };
   }, [seats, org, treasury]);
 
   const completedSlugs = useMemo<Set<string>>(() => {

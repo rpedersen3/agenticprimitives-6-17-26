@@ -439,6 +439,7 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
       setAlreadyIssued(true);
       setStepLabel(null);
       setStage('success');
+      try { window.dispatchEvent(new Event('chain-state:update')); } catch {}
     } catch (e) {
       setStage('error');
       setError(e instanceof Error ? e.message : String(e));

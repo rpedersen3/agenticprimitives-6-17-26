@@ -451,6 +451,9 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
       }
       setBobCustodyConfirmed(true);
       setStage('success');
+      // Kick TreasuryShell's act-progress probe immediately so the
+      // next-action CTA advances without waiting for the interval tick.
+      try { window.dispatchEvent(new Event('chain-state:update')); } catch {}
     } catch (e) {
       setStage('error');
       setError(e instanceof Error ? e.message : String(e));
