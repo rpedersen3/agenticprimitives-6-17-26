@@ -52,6 +52,7 @@ export interface DeploymentConfig {
   agentProfileResolver?: `0x${string}`;
   ontologyTermRegistry?: `0x${string}`;
   shapeRegistry?: `0x${string}`;
+  permissionlessSubregistry?: `0x${string}`;
 }
 
 function parseAddr(v: string | undefined): `0x${string}` | undefined {
@@ -90,4 +91,5 @@ export const config: DeploymentConfig = {
   agentProfileResolver:       parseAddr(import.meta.env.VITE_AGENT_PROFILE_RESOLVER),
   ontologyTermRegistry:       parseAddr(import.meta.env.VITE_ONTOLOGY_TERM_REGISTRY),
   shapeRegistry:              parseAddr(import.meta.env.VITE_SHAPE_REGISTRY),
+  permissionlessSubregistry:  parseAddr(import.meta.env.VITE_PERMISSIONLESS_SUBREGISTRY),
 };

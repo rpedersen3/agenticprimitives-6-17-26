@@ -233,6 +233,47 @@ export const agentNameAttributeResolverAbi = [
 
 // ─── AgentNameUniversalResolver ────────────────────────────────────
 
+// ─── PermissionlessSubregistry (demo.agent permissionless child registration) ──
+
+export const permissionlessSubregistryAbi = [
+  { type: 'error', name: 'AlreadyClaimed',
+    inputs: [{ name: 'existingNode', type: 'bytes32' }] },
+  { type: 'error', name: 'LabelTooShort', inputs: [] },
+  { type: 'error', name: 'EmptyLabel', inputs: [] },
+  { type: 'error', name: 'ZeroNewOwner', inputs: [] },
+
+  {
+    type: 'event', name: 'NameClaimed',
+    inputs: [
+      { name: 'caller', type: 'address', indexed: true },
+      { name: 'childNode', type: 'bytes32', indexed: true },
+      { name: 'label', type: 'string', indexed: false },
+      { name: 'newOwner', type: 'address', indexed: false },
+    ],
+  },
+
+  { type: 'function', name: 'REGISTRY', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'PARENT_NODE', stateMutability: 'view', inputs: [], outputs: [{ type: 'bytes32' }] },
+  { type: 'function', name: 'DEFAULT_RESOLVER', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'MIN_LABEL_LENGTH', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+
+  {
+    type: 'function', name: 'register', stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'label', type: 'string' },
+      { name: 'newOwner', type: 'address' },
+    ],
+    outputs: [{ name: 'childNode', type: 'bytes32' }],
+  },
+
+  { type: 'function', name: 'claimedBy', stateMutability: 'view',
+    inputs: [{ name: 'caller', type: 'address' }], outputs: [{ type: 'bytes32' }] },
+  { type: 'function', name: 'hasClaimed', stateMutability: 'view',
+    inputs: [{ name: 'caller', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'claimCount', stateMutability: 'view',
+    inputs: [], outputs: [{ type: 'uint256' }] },
+] as const;
+
 export const agentNameUniversalResolverAbi = [
   { type: 'function', name: 'REGISTRY', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
 

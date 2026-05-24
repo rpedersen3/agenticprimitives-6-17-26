@@ -36,6 +36,7 @@ export {
   buildSetAddressAttributeCall,
   buildSetBytes32AttributeCall,
   buildRecordCalls,
+  buildSubregistryRegisterCall,
   type ContractCall,
 } from './custody';
 
@@ -48,6 +49,7 @@ export {
   agentNameUniversalResolverAbi,
   ontologyTermRegistryAbi,
   shapeRegistryAbi,
+  permissionlessSubregistryAbi,
 } from './abis';
 
 // Ontology predicate ids (bytes32 mirror of AgentNamePredicates.sol) +

@@ -21,6 +21,7 @@ import type { Address, Hex } from '@agenticprimitives/types';
 import {
   agentNameAttributeResolverAbi,
   agentNameRegistryAbi,
+  permissionlessSubregistryAbi,
 } from './abis';
 import { PREDICATE_ID, AGENT_KIND_ID, type EncodedRecord } from './records';
 import type { AgentKind } from './types';
@@ -254,6 +255,34 @@ export function buildRecordCalls(args: {
     out.push(buildSetStringAttributeCall({ resolver, node, predicate: PREDICATE_ID.nativeId, value: records.nativeId }));
   }
   return out;
+}
+
+// ─── PermissionlessSubregistry ─────────────────────────────────────
+
+/**
+ * Build a call to claim `<label>.<parent>` through a deployed
+ * PermissionlessSubregistry instance. The caller pays gas; the
+ * registered child name is owned by `newOwner` (typically the
+ * caller's own PSA OR an account they control).
+ *
+ * Anti-spam: one claim per `msg.sender` is enforced on chain; the
+ * call reverts with `AlreadyClaimed(existingNode)` if the caller
+ * has previously claimed a name through this subregistry instance.
+ */
+export function buildSubregistryRegisterCall(args: {
+  subregistry: Address;
+  label: string;
+  newOwner: Address;
+}): ContractCall {
+  return {
+    to: args.subregistry,
+    value: 0n,
+    data: encodeFunctionData({
+      abi: permissionlessSubregistryAbi,
+      functionName: 'register',
+      args: [args.label, args.newOwner],
+    }),
+  };
 }
 
 /**

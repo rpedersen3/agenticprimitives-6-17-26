@@ -20,6 +20,7 @@ import {AgentNameRegistry} from "../src/naming/AgentNameRegistry.sol";
 import {AgentNameAttributeResolver} from "../src/naming/AgentNameAttributeResolver.sol";
 import {AgentNameUniversalResolver} from "../src/naming/AgentNameUniversalResolver.sol";
 import {AgentNamePredicates} from "../src/naming/AgentNamePredicates.sol";
+import {PermissionlessSubregistry} from "../src/naming/PermissionlessSubregistry.sol";
 import {OntologyTermRegistry} from "../src/ontology/OntologyTermRegistry.sol";
 import {ShapeRegistry} from "../src/ontology/ShapeRegistry.sol";
 import {AttributeStorage} from "../src/ontology/AttributeStorage.sol";
@@ -180,6 +181,27 @@ contract Deploy is Script {
         //      optional cardinality initially (gradual adoption).
         _bootstrapAgentNameOntology(ontology, shapes, address(nameResolver));
 
+        // 6.7.1. Register demo.agent + acme.agent so the bootstrap
+        //        namespace exists before we wire the permissionless
+        //        subregistry under demo.agent.
+        bytes32 demoNode = nameRegistry.register(agentRoot, "demo", deployer, address(nameResolver), 0);
+        nameRegistry.register(agentRoot, "acme", deployer, address(nameResolver), 0);
+        console2.log("  demo.agent node:    %s", vm.toString(demoNode));
+
+        // 6.7.2. Deploy the permissionless subregistry under demo.agent
+        //        and grant it subregistry authority. After this, ANY
+        //        caller (EOA OR Smart Agent) can claim
+        //        <label>.demo.agent for an owner of their choice
+        //        (capped at one claim per caller for anti-spam).
+        PermissionlessSubregistry subregistry = new PermissionlessSubregistry(
+            nameRegistry,
+            demoNode,
+            address(nameResolver)
+        );
+        console2.log("PermissionlessSubregistry: %s", address(subregistry));
+        nameRegistry.setSubregistry(demoNode, address(subregistry));
+        console2.log("  subregistry granted under demo.agent");
+
         // 6.8. Agent Relationships (RL Phase 3, spec 216) — trust-fabric
         //      edge store + governance-gated type semantics registry.
         RelationshipTypeRegistry relTypes = new RelationshipTypeRegistry(deployer);
@@ -247,6 +269,7 @@ contract Deploy is Script {
         vm.serializeAddress(key, "agentNameRegistry", address(nameRegistry));
         vm.serializeAddress(key, "agentNameResolver", address(nameResolver));
         vm.serializeAddress(key, "agentNameUniversalResolver", address(nameUniversal));
+        vm.serializeAddress(key, "permissionlessSubregistry", address(subregistry));
         vm.serializeAddress(key, "relationshipTypeRegistry", address(relTypes));
         vm.serializeAddress(key, "agentRelationship", address(relationships));
         string memory out = vm.serializeAddress(key, "agentProfileResolver", address(profileResolver));

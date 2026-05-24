@@ -77,7 +77,9 @@
     "buildSetStringAttributeCall",
     "buildSetAddressAttributeCall",
     "buildSetBytes32AttributeCall",
-    "buildRecordCalls"
+    "buildRecordCalls",
+    "buildSubregistryRegisterCall",
+    "permissionlessSubregistryAbi"
   ],
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation. Naming-domain only.", "owningPackage": "@agenticprimitives/delegation" },
