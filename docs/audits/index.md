@@ -1,6 +1,24 @@
 # Security & Architecture Audit Index
 
-**Last refreshed:** 2026-05-20
+**Last refreshed:** 2026-05-23 (post-Wave H1-H4 + auditor packet + agent-identity / agent-relationships Phase 1 scaffolds landed)
+
+## Auditor packet (the third-party-audit-ready dossier)
+
+| Doc | Owner | Purpose |
+| --- | --- | --- |
+| [`specs/214-production-audit-dossier.md`](../../specs/214-production-audit-dossier.md) | security + architect | **The master spec.** Closure gates + control list + continuous-update protocol. |
+| [`threat-model.md`](./threat-model.md) | security-auditor | STRIDE per trust boundary, mapped to packages. |
+| [`architecture-diagram.md`](./architecture-diagram.md) | technical-architect-auditor | System map, dependency graph, deployment topology, trust boundaries. |
+| [`evidence-checklist.md`](./evidence-checklist.md) | security + architect | Every security control → source + test + audit event + closure status. |
+
+## Auditor agents (Claude Code subagents)
+
+| Agent | Spec | Subagent definition |
+| --- | --- | --- |
+| security-auditor | [`docs/agents/security-auditor.md`](../agents/security-auditor.md) | [`.claude/agents/security-auditor.md`](../../.claude/agents/security-auditor.md) |
+| technical-architect-auditor | [`docs/agents/technical-architect-auditor.md`](../agents/technical-architect-auditor.md) | [`.claude/agents/technical-architect-auditor.md`](../../.claude/agents/technical-architect-auditor.md) |
+
+
 
 The agenticprimitives audit lives in two layers:
 
@@ -25,6 +43,10 @@ The agenticprimitives audit lives in two layers:
 | `@agenticprimitives/key-custody` | **critical** (KMS surface) | [packages/key-custody/AUDIT.md](../../packages/key-custody/AUDIT.md) | [specs/203-key-custody.md](../../specs/203-key-custody.md) |
 | `@agenticprimitives/tool-policy` | medium | [packages/tool-policy/AUDIT.md](../../packages/tool-policy/AUDIT.md) | [specs/204-tool-policy.md](../../specs/204-tool-policy.md) |
 | `@agenticprimitives/mcp-runtime` | high | [packages/mcp-runtime/AUDIT.md](../../packages/mcp-runtime/AUDIT.md) | [specs/205-mcp-runtime.md](../../specs/205-mcp-runtime.md) |
+| `@agenticprimitives/custody` | high (custody policy ABI + arg builders) | [packages/custody/AUDIT.md](../../packages/custody/AUDIT.md) | [specs/213-custody-layer-carve-out.md](../../specs/213-custody-layer-carve-out.md) |
+| `@agenticprimitives/agent-naming` | medium (Phase 1 — pure SDK + spec; on-chain authority + writes land in Phase 3+) | [packages/agent-naming/AUDIT.md](../../packages/agent-naming/AUDIT.md) | [specs/215-agent-naming.md](../../specs/215-agent-naming.md) |
+| `@agenticprimitives/agent-identity` | medium (Phase 1 — HCS-11 typed profile + HCS-14 CAIP-10 alignment + endpoint verification methods; client wires in Phase 2+) | [packages/agent-identity/AUDIT.md](../../packages/agent-identity/AUDIT.md) | [specs/217-agent-identity.md](../../specs/217-agent-identity.md) |
+| `@agenticprimitives/agent-relationships` | medium (Phase 1 — trust-fabric edge primitive + role taxonomy; contracts + writes land Phase 3+) | [packages/agent-relationships/AUDIT.md](../../packages/agent-relationships/AUDIT.md) | [specs/216-agent-relationships.md](../../specs/216-agent-relationships.md) |
 
 ## Cross-cutting audits
 
@@ -59,5 +81,5 @@ The agenticprimitives audit lives in two layers:
 ## Findings ID space
 
 - **System IDs**: `C1`–`Cn` (critical), `H1`–`Hn` (high), `M1`–`Mn` (medium), `L1`–`Ln` (low), `N1`–`Nn` (new, raised after the initial draft). Managed in the system audit.
-- **Per-package IDs**: `<PKG>-N` (e.g. `DEL-1`, `KC-1`, `AA-1`, `IA-1`, `MR-1`, `TP-1`, `TYP-1`). Managed in the package audit.
+- **Per-package IDs**: `<PKG>-N` (e.g. `DEL-1`, `KC-1`, `AA-1`, `IA-1`, `MR-1`, `TP-1`, `TYP-1`, `AN-1` agent-naming, `AI-1` agent-identity, `AR-1` agent-relationships). Managed in the package audit.
 - Cross-references: system findings appear in the relevant package(s) by ID; package-local findings stay local unless they escalate.

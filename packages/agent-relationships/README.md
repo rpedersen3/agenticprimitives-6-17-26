@@ -1,0 +1,138 @@
+# @agenticprimitives/agent-relationships
+
+Trust-fabric edge primitive for Smart Agents. An `Edge` is a
+`(subject, object, relationshipType)` triple with a role set on each
+side, a status lifecycle (`PROPOSED → CONFIRMED → ACTIVE → REVOKED`),
+and optional off-chain metadata anchored by a deterministic
+content-hash.
+
+Where [`agent-naming`](../agent-naming) resolves *names → addresses*
+and [`agent-identity`](../agent-identity) owns the *profile layer*,
+this package owns the **relationship layer**: the on-chain graph of
+who-knows-whom that other layers compose against (org membership,
+governance assertions, validation trust, etc.).
+
+## Status
+
+**Phase 1** — pure SDK + spec + API skeleton. Read methods on the
+client throw `R Phase 2`; write methods throw `R Phase 4`. Contracts
+(`AgentRelationship.sol` + `RelationshipTypeRegistry.sol`) land in
+Phase 3. `AgentAssertion` (signed-claim layer) and
+`AgentRelationshipResolver` (policy layer) are **deferred to v2** per
+ADR-0007.
+
+See [`specs/216-agent-relationships.md`](../../specs/216-agent-relationships.md)
+for the full design + the phase plan, and:
+
+- [ADR-0006](../../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md)
+  — why naming hierarchy is parent-pointer-based, NOT a
+  `NAMESPACE_CONTAINS` edge.
+- [ADR-0007](../../docs/architecture/decisions/0007-agent-identity-stack-three-packages.md)
+  — why the identity stack is three packages, not one.
+
+## Install
+
+This package is workspace-internal in the agenticprimitives monorepo
+and not yet published.
+
+## Usage
+
+### Edge-ID derivation (pure)
+
+```ts
+import {
+  computeEdgeId,
+  RELATIONSHIP_TYPE,
+} from '@agenticprimitives/agent-relationships';
+
+const id = computeEdgeId(
+  '0x1111…1111',                              // subject
+  '0x2222…2222',                              // object
+  RELATIONSHIP_TYPE.HAS_MEMBER,               // type (bytes32 hash)
+);
+//   0x… — keccak256 of packed (subject || object || typeId)
+```
+
+Same triple → same edge ID. Direction matters for non-symmetric types
+(`HAS_MEMBER(A→B)` ≠ `HAS_MEMBER(B→A)`).
+
+### Relationship type + role taxonomy
+
+```ts
+import {
+  RELATIONSHIP_TYPE,
+  ROLE,
+  TYPE_SEMANTICS,
+} from '@agenticprimitives/agent-relationships/taxonomy';
+
+RELATIONSHIP_TYPE.HAS_MEMBER;        // bytes32 — keccak256("HAS_MEMBER")
+RELATIONSHIP_TYPE.PARTNERSHIP;       // bytes32 — symmetric
+RELATIONSHIP_TYPE.HAS_GOVERNANCE_OVER; // bytes32 — hierarchical
+
+ROLE.BOARD_MEMBER;                   // bytes32 — keccak256("BOARD_MEMBER")
+ROLE.TREASURER;                      // bytes32
+
+TYPE_SEMANTICS[RELATIONSHIP_TYPE.PARTNERSHIP].symmetric;     // true
+TYPE_SEMANTICS[RELATIONSHIP_TYPE.HAS_GOVERNANCE_OVER].hierarchical; // true
+```
+
+`NAMESPACE_CONTAINS` is **intentionally absent** — naming hierarchy
+lives in [`agent-naming`](../agent-naming) via parent-pointer per
+ADR-0006.
+
+### Relationships client (Phase 2+)
+
+```ts
+import {
+  AgentRelationshipsClient,
+  RELATIONSHIP_TYPE,
+  ROLE,
+} from '@agenticprimitives/agent-relationships';
+
+const rel = new AgentRelationshipsClient({
+  rpcUrl: 'https://base-sepolia.g.alchemy.com/v2/…',
+  chainId: 84532,
+});
+
+// Read (Phase 2+)
+const edges = await rel.listEdgesFor('0x…', { relationshipType: RELATIONSHIP_TYPE.HAS_MEMBER });
+
+// Write (Phase 4+)
+await rel.proposeEdge({
+  subject: '0xAlice…',
+  object:  '0xAcme…',
+  relationshipType: RELATIONSHIP_TYPE.HAS_MEMBER,
+  subjectRoles: [ROLE.BOARD_MEMBER],
+});
+await rel.confirmEdge({ edgeId: '0x…', selfRoles: [] });
+```
+
+Each write is authorized via the actor's Smart Agent ERC-1271 →
+its CustodyPolicy module. The relationships package itself stays
+custody-agnostic (no `@agenticprimitives/custody` import).
+
+## Subpath exports
+
+- `@agenticprimitives/agent-relationships/taxonomy` —
+  relationship-type + role constants + semantics map.
+
+## Security invariants
+
+- Edge ID is **deterministic** —
+  `keccak256(subject || object || relationshipType)`. Off-chain and
+  on-chain derivations always match.
+- `computeEdgeId` refuses self-edges (subject === object).
+- Relationship-type + role IDs are `keccak256(name)` (matches
+  Solidity `keccak256(bytes(name))`).
+- Two-side confirmation for non-symmetric types (Phase 3+ contract
+  enforcement).
+- Permissionless revocation from either side (Phase 3+).
+- Custody-agnostic — authority always routes through the actor's
+  Smart Agent ERC-1271.
+- `NAMESPACE_CONTAINS` is intentionally absent (ADR-0006).
+
+See `AUDIT.md` for the package audit + open findings.
+
+## License
+
+UNLICENSED (internal monorepo, not published).

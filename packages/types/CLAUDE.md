@@ -3,6 +3,10 @@
 ## What this package owns
 - Branded primitive types: `Address`, `Hex`, `ChainId`.
 - `BrandedId<T>` helper for opaque IDs.
+- Cross-cutting agent-identity shape: `AgentType` (closed enum) and
+  `NameContext` (optional injected context downstream packages
+  accept WITHOUT importing `@agenticprimitives/agent-naming`). See
+  [ADR-0006](../../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md).
 - Nothing else. This is a types-only leaf package.
 
 ## What this package does NOT own
@@ -11,8 +15,17 @@
 - Anything used by only one other package.
 
 ## Vocabulary
-**Owns:** `Address`, `Hex`, `ChainId`, `BrandedId`.
-**Does not use:** any concept named in any other package. See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-map.md).
+**Owns:** `Address`, `Hex`, `ChainId`, `BrandedId`, `AgentType`,
+`NameContext`.
+**Disambiguation:**
+- **`AgentType`** lives here as a cross-cutting closed enum (≥2 consumers:
+  audit, tool-policy, delegation, mcp-runtime, agent-naming). Naming-domain
+  authority — resolution, registry, records — belongs in `agent-naming`.
+- **`NameContext`** is the injection shape (`agentName? + agentType?`)
+  other packages accept as optional context. It is NOT a delegation
+  primitive, NOT a session primitive, NOT custody authority.
+**Does not use:** any concept named in any other package. See
+[`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-map.md).
 
 ## Read these first (in order)
 1. `capability.manifest.json`
@@ -22,6 +35,8 @@
 - `Address`, `Hex` — branded `0x${string}` types.
 - `ChainId` — branded number.
 - `BrandedId<T>` — generic opaque-ID helper.
+- `AgentType` — closed enum (`'person' | 'org' | 'service' | 'treasury'`).
+- `NameContext` — `{ agentName?: string; agentType?: AgentType }`.
 
 ## Allowed imports
 None. Zero deps.

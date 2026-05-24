@@ -1,0 +1,86 @@
+{
+  "name": "@agenticprimitives/agent-identity",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/217-agent-identity.md",
+  "summary": "Typed AgentCard profile schema (HCS-11-aligned), CAIP-10 nativeId helpers, endpoint verification methods. Phase 1: pure helpers + types + client skeleton.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/agent-account",
+    "viem"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/agent-account",
+    "viem",
+    "@noble/hashes"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/audit",
+    "@agenticprimitives/custody",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-relationships",
+    "@modelcontextprotocol/sdk"
+  ],
+  "publicExports": [
+    "AgentCard",
+    "ProfileType",
+    "AiAgentProfile",
+    "McpServerProfile",
+    "MultisigProfile",
+    "ServiceProfile",
+    "VerificationMethod",
+    "Caip10Address",
+    "Caip10Parts",
+    "AgentIdentityClient",
+    "AgentIdentityClientOpts",
+    "PublishProfileInput",
+    "buildCaip10Address",
+    "parseCaip10",
+    "isValidCaip10",
+    "canonicalProfileJson",
+    "profileContentHash",
+    "InvalidProfileError",
+    "ProfileHashMismatchError",
+    "EndpointVerificationError",
+    "InvalidCaip10Error",
+    "CAIP10_NAMESPACE_ALLOWLIST",
+    "AGENT_CARD_SCHEMA_VERSION"
+  ],
+  "forbiddenTerms": [
+    { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "Caveat", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "Custodian", "reason": "Belongs in @agenticprimitives/custody.", "owningPackage": "@agenticprimitives/custody" },
+    { "term": "Trustee", "reason": "Belongs in @agenticprimitives/custody.", "owningPackage": "@agenticprimitives/custody" },
+    { "term": "RiskTier", "reason": "Belongs in @agenticprimitives/tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
+    { "term": "KMS", "reason": "Belongs in @agenticprimitives/key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "AAD", "reason": "Belongs in @agenticprimitives/key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "JtiStore", "reason": "Belongs in @agenticprimitives/mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "namehash", "reason": "Naming-domain primitive — belongs in @agenticprimitives/agent-naming.", "owningPackage": "@agenticprimitives/agent-naming" },
+    { "term": "Edge", "reason": "Trust-fabric edge primitive — belongs in @agenticprimitives/agent-relationships.", "owningPackage": "@agenticprimitives/agent-relationships" }
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

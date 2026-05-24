@@ -5,7 +5,7 @@
   "agentEntry": "CLAUDE.md",
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/101-v0-package-proposal.md",
-  "summary": "Cross-cutting branded types: Address, Hex, ChainId, BrandedId. Types-only; no runtime code.",
+  "summary": "Cross-cutting branded types: Address, Hex, ChainId, BrandedId, plus the NameContext / AgentType shapes downstream packages accept as injected naming context (ADR-0006). Types-only; no runtime code.",
   "owns": {
     "source": ["src/**"],
     "tests": ["test/**"]
@@ -20,7 +20,9 @@
     "Address",
     "Hex",
     "ChainId",
-    "BrandedId"
+    "BrandedId",
+    "AgentType",
+    "NameContext"
   ],
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Domain concept; types-only package has no domain types.", "owningPackage": "@agenticprimitives/delegation" },

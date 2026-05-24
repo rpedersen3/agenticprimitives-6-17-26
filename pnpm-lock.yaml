@@ -275,6 +275,72 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
 
+  packages/agent-identity:
+    dependencies:
+      '@agenticprimitives/agent-account':
+        specifier: workspace:*
+        version: link:../agent-account
+      '@agenticprimitives/identity-auth':
+        specifier: workspace:*
+        version: link:../identity-auth
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      viem:
+        specifier: ^2.21.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.19.19
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
+  packages/agent-naming:
+    dependencies:
+      '@agenticprimitives/agent-account':
+        specifier: workspace:*
+        version: link:../agent-account
+      '@agenticprimitives/identity-auth':
+        specifier: workspace:*
+        version: link:../identity-auth
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      viem:
+        specifier: ^2.21.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.19.19
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
+  packages/agent-relationships:
+    dependencies:
+      '@agenticprimitives/agent-account':
+        specifier: workspace:*
+        version: link:../agent-account
+      '@agenticprimitives/identity-auth':
+        specifier: workspace:*
+        version: link:../identity-auth
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      viem:
+        specifier: ^2.21.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.19.19
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
   packages/audit:
     dependencies:
       '@agenticprimitives/types':

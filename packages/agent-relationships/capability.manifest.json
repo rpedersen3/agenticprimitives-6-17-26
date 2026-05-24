@@ -1,0 +1,83 @@
+{
+  "name": "@agenticprimitives/agent-relationships",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/216-agent-relationships.md",
+  "summary": "Trust-fabric edge primitive: (subject, object, relationshipType) tuples with role taxonomy. Phase 1: pure helpers + client skeleton. Contracts land in Phase 3.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/agent-account",
+    "viem"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/agent-account",
+    "viem",
+    "@noble/hashes"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/audit",
+    "@agenticprimitives/custody",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-identity",
+    "@modelcontextprotocol/sdk"
+  ],
+  "publicExports": [
+    "Edge",
+    "EdgeStatus",
+    "RelationshipType",
+    "Role",
+    "AgentRelationshipsClient",
+    "AgentRelationshipsClientOpts",
+    "ProposeEdgeInput",
+    "ConfirmEdgeInput",
+    "RevokeEdgeInput",
+    "SetRolesInput",
+    "computeEdgeId",
+    "hashRelationshipType",
+    "hashRole",
+    "RELATIONSHIP_TYPE",
+    "ROLE",
+    "TYPE_SEMANTICS",
+    "RelationshipTypeSemantics",
+    "InvalidEdgeError",
+    "UnauthorizedActorError",
+    "UnknownRelationshipTypeError"
+  ],
+  "forbiddenTerms": [
+    { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "Caveat", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "Custodian", "reason": "Belongs in @agenticprimitives/custody.", "owningPackage": "@agenticprimitives/custody" },
+    { "term": "Trustee", "reason": "Belongs in @agenticprimitives/custody.", "owningPackage": "@agenticprimitives/custody" },
+    { "term": "RiskTier", "reason": "Belongs in @agenticprimitives/tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
+    { "term": "KMS", "reason": "Belongs in @agenticprimitives/key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
+    { "term": "JtiStore", "reason": "Belongs in @agenticprimitives/mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
+    { "term": "namehash", "reason": "Naming-domain primitive.", "owningPackage": "@agenticprimitives/agent-naming" },
+    { "term": "AgentCard", "reason": "Identity-domain primitive.", "owningPackage": "@agenticprimitives/agent-identity" },
+    { "term": "NAMESPACE_CONTAINS", "reason": "Naming hierarchy lives in agent-naming (parent-pointer) per ADR-0006. NOT a relationship type in our model.", "owningPackage": "@agenticprimitives/agent-naming", "allowInPaths": ["src/constants.ts", "CLAUDE.md", "AUDIT.md", "README.md", "test/taxonomy.test.ts"] }
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "name": "@agenticprimitives/agent-naming",
+  "version": "0.0.1",
+  "description": "Agent Naming Service SDK: ENS-v2-style hierarchical naming for Smart Agents (.agent TLD). Owns name normalization, namehash/labelhash, records schemas, and the AgentNamingClient (resolve / reverse / registry). Speaks naming-domain vocabulary only — no delegation / caveat / custody concepts.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./records": {
+      "types": "./dist/records.d.ts",
+      "import": "./dist/records.js"
+    },
+    "./custody": {
+      "types": "./dist/custody.d.ts",
+      "import": "./dist/custody.js"
+    }
+  },
+  "files": ["dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["agent", "naming", "ens", "smart-agent", "agentic"],
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/identity-auth": "workspace:*",
+    "@agenticprimitives/agent-account": "workspace:*",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "vitest": "^2.1.0"
+  }
+}

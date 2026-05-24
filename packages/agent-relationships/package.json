@@ -1,0 +1,38 @@
+{
+  "name": "@agenticprimitives/agent-relationships",
+  "version": "0.0.1",
+  "description": "Agent relationships SDK: trust-fabric edge store (subject, object, relationshipType) with role taxonomy. Phase 1 ships edge-ID derivation + relationship-type constants + client skeleton; AgentRelationship.sol + RelationshipTypeRegistry.sol ports land in Phase 3. AgentAssertion + AgentRelationshipResolver deferred to v2.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./taxonomy": {
+      "types": "./dist/taxonomy.d.ts",
+      "import": "./dist/taxonomy.js"
+    }
+  },
+  "files": ["dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["agent", "relationships", "trust-fabric", "edges", "roles", "agentic"],
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/identity-auth": "workspace:*",
+    "@agenticprimitives/agent-account": "workspace:*",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "vitest": "^2.1.0"
+  }
+}
