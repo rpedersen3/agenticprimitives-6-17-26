@@ -19,6 +19,10 @@ export function NamingStatusPanel() {
   const client = useAgentNamingClient();
   const queryClient = useQueryClient();
 
+  // Strip `getRecords` from the steady-state read path — it fans out
+  // to ~10 readContract calls per name (one per typed predicate) which
+  // hammers the browser RPC. Just resolve the addresses; records
+  // bundle is available via the AgentDetailModal on demand.
   const { data: demos, isLoading, error } = useQuery({
     queryKey: ['naming-status', config.agentNameRegistry ?? null],
     enabled: !!client,
@@ -27,16 +31,16 @@ export function NamingStatusPanel() {
       const names = ['demo.agent', 'acme.agent', 'treasury.acme.agent'];
       const entries = await Promise.all(
         names.map(async (name) => {
-          const [addr, records] = await Promise.all([
-            client.resolveName(name),
-            client.getRecords(name),
-          ]);
-          return { name, addr, displayName: records.displayName, kind: records.agentKind };
+          const addr = await client.resolveName(name);
+          return { name, addr, displayName: undefined as string | undefined, kind: undefined as string | undefined };
         }),
       );
       return entries;
     },
-    staleTime: 30_000,
+    // Bootstrap names don't change minute-to-minute — keep fresh for an
+    // hour so this panel doesn't re-fire on every dashboard re-render.
+    staleTime: 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   if (!client) {

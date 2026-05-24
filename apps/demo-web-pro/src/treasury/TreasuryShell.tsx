@@ -200,7 +200,9 @@ export function TreasuryShell() {
       setChainCompletedSlugs(next);
     };
     void probe();
-    const interval = setInterval(probe, 15_000);
+    // 60s — chain state doesn't change tx-by-tx for these probes; the
+    // user-facing reads are event-driven (success cards on each Act).
+    const interval = setInterval(probe, 60_000);
     return () => clearInterval(interval);
   }, [seats, org, treasury]);
 
@@ -479,7 +481,9 @@ function GasReadout() {
 
   useEffect(() => {
     void refresh();
-    const interval = setInterval(refresh, 15_000);
+    // 60s — paymaster deposit + deployer balance don't change tx-by-tx
+    // in normal demo use; bumped from 15s to reduce RPC chatter.
+    const interval = setInterval(refresh, 60_000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

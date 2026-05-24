@@ -80,15 +80,16 @@ export const config: DeploymentConfig = {
   valueEnforcer:            parseAddr(import.meta.env.VITE_VALUE_ENFORCER),
   allowedTargetsEnforcer:   parseAddr(import.meta.env.VITE_ALLOWED_TARGETS_ENFORCER),
   allowedMethodsEnforcer:   parseAddr(import.meta.env.VITE_ALLOWED_METHODS_ENFORCER),
-  // Browser RPC: Alchemy's free tier rejects browser requests with
-  // CORS errors AND aggressively 429s eth_getLogs. Default to the
-  // public Base RPC which serves CORS headers + handles the demo's
-  // light read load. Override with VITE_BROWSER_RPC_URL for a paid
-  // CORS-enabled endpoint; VITE_RPC_URL is kept for compatibility but
-  // only used if it doesn't look like Alchemy.
+  // Browser RPC: route through the demo-a2a Worker's /rpc passthrough.
+  // Worker → Alchemy server-side (no CORS, single API key, single
+  // origin shape against the upstream rate limit). VITE_BROWSER_RPC_URL
+  // overrides; otherwise we derive from VITE_DEMO_A2A_URL + /rpc.
+  // Last-resort fallback is the public Base RPC.
   rpcUrl: (() => {
     const browserOverride = import.meta.env.VITE_BROWSER_RPC_URL as string | undefined;
     if (browserOverride) return browserOverride;
+    const a2a = import.meta.env.VITE_DEMO_A2A_URL as string | undefined;
+    if (a2a) return `${a2a.replace(/\/$/, '')}/rpc`;
     const generic = import.meta.env.VITE_RPC_URL as string | undefined;
     if (generic && !/alchemy\.com/i.test(generic)) return generic;
     return 'https://sepolia.base.org';
