@@ -44,6 +44,13 @@ import { getPasskeyAuth, getSiweAuth, type SeatClaim } from './seats';
  * Wallet's signTypedData callback (provided by the act via wagmi's
  * `useSignTypedData().signTypedDataAsync`). Decoupled from this module
  * so the helper doesn't need to mount a React hook context.
+ *
+ * `account` pins which EOA MetaMask signs with — without it, MetaMask
+ * silently uses the currently-active account in the wallet UI, which
+ * is the wrong identity in the 2-of-2 case (Alice's active when we
+ * need Bob's sig). With `account` set, MetaMask pops a signature
+ * dialog for that specific account regardless of which is "active"
+ * in its dropdown, as long as the dapp has permission for it.
  */
 export type SignTypedDataFn = (args: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,6 +60,7 @@ export type SignTypedDataFn = (args: {
   primaryType: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   message: any;
+  account?: Address;
 }) => Promise<Hex>;
 
 /**
@@ -126,44 +134,48 @@ async function signCeremonyHash(args: {
       'Seat has no signing method available — needs either a local DemoPasskey or a connected wallet + signTypedDataAsync callback.',
     );
   }
-  // Guard: every signTypedData call uses the wallet's CURRENT active
-  // address, not the address bound to this seat. If the user switched
-  // MetaMask accounts (e.g. to claim Bob), the signature will recover
-  // to the wrong address and the quorum check will revert with
-  // `AdminUnauthorizedSigner`. On mismatch we trigger MetaMask's
-  // account picker so the user can switch with one click; if they
-  // still pick the wrong account (or dismiss), we throw a clear error.
-  if (signer.getWalletAddress) {
-    let active = signer.getWalletAddress();
-    if (!active && signer.promptSwitchWalletAccount) {
-      active = await signer.promptSwitchWalletAccount();
-    }
-    if (!active) {
-      throw new Error(
-        'No wallet account connected. Connect MetaMask + select the account bound to this seat, then retry.',
-      );
-    }
-    if (active.toLowerCase() !== siwe.eoa.toLowerCase() && signer.promptSwitchWalletAccount) {
-      // Prompt for switch automatically.
-      const after = await signer.promptSwitchWalletAccount();
-      if (after) active = after;
-    }
-    if (active.toLowerCase() !== siwe.eoa.toLowerCase()) {
-      throw new Error(
-        `Wrong MetaMask account active: wallet is on ${active} but this seat was claimed with ${siwe.eoa}. Open MetaMask → switch to ${siwe.eoa}, then retry the action.`,
-      );
-    }
-  }
+  // Account pinning: pass `siwe.eoa` to signTypedDataAsync so MetaMask
+  // signs with THAT specific account, not whichever happens to be the
+  // active selection in MetaMask's UI. This eliminates the "Wrong
+  // MetaMask account active" failure mode for the 2-of-2 case
+  // (Alice's wallet active when we need Bob's sig). MetaMask will
+  // pop a signature dialog for the pinned account as long as the dapp
+  // has permission for it. If it doesn't have permission, the call
+  // throws — we fall through to the picker prompt so the user can grant.
   const domainForWallet = custodyDomain({
     chainId: args.domain.chainId,
     verifyingContract: args.domain.verifyingContract,
   });
-  const signature = await signer.signTypedDataAsync({
-    domain: domainForWallet,
-    types: args.types,
-    primaryType: args.primaryType,
-    message: args.message,
-  });
+  let signature: Hex;
+  try {
+    signature = await signer.signTypedDataAsync({
+      domain: domainForWallet,
+      types: args.types,
+      primaryType: args.primaryType,
+      message: args.message,
+      account: siwe.eoa,
+    });
+  } catch (e) {
+    // If MetaMask refused because the account isn't permitted (or
+    // doesn't exist in the wallet), give the user a one-click path
+    // to grant permission via the standard picker.
+    const msg = e instanceof Error ? e.message : String(e);
+    const looksLikeMissingPermission =
+      /unauthor|permission|not.*found|unknown account/i.test(msg);
+    if (looksLikeMissingPermission && signer.promptSwitchWalletAccount) {
+      await signer.promptSwitchWalletAccount();
+      // Retry once with the pinned account.
+      signature = await signer.signTypedDataAsync({
+        domain: domainForWallet,
+        types: args.types,
+        primaryType: args.primaryType,
+        message: args.message,
+        account: siwe.eoa,
+      });
+    } else {
+      throw e;
+    }
+  }
   return { type: 'ecdsa', signer: siwe.eoa, signature };
 }
 

@@ -21,7 +21,7 @@
 
 import { useEffect, useState } from 'react';
 import { keccak256, encodeAbiParameters, type Address, type Hex } from 'viem';
-import { useAccount, useConnectors, useSignTypedData } from 'wagmi';
+import { useConnectors, useSignTypedData } from 'wagmi';
 import { orgConfig } from '../../org-config';
 import { getPasskeyAuth, getSiweAuth, loadSeats } from '../../lib/seats';
 import { loadOrg, loadTreasury } from '../../lib/demo-state';
@@ -103,7 +103,6 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
   const [alreadyIssued, setAlreadyIssued] = useState(() => countFreshDelegations() >= 8);
 
   const { signTypedDataAsync } = useSignTypedData();
-  const { address: walletAddress } = useAccount();
   const connectors = useConnectors();
 
   // Mirrors Acts 3/4: opens MetaMask's account picker via the injected
@@ -211,65 +210,66 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
       return encodeWebAuthnSignature(assertion);
     }
     if (siweAuth) {
-      // Wallet-account guard with auto-switch.
-      let active = walletAddress;
-      if (!active || active.toLowerCase() !== siweAuth.eoa.toLowerCase()) {
-        const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0];
-        if (injected) {
-          // Force MetaMask's account picker via the injected provider
-          // directly — wallet_requestPermissions always opens it. We
-          // DON'T disconnect/reconnect via wagmi (which races its own
-          // state and trips "Connector already connected"). After the
-          // user picks an account, the provider emits accountsChanged
-          // and wagmi's useAccount updates on the next tick.
-          const provider = (await injected.getProvider()) as
-            | { request: (a: { method: string; params?: unknown[] }) => Promise<string[] | unknown> }
-            | undefined;
-          if (provider?.request) {
-            try {
-              await provider.request({
-                method: 'wallet_requestPermissions',
-                params: [{ eth_accounts: {} }],
-              });
-              // Read the newly-selected account directly from the
-              // provider — don't wait for wagmi's state refresh.
-              const accounts = (await provider.request({
-                method: 'eth_accounts',
-              })) as string[] | undefined;
-              if (accounts && accounts.length > 0) {
-                active = accounts[0] as `0x${string}`;
-              }
-            } catch {
-              // User dismissed the picker — fall through to the
-              // mismatch error so the dialog shows the Switch button.
-            }
-          }
-        }
-      }
-      if (!active || active.toLowerCase() !== siweAuth.eoa.toLowerCase()) {
-        throw new Error(
-          `Wrong MetaMask account active: wallet is on ${active ?? '(none)'} but this seat was claimed with ${siweAuth.eoa}. Open MetaMask → switch to ${siweAuth.eoa}, then retry the action.`,
-        );
-      }
       if (!config.delegationManager || !config.chainId) {
         throw new Error('delegationManager / chainId not configured');
       }
-      const sig = (await signTypedDataAsync({
-        domain: delegationDomain(config.chainId, config.delegationManager),
-        types: DELEGATION_EIP712_TYPES,
-        primaryType: 'Delegation',
-        message: {
-          delegator: delegation.delegator,
-          delegate: delegation.delegate,
-          authority: delegation.authority,
-          caveats: delegation.caveats.map((c) => ({
-            enforcer: c.enforcer,
-            terms: c.terms,
-            args: c.args ?? '0x',
-          })),
-          salt: delegation.salt,
-        },
-      })) as Hex;
+      // Pin `account: siweAuth.eoa` so MetaMask signs with THAT
+      // specific EOA, not whichever happens to be the active
+      // selection in the wallet UI. Eliminates the "wrong account
+      // active" failure mode (Alice's wallet active when we need
+      // Bob's sig). MetaMask pops a signature dialog for the pinned
+      // account as long as the dapp has permission for it; if not,
+      // we open the picker once via promptSwitchWalletAccount and
+      // retry. See custody-ceremony.ts:signCeremonyHash for the
+      // same pattern on the custody-policy signing path.
+      const promptPicker = async (): Promise<void> => {
+        const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0];
+        if (!injected) return;
+        const provider = (await injected.getProvider()) as
+          | { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> }
+          | undefined;
+        if (!provider?.request) return;
+        try {
+          await provider.request({
+            method: 'wallet_requestPermissions',
+            params: [{ eth_accounts: {} }],
+          });
+        } catch {
+          // user dismissed — fall through, signTypedDataAsync will
+          // throw the real error
+        }
+      };
+      const message = {
+        delegator: delegation.delegator,
+        delegate: delegation.delegate,
+        authority: delegation.authority,
+        caveats: delegation.caveats.map((c) => ({
+          enforcer: c.enforcer,
+          terms: c.terms,
+          args: c.args ?? '0x',
+        })),
+        salt: delegation.salt,
+      };
+      const doSign = () =>
+        signTypedDataAsync({
+          domain: delegationDomain(config.chainId!, config.delegationManager!),
+          types: DELEGATION_EIP712_TYPES,
+          primaryType: 'Delegation',
+          message,
+          account: siweAuth.eoa,
+        }) as Promise<Hex>;
+      let sig: Hex;
+      try {
+        sig = await doSign();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/unauthor|permission|not.*found|unknown account/i.test(msg)) {
+          await promptPicker();
+          sig = await doSign();
+        } else {
+          throw e;
+        }
+      }
       // Raw 65-byte ECDSA matches the legacy fast path of
       // `AgentAccount._validateSig` — no extra wrapping needed.
       return sig;

@@ -101,7 +101,7 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
       return undefined;
     }
   };
-  const std = async (a: { domain: unknown; types: unknown; primaryType: string; message: unknown }) =>
+  const std = async (a: { domain: unknown; types: unknown; primaryType: string; message: unknown; account?: Address }) =>
     (await signTypedDataAsync({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       domain: a.domain as any,
@@ -110,6 +110,7 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
       primaryType: a.primaryType,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       message: a.message as any,
+      account: a.account,
     })) as Hex;
   const [stage, setStage] = useState<ConnectionStage>('consent');
   const [phase, setPhase] = useState<WorkingPhase>('computing-hash');
