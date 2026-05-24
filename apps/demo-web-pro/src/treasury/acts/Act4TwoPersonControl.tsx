@@ -42,7 +42,7 @@ import {
   buildAddPasskeyCredentialArgs,
   buildChangeApprovalsRequiredArgs,
 } from '@agenticprimitives/custody';
-import { readIsCustodian } from '../../lib/chain-reads';
+import { readApprovalsRequired, readIsCustodian } from '../../lib/chain-reads';
 import { scheduleAndApply, type CeremonyResult, type CeremonyPhase } from '../../lib/custody-ceremony';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
@@ -131,12 +131,17 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
   const bobClaim: SeatClaim | undefined = bobSeat ? seats[bobSeat.id] : undefined;
   const aliceIsActive = aliceClaim && activeSeatId === aliceSeat?.id;
 
-  // Pre-flight: if step 1 (Bob on Treasury) is already on chain,
-  // short-circuit. Check passkey PIA AND SIWE EOA — a SIWE-only Bob
-  // was missed by the earlier passkey-only probe.
+  // Pre-flight: only short-circuit when BOTH effects are on chain —
+  // every Bob identity is a Treasury custodian (step 1) AND the Org's
+  // T4 quorum is ≥ 2 (step 2). If only step 1 is done (e.g. a prior
+  // session bumped Treasury but never raised the Org quorum), the
+  // dialog stays open so `runCeremony` can run step 2 alone — the
+  // inner `already` guards skip the no-op work.
+  // Step 1 detection checks passkey PIA AND SIWE EOA — earlier code
+  // only checked PIA, so SIWE-only Bob never marked the act complete.
   useEffect(() => {
     const probe = async () => {
-      if (!org || !treasury || !bobClaim) return;
+      if (!org || !treasury || !bobClaim || !config.custodyPolicy) return;
       const bobPa = getPasskeyAuth(bobClaim);
       const bobSiwe = getSiweAuth(bobClaim);
       const bobIdents: `0x${string}`[] = [
@@ -144,13 +149,17 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
         ...(bobSiwe ? [bobSiwe.eoa] : []),
       ];
       if (bobIdents.length === 0) return;
-      const checks = await Promise.all(
-        bobIdents.map((id) => readIsCustodian({ account: treasury.address, signer: id })),
-      );
-      if (checks.every(Boolean)) {
-        // Step 1 already done; step 2's verification (Org T4 = 2) would
-        // need an additional view we don't currently have. For now, if
-        // step 1 is done, assume the act is complete.
+      const [treasuryChecks, orgT4] = await Promise.all([
+        Promise.all(
+          bobIdents.map((id) => readIsCustodian({ account: treasury.address, signer: id })),
+        ),
+        readApprovalsRequired({
+          custodyPolicy: config.custodyPolicy,
+          account: org.address,
+          tier: 4,
+        }),
+      ]);
+      if (treasuryChecks.every(Boolean) && orgT4 >= 2) {
         setAlreadyComplete(true);
         setDialogOpen(false);
       }
