@@ -43,6 +43,7 @@ import {
 import { config } from '../config';
 import { executeCallFromAgent } from './execute-call';
 import type { DemoPasskey } from './passkey';
+import { setCachedName } from './name-cache';
 
 /**
  * Event fired AFTER the on-chain claim has propagated and a fresh
@@ -221,7 +222,8 @@ export async function setPrimaryNameOnly(args: {
     await new Promise((r) => setTimeout(r, 1500));
   }
 
-  // Broadcast so cached NameDisplay reads invalidate.
+  // Populate local cache + broadcast.
+  setCachedName(personAgent, agentName);
   try {
     window.dispatchEvent(
       new CustomEvent<NamingClaimedDetail>(NAMING_CLAIMED_EVENT, {
@@ -392,7 +394,10 @@ export async function claimPsaName(args: {
     }
   }
 
-  // Step 3 — broadcast so cached NameDisplay reads invalidate.
+  // Step 3 — populate the local name cache + broadcast. NameDisplay
+  // reads synchronously from the cache (per ADR-0012, no browser-side
+  // log scans).
+  setCachedName(personAgent, fullName);
   try {
     window.dispatchEvent(
       new CustomEvent<NamingClaimedDetail>(NAMING_CLAIMED_EVENT, {

@@ -24,6 +24,7 @@ import {
 } from '../../lib/seats';
 import { clearPasskeyForSeat } from '../../lib/passkey';
 import { clearDemoState } from '../../lib/demo-state';
+import { clearAllCachedNames } from '../../lib/name-cache';
 
 export function DisconnectMenu({
   activeSeatId,
@@ -72,6 +73,7 @@ export function DisconnectMenu({
     }
     clearActiveSeat();
     clearDemoState();
+    clearAllCachedNames();
     setOpen(false);
     setConfirm(null);
     window.location.hash = '';
