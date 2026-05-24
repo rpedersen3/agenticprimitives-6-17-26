@@ -1,4 +1,4 @@
-import { createPublicClient, http, parseAbiItem, type Address, type Hex, type PublicClient, type WalletClient } from 'viem';
+import { createPublicClient, http, parseAbiItem, type AbiEvent, type Address, type Hex, type PublicClient, type WalletClient } from 'viem';
 import {
   agentNameAttributeResolverAbi,
   agentNameRegistryAbi,
@@ -351,30 +351,100 @@ export class AgentNamingClient {
     );
     for (let depth = 0; depth < 10; depth++) {
       if (current === ZERO_NODE) break;
-      const logs = await this.publicClient.getLogs({
-        address: this.opts.registry,
-        event: registeredEvent,
-        args: { node: current },
-        fromBlock: 0n,
-      });
-      if (logs.length === 0) {
-        const rootLogs = await this.publicClient.getLogs({
-          address: this.opts.registry,
-          event: rootEvent,
-          args: { rootNode: current },
-          fromBlock: 0n,
-        });
-        if (rootLogs.length === 0) return null;
-        const label = rootLogs[0]!.args.label;
-        if (label) labels.push(label);
+      const registered = await this._findRegisteredEvent(current, registeredEvent);
+      if (registered) {
+        labels.push(registered.label);
+        current = registered.parent;
+        continue;
+      }
+      const root = await this._findRootEvent(current, rootEvent);
+      if (root) {
+        labels.push(root);
         break;
       }
-      const { label, parent } = logs[0]!.args;
-      if (label) labels.push(label);
-      current = (parent ?? ZERO_NODE) as Hex;
+      // Neither a NameRegistered nor a RootInitialized event for this
+      // node was found within the chunked scan window. Could mean:
+      // (a) the node really doesn't exist; (b) the event predates our
+      // scan lower bound. Caller treats as "name unresolvable".
+      return null;
     }
     if (labels.length === 0) return null;
     const name = labels.join('.');
     return normalizeAgentName(name) === name ? name : name.toLowerCase();
+  }
+
+  /**
+   * Walk backwards from `latest` in `getLogsChunkSize`-block windows
+   * until a `NameRegistered(node = target)` log is found, or until
+   * `getLogsMaxChunks` chunks have been scanned, or until the lower
+   * bound `fromBlock` is reached. Returns `null` when not found.
+   *
+   * Required because Alchemy / QuickNode / Infura cap a single
+   * `eth_getLogs` call at 10k blocks — `fromBlock: 0n` on Base Sepolia
+   * (25M+ blocks) gets a 400 back, so we MUST chunk.
+   */
+  private async _findRegisteredEvent(
+    node: Hex,
+    event: AbiEvent,
+  ): Promise<{ label: string; parent: Hex } | null> {
+    for await (const { fromBlock, toBlock } of this._iterChunks()) {
+      const logs = await this.publicClient.getLogs({
+        address: this.opts.registry,
+        event,
+        args: { node },
+        fromBlock,
+        toBlock,
+      });
+      if (logs.length > 0) {
+        const args = logs[0]!.args as { label?: string; parent?: Hex };
+        if (args.label !== undefined) {
+          return { label: args.label, parent: (args.parent ?? ZERO_NODE) as Hex };
+        }
+      }
+    }
+    return null;
+  }
+
+  private async _findRootEvent(
+    node: Hex,
+    event: AbiEvent,
+  ): Promise<string | null> {
+    for await (const { fromBlock, toBlock } of this._iterChunks()) {
+      const logs = await this.publicClient.getLogs({
+        address: this.opts.registry,
+        event,
+        args: { rootNode: node },
+        fromBlock,
+        toBlock,
+      });
+      if (logs.length > 0) {
+        const args = logs[0]!.args as { label?: string };
+        if (args.label !== undefined) return args.label;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Generator yielding chunked [fromBlock, toBlock] ranges walking
+   * backwards from `latest` to `opts.fromBlock` (default 0n), in
+   * `getLogsChunkSize`-block windows (default 10_000), capped at
+   * `getLogsMaxChunks` chunks (default 50). Each chunk is a single
+   * eth_getLogs call.
+   */
+  private async *_iterChunks(): AsyncIterable<{ fromBlock: bigint; toBlock: bigint }> {
+    const chunkSize = this.opts.getLogsChunkSize ?? 10_000n;
+    const maxChunks = this.opts.getLogsMaxChunks ?? 50;
+    const lowerBound = this.opts.fromBlock ?? 0n;
+    const latest = await this.publicClient.getBlockNumber();
+    let toBlock = latest;
+    for (let i = 0; i < maxChunks; i++) {
+      if (toBlock < lowerBound) break;
+      const tentativeFrom = toBlock + 1n > chunkSize ? toBlock + 1n - chunkSize : 0n;
+      const fromBlock = tentativeFrom < lowerBound ? lowerBound : tentativeFrom;
+      yield { fromBlock, toBlock };
+      if (fromBlock === lowerBound || fromBlock === 0n) break;
+      toBlock = fromBlock - 1n;
+    }
   }
 }
