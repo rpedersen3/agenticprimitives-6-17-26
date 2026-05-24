@@ -21,11 +21,12 @@
 
 import { useEffect, useState } from 'react';
 import { keccak256, encodeAbiParameters, type Address, type Hex } from 'viem';
-import { useAccount, useConnect, useConnectors, useDisconnect, useSignTypedData } from 'wagmi';
+import { useAccount, useConnectors, useSignTypedData } from 'wagmi';
 import { orgConfig } from '../../org-config';
 import { getPasskeyAuth, getSiweAuth, loadSeats } from '../../lib/seats';
 import { loadOrg, loadTreasury } from '../../lib/demo-state';
 import { getPasskeyForSeat, assertWithPasskey } from '../../lib/passkey';
+import { getCachedName } from '../../lib/name-cache';
 import {
   ROOT_AUTHORITY,
   buildCaveat,
@@ -103,9 +104,36 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
 
   const { signTypedDataAsync } = useSignTypedData();
   const { address: walletAddress } = useAccount();
-  const { connectAsync } = useConnect();
-  const { disconnectAsync } = useDisconnect();
   const connectors = useConnectors();
+
+  // Mirrors Acts 3/4: opens MetaMask's account picker via the injected
+  // provider directly. Used both by signForSeat's inline mismatch handler
+  // (which races wagmi's state) and the dialog's <Switch> button so a
+  // SIWE user hitting wrong-wallet has a one-click recovery path.
+  const promptSwitchWalletAccount = async (): Promise<`0x${string}` | undefined> => {
+    const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0];
+    if (!injected) return undefined;
+    try {
+      const provider = (await injected.getProvider()) as
+        | { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> }
+        | undefined;
+      if (!provider?.request) return undefined;
+      try {
+        await provider.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        });
+      } catch {
+        return undefined;
+      }
+      const accounts = (await provider.request({
+        method: 'eth_accounts',
+      })) as string[] | undefined;
+      return (accounts?.[0] as `0x${string}` | undefined) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  };
 
   useEffect(() => {
     setAlreadyIssued(countFreshDelegations() >= 8);
@@ -325,7 +353,7 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
         actions: ['ERC-20 transfer call against Treasury (selector 0xa9059cbb).'],
         limits: [
           `Per-call value cap: 0.05 ETH equivalent.`,
-          `Target restricted to Treasury ${shortAddress(treasury.address)}.`,
+          `Target restricted to Treasury ${getCachedName(treasury.address) ?? shortAddress(treasury.address)}.`,
           `Window: now → ${expiryHuman}.`,
         ],
         notPermitted: [
@@ -414,10 +442,11 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
       //        against Treasury's default 1-of-N quorum. Phase 6f.7 will
       //        upgrade these to QuorumCaveat-gated 2-of-2 redemption.
       const treasurySigner = aliceClaim;
+      const treasuryLabel = getCachedName(treasury.address) ?? 'Treasury';
       await issueOne({
         kind: 'treasury-spend',
         delegator: treasury.address,
-        delegatorLabel: 'Acme Treasury',
+        delegatorLabel: treasuryLabel,
         delegate: aliceClaim.personAgent,
         delegateLabel: `${aliceSeat.name}\'s Person Smart Agent`,
         signerSeat: treasurySigner,
@@ -427,7 +456,7 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
       await issueOne({
         kind: 'treasury-spend',
         delegator: treasury.address,
-        delegatorLabel: 'Acme Treasury',
+        delegatorLabel: treasuryLabel,
         delegate: bobClaim.personAgent,
         delegateLabel: `${bobSeat.name}\'s Person Smart Agent`,
         signerSeat: treasurySigner,
@@ -471,7 +500,7 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
             read-sensitive-data on the Org MCP.
           </li>
           <li>
-            <strong>Acme Treasury → {aliceSeat.name}/{bobSeat.name}\'s PSAs</strong> —
+            <strong>{getCachedName(treasury.address) ?? 'Treasury'} → {aliceSeat.name}/{bobSeat.name}\'s PSAs</strong> —
             ERC-20 transfer scope on Treasury (0.05 ETH per-call cap, 90-day window).
           </li>
         </ul>
@@ -534,6 +563,7 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
           onComplete();
         }}
         errorMessage={error ?? undefined}
+        onSwitchWallet={async () => { await promptSwitchWalletAccount(); }}
         onRetry={() => {
           setStage('consent');
           setError(null);

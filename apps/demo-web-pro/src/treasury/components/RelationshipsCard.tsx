@@ -21,6 +21,7 @@ import { shortAddress } from '../../components';
 import { config } from '../../config';
 import { NameDisplay } from './NameDisplay';
 import { AgentDetailModal, type AgentDetailKind } from './AgentDetailModal';
+import { getCachedName } from '../../lib/name-cache';
 
 /**
  * Compact clickable header for an agent — opens the AgentDetailModal
@@ -293,12 +294,12 @@ export function RelationshipsCard({
             <tr>
               <td className="relationship-actor">
                 <AgentHeaderButton
-                  label="Acme Treasury"
+                  label={getCachedName(treasury.address) ?? 'Treasury'}
                   sublabel={<span className="muted small">(Service Smart Agent)</span>}
                   onClick={() =>
                     setDetail({
                       address: treasury.address,
-                      label: 'Acme Treasury',
+                      label: getCachedName(treasury.address) ?? 'Treasury',
                       kind: 'treasury',
                     })
                   }

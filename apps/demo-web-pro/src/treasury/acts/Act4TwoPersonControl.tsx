@@ -24,7 +24,7 @@
 
 import { useEffect, useState } from 'react';
 import type { Address, Hex } from 'viem';
-import { useAccount, useConnect, useConnectors, useDisconnect, useSignTypedData } from 'wagmi';
+import { useAccount, useConnectors, useSignTypedData } from 'wagmi';
 import { orgConfig } from '../../org-config';
 import {
   loadActiveSeat,
@@ -73,8 +73,6 @@ const PHASE_LABEL: Record<WorkingPhase, string> = {
 export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void }) {
   const { signTypedDataAsync } = useSignTypedData();
   const { address: walletAddress } = useAccount();
-  const { connectAsync } = useConnect();
-  const { disconnectAsync } = useDisconnect();
   const connectors = useConnectors();
   const getWalletAddress = () => walletAddress as `0x${string}` | undefined;
   const promptSwitchWalletAccount = async (): Promise<`0x${string}` | undefined> => {
@@ -133,17 +131,23 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
   const bobClaim: SeatClaim | undefined = bobSeat ? seats[bobSeat.id] : undefined;
   const aliceIsActive = aliceClaim && activeSeatId === aliceSeat?.id;
 
-  // Pre-flight: if both effects are already on chain, short-circuit.
+  // Pre-flight: if step 1 (Bob on Treasury) is already on chain,
+  // short-circuit. Check passkey PIA AND SIWE EOA — a SIWE-only Bob
+  // was missed by the earlier passkey-only probe.
   useEffect(() => {
     const probe = async () => {
       if (!org || !treasury || !bobClaim) return;
       const bobPa = getPasskeyAuth(bobClaim);
-      if (!bobPa) return;
-      const isBobTreasury = await readIsCustodian({
-        account: treasury.address,
-        signer: bobPa.pia,
-      });
-      if (isBobTreasury) {
+      const bobSiwe = getSiweAuth(bobClaim);
+      const bobIdents: `0x${string}`[] = [
+        ...(bobPa ? [bobPa.pia] : []),
+        ...(bobSiwe ? [bobSiwe.eoa] : []),
+      ];
+      if (bobIdents.length === 0) return;
+      const checks = await Promise.all(
+        bobIdents.map((id) => readIsCustodian({ account: treasury.address, signer: id })),
+      );
+      if (checks.every(Boolean)) {
         // Step 1 already done; step 2's verification (Org T4 = 2) would
         // need an additional view we don't currently have. For now, if
         // step 1 is done, assume the act is complete.

@@ -28,7 +28,7 @@
 
 import { useEffect, useState } from 'react';
 import type { Hex } from 'viem';
-import { useAccount, useConnect, useConnectors, useDisconnect, useSignTypedData } from 'wagmi';
+import { useAccount, useConnectors, useSignTypedData } from 'wagmi';
 import { orgConfig } from '../../org-config';
 import {
   loadActiveSeat,
@@ -87,8 +87,6 @@ const PHASE_HINT: Record<WorkingPhase, string | undefined> = {
 export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
   const { signTypedDataAsync } = useSignTypedData();
   const { address: walletAddress } = useAccount();
-  const { connectAsync } = useConnect();
-  const { disconnectAsync } = useDisconnect();
   const connectors = useConnectors();
   const getWalletAddress = () => walletAddress as `0x${string}` | undefined;
   /**
@@ -161,18 +159,26 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
         tier: 4,
       });
       setSafetyDelaySeconds(delay);
-      // If Bob's PIA is already a custodian (e.g. Act 3 already
-      // completed), close the dialog and show the summary card.
-      const bobPasskeyAuth = bobClaim ? getPasskeyAuth(bobClaim) : undefined;
-      if (bobClaim && bobPasskeyAuth) {
-        const isCust = await readIsCustodian({
-          account: org.address,
-          signer: bobPasskeyAuth.pia,
-        });
-        if (isCust) {
-          setBobCustodyConfirmed(true);
-          setDialogOpen(false);
-        }
+      // If every Bob identity is already a custodian (e.g. Act 3
+      // already completed), close the dialog and show the summary
+      // card. Must check passkey PIA AND SIWE EOA — Bob may have
+      // enrolled either or both, and a SIWE-only Bob was missed by
+      // the earlier passkey-only probe so the dialog kept re-opening
+      // after a clean run.
+      if (!bobClaim) return;
+      const bobPasskeyAuth = getPasskeyAuth(bobClaim);
+      const bobSiweAuth = getSiweAuth(bobClaim);
+      const bobIdents: `0x${string}`[] = [
+        ...(bobPasskeyAuth ? [bobPasskeyAuth.pia] : []),
+        ...(bobSiweAuth ? [bobSiweAuth.eoa] : []),
+      ];
+      if (bobIdents.length === 0) return;
+      const checks = await Promise.all(
+        bobIdents.map((id) => readIsCustodian({ account: org.address, signer: id })),
+      );
+      if (checks.every(Boolean)) {
+        setBobCustodyConfirmed(true);
+        setDialogOpen(false);
       }
     };
     void probe();
