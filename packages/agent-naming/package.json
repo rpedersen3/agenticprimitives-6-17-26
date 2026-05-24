@@ -21,8 +21,12 @@
   },
   "files": [
     "dist",
+    "docs",
+    "examples",
     "spec.md",
-    "README.md"
+    "README.md",
+    "AUDIT.md",
+    "CLAUDE.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

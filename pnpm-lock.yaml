@@ -8,9 +8,6 @@ importers:
 
   .:
     devDependencies:
-      '@agenticprimitives/agent-naming':
-        specifier: workspace:*
-        version: link:packages/agent-naming
       '@types/node':
         specifier: ^22.7.0
         version: 22.19.19
@@ -172,9 +169,15 @@ importers:
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../../packages/agent-account
+      '@agenticprimitives/agent-identity':
+        specifier: workspace:*
+        version: link:../../packages/agent-identity
       '@agenticprimitives/agent-naming':
         specifier: workspace:*
         version: link:../../packages/agent-naming
+      '@agenticprimitives/agent-relationships':
+        specifier: workspace:*
+        version: link:../../packages/agent-relationships
       '@agenticprimitives/custody':
         specifier: workspace:*
         version: link:../../packages/custody

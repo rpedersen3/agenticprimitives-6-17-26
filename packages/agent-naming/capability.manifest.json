@@ -6,6 +6,49 @@
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/215-agent-naming.md",
   "summary": "ENS-v2-style hierarchical names for Smart Agents (.agent TLD). Pure helpers + record schemas + client skeleton. Phase 1: SDK only.",
+  "capabilities": [
+    "name-resolution",
+    "reverse-resolution",
+    "service-discovery",
+    "typed-record-encoding",
+    "name-management-call-builders"
+  ],
+  "runtime": ["browser", "node", "worker"],
+  "readFirst": ["CLAUDE.md", "README.md", "src/index.ts", "docs/concepts.md", "docs/api.md"],
+  "docs": {
+    "concepts": "docs/concepts.md",
+    "api": "docs/api.md",
+    "security": "docs/security.md",
+    "troubleshooting": "docs/troubleshooting.md",
+    "migration": "docs/migration.md",
+    "audit": "AUDIT.md"
+  },
+  "examples": ["examples/basic.ts", "examples/records.ts", "examples/custody-rotation.ts"],
+  "validation": [
+    "pnpm check:agent-naming",
+    "pnpm check:public-exports",
+    "pnpm check:forbidden-terms"
+  ],
+  "securityInvariants": [
+    "name normalization must be deterministic",
+    "reverse resolution must round-trip",
+    "unknown predicates must fail closed on read and fail loud on write",
+    "raw passkey credential IDs must never be stored",
+    "endpoint records are discovery hints, not proof of endpoint control"
+  ],
+  "integrationPoints": {
+    "consumes": [
+      "@agenticprimitives/types",
+      "@agenticprimitives/identity-auth",
+      "@agenticprimitives/agent-account"
+    ],
+    "mustNotImport": [
+      "@agenticprimitives/delegation",
+      "@agenticprimitives/custody",
+      "@agenticprimitives/mcp-runtime",
+      "@agenticprimitives/key-custody"
+    ]
+  },
   "owns": {
     "source": ["src/**"],
     "tests": ["test/**"]
@@ -82,22 +125,53 @@
     "permissionlessSubregistryAbi"
   ],
   "forbiddenTerms": [
-    { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation. Naming-domain only.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "Caveat", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "Steward", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "Custodian", "reason": "Belongs in @agenticprimitives/custody. Compose via agent-naming/custody subpath builders without import.", "owningPackage": "@agenticprimitives/custody" },
-    { "term": "Trustee", "reason": "Belongs in @agenticprimitives/custody.", "owningPackage": "@agenticprimitives/custody" },
-    { "term": "RiskTier", "reason": "Belongs in @agenticprimitives/tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
-    { "term": "KMS", "reason": "Belongs in @agenticprimitives/key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
-    { "term": "AAD", "reason": "Belongs in @agenticprimitives/key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
-    { "term": "JtiStore", "reason": "Belongs in @agenticprimitives/mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" }
+    {
+      "term": "Delegation",
+      "reason": "Belongs in @agenticprimitives/delegation. Naming-domain only.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "Caveat",
+      "reason": "Belongs in @agenticprimitives/delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "Steward",
+      "reason": "Belongs in @agenticprimitives/delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "Custodian",
+      "reason": "Belongs in @agenticprimitives/custody. Compose via agent-naming/custody subpath builders without import.",
+      "owningPackage": "@agenticprimitives/custody"
+    },
+    {
+      "term": "Trustee",
+      "reason": "Belongs in @agenticprimitives/custody.",
+      "owningPackage": "@agenticprimitives/custody"
+    },
+    {
+      "term": "RiskTier",
+      "reason": "Belongs in @agenticprimitives/tool-policy.",
+      "owningPackage": "@agenticprimitives/tool-policy"
+    },
+    {
+      "term": "KMS",
+      "reason": "Belongs in @agenticprimitives/key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "AAD",
+      "reason": "Belongs in @agenticprimitives/key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "JtiStore",
+      "reason": "Belongs in @agenticprimitives/mcp-runtime.",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    }
   ],
-  "ignoreForAgentContext": [
-    "dist/**",
-    "node_modules/**",
-    "coverage/**",
-    "*.tsbuildinfo"
-  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
   "contextBudget": {
     "claudeMdMaxWords": 900,
     "readmeMaxWords": 1800,
