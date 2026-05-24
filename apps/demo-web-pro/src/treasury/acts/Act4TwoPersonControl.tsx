@@ -313,18 +313,35 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
       }
 
       // Step B: ChangeApprovalsRequired(T4, 2) on Org.
+      //
+      // Critical: raising the threshold from N→M (M > N) requires M
+      // signatures, not the current N. Otherwise a lone signer could
+      // raise + lower the quorum freely. Concretely: the on-chain
+      // CustodyPolicy emits `AdminInsufficientQuorum(supplied=1,
+      // required=2)` if we only send Alice's sig. We collect BOTH
+      // Alice + Bob here. Bob's signer dispatches via whichever auth
+      // method he claimed with (passkey preferred, else SIWE).
       setActiveStep('bump-org-threshold');
       const step2 = await scheduleAndApply({
         account: org.address,
         action: CustodyAction.ChangeApprovalsRequired,
         innerArgs: buildChangeApprovalsRequiredArgs(4, 2),
-        signers: [{
-          seat: aliceClaim,
-          passkey: alicePasskey,
-          signTypedDataAsync: std,
-          getWalletAddress,
-          promptSwitchWalletAccount,
-        }],
+        signers: [
+          {
+            seat: aliceClaim,
+            passkey: alicePasskey,
+            signTypedDataAsync: std,
+            getWalletAddress,
+            promptSwitchWalletAccount,
+          },
+          {
+            seat: bobClaim,
+            passkey: bobPasskey,
+            signTypedDataAsync: std,
+            getWalletAddress,
+            promptSwitchWalletAccount,
+          },
+        ],
         setPhase,
       });
       if ('error' in step2) {
