@@ -17,6 +17,7 @@ import {
 } from '../../lib/passkey';
 import { claimSeat, setActiveSeat, type AuthMethod } from '../../lib/seats';
 import { deployPersonAgent } from '../../lib/deploy-person';
+import { claimPsaName } from '../../lib/claim-psa-name';
 import { passkeyIdentity } from '@agenticprimitives/custody';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
@@ -82,6 +83,8 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
   const [error, setError] = useState<string | null>(null);
   const [deployedAddress, setDeployedAddress] = useState<Address | null>(null);
   const [txHash, setTxHash] = useState<Hex | null>(null);
+  const [psaName, setPsaName] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(true);
 
   const { address: walletAddress, isConnected, connector: activeConnector } = useAccount();
@@ -232,6 +235,26 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
     setDeployedAddress(result.deployedAddress);
     setTxHash(result.transactionHash);
     setStage('success');
+
+    // Best-effort: auto-claim <seatId>.demo.agent for this PSA and set
+    // its primary name so NameDisplay everywhere immediately shows
+    // the human-readable name. Two extra txs, both gasless via the
+    // PSA's passkey path. Failures don't block success — the user
+    // can still proceed; the error surfaces in the success card.
+    if (passkey) {
+      void (async () => {
+        const claim = await claimPsaName({
+          label: seat.id.toLowerCase(),
+          personAgent: result.deployedAddress,
+          passkey,
+        });
+        if (claim.ok) {
+          setPsaName(claim.name);
+        } else {
+          setNameError(claim.reason);
+        }
+      })();
+    }
   };
 
   const handleAccept = () => {
@@ -429,12 +452,27 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
         successTxHash={txHash ?? undefined}
         successExtra={
           stage === 'success' && deployedAddress ? (
-            <p className="muted">
-              {seat.name}\'s Person Smart Agent is live on Base Sepolia. Custodians:
-              {authChoice !== 'siwe' && ' passkey'}
-              {authChoice === 'both' && ' +'}
-              {authChoice !== 'passkey' && ' wallet'}.
-            </p>
+            <>
+              <p className="muted">
+                {seat.name}\'s Person Smart Agent is live on Base Sepolia. Custodians:
+                {authChoice !== 'siwe' && ' passkey'}
+                {authChoice === 'both' && ' +'}
+                {authChoice !== 'passkey' && ' wallet'}.
+              </p>
+              {psaName ? (
+                <p className="muted" style={{ color: '#059669' }}>
+                  ✓ Agent name registered: <code>{psaName}</code>
+                </p>
+              ) : nameError ? (
+                <p className="muted" style={{ color: '#b45309' }}>
+                  ⚠ Agent-name auto-claim skipped: {nameError}
+                </p>
+              ) : (
+                <p className="muted" style={{ color: '#9ca3af' }}>
+                  Claiming <code>{seat.id.toLowerCase()}.demo.agent</code>…
+                </p>
+              )}
+            </>
           ) : undefined
         }
         onContinue={() => {

@@ -1,11 +1,8 @@
 import { useMemo, useState } from 'react';
-import type { Address, Hex } from 'viem';
-import { buildSubregistryRegisterCall } from '@agenticprimitives/agent-naming';
-import { buildExecuteCallData } from '@agenticprimitives/agent-account';
 import { config } from '../../config';
 import { loadActiveSeat, loadSeats } from '../../lib/seats';
 import { getPasskeyForSeat } from '../../lib/passkey';
-import { executeCallFromAgent } from '../../lib/execute-call';
+import { claimPsaName } from '../../lib/claim-psa-name';
 
 /**
  * "Register a name under demo.agent" form — PSA-controlled, routed
@@ -27,10 +24,10 @@ import { executeCallFromAgent } from '../../lib/execute-call';
  */
 export function RegisterNameForm({ onRegistered }: { onRegistered?: (name: string) => void }) {
   const [label, setLabel] = useState('');
-  const [recordAddr, setRecordAddr] = useState('');
   const [state, setState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
+  const [registerTx, setRegisterTx] = useState<string | null>(null);
+  const [primaryTx, setPrimaryTx] = useState<string | null>(null);
 
   const psaInfo = useMemo(() => {
     const seatId = loadActiveSeat();
@@ -54,44 +51,22 @@ export function RegisterNameForm({ onRegistered }: { onRegistered?: (name: strin
 
   const submit = async () => {
     setError(null);
-    setTxHash(null);
+    setRegisterTx(null);
+    setPrimaryTx(null);
     if (!psaInfo || !config.permissionlessSubregistry) return;
     setState('submitting');
-    try {
-      const owner = (recordAddr.trim() || psaInfo.personAgent) as Address;
-      const call = buildSubregistryRegisterCall({
-        subregistry: config.permissionlessSubregistry,
-        label: label.trim(),
-        newOwner: owner,
-      });
-      const callData = buildExecuteCallData({
-        to: call.to as Address,
-        value: call.value,
-        data: call.data as Hex,
-      });
-      const result = await executeCallFromAgent({
-        sender: psaInfo.personAgent,
-        passkey: psaInfo.passkey,
-        callData,
-      });
-      if (!result.ok) {
-        const reason = (result.reason ?? '').toLowerCase();
-        if (reason.includes('alreadyclaimed')) {
-          throw new Error('Your PSA has already claimed a name under demo.agent.');
-        }
-        if (reason.includes('labeltooshort')) {
-          throw new Error('Label too short — minimum 3 characters.');
-        }
-        if (reason.includes('nodealreadyexists')) {
-          throw new Error('That label is already taken under demo.agent.');
-        }
-        throw new Error(result.reason ?? result.error);
-      }
-      setTxHash(result.transactionHash);
+    const result = await claimPsaName({
+      label: label.trim(),
+      personAgent: psaInfo.personAgent,
+      passkey: psaInfo.passkey,
+    });
+    if (result.ok) {
+      setRegisterTx(result.registerTx ?? null);
+      setPrimaryTx(result.primaryTx ?? null);
       setState('done');
-      onRegistered?.(`${label.trim()}.demo.agent`);
-    } catch (err) {
-      setError((err as Error).message ?? String(err));
+      onRegistered?.(result.name);
+    } else {
+      setError(result.reason);
       setState('error');
     }
   };
@@ -115,20 +90,12 @@ export function RegisterNameForm({ onRegistered }: { onRegistered?: (name: strin
         </div>
       ) : (
         <>
-          <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 6, alignItems: 'center' }}>
+          <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'center' }}>
             <input
               type="text"
               placeholder="label (a-z, 0-9, -, min 3)"
               value={label}
               onChange={(e) => setLabel(e.target.value.toLowerCase())}
-              disabled={state === 'submitting'}
-              style={{ padding: '4px 8px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 4 }}
-            />
-            <input
-              type="text"
-              placeholder={`owner (default ${psaInfo.personAgent.slice(0, 6)}…)`}
-              value={recordAddr}
-              onChange={(e) => setRecordAddr(e.target.value)}
               disabled={state === 'submitting'}
               style={{ padding: '4px 8px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 4 }}
             />
@@ -148,12 +115,11 @@ export function RegisterNameForm({ onRegistered }: { onRegistered?: (name: strin
               {state === 'submitting' ? 'submitting…' : 'register'}
             </button>
           </div>
-          {state === 'done' && txHash ? (
+          {state === 'done' ? (
             <div style={{ marginTop: 6, fontSize: 11, color: '#059669' }}>
-              ✓ claimed <code>{label}.demo.agent</code> · tx{' '}
-              <code>
-                {txHash.slice(0, 10)}…{txHash.slice(-6)}
-              </code>
+              ✓ claimed <code>{label}.demo.agent</code> as your PSA's primary name
+              {registerTx ? <> · register tx <code>{registerTx.slice(0, 10)}…</code></> : null}
+              {primaryTx ? <> · primary tx <code>{primaryTx.slice(0, 10)}…</code></> : null}
             </div>
           ) : null}
           {state === 'error' && error ? (
@@ -162,10 +128,9 @@ export function RegisterNameForm({ onRegistered }: { onRegistered?: (name: strin
         </>
       )}
       <div style={{ marginTop: 6, fontSize: 10, color: '#9ca3af' }}>
-        Phase 4 SDK: <code>buildSubregistryRegisterCall</code> →{' '}
-        <code>buildExecuteCallData</code> (wraps in AgentAccount.execute) →{' '}
-        <code>executeCallFromAgent</code> (demo-a2a relay + WebAuthn passkey sign). One claim per
-        PSA (subregistry caps spam at the contract level).
+        Phase 4 SDK: subregistry.register → registry.setPrimaryName, both gasless via your PSA's
+        passkey. Act 1 auto-claims <code>&lt;seat&gt;.demo.agent</code> already; use this form to
+        claim an additional label OR if the auto-claim failed.
       </div>
     </div>
   );
