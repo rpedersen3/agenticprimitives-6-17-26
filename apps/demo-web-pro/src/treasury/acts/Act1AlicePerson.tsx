@@ -143,27 +143,24 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
    */
   const switchWalletAccount = async () => {
     try {
-      // 1. Disconnect through wagmi so React state resets cleanly.
-      if (isConnected) await disconnectAsync();
-      // 2. Ask MetaMask to show its account picker. The injected
-      //    connector exposes a provider via `getProvider()`.
+      // Provider-direct picker (no wagmi disconnect/connect dance —
+      // that races wagmi's state and trips "Connector already
+      // connected"). wallet_requestPermissions always shows the
+      // picker; wagmi's useAccount updates on accountsChanged.
       const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0];
       if (!injected) return;
       const provider = (await injected.getProvider()) as
         | { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> }
         | undefined;
-      if (provider?.request) {
-        try {
-          await provider.request({
-            method: 'wallet_requestPermissions',
-            params: [{ eth_accounts: {} }],
-          });
-        } catch {
-          // user dismissed; fine — we just won't connect this time
-        }
+      if (!provider?.request) return;
+      try {
+        await provider.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        });
+      } catch {
+        // user dismissed; fine
       }
-      // 3. Re-connect via wagmi so the new account flows back into useAccount.
-      connect({ connector: injected });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

@@ -81,17 +81,24 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
     const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0];
     if (!injected) return undefined;
     try {
-      await disconnectAsync().catch(() => undefined);
+      // Provider-direct picker — see Act3BobJoins for full rationale.
+      // No wagmi disconnect/connect (which races state).
       const provider = (await injected.getProvider()) as
         | { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> }
         | undefined;
-      if (provider?.request) {
-        await provider
-          .request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
-          .catch(() => undefined);
+      if (!provider?.request) return undefined;
+      try {
+        await provider.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        });
+      } catch {
+        return undefined;
       }
-      const result = await connectAsync({ connector: injected });
-      return result.accounts[0] as `0x${string}` | undefined;
+      const accounts = (await provider.request({
+        method: 'eth_accounts',
+      })) as string[] | undefined;
+      return (accounts?.[0] as `0x${string}` | undefined) ?? undefined;
     } catch {
       return undefined;
     }

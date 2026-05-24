@@ -100,20 +100,28 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
     const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0];
     if (!injected) return undefined;
     try {
-      // Disconnect through wagmi first so React state resets cleanly.
-      await disconnectAsync().catch(() => undefined);
-      // Force MetaMask's account picker. `wallet_requestPermissions`
-      // always opens it, regardless of cached approvals.
+      // Talk to MetaMask's injected provider directly. We DO NOT
+      // disconnect + reconnect via wagmi — that races wagmi's own
+      // state machine and trips "Connector already connected".
+      // `wallet_requestPermissions` always opens the account picker.
+      // After the user picks, read the address via eth_accounts;
+      // wagmi's useAccount updates on its own via accountsChanged.
       const provider = (await injected.getProvider()) as
         | { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> }
         | undefined;
-      if (provider?.request) {
-        await provider
-          .request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
-          .catch(() => undefined);
+      if (!provider?.request) return undefined;
+      try {
+        await provider.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        });
+      } catch {
+        return undefined; // user dismissed picker
       }
-      const result = await connectAsync({ connector: injected });
-      return result.accounts[0] as `0x${string}` | undefined;
+      const accounts = (await provider.request({
+        method: 'eth_accounts',
+      })) as string[] | undefined;
+      return (accounts?.[0] as `0x${string}` | undefined) ?? undefined;
     } catch {
       return undefined;
     }

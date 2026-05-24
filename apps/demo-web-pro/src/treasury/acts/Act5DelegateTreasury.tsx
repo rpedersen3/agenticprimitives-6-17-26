@@ -188,22 +188,39 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
       if (!active || active.toLowerCase() !== siweAuth.eoa.toLowerCase()) {
         const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0];
         if (injected) {
-          await disconnectAsync().catch(() => undefined);
+          // Force MetaMask's account picker via the injected provider
+          // directly — wallet_requestPermissions always opens it. We
+          // DON'T disconnect/reconnect via wagmi (which races its own
+          // state and trips "Connector already connected"). After the
+          // user picks an account, the provider emits accountsChanged
+          // and wagmi's useAccount updates on the next tick.
           const provider = (await injected.getProvider()) as
-            | { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> }
+            | { request: (a: { method: string; params?: unknown[] }) => Promise<string[] | unknown> }
             | undefined;
           if (provider?.request) {
-            await provider
-              .request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
-              .catch(() => undefined);
+            try {
+              await provider.request({
+                method: 'wallet_requestPermissions',
+                params: [{ eth_accounts: {} }],
+              });
+              // Read the newly-selected account directly from the
+              // provider — don't wait for wagmi's state refresh.
+              const accounts = (await provider.request({
+                method: 'eth_accounts',
+              })) as string[] | undefined;
+              if (accounts && accounts.length > 0) {
+                active = accounts[0] as `0x${string}`;
+              }
+            } catch {
+              // User dismissed the picker — fall through to the
+              // mismatch error so the dialog shows the Switch button.
+            }
           }
-          const result = await connectAsync({ connector: injected });
-          active = result.accounts[0];
         }
       }
       if (!active || active.toLowerCase() !== siweAuth.eoa.toLowerCase()) {
         throw new Error(
-          `Wrong wallet account for seat ${signerSeat.seatId}: need ${siweAuth.eoa}, got ${active ?? '(none)'}.`,
+          `Wrong MetaMask account active: wallet is on ${active ?? '(none)'} but this seat was claimed with ${siweAuth.eoa}. Open MetaMask → switch to ${siweAuth.eoa}, then retry the action.`,
         );
       }
       if (!config.delegationManager || !config.chainId) {
