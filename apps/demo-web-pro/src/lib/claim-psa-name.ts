@@ -413,6 +413,59 @@ export async function claimPsaName(args: {
 }
 
 /**
+ * SIWE-flavor of `sendSetPrimaryName` — same retry-on-AA20/AA25 loop
+ * but signs via the wallet EOA instead of a passkey. Used by the
+ * AlreadyClaimed recovery path in `claimPsaNameViaEoa` when the SA's
+ * subregistry slot was consumed by a prior attempt (so the atomic
+ * batch reverts, but the SA already owns the name and just needs
+ * setPrimaryName to land separately).
+ */
+async function sendSetPrimaryNameEoa(
+  sender: Address,
+  walletClient: WalletClient,
+  account: Address,
+  node: Hex,
+): Promise<{ ok: true; transactionHash?: Hex } | { ok: false; reason: string }> {
+  if (!config.agentNameRegistry) {
+    return { ok: false, reason: 'agentNameRegistry not configured' };
+  }
+  const call = buildSetPrimaryNameCall({
+    registry: config.agentNameRegistry,
+    node,
+  });
+  const callData = buildExecuteCallData({
+    to: call.to as Address,
+    value: call.value,
+    data: call.data as Hex,
+  });
+  let lastErr = '';
+  const MAX_ATTEMPTS = 5;
+  const RETRY_DELAY_MS = 8000;
+  let result: Awaited<ReturnType<typeof executeCallFromAgentEoa>> | null = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    result = await executeCallFromAgentEoa({ sender, walletClient, account, callData });
+    if (result.ok) break;
+    lastErr = (result.reason ?? result.error ?? '').toString();
+    const lowered = lastErr.toLowerCase();
+    const transient =
+      lowered.includes('aa20') ||
+      lowered.includes('account not deployed') ||
+      lowered.includes('aa25') ||
+      lowered.includes('invalid account nonce') ||
+      lowered.includes('replacement transaction underpriced');
+    if (transient && attempt + 1 < MAX_ATTEMPTS) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      continue;
+    }
+    break;
+  }
+  if (!result || !result.ok) {
+    return { ok: false, reason: `setPrimaryName via EOA failed: ${lastErr}` };
+  }
+  return { ok: true, transactionHash: result.transactionHash };
+}
+
+/**
  * SIWE-flavor of `claimPsaName` — same atomic batch (register +
  * setPrimaryName) but signs the userOpHash with the user's wallet
  * EOA (custodian on the SA) via wagmi instead of a WebAuthn passkey.
@@ -504,6 +557,87 @@ export async function claimPsaNameViaEoa(args: {
     break;
   }
   if (!result || !result.ok) {
+    const lowered = lastErr.toLowerCase();
+    // AlreadyClaimed — the SA's subregistry slot was consumed by a
+    // prior attempt (register landed but the batch reverted on
+    // setPrimaryName for some reason, OR a partial earlier run with
+    // a different flow). The name is already owned by the SA; just
+    // run setPrimaryName alone to bind the reverse record.
+    //
+    // The subregistry's AlreadyClaimed error carries the prior node;
+    // we look it up directly from chain instead of relying on the
+    // (often-mangled) decoded revert payload.
+    if (
+      lowered.includes('alreadyclaimed') ||
+      lowered.includes('userop_reverted')
+    ) {
+      console.log('[claim-psa-name/eoa] AlreadyClaimed fallback — trying setPrimaryName alone');
+      // Find the actual claimed node (whichever label this SA owns).
+      try {
+        const subregistryAbi = [
+          {
+            type: 'function', name: 'hasClaimed', stateMutability: 'view',
+            inputs: [{ name: 'caller', type: 'address' }], outputs: [{ type: 'bool' }],
+          },
+          {
+            type: 'function', name: 'claimedBy', stateMutability: 'view',
+            inputs: [{ name: 'caller', type: 'address' }], outputs: [{ type: 'bytes32' }],
+          },
+        ] as const;
+        const claimedNode = (await publicClient.readContract({
+          address: config.permissionlessSubregistry,
+          abi: subregistryAbi,
+          functionName: 'claimedBy',
+          args: [personAgent],
+        })) as Hex;
+        if (claimedNode !== ZERO_NODE) {
+          // SA already owns SOME node — use that as the target for
+          // setPrimaryName instead of the freshly-discovered one.
+          const fallback = await sendSetPrimaryNameEoa(personAgent, walletClient, account, claimedNode);
+          if (fallback.ok) {
+            // Resolve the full name string from on-chain for accurate cache.
+            try {
+              const universalAbi = [
+                {
+                  type: 'function', name: 'nameOf', stateMutability: 'view',
+                  inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ type: 'string' }],
+                },
+              ] as const;
+              const resolvedName = config.agentNameUniversalResolver
+                ? ((await publicClient.readContract({
+                    address: config.agentNameUniversalResolver,
+                    abi: universalAbi,
+                    functionName: 'nameOf',
+                    args: [claimedNode],
+                  })) as string)
+                : '';
+              const actualName = resolvedName || fullName;
+              setCachedName(personAgent, actualName);
+              try {
+                window.dispatchEvent(
+                  new CustomEvent<NamingClaimedDetail>(NAMING_CLAIMED_EVENT, {
+                    detail: { address: personAgent, name: actualName },
+                  }),
+                );
+              } catch {}
+              return {
+                ok: true,
+                name: actualName,
+                label: actualName.replace(/\.demo\.agent$/, ''),
+                registerTx: undefined,
+                primaryTx: fallback.transactionHash,
+              };
+            } catch {
+              // If we can't resolve the name, return success with the discovered label.
+              return { ok: true, name: fullName, label: uniqueLabel, primaryTx: fallback.transactionHash };
+            }
+          }
+          return { ok: false, reason: `AlreadyClaimed fallback failed: ${fallback.reason}` };
+        }
+      } catch (e) {
+        return { ok: false, reason: `AlreadyClaimed lookup failed: ${e instanceof Error ? e.message : String(e)}` };
+      }
+    }
     return { ok: false, reason: `batch claim failed: ${lastErr}` };
   }
   batchTx = result.transactionHash;

@@ -124,8 +124,14 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
   }
 
   const needsWallet = authChoice === 'siwe' || authChoice === 'both';
+  // `conflictingSeat` only matters when this seat needs the wallet.
+  // Passkey-only seats don't care what MetaMask is currently on; the
+  // passkey is the authority. Without this carve-out, claiming Bob with
+  // a passkey was blocked whenever MetaMask happened to be on Alice's
+  // EOA from her SIWE claim.
+  const activeConflict = needsWallet ? conflictingSeat : null;
   const canStart =
-    (!needsWallet || (isConnected && !!walletAddress)) && !conflictingSeat;
+    (!needsWallet || (isConnected && !!walletAddress)) && !activeConflict;
 
   /**
    * Re-open MetaMask's account picker so the visitor can switch to a
