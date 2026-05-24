@@ -4,11 +4,13 @@
  * picker (open vs claimed) and the top bar (current "acting as" actor).
  */
 
+import { useState } from 'react';
 import type { SeatDef } from '../../org-config';
 import { getPasskeyAuth, getSiweAuth, type SeatClaim } from '../../lib/seats';
 import { getPasskeyForSeat } from '../../lib/passkey';
 import { shortAddress } from '../../components';
 import { NameDisplay } from './NameDisplay';
+import { AgentDetailModal } from './AgentDetailModal';
 
 export function ActorCard({
   seat,
@@ -23,6 +25,7 @@ export function ActorCard({
   onClick?: () => void;
   active?: boolean;
 }) {
+  const [detailOpen, setDetailOpen] = useState(false);
   const claimed = !!claim;
   const className = [
     'actor-card',
@@ -33,6 +36,11 @@ export function ActorCard({
   ]
     .filter(Boolean)
     .join(' ');
+
+  // If the consumer provided an onClick we honour it (e.g., "switch
+  // acting-as" in the topbar). Otherwise: claimed seats open the
+  // detail modal on click; empty seats stay inert.
+  const handleClick = onClick ?? (claim ? () => setDetailOpen(true) : undefined);
 
   const content = (
     <>
@@ -50,6 +58,19 @@ export function ActorCard({
           <p className="muted small">Click to claim with a passkey.</p>
         </div>
       )}
+      {claim && (
+        <p className="muted small" style={{ marginTop: 6 }}>
+          ↳ click to view canonical id, name &amp; profile
+        </p>
+      )}
+      <AgentDetailModal
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        address={claim?.personAgent}
+        label={seat.name}
+        kind="person"
+        seatId={seat.id}
+      />
     </>
   );
 
@@ -57,7 +78,7 @@ export function ActorCard({
 
   if (variant === 'compact') {
     return (
-      <div className={className} onClick={onClick} role={onClick ? 'button' : undefined}>
+      <div className={className} onClick={handleClick} role={handleClick ? 'button' : undefined}>
         {content}
       </div>
     );
@@ -66,8 +87,8 @@ export function ActorCard({
     <button
       type="button"
       className={className}
-      onClick={onClick}
-      disabled={claimed && !onClick}
+      onClick={handleClick}
+      disabled={!handleClick}
       data-testid={`seat-picker-${seat.id}`}
     >
       {content}

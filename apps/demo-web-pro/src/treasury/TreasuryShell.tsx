@@ -31,7 +31,9 @@ import { PublishProfileForm } from './components/PublishProfileForm';
 import { PublishedProfileCard } from './components/PublishedProfileCard';
 import { ProposeEdgeForm } from './components/ProposeEdgeForm';
 import { EdgesCard } from './components/EdgesCard';
+import { AgentDetailModal, type AgentDetailKind } from './components/AgentDetailModal';
 import { shortAddress } from '../components';
+import type { Address } from 'viem';
 import { Act1AlicePerson } from './acts/Act1AlicePerson';
 import { Act2CreateOrg } from './acts/Act2CreateOrg';
 import { Act2_5CreateTreasury } from './acts/Act2_5CreateTreasury';
@@ -331,6 +333,38 @@ function TopBar({
   treasury: TreasuryRecord | null;
 }) {
   const seatList = orgConfig.seats;
+  const [detail, setDetail] = useState<{
+    address: Address;
+    label: string;
+    kind: AgentDetailKind;
+    seatId?: string;
+  } | null>(null);
+  const pillButton = (
+    extraClass: string,
+    testId: string,
+    title: string,
+    onClick: (() => void) | undefined,
+    inner: React.ReactNode,
+  ) => (
+    <button
+      type="button"
+      className={`actor-pill ${extraClass}`}
+      data-testid={testId}
+      title={title}
+      onClick={onClick}
+      disabled={!onClick}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        padding: 0,
+        font: 'inherit',
+        color: 'inherit',
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+    >
+      {inner}
+    </button>
+  );
   return (
     <header className="treasury-topbar">
       <a href="#/" className="brand">
@@ -338,31 +372,66 @@ function TopBar({
       </a>
       <div className="treasury-topbar__actors">
         {seatList.map((s) => {
-          const claimed = !!seats[s.id];
-          return (
-            <span
-              key={s.id}
-              className={`actor-pill ${claimed ? 'claimed' : 'open'}`}
-              data-testid={`top-actor-${s.id}`}
-            >
-              <span className="dot" /> {s.name}
-            </span>
+          const claim = seats[s.id];
+          const claimed = !!claim;
+          return pillButton(
+            claimed ? 'claimed' : 'open',
+            `top-actor-${s.id}`,
+            claim
+              ? `${s.name}'s Smart Agent · click for canonical id + name + profile`
+              : `Claim ${s.name}'s seat to deploy their Smart Agent`,
+            claim
+              ? () =>
+                  setDetail({
+                    address: claim.personAgent,
+                    label: s.name,
+                    kind: 'person',
+                    seatId: s.id,
+                  })
+              : undefined,
+            <><span className="dot" /> {s.name}</>,
           );
         })}
-        <span
-          className={`actor-pill ${org ? 'claimed' : 'open'}`}
-          data-testid="top-actor-org"
-          title={org ? org.address : 'Run Act 2 to deploy the Organization'}
-        >
-          <span className="dot" /> {orgConfig.name}
-        </span>
-        <span
-          className={`actor-pill ${treasury ? 'claimed' : 'open'}`}
-          data-testid="top-actor-treasury"
-          title={treasury ? treasury.address : 'Run Act 2.5 to deploy the Treasury'}
-        >
-          <span className="dot" /> Treasury
-        </span>
+        {pillButton(
+          org ? 'claimed' : 'open',
+          'top-actor-org',
+          org
+            ? `${orgConfig.name} · click for canonical id + name + profile`
+            : 'Run Act 2 to deploy the Organization',
+          org
+            ? () =>
+                setDetail({
+                  address: org.address,
+                  label: orgConfig.name,
+                  kind: 'org',
+                })
+            : undefined,
+          <><span className="dot" /> {orgConfig.name}</>,
+        )}
+        {pillButton(
+          treasury ? 'claimed' : 'open',
+          'top-actor-treasury',
+          treasury
+            ? 'Acme Treasury · click for canonical id + name + profile'
+            : 'Run Act 2.5 to deploy the Treasury',
+          treasury
+            ? () =>
+                setDetail({
+                  address: treasury.address,
+                  label: 'Acme Treasury',
+                  kind: 'treasury',
+                })
+            : undefined,
+          <><span className="dot" /> Treasury</>,
+        )}
+        <AgentDetailModal
+          open={detail !== null}
+          onClose={() => setDetail(null)}
+          address={detail?.address}
+          label={detail?.label ?? ''}
+          kind={detail?.kind ?? 'person'}
+          seatId={detail?.seatId}
+        />
       </div>
       <div className="treasury-topbar__right">
         <GasReadout />

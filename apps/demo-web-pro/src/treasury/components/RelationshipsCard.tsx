@@ -20,6 +20,47 @@ import { readApprovalsRequired, readIsCustodian } from '../../lib/chain-reads';
 import { shortAddress } from '../../components';
 import { config } from '../../config';
 import { NameDisplay } from './NameDisplay';
+import { AgentDetailModal, type AgentDetailKind } from './AgentDetailModal';
+
+/**
+ * Compact clickable header for an agent — opens the AgentDetailModal
+ * with the canonical SA address, naming-service truth, control
+ * credentials, and profile. Used wherever the UI renders a friendly
+ * label like "Alice", "Acme Construction", or "Treasury".
+ */
+function AgentHeaderButton({
+  label,
+  sublabel,
+  onClick,
+}: {
+  label: React.ReactNode;
+  sublabel?: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Open agent detail"
+      style={{
+        background: 'transparent',
+        border: 'none',
+        padding: '2px 4px',
+        margin: '-2px -4px',
+        textAlign: 'left',
+        cursor: 'pointer',
+        font: 'inherit',
+        color: '#1d4ed8',
+        textDecoration: 'underline',
+        textDecorationStyle: 'dotted',
+        textUnderlineOffset: 2,
+      }}
+    >
+      {label}
+      {sublabel ? <span style={{ marginLeft: 6 }}>{sublabel}</span> : null}
+    </button>
+  );
+}
 
 type CheckMap = Map<string, boolean>;
 
@@ -49,6 +90,12 @@ export function RelationshipsCard({
     orgT4Approvals: null,
     treasuryT4Approvals: null,
   });
+  const [detail, setDetail] = useState<{
+    address: Address;
+    label: string;
+    kind: AgentDetailKind;
+    seatId?: string;
+  } | null>(null);
 
   const aliceSeat = orgConfig.seats[0];
   const bobSeat = orgConfig.seats[1];
@@ -169,7 +216,17 @@ export function RelationshipsCard({
           {aliceClaim && aliceSeat && (
             <tr>
               <td className="relationship-actor">
-                {aliceSeat.name}\'s Person Smart Agent
+                <AgentHeaderButton
+                  label={`${aliceSeat.name}'s Person Smart Agent`}
+                  onClick={() =>
+                    setDetail({
+                      address: aliceClaim.personAgent,
+                      label: aliceSeat.name,
+                      kind: 'person',
+                      seatId: aliceSeat.id,
+                    })
+                  }
+                />
               </td>
               <td><code><NameDisplay address={aliceClaim.personAgent} /></code></td>
               <td>{renderCustodyLine(aliceClaim, aliceClaim.personAgent)}</td>
@@ -178,7 +235,17 @@ export function RelationshipsCard({
           {bobClaim && bobSeat && (
             <tr>
               <td className="relationship-actor">
-                {bobSeat.name}\'s Person Smart Agent
+                <AgentHeaderButton
+                  label={`${bobSeat.name}'s Person Smart Agent`}
+                  onClick={() =>
+                    setDetail({
+                      address: bobClaim.personAgent,
+                      label: bobSeat.name,
+                      kind: 'person',
+                      seatId: bobSeat.id,
+                    })
+                  }
+                />
               </td>
               <td><code><NameDisplay address={bobClaim.personAgent} /></code></td>
               <td>{renderCustodyLine(bobClaim, bobClaim.personAgent)}</td>
@@ -187,8 +254,17 @@ export function RelationshipsCard({
           {org && (
             <tr>
               <td className="relationship-actor">
-                {orgConfig.name}{' '}
-                <span className="muted small">(Org Smart Agent)</span>
+                <AgentHeaderButton
+                  label={orgConfig.name}
+                  sublabel={<span className="muted small">(Org Smart Agent)</span>}
+                  onClick={() =>
+                    setDetail({
+                      address: org.address,
+                      label: orgConfig.name,
+                      kind: 'org',
+                    })
+                  }
+                />
               </td>
               <td><code><NameDisplay address={org.address} /></code></td>
               <td>
@@ -216,8 +292,17 @@ export function RelationshipsCard({
           {treasury && (
             <tr>
               <td className="relationship-actor">
-                Acme Treasury{' '}
-                <span className="muted small">(Service Smart Agent)</span>
+                <AgentHeaderButton
+                  label="Acme Treasury"
+                  sublabel={<span className="muted small">(Service Smart Agent)</span>}
+                  onClick={() =>
+                    setDetail({
+                      address: treasury.address,
+                      label: 'Acme Treasury',
+                      kind: 'treasury',
+                    })
+                  }
+                />
               </td>
               <td><code><NameDisplay address={treasury.address} /></code></td>
               <td>
@@ -252,6 +337,19 @@ export function RelationshipsCard({
         forbidden at the contract level via the ERC-165 marker check in addCustodian.
         Inter-agent authority is modeled separately as stewardship / delegation.
       </p>
+      <p className="muted small" style={{ marginTop: 4 }}>
+        Click any agent label to see its canonical identifier, naming-service
+        state, control credentials, and profile.
+      </p>
+
+      <AgentDetailModal
+        open={detail !== null}
+        onClose={() => setDetail(null)}
+        address={detail?.address}
+        label={detail?.label ?? ''}
+        kind={detail?.kind ?? 'person'}
+        seatId={detail?.seatId}
+      />
     </section>
   );
 }
