@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { encodeFunctionData, type Address, type Hex } from 'viem';
+import { encodeFunctionData, keccak256, toHex, type Address, type Hex } from 'viem';
 import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
 import { getPasskeyAuth, getSiweAuth } from '../../lib/seats';
 import { orgConfig } from '../../org-config';
@@ -137,17 +137,17 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     // Salt includes the Org address (so Treasury can't collide
     // across Orgs) AND the session salt (so Reset → re-deploy gets
     // a fresh Treasury even when the user reuses the same EOA).
-    // See lib/session-salt.ts.
-    const SALT_VERSION = 'v9-session-scoped';
+    //
+    // CRITICAL: keccak256 the input. Previously `slice(0, 16)` kept
+    // only the first 8 chars of the encoded string ("Acme Tre"...)
+    // and discarded org/identity/session-salt — Treasury address was
+    // deterministic per name alone. See Act2CreateOrg for the same fix.
+    const SALT_VERSION = 'v10-keccak-salt';
     const sessionSalt = getSessionSalt();
     const salt = BigInt(
-      '0x' +
-        [...new TextEncoder().encode(
-          `${TREASURY_NAME}:${org.address}:${aliceIdentityForSalt}:${SALT_VERSION}:${sessionSalt}`,
-        )]
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join('')
-          .slice(0, 16),
+      keccak256(
+        toHex(`${TREASURY_NAME}:${org.address}:${aliceIdentityForSalt}:${SALT_VERSION}:${sessionSalt}`),
+      ),
     );
 
     // 1-second T4 safety delay — same demo override as Act 2.

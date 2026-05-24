@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { encodeFunctionData, type Address, type Hex } from 'viem';
+import { encodeFunctionData, keccak256, toHex, type Address, type Hex } from 'viem';
 import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
 import { getPasskeyAuth, getSiweAuth } from '../../lib/seats';
 import { orgConfig } from '../../org-config';
@@ -151,16 +151,18 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     // produces the SAME Org address forever, and the user can't
     // actually "start over" because the prior Org's custodian set is
     // already configured on chain. See lib/session-salt.ts.
-    const SALT_VERSION = 'v9-session-scoped';
+    //
+    // CRITICAL: keccak256 the input string — previously this used
+    // `slice(0, 16)` on the hex-encoded UTF-8 bytes, which kept only
+    // the first 8 chars of the input ("Acme Con...") and discarded
+    // the identity / version / session salt entirely. The Org address
+    // was deterministic forever regardless of any "fix" to the inputs.
+    const SALT_VERSION = 'v10-keccak-salt';
     const sessionSalt = getSessionSalt();
     const salt = BigInt(
-      '0x' +
-        [...new TextEncoder().encode(
-          `${orgConfig.name}:${aliceIdentityForSalt}:${SALT_VERSION}:${sessionSalt}`,
-        )]
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join('')
-          .slice(0, 16),
+      keccak256(
+        toHex(`${orgConfig.name}:${aliceIdentityForSalt}:${SALT_VERSION}:${sessionSalt}`),
+      ),
     );
 
     // Encode factory.createAgentAccount with a 1-second T4 safety
