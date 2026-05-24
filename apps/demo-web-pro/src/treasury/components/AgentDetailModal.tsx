@@ -144,6 +144,7 @@ function ModalHeader({
       <div>
         <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>
           {kindLabel(kind)}
+          <span style={{ marginLeft: 8, opacity: 0.6 }}>· build v7-atomic-batch</span>
         </div>
         <div style={{ fontSize: 22, fontWeight: 700 }}>{label}</div>
       </div>

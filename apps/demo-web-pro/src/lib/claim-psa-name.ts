@@ -198,7 +198,9 @@ export async function setPrimaryNameOnly(args: {
     return { ok: false, reason: 'naming contracts / RPC not configured' };
   }
   const node = namehash(agentName);
+  console.log('[setPrimaryNameOnly] v7', { personAgent, agentName, node });
   const result = await sendSetPrimaryName(personAgent, passkey, node);
+  console.log('[setPrimaryNameOnly] result', result);
   if (!result.ok) return result;
 
   // Poll the resolver until it returns the expected name (or timeout).
@@ -285,11 +287,24 @@ export async function claimPsaName(args: {
       { to: registerCall.to as Address, value: registerCall.value, data: registerCall.data as Hex },
       { to: setPrimaryCall.to as Address, value: setPrimaryCall.value, data: setPrimaryCall.data as Hex },
     ]);
+    console.log('[claim-psa-name] v7-atomic-batch', {
+      sender: personAgent,
+      label: uniqueLabel,
+      fullName,
+      node,
+      registerTo: registerCall.to,
+      registerSelector: (registerCall.data as Hex).slice(0, 10),
+      setPrimaryTo: setPrimaryCall.to,
+      setPrimarySelector: (setPrimaryCall.data as Hex).slice(0, 10),
+      batchSelector: batchCallData.slice(0, 10),
+      batchCallDataLen: batchCallData.length,
+    });
     const result = await executeCallFromAgent({
       sender: personAgent,
       passkey,
       callData: batchCallData,
     });
+    console.log('[claim-psa-name] batch result', result);
     if (!result.ok) {
       const reason = (result.reason ?? '').toLowerCase();
       // AlreadyClaimed → this SA already registered a name in a prior

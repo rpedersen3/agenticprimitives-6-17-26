@@ -118,6 +118,11 @@ export async function executeCallFromAgent(args: {
   const baseTrimmed = base.replace(/\/$/, '');
 
   // 1. Build the userOp (sender + callData).
+  console.log('[execute-call] build-call-userop request', {
+    sender: args.sender,
+    callDataSelector: args.callData.slice(0, 10),
+    callDataLen: args.callData.length,
+  });
   const buildRes = await fetch(`${baseTrimmed}/account/build-call-userop`, {
     method: 'POST',
     credentials: 'include',
@@ -162,6 +167,7 @@ export async function executeCallFromAgent(args: {
     body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
   });
   const submitBody = (await submitRes.json()) as Record<string, unknown>;
+  console.log('[execute-call] submit response', { status: submitRes.status, body: submitBody });
   if (!submitRes.ok || submitBody.ok !== true) {
     return {
       ok: false,
