@@ -29,6 +29,8 @@ import { RelationshipsCard } from './components/RelationshipsCard';
 import { NamingStatusPanel } from './components/NamingStatusPanel';
 import { PublishProfileForm } from './components/PublishProfileForm';
 import { PublishedProfileCard } from './components/PublishedProfileCard';
+import { ProposeEdgeForm } from './components/ProposeEdgeForm';
+import { EdgesCard } from './components/EdgesCard';
 import { shortAddress } from '../components';
 import { Act1AlicePerson } from './acts/Act1AlicePerson';
 import { Act2CreateOrg } from './acts/Act2CreateOrg';
@@ -664,6 +666,9 @@ function NextStepHint({
 
       <PublishedProfileCard />
       <PublishProfileForm />
+
+      <EdgesCard />
+      <ProposeEdgeForm />
     </section>
   );
 }
