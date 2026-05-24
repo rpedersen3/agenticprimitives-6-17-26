@@ -17,12 +17,12 @@ import {
 } from '../../lib/passkey';
 import { claimSeat, setActiveSeat, type AuthMethod } from '../../lib/seats';
 import { deployPersonAgent } from '../../lib/deploy-person';
-import { claimPsaName, predictUniqueAgentLabel } from '../../lib/claim-psa-name';
+import { claimPsaName, claimPsaNameViaEoa, predictUniqueAgentLabel } from '../../lib/claim-psa-name';
 import { passkeyIdentity } from '@agenticprimitives/custody';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { config } from '../../config';
-import { useAccount, useConnect, useConnectors, useDisconnect } from 'wagmi';
+import { useAccount, useConnect, useConnectors, useDisconnect, useWalletClient } from 'wagmi';
 import { loadSeats } from '../../lib/seats';
 import { getSiweAuth } from '../../lib/seats';
 import type { Address, Hex } from 'viem';
@@ -92,6 +92,7 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
   const { connect, isPending: connectPending } = useConnect();
   const { disconnectAsync } = useDisconnect();
   const connectors = useConnectors();
+  const { data: walletClient } = useWalletClient();
 
   // Detect "already used by another seat" — if a different seat is
   // already bound to the currently-connected EOA, the user almost
@@ -256,26 +257,35 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
     setStage('success');
 
     // Best-effort: auto-claim <seatId>.demo.agent for this PSA and set
-    // its primary name so NameDisplay everywhere immediately shows
-    // the human-readable name. Two extra txs, both gasless via the
-    // PSA's passkey path. Failures don't block success — the user
-    // can still proceed; the error surfaces in the success card.
+    // its primary name so NameDisplay everywhere immediately shows the
+    // human-readable name. Both calls atomic via AgentAccount.executeBatch.
+    // Failures don't block success — error surfaces in the success card.
+    //
+    // Signer pick: passkey if available (gasless, no wallet popup);
+    // SIWE EOA otherwise. 'both' uses passkey for better UX.
     if (passkey) {
-      // Number-suffix uniqueness per spec 220 § 5: alice → alice2 → …
-      // Names are facet registrations pointing at the canonical SA;
-      // the human-readable label stays intact (no hex salt).
       void (async () => {
         const claim = await claimPsaName({
           baseLabel: seat.id.toLowerCase(),
           personAgent: result.deployedAddress,
           passkey,
         });
-        if (claim.ok) {
-          setPsaName(claim.name);
-        } else {
-          setNameError(claim.reason);
-        }
+        if (claim.ok) setPsaName(claim.name);
+        else setNameError(claim.reason);
       })();
+    } else if (eoa && walletClient) {
+      void (async () => {
+        const claim = await claimPsaNameViaEoa({
+          baseLabel: seat.id.toLowerCase(),
+          personAgent: result.deployedAddress,
+          walletClient,
+          account: eoa,
+        });
+        if (claim.ok) setPsaName(claim.name);
+        else setNameError(claim.reason);
+      })();
+    } else {
+      setNameError('no signer (passkey or wallet) available for name auto-claim');
     }
   };
 

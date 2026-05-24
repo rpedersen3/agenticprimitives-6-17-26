@@ -41,9 +41,10 @@ import {
   buildExecuteBatchCallData,
 } from '@agenticprimitives/agent-account';
 import { config } from '../config';
-import { executeCallFromAgent } from './execute-call';
+import { executeCallFromAgent, executeCallFromAgentEoa } from './execute-call';
 import type { DemoPasskey } from './passkey';
 import { setCachedName } from './name-cache';
+import type { WalletClient } from 'viem';
 
 /**
  * Event fired AFTER the on-chain claim has propagated and a fresh
@@ -409,4 +410,113 @@ export async function claimPsaName(args: {
   }
 
   return { ok: true, name: fullName, label: uniqueLabel, registerTx, primaryTx };
+}
+
+/**
+ * SIWE-flavor of `claimPsaName` — same atomic batch (register +
+ * setPrimaryName) but signs the userOpHash with the user's wallet
+ * EOA (custodian on the SA) via wagmi instead of a WebAuthn passkey.
+ *
+ * Used by Act 1 when the seat was claimed with SIWE only (no
+ * passkey enrolled). The MetaMask popup shows a "Sign Message"
+ * prompt with the userOpHash — same on-chain effect.
+ */
+export async function claimPsaNameViaEoa(args: {
+  baseLabel: string;
+  personAgent: Address;
+  walletClient: WalletClient;
+  account: Address;
+}): Promise<ClaimPsaNameResult> {
+  const { baseLabel, personAgent, walletClient, account } = args;
+  if (!config.permissionlessSubregistry || !config.agentNameRegistry || !config.rpcUrl) {
+    return { ok: false, reason: 'naming contracts not configured (subregistry / registry / rpc missing)' };
+  }
+  if (!/^[a-z0-9-]{3,}$/.test(baseLabel)) {
+    return { ok: false, reason: `label "${baseLabel}" must match /^[a-z0-9-]{3,}$/` };
+  }
+
+  const publicClient = createPublicClient({ transport: http(config.rpcUrl) });
+
+  // 0. Discover next-free label.
+  let uniqueLabel: string;
+  try {
+    uniqueLabel = await findUniqueLabel(publicClient, config.agentNameRegistry, baseLabel);
+  } catch (err) {
+    return { ok: false, reason: (err as Error).message };
+  }
+  const fullName = `${uniqueLabel}.demo.agent`;
+  const node = namehash(fullName);
+
+  // 0.5. Pre-poll bytecode visibility (same race as the passkey path).
+  {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      try {
+        const code = await publicClient.getCode({ address: personAgent });
+        if (code && code !== '0x') break;
+      } catch {}
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+
+  // 1. Atomic batch (subregistry.register + registry.setPrimaryName).
+  const registerCall = buildSubregistryRegisterCall({
+    subregistry: config.permissionlessSubregistry,
+    label: uniqueLabel,
+    newOwner: personAgent,
+  });
+  const setPrimaryCall = buildSetPrimaryNameCall({
+    registry: config.agentNameRegistry,
+    node,
+  });
+  const batchCallData = buildExecuteBatchCallData([
+    { to: registerCall.to as Address, value: registerCall.value, data: registerCall.data as Hex },
+    { to: setPrimaryCall.to as Address, value: setPrimaryCall.value, data: setPrimaryCall.data as Hex },
+  ]);
+  console.log('[claim-psa-name/eoa] v9', {
+    sender: personAgent, account, label: uniqueLabel, fullName,
+    batchSelector: batchCallData.slice(0, 10),
+  });
+
+  let batchTx: Hex | undefined;
+  const MAX_ATTEMPTS = 5;
+  const RETRY_DELAY_MS = 8000;
+  let lastErr = '';
+  let result: Awaited<ReturnType<typeof executeCallFromAgentEoa>> | null = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    result = await executeCallFromAgentEoa({
+      sender: personAgent, walletClient, account, callData: batchCallData,
+    });
+    console.log(`[claim-psa-name/eoa] attempt ${attempt + 1}`, result);
+    if (result.ok) break;
+    lastErr = (result.reason ?? result.error ?? '').toString();
+    const lowered = lastErr.toLowerCase();
+    const transient =
+      lowered.includes('aa20') ||
+      lowered.includes('account not deployed') ||
+      lowered.includes('aa25') ||
+      lowered.includes('invalid account nonce') ||
+      lowered.includes('replacement transaction underpriced');
+    if (transient && attempt + 1 < MAX_ATTEMPTS) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      continue;
+    }
+    break;
+  }
+  if (!result || !result.ok) {
+    return { ok: false, reason: `batch claim failed: ${lastErr}` };
+  }
+  batchTx = result.transactionHash;
+
+  // 2. Cache + broadcast.
+  setCachedName(personAgent, fullName);
+  try {
+    window.dispatchEvent(
+      new CustomEvent<NamingClaimedDetail>(NAMING_CLAIMED_EVENT, {
+        detail: { address: personAgent, name: fullName },
+      }),
+    );
+  } catch {}
+
+  return { ok: true, name: fullName, label: uniqueLabel, registerTx: batchTx, primaryTx: batchTx };
 }
