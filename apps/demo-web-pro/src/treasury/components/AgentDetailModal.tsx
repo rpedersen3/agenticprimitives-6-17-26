@@ -23,8 +23,8 @@
  * naming-service truth side by side.
  */
 
-import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Address } from 'viem';
 import {
   useAgentNamingClient,
@@ -40,6 +40,7 @@ import {
   type SeatClaim,
 } from '../../lib/seats';
 import { getPasskeyForSeat } from '../../lib/passkey';
+import { setPrimaryNameOnly } from '../../lib/claim-psa-name';
 
 export type AgentDetailKind = 'person' | 'org' | 'service' | 'treasury';
 
@@ -193,6 +194,12 @@ function Body({
   // Records bundle (displayName, agentKind, addr, nativeId, …).
   const recordsQ = useAgentRecords(reverseQ.data ?? storedAgentName ?? undefined);
 
+  // Recovery state for the "Set primary name now" button.
+  const [setPrimaryState, setSetPrimaryState] = useState<
+    'idle' | 'running' | 'done' | 'error'
+  >('idle');
+  const [setPrimaryError, setSetPrimaryError] = useState<string | null>(null);
+
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['agent-name', address.toLowerCase()] });
     if (storedAgentName) {
@@ -200,6 +207,42 @@ function Body({
       queryClient.invalidateQueries({ queryKey: ['agent-records', storedAgentName] });
     }
     queryClient.invalidateQueries({ queryKey: ['naming-status'] });
+  };
+
+  // Did the initial reverse-resolve query actually finish? Used to
+  // distinguish "still loading" from "loaded and null" — the diagnostic
+  // + recovery button should only show after we know the answer.
+  const reverseSettled = !reverseQ.isFetching && !reverseQ.isPending;
+  const reverseEmpty = reverseSettled && !reverseQ.data;
+  const forwardMatches =
+    forwardQ.data && forwardQ.data.toLowerCase() === address.toLowerCase();
+
+  // Recovery: forward record points at this SA but the SA's reverse
+  // record was never set. The fix is ONLY setPrimaryName from the SA;
+  // the passkey already signs everything else.
+  const canRecover =
+    !!passkeyMirror &&
+    !!storedAgentName &&
+    reverseEmpty &&
+    forwardMatches &&
+    !reverseQ.data;
+
+  const runSetPrimary = async () => {
+    if (!passkeyMirror || !storedAgentName) return;
+    setSetPrimaryState('running');
+    setSetPrimaryError(null);
+    const result = await setPrimaryNameOnly({
+      personAgent: address,
+      passkey: passkeyMirror,
+      agentName: storedAgentName,
+    });
+    if (result.ok) {
+      setSetPrimaryState('done');
+      refresh();
+    } else {
+      setSetPrimaryState('error');
+      setSetPrimaryError(result.reason);
+    }
   };
 
   const caip10 = config.chainId ? `eip155:${config.chainId}:${address}` : address;
@@ -253,7 +296,7 @@ function Body({
         ) : (
           <>
             <Field label="Primary name (reverse-resolve)">
-              {reverseQ.isFetching && !reverseQ.data ? (
+              {!reverseSettled ? (
                 <span style={{ color: '#9ca3af' }}>resolving…</span>
               ) : reverseQ.data ? (
                 <strong style={{ color: '#059669' }}>{reverseQ.data}</strong>
@@ -375,8 +418,12 @@ function Body({
         )}
       </Section>
 
-      {/* Diagnostic note when reverse resolution is missing despite a stored name. */}
-      {client && storedAgentName && !reverseQ.data && (
+      {/*
+        Diagnostic ONLY after the initial query has settled. Avoids the
+        confusing "Primary name: resolving…" + amber diagnostic combo
+        the user saw during the first fetch.
+      */}
+      {client && storedAgentName && reverseEmpty && (
         <div
           style={{
             marginTop: 14,
@@ -388,24 +435,54 @@ function Body({
             color: '#78350f',
           }}
         >
-          <strong>Diagnostic:</strong> the passkey is enrolled as{' '}
-          <code>{storedAgentName}</code>, but the universal resolver
-          isn't returning that name for this SA yet. Common causes:
-          <ul style={{ marginTop: 6, paddingLeft: 18 }}>
-            <li>
-              <code>setPrimaryName</code> didn't land (check the success
-              card from the act that created this agent for an AA25 retry
-              failure).
-            </li>
-            <li>
-              Read-after-write lag — Base Sepolia's RPC pool can return
-              stale state for a few seconds. Click <em>refresh</em>.
-            </li>
-            <li>
-              Forward record points elsewhere — see the "Forward resolve"
-              row above; round-trip must match for reverse to return.
-            </li>
-          </ul>
+          <strong>Diagnostic:</strong>{' '}
+          {forwardMatches
+            ? `the forward record claims ${storedAgentName} → this SA, but the SA's reverse record (primaryName) was never set on chain. setPrimaryName is the missing step.`
+            : `${storedAgentName} doesn't resolve to this SA. subregistry.register may have failed; check the success card from the act that created this agent.`}
+          {canRecover && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                disabled={setPrimaryState === 'running'}
+                onClick={() => void runSetPrimary()}
+                style={{
+                  padding: '6px 12px',
+                  background: setPrimaryState === 'running' ? '#9ca3af' : '#2563eb',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: setPrimaryState === 'running' ? 'wait' : 'pointer',
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                {setPrimaryState === 'running'
+                  ? 'Signing + waiting for confirmation (up to ~60s)…'
+                  : setPrimaryState === 'done'
+                    ? '✓ Set — refreshing'
+                    : `Set primary name now (${storedAgentName})`}
+              </button>
+              {setPrimaryState === 'error' && setPrimaryError && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    color: '#dc2626',
+                    fontSize: 11,
+                    background: 'white',
+                    padding: 6,
+                    borderRadius: 4,
+                  }}
+                >
+                  {setPrimaryError}
+                </div>
+              )}
+              <div style={{ marginTop: 6, fontSize: 11, color: '#92400e' }}>
+                Sends one gasless userOp from this SA via the passkey
+                path. The SA already owns <code>{storedAgentName}</code>
+                ; this just writes the SA→node reverse record.
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>

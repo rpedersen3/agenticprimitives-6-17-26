@@ -123,6 +123,111 @@ async function findUniqueLabel(
   throw new Error(`No free label found after ${MAX_SUFFIX} attempts starting from "${baseLabel}"`);
 }
 
+/**
+ * Send `setPrimaryName(node)` from the SA via the gasless passkey
+ * path. Aggressive retry on AA25 because Base Sepolia's load-balanced
+ * RPC pool can return stale nonce state for a while after the prior
+ * userOp (subregistry.register) lands. 5 attempts × 12s = up to 60s
+ * of patience.
+ *
+ * Returns a structured result; never throws.
+ */
+async function sendSetPrimaryName(
+  sender: Address,
+  passkey: DemoPasskey,
+  node: Hex,
+): Promise<{ ok: true; transactionHash?: Hex } | { ok: false; reason: string }> {
+  if (!config.agentNameRegistry) {
+    return { ok: false, reason: 'agentNameRegistry not configured' };
+  }
+  const call = buildSetPrimaryNameCall({
+    registry: config.agentNameRegistry,
+    node,
+  });
+  const callData = buildExecuteCallData({
+    to: call.to as Address,
+    value: call.value,
+    data: call.data as Hex,
+  });
+  let lastErr = '';
+  let attempt = 0;
+  let result: Awaited<ReturnType<typeof executeCallFromAgent>> | null = null;
+  const MAX_ATTEMPTS = 5;
+  const RETRY_DELAY_MS = 12000;
+  for (attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    result = await executeCallFromAgent({ sender, passkey, callData });
+    if (result.ok) break;
+    lastErr = result.reason ?? result.error;
+    const isNonceMismatch =
+      lastErr.includes('AA25') ||
+      lastErr.toLowerCase().includes('invalid account nonce') ||
+      lastErr.toLowerCase().includes('replacement transaction underpriced');
+    if (isNonceMismatch && attempt + 1 < MAX_ATTEMPTS) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      continue;
+    }
+    break;
+  }
+  if (!result || !result.ok) {
+    return {
+      ok: false,
+      reason: `setPrimaryName failed after ${attempt + 1} attempt${attempt === 0 ? '' : 's'}: ${lastErr}`,
+    };
+  }
+  return { ok: true, transactionHash: result.transactionHash };
+}
+
+/**
+ * Recovery helper: SA's owner of `<name>` is already on chain
+ * (subregistry.register landed) but the reverse record was never set.
+ * This re-runs ONLY the setPrimaryName step + propagation poll +
+ * naming:claimed broadcast. Used by AgentDetailModal's "Set primary
+ * name now" button when the diagnostic shows
+ * forward ✓ / reverse ✗.
+ */
+export async function setPrimaryNameOnly(args: {
+  personAgent: Address;
+  passkey: DemoPasskey;
+  agentName: string;
+}): Promise<{ ok: true; transactionHash?: Hex; name: string } | { ok: false; reason: string }> {
+  const { personAgent, passkey, agentName } = args;
+  if (!config.agentNameRegistry || !config.agentNameUniversalResolver || !config.rpcUrl) {
+    return { ok: false, reason: 'naming contracts / RPC not configured' };
+  }
+  const node = namehash(agentName);
+  const result = await sendSetPrimaryName(personAgent, passkey, node);
+  if (!result.ok) return result;
+
+  // Poll the resolver until it returns the expected name (or timeout).
+  const namingClient = new AgentNamingClient({
+    rpcUrl: config.rpcUrl,
+    chainId: config.chainId!,
+    registry: config.agentNameRegistry,
+    universalResolver: config.agentNameUniversalResolver,
+  });
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    try {
+      const resolved = await namingClient.reverseResolve(personAgent);
+      if (resolved && resolved.toLowerCase() === agentName.toLowerCase()) break;
+    } catch {
+      // Ignore transient RPC errors.
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+
+  // Broadcast so cached NameDisplay reads invalidate.
+  try {
+    window.dispatchEvent(
+      new CustomEvent<NamingClaimedDetail>(NAMING_CLAIMED_EVENT, {
+        detail: { address: personAgent, name: agentName },
+      }),
+    );
+  } catch {}
+
+  return { ok: true, transactionHash: result.transactionHash, name: agentName };
+}
+
 export async function claimPsaName(args: {
   /** The desired base label (3+ chars, a-z 0-9 -). Forced-unique via counter. */
   baseLabel: string;
@@ -197,43 +302,15 @@ export async function claimPsaName(args: {
   }
 
   // Step 2 — setPrimaryName.
-  let primaryTx: Hex | undefined;
-  {
-    const call = buildSetPrimaryNameCall({
-      registry: config.agentNameRegistry,
-      node,
-    });
-    const callData = buildExecuteCallData({
-      to: call.to as Address,
-      value: call.value,
-      data: call.data as Hex,
-    });
-    let lastErr = '';
-    let attempt = 0;
-    let result: Awaited<ReturnType<typeof executeCallFromAgent>> | null = null;
-    for (attempt = 0; attempt < 3; attempt++) {
-      result = await executeCallFromAgent({
-        sender: personAgent,
-        passkey,
-        callData,
-      });
-      if (result.ok) break;
-      lastErr = result.reason ?? result.error;
-      if (lastErr.includes('AA25') || lastErr.toLowerCase().includes('invalid account nonce')) {
-        await new Promise((r) => setTimeout(r, 8000));
-        continue;
-      }
-      break;
-    }
-    if (!result || !result.ok) {
-      return {
-        ok: false,
-        reason: `setPrimaryName failed${attempt > 0 ? ` after ${attempt + 1} attempts` : ''}: ${lastErr}` +
-          (registerTx ? ` (register OK — ${fullName})` : ''),
-      };
-    }
-    primaryTx = result.transactionHash;
+  const primaryResult = await sendSetPrimaryName(personAgent, passkey, node);
+  if (!primaryResult.ok) {
+    return {
+      ok: false,
+      reason: primaryResult.reason +
+        (registerTx ? ` (register OK — ${fullName})` : ''),
+    };
   }
+  const primaryTx: Hex | undefined = primaryResult.transactionHash;
 
   // Step 3 — poll until the universal resolver returns the new name.
   // Base Sepolia's RPC pool can return stale state for a few seconds
