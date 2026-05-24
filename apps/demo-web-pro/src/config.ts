@@ -42,6 +42,16 @@ export interface DeploymentConfig {
   rpcUrl?: string;
   demoA2aUrl?: string;
   demoMcpUrl?: string;
+  // NS/RL/ID Phase 3 stack (live since 2026-05-23). Optional —
+  // surfaces "naming layer not deployed" in UI when absent.
+  agentNameRegistry?: `0x${string}`;
+  agentNameResolver?: `0x${string}`;
+  agentNameUniversalResolver?: `0x${string}`;
+  agentRelationship?: `0x${string}`;
+  relationshipTypeRegistry?: `0x${string}`;
+  agentProfileResolver?: `0x${string}`;
+  ontologyTermRegistry?: `0x${string}`;
+  shapeRegistry?: `0x${string}`;
 }
 
 function parseAddr(v: string | undefined): `0x${string}` | undefined {
@@ -72,4 +82,12 @@ export const config: DeploymentConfig = {
   rpcUrl:               import.meta.env.VITE_RPC_URL || undefined,
   demoA2aUrl:           import.meta.env.VITE_DEMO_A2A_URL || undefined,
   demoMcpUrl:           import.meta.env.VITE_DEMO_MCP_URL || undefined,
+  agentNameRegistry:          parseAddr(import.meta.env.VITE_AGENT_NAME_REGISTRY),
+  agentNameResolver:          parseAddr(import.meta.env.VITE_AGENT_NAME_RESOLVER),
+  agentNameUniversalResolver: parseAddr(import.meta.env.VITE_AGENT_NAME_UNIVERSAL_RESOLVER),
+  agentRelationship:          parseAddr(import.meta.env.VITE_AGENT_RELATIONSHIP),
+  relationshipTypeRegistry:   parseAddr(import.meta.env.VITE_RELATIONSHIP_TYPE_REGISTRY),
+  agentProfileResolver:       parseAddr(import.meta.env.VITE_AGENT_PROFILE_RESOLVER),
+  ontologyTermRegistry:       parseAddr(import.meta.env.VITE_ONTOLOGY_TERM_REGISTRY),
+  shapeRegistry:              parseAddr(import.meta.env.VITE_SHAPE_REGISTRY),
 };

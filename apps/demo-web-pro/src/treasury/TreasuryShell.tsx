@@ -26,6 +26,7 @@ import { LiveStatusBadge } from './components/LiveStatusBadge';
 import { SeatPicker } from './components/SeatPicker';
 import { DisconnectMenu } from './components/DisconnectMenu';
 import { RelationshipsCard } from './components/RelationshipsCard';
+import { NamingStatusPanel } from './components/NamingStatusPanel';
 import { shortAddress } from '../components';
 import { Act1AlicePerson } from './acts/Act1AlicePerson';
 import { Act2CreateOrg } from './acts/Act2CreateOrg';
@@ -654,6 +655,10 @@ function NextStepHint({
       </div>
 
       <RelationshipsCard seats={seats} org={org} treasury={treasury} />
+
+      <div style={{ marginTop: 12 }}>
+        <NamingStatusPanel />
+      </div>
     </section>
   );
 }

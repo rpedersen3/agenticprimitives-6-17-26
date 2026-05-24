@@ -19,15 +19,27 @@
       "import": "./dist/custody.js"
     }
   },
-  "files": ["dist", "spec.md", "README.md"],
+  "files": [
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:unit": "vitest run test/normalize.test.ts test/namehash.test.ts test/records.test.ts",
+    "test:integration": "vitest run test/integration.test.ts",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["agent", "naming", "ens", "smart-agent", "agentic"],
+  "keywords": [
+    "agent",
+    "naming",
+    "ens",
+    "smart-agent",
+    "agentic"
+  ],
   "license": "UNLICENSED",
   "peerDependencies": {
     "@agenticprimitives/types": "workspace:*",
