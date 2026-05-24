@@ -45,7 +45,7 @@ export type ClaimPsaNameResult =
   | { ok: false; reason: string };
 
 const ZERO_NODE = '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex;
-const MAX_SUFFIX = 100;
+const MAX_SUFFIX = 9999;
 
 function namehash(name: string): Hex {
   if (name === '') return ZERO_NODE;
