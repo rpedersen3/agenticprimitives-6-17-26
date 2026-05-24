@@ -39,7 +39,7 @@ The polyrepo case strengthens only if cross-package coordination cost is approac
 
 ## References
 
-- [`specs/100-package-boundary-doctrine.md`](../../../specs/100-package-boundary-doctrine.md) §5 (naming) and §7 (Claude routing)
+- [`specs/100-package-boundary-doctrine.md`](../../../specs/100-package-boundary-doctrine.md) §6 (naming) and §9 (Claude routing)
 - [`specs/101-v0-package-proposal.md`](../../../specs/101-v0-package-proposal.md) §1 (the 7-package set)
 - 1clawAI polyrepo: https://github.com/1clawAI
 - MetaMask DTK single-SDK: https://github.com/MetaMask/delegation-toolkit

@@ -1,16 +1,32 @@
 # Agent Naming Concepts
 
-`@agenticprimitives/agent-naming` gives Smart Agents stable human-readable
-names and typed discovery records.
+`@agenticprimitives/agent-naming` registers a **naming facet** for Smart
+Agents: human-readable `.agent` labels and typed discovery records that **point
+at** the canonical Smart Agent address ([ADR-0010](../../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)).
+
+This package does **not** own identity. The ERC-4337 Smart Agent address
+(from `@agenticprimitives/agent-account`) is the canonical identifier. Names are
+facet registrations — useful for UX and discovery, never the root authority.
+
+## Canonical Identifier Vs Naming Facet
+
+| Concept | Owner | Example |
+| --- | --- | --- |
+| Canonical identity | `agent-account` | `0xabc…` / `eip155:84532:0xabc…` |
+| Naming facet | `agent-naming` | `alice.agent` → `addr` + `nativeId` records |
+| Profile facet | `agent-identity` | AgentCard at `metadata-uri` |
+| Control credentials | `identity-auth` + `custody` | Passkey / SIWE → custodian on the SA |
+
+Cross-package APIs use `Address` or CAIP-10 `nativeId`, not bare names.
 
 ## AgentName
 
 An `AgentName` is a normalized dotted name under `.agent`, such as
 `alice.agent`, `acme.agent`, or `treasury.acme.agent`.
 
-Names are identifiers for Smart Agents, not login credentials. A name resolves
-to a Smart Agent address. The Smart Agent and its account policy decide who can
-change that name or its records.
+Names are **not** login credentials and **not** CREATE2 salt inputs. A name
+resolves to a Smart Agent address via resolver records. The Smart Agent and its
+custody policy decide who can change that name or its records.
 
 ## Label
 
@@ -102,17 +118,25 @@ name must return the same address.
 
 ## CAIP-10 Native ID
 
-`nativeId` is a chain-agnostic account identifier such as:
+`nativeId` is the canonical Smart Agent identifier in CAIP-10 form:
 
 ```text
 eip155:84532:0x0000000000000000000000000000000000000003
 ```
 
-It helps external indexers and cross-resolver systems map a Smart Agent to a
-native account identifier without this package generating UAID strings.
+It MUST equal the `addr` record for EVM chains. It back-links external registries
+(ERC-8004, HCS, ANS) to the same canonical SA. This package does not generate
+UAID strings ([ADR-0008](../../../docs/architecture/decisions/0008-caip10-nativeid-record-predicate.md)).
 
 Encode-side validation is strict. Decode-side behavior is more permissive for
 forward compatibility.
+
+## Forced-Unique Labels
+
+When `alice.agent` is taken, bootstrap uses a sequential suffix:
+`alice2.agent`, `alice3.agent`, … ([spec 220 § 5](../../../specs/220-agent-identity-bootstrap.md)).
+The canonical SA address does not change when the suffix increments — only the
+naming facet label does.
 
 ## Records And Service Discovery
 

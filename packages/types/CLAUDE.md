@@ -3,11 +3,13 @@
 ## What this package owns
 - Branded primitive types: `Address`, `Hex`, `ChainId`.
 - `BrandedId<T>` helper for opaque IDs.
-- Cross-cutting agent-identity shape: `AgentType` (closed enum) and
-  `NameContext` (optional injected context downstream packages
-  accept WITHOUT importing `@agenticprimitives/agent-naming`). See
-  [ADR-0006](../../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md).
-- Nothing else. This is a types-only leaf package.
+- Cross-cutting shapes: `AgentType`, `NameContext` (display-only; canonical
+  authority stays `Address` / future `canonicalAgentId` per
+  [ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)).
+  See [ADR-0006](../../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md).
+- Planned: `CanonicalAgentIdentity`, facet types from ADR-0010/0011 when ≥2
+  packages import them.
+- Nothing else. Types-only leaf package.
 
 ## What this package does NOT own
 - Runtime code of any kind. If you find yourself adding a function here, it belongs in the consuming package.

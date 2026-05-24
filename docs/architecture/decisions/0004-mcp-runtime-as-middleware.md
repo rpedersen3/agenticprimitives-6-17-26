@@ -41,6 +41,6 @@ The reversal case is: the MCP SDK drops a capability we need, or its API churn b
 
 ## References
 
-- [`specs/100-package-boundary-doctrine.md`](../../../specs/100-package-boundary-doctrine.md) §6 (what stays in apps)
+- [`specs/100-package-boundary-doctrine.md`](../../../specs/100-package-boundary-doctrine.md) §7 (what stays in apps)
 - [`specs/205-mcp-runtime.md`](../../../specs/205-mcp-runtime.md) §10 (non-goals: no MCP SDK bundling, no transport, no OAuth plumbing)
 - MCP TypeScript SDK: https://github.com/modelcontextprotocol/typescript-sdk

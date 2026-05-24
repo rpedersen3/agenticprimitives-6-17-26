@@ -1,7 +1,7 @@
 # @agenticprimitives/agent-identity — Claude guide
 
-## Facet, not identity
-Profiles are a **facet registration** anchored at the canonical Smart Agent address ([ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)). The profile JSON describes the SA; the on-chain anchor's subject is `bytes32(uint256(uint160(canonicalAddr)))`. Cross-package APIs key off the SA address — names are decorative. ERC-8004 / GoDaddy ANS / HCS-10 / HCS-11 / HCS-14 facets, if added, MUST back-link to the canonical SA address per [spec 220 § 4](../../specs/220-agent-identity-bootstrap.md).
+## Profile facet, not identity
+Profiles are a **facet registration** anchored at the canonical Smart Agent address ([ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)). Cross-package APIs key off the SA address — names are decorative. External registry facets MUST back-link to the canonical SA ([spec 220 § 4](../../specs/220-agent-identity-bootstrap.md)).
 
 ## What this package owns
 - `AgentCard` — the HCS-11-aligned typed off-chain profile schema,
@@ -151,6 +151,9 @@ pnpm check:forbidden-terms
   `AuditSink`): `agent-identity.profile.fetch`,
   `agent-identity.profile.update`, `agent-identity.endpoint.verify.{success,failure}`.
 - Index: [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md).
+
+## Documentation map
+[`README.md`](README.md) · [`docs/concepts.md`](docs/concepts.md) · [`docs/api.md`](docs/api.md) · [`docs/security.md`](docs/security.md) · [`docs/troubleshooting.md`](docs/troubleshooting.md) · [`docs/migration.md`](docs/migration.md)
 
 ## Generated files (ignore)
 `dist/`, `node_modules/`, `coverage/`, `*.tsbuildinfo`.

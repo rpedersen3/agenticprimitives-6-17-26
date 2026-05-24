@@ -1,6 +1,10 @@
 # @agenticprimitives/agent-naming
 
-Human-readable `.agent` names for Smart Agents.
+Human-readable `.agent` **naming facets** for Smart Agents.
+
+The canonical identifier is the Smart Agent address
+(`@agenticprimitives/agent-account`). This package registers names and records
+that point **at** that address — it does not create or own identity.
 
 Use this package to resolve names like `alice.agent`, `acme.agent`, and
 `treasury.acme.agent` to Smart Agent addresses, read typed service-discovery
@@ -59,7 +63,9 @@ const records = await naming.getRecords('treasury.acme.agent');
 
 ## Main Concepts
 
-- **AgentName**: a normalized dotted name under `.agent`.
+- **Canonical SA**: the ERC-4337 address every name must reference (`addr`,
+  `nativeId`). Owned by `agent-account`, not this package.
+- **AgentName**: a normalized dotted name under `.agent` (a facet label).
 - **Label**: one segment of a name, such as `treasury`.
 - **Node**: ENS-compatible `namehash(name)`.
 - **Registry**: owns name records: owner, resolver, parent, subregistry.

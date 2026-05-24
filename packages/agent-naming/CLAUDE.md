@@ -1,7 +1,7 @@
 # @agenticprimitives/agent-naming — Claude guide
 
-## Facet, not identity
-Names are a **facet registration** that points AT the canonical Smart Agent address. The SA address is the identifier ([ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)); this package's job is to make a unique human-readable label resolvable to / from that address. Bootstrap MUST force uniqueness via the number-suffix algorithm in [spec 220 § 5](../../specs/220-agent-identity-bootstrap.md): `alice` → `alice2` → `alice3` → … No collisions, no `<random-salt>` ugliness.
+## Naming facet, not identity
+Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)). Forced-unique labels: [spec 220 § 5](../../specs/220-agent-identity-bootstrap.md). `addr` + `nativeId` MUST reference the same SA.
 
 ## What this package owns
 
@@ -162,6 +162,10 @@ pnpm check:forbidden-terms
 primary-name.update,subregistry.update}`.
 - Index of cross-cutting capabilities:
   [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md).
+
+## Documentation map
+
+[`README.md`](README.md) · [`docs/concepts.md`](docs/concepts.md) · [`docs/api.md`](docs/api.md) · [`docs/security.md`](docs/security.md) · [`docs/troubleshooting.md`](docs/troubleshooting.md) · [`docs/migration.md`](docs/migration.md)
 
 ## Generated files (ignore)
 

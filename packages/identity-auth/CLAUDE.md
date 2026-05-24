@@ -77,5 +77,8 @@ pnpm check:forbidden-terms
 - Adding a new `Signer` specialization → `src/signers.ts`; type-only addition.
 - Changing JWT claim shape → coordinate with [`delegation`](../delegation) (it reads claims).
 
+## Documentation map
+[`README.md`](README.md) · [`docs/concepts.md`](docs/concepts.md) · [`docs/api.md`](docs/api.md) · [`docs/security.md`](docs/security.md) · [`docs/troubleshooting.md`](docs/troubleshooting.md) · [`docs/migration.md`](docs/migration.md)
+
 ## Generated files (ignore)
 `dist/`, `node_modules/`, `coverage/`, `*.tsbuildinfo`.

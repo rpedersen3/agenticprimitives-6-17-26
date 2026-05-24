@@ -1,8 +1,8 @@
 # Agent Naming Security
 
-This package is part of the identity and service-discovery surface. Treat names
-as user-facing identifiers, but bind authority to Smart Agent addresses and
-contract checks.
+This package is a **facet registry**, not the identity anchor. Treat names as
+user-facing labels; bind authority to Smart Agent addresses and contract checks
+([ADR-0010](../../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)).
 
 ## Deterministic Normalization
 

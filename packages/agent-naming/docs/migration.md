@@ -24,6 +24,22 @@ Every breaking change should update:
 4. `capability.manifest.json`
 5. tests or examples that show the changed path
 
+## Canonical-Identifier-First Wiring
+
+New integrations should follow [spec 220](../../../specs/220-agent-identity-bootstrap.md):
+
+1. Deploy or resolve the Smart Agent (`agent-account`) — canonical `Address`.
+2. Register a forced-unique `.agent` name pointing at that address (this package).
+3. Enroll custodians (`custody` + `identity-auth` ceremonies).
+4. Optionally publish a profile (`agent-identity`).
+
+Display both in UI:
+
+```text
+Canonical Agent ID: eip155:84532:0x…
+Name:               alice.agent   (facet — may be alice2.agent if taken)
+```
+
 ## From Ad Hoc Address Config To Names
 
 Old app wiring often carries raw addresses and endpoint URLs in local config:

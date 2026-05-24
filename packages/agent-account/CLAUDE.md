@@ -42,9 +42,12 @@ The canonical SA address MUST NOT change during credential recovery ([ADR-0011](
 
 ## Validate
 ```bash
-pnpm --filter @agenticprimitives/agent-account typecheck && test
+pnpm check:agent-account
 pnpm check:forbidden-terms
 ```
+
+## Documentation map
+[`README.md`](README.md) · [`docs/concepts.md`](docs/concepts.md) · [`docs/api.md`](docs/api.md) · [`docs/security.md`](docs/security.md) · [`docs/troubleshooting.md`](docs/troubleshooting.md) · [`docs/migration.md`](docs/migration.md)
 
 ## Capabilities (cross-cutting)
 - **Multi-sig + custody policy** — see [spec 207](../../specs/207-smart-account-threshold-policy.md) (product) + [spec 209](../../specs/209-erc7579-module-taxonomy.md) (impl) + [spec 213](../../specs/213-custody-layer-carve-out.md) (vocabulary firewall). Phase 6c.5-d.1 moved the custody machinery to `apps/contracts/src/custody/CustodyPolicy.sol`; phase 6g.3 moved the SDK surface to `@agenticprimitives/custody`. This package now exposes only the AgentAccount-side SDK helpers (address derivation, sign/verify, userOp build).
