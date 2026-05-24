@@ -254,6 +254,37 @@ export async function claimPsaName(args: {
 
   const publicClient = createPublicClient({ transport: http(config.rpcUrl) });
 
+  // Step -1 — early-out if the SA already has a primary name. Happens
+  // when the user re-runs the demo on a deterministic CREATE2 address
+  // (same EOA + same salt as before) and a prior session already
+  // claimed + setPrimaryName. The atomic batch would revert with
+  // AlreadyClaimed; recognising the existing state up front saves
+  // both a failed userOp AND a fallback round-trip.
+  if (config.agentNameUniversalResolver && config.chainId) {
+    try {
+      const existing = await new AgentNamingClient({
+        rpcUrl: config.rpcUrl,
+        chainId: config.chainId,
+        registry: config.agentNameRegistry,
+        universalResolver: config.agentNameUniversalResolver,
+      }).reverseResolve(personAgent);
+      if (existing && /^[a-z0-9-]+\.demo\.agent$/i.test(existing)) {
+        setCachedName(personAgent, existing);
+        try {
+          window.dispatchEvent(
+            new CustomEvent<NamingClaimedDetail>(NAMING_CLAIMED_EVENT, {
+              detail: { address: personAgent, name: existing },
+            }),
+          );
+        } catch {}
+        const matchLabel = existing.replace(/\.demo\.agent$/i, '');
+        return { ok: true, name: existing, label: matchLabel };
+      }
+    } catch {
+      // Pre-check failure is non-fatal — continue with the normal claim path.
+    }
+  }
+
   // Step 0 — discover the next-free label.
   let uniqueLabel: string;
   try {
@@ -489,6 +520,37 @@ export async function claimPsaNameViaEoa(args: {
   }
 
   const publicClient = createPublicClient({ transport: http(config.rpcUrl) });
+
+  // -1. Early-out — same logic as claimPsaName's pre-check. If this
+  // SA's CREATE2 address collides with a previously-used one that
+  // already has a primary name, skip the atomic batch entirely.
+  if (config.agentNameUniversalResolver && config.chainId) {
+    try {
+      const existing = await new AgentNamingClient({
+        rpcUrl: config.rpcUrl,
+        chainId: config.chainId,
+        registry: config.agentNameRegistry,
+        universalResolver: config.agentNameUniversalResolver,
+      }).reverseResolve(personAgent);
+      if (existing && /^[a-z0-9-]+\.demo\.agent$/i.test(existing)) {
+        setCachedName(personAgent, existing);
+        try {
+          window.dispatchEvent(
+            new CustomEvent<NamingClaimedDetail>(NAMING_CLAIMED_EVENT, {
+              detail: { address: personAgent, name: existing },
+            }),
+          );
+        } catch {}
+        return {
+          ok: true,
+          name: existing,
+          label: existing.replace(/\.demo\.agent$/i, ''),
+        };
+      }
+    } catch {
+      // non-fatal
+    }
+  }
 
   // 0. Discover next-free label.
   let uniqueLabel: string;

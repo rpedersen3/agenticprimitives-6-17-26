@@ -93,7 +93,14 @@ export async function deployPersonAgent(
         initialPasskeyX: '0',
         initialPasskeyY: '0',
         timelockOverrides: [],
-        salt: '0',
+        // Time-bucketed salt: each fresh Act-1 claim attempt gets a
+        // distinct CREATE2 address even when re-using the same EOA.
+        // Without this, after Reset the user's same EOA → same SA →
+        // already-claimed name → AlreadyClaimed on the auto-claim
+        // batch. Salt is throwaway: we only need to ensure uniqueness
+        // per-session, not reproducibility across sessions (the SA's
+        // address is persisted in the SeatClaim after deploy).
+        salt: Date.now().toString(),
       }),
     });
     const raw = await directRes.text();
@@ -139,7 +146,7 @@ export async function deployPersonAgent(
       initialPasskeyX: passkey.pubKeyX.toString(),
       initialPasskeyY: passkey.pubKeyY.toString(),
       timelockOverrides: [],
-      salt: '0',
+      salt: Date.now().toString(),
     }),
   });
   const directRaw = await directRes.text();
