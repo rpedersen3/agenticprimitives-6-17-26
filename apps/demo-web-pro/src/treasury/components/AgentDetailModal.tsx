@@ -305,12 +305,12 @@ function Body({
           </p>
         ) : (
           <>
-            <Field label="Primary name (local cache)">
+            <Field label="Primary name (reverse-resolve)">
               {cachedName ? (
                 <strong style={{ color: '#059669' }}>{cachedName}</strong>
               ) : (
                 <span style={{ color: '#b45309' }}>
-                  no local cache entry
+                  not yet resolved
                   {storedAgentName ? ` (expected ${storedAgentName})` : ''}
                 </span>
               )}

@@ -86,6 +86,10 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 
 ## Drift triggers — STOP and route
 
+- "Add `getLogs` / `queryFilter` / `watchContractEvent` for a product read" —
+  **STOP.** [ADR-0012](../../docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md):
+  use `readContract`, on-chain stored fields, or an indexer. Only
+  `_reconstructName` may use logs until contract/indexer exit — do not extend.
 - "Add a delegation-token mint or verify path" — **STOP.** Belongs
   in [`delegation`](../delegation).
 - "Add a CustodyAction to gate name rotation" — **STOP.** Belongs

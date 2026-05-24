@@ -4,6 +4,21 @@ This package is a **facet registry**, not the identity anchor. Treat names as
 user-facing labels; bind authority to Smart Agent addresses and contract checks
 ([ADR-0010](../../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)).
 
+## Read-Path Discipline (No Log Scans)
+
+Binding: [ADR-0012](../../../docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md).
+
+Product reads must use `readContract` only:
+
+- `resolveName` and `getRecords` — compliant.
+- `reverseResolve` — on-chain round-trip uses `readContract`; returning the
+  dotted string currently uses **chunked `eth_getLogs`** in `_reconstructName`
+  (**transitional debt** — do not add more log walkers).
+
+Approved exits: store plaintext `label` on chain, or a naming indexer, or app
+cache after registration. Chunking log ranges does not make log scans an
+acceptable long-term pattern.
+
 ## Deterministic Normalization
 
 Every name must normalize the same way on every runtime:

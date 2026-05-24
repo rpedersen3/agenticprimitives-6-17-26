@@ -100,6 +100,25 @@ export class AgentNamingClient {
    * label string.
    */
   async reverseResolve(agent: Address): Promise<string | null> {
+    // Spec/222 fast path: single readContract returns the full dotted
+    // name (the contract walks the parent chain via view calls and
+    // concatenates labels — no SDK-side eth_getLogs, no rate limits).
+    try {
+      const fullName = (await this.publicClient.readContract({
+        address: this.opts.universalResolver,
+        abi: agentNameUniversalResolverAbi,
+        functionName: 'reverseResolveString',
+        args: [agent],
+      })) as string;
+      if (fullName && fullName.length > 0) return fullName;
+    } catch {
+      // Older deployments without reverseResolveString — fall through
+      // to the legacy node + log-walk path.
+    }
+
+    // Legacy path (pre-spec/222 deployments only): get the node, then
+    // reconstruct via NameRegistered events. Subject to provider
+    // getLogs limits — see ADR-0012.
     const node = await this.publicClient.readContract({
       address: this.opts.universalResolver,
       abi: agentNameUniversalResolverAbi,

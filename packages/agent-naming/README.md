@@ -121,6 +121,9 @@ transaction submission.
 
 ## Security Invariants
 
+- Product reads use `readContract`; no `eth_getLogs` in hot paths
+  ([ADR-0012](../../docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md)).
+  `reverseResolve` string reconstruction is transitional log debt — do not copy.
 - Name normalization is deterministic.
 - Reverse resolution must round-trip before it is trusted.
 - Unknown predicates are ignored on decode and rejected by typed encoders.

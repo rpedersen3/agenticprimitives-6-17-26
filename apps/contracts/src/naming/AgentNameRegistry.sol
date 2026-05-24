@@ -83,6 +83,12 @@ contract AgentNameRegistry {
     mapping(bytes32 => NameRecord) private _records;
     mapping(bytes32 => mapping(bytes32 => bytes32)) private _children; // parent => labelhash => childNode
     mapping(bytes32 => bytes32[]) private _childLabels;                // parent => labelhash[]
+    /// @notice Plain-text label per node — the string that was passed to
+    ///         `initializeRoot` / `register` at registration time.
+    ///         Per spec/222 this enables view-call reverse resolution
+    ///         (universal resolver concatenates parents into the full
+    ///         dotted name) WITHOUT any `eth_getLogs` scan.
+    mapping(bytes32 => string) private _label;
 
     /// @notice Multi-root registry — `true` iff `node` was initialized via `initializeRoot`.
     mapping(bytes32 => bool) public isRoot;
@@ -151,6 +157,7 @@ contract AgentNameRegistry {
         rootKind[rootNode] = kind;
         _rootByLabel[label] = rootNode;
         _allRoots.push(rootNode);
+        _label[rootNode] = label;
 
         emit RootInitialized(rootNode, label, rootOwner, kind);
     }
@@ -202,8 +209,23 @@ contract AgentNameRegistry {
 
         _children[parentNode][lh] = childNode;
         _childLabels[parentNode].push(lh);
+        _label[childNode] = label;
 
         emit NameRegistered(childNode, parentNode, label, newOwner, resolverContract, expiry);
+    }
+
+    /**
+     * @notice Backfill a label for a node registered before per-node
+     *         label storage shipped (pre-spec/222 deployments).
+     *         Authorized to the node's owner ONLY — labels can't be
+     *         changed once set, preventing display spoofing.
+     */
+    function backfillLabel(bytes32 node, string calldata label_) external {
+        _requireNodeAuth(node);
+        if (bytes(label_).length == 0) revert EmptyLabel();
+        if (keccak256(bytes(label_)) != _records[node].labelhash) revert NotAuthorized();
+        if (bytes(_label[node]).length != 0) revert NotAuthorized();
+        _label[node] = label_;
     }
 
     // ─── Setters ────────────────────────────────────────────────────
@@ -276,6 +298,13 @@ contract AgentNameRegistry {
     function isExpired(bytes32 node) public view returns (bool) {
         uint64 exp = _records[node].expiry;
         return exp != 0 && block.timestamp > exp;
+    }
+
+    /// @notice Plain-text label for `node` (the string that was passed
+    ///         to register / initializeRoot). Empty for un-backfilled
+    ///         pre-spec/222 records.
+    function label(bytes32 node) external view returns (string memory) {
+        return _label[node];
     }
 
     // ─── Auth ───────────────────────────────────────────────────────

@@ -141,6 +141,10 @@ export const agentNameRegistryAbi = [
   { type: 'function', name: 'childCount',   stateMutability: 'view', inputs: [{ name: 'parentNode', type: 'bytes32' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'childLabelhashes', stateMutability: 'view', inputs: [{ name: 'parentNode', type: 'bytes32' }], outputs: [{ type: 'bytes32[]' }] },
   { type: 'function', name: 'primaryName',  stateMutability: 'view', inputs: [{ name: 'agent', type: 'address' }], outputs: [{ type: 'bytes32' }] },
+  // Per-node label string (spec/222) — enables view-call reverse name reconstruction.
+  { type: 'function', name: 'label',         stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'backfillLabel', stateMutability: 'nonpayable',
+    inputs: [{ name: 'node', type: 'bytes32' }, { name: 'label', type: 'string' }], outputs: [] },
 ] as const;
 
 // ─── AgentNameAttributeResolver (ontology-backed typed records) ────
@@ -289,6 +293,12 @@ export const agentNameUniversalResolverAbi = [
     inputs: [{ name: 'node', type: 'bytes32' }, { name: 'predicates', type: 'bytes32[]' }], outputs: [{ type: 'string[]' }] },
   { type: 'function', name: 'reverseResolve', stateMutability: 'view',
     inputs: [{ name: 'agent', type: 'address' }], outputs: [{ type: 'bytes32' }] },
+  // Spec/222 — single-call reverse to the full dotted name string. Walks
+  // the parent chain on chain via view calls; no SDK-side eth_getLogs.
+  { type: 'function', name: 'reverseResolveString', stateMutability: 'view',
+    inputs: [{ name: 'agent', type: 'address' }], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'nameOf', stateMutability: 'view',
+    inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ type: 'string' }] },
   {
     type: 'function', name: 'getChildren', stateMutability: 'view',
     inputs: [{ name: 'parentNode', type: 'bytes32' }],

@@ -119,6 +119,67 @@ contract AgentNameUniversalResolver {
         return node;
     }
 
+    /**
+     * @notice Reverse-resolve a Smart Agent address to its primary name
+     *         STRING in a single external call. Per spec/222 this is
+     *         the ENS-aligned reverse path — no log walks, no name
+     *         reconstruction in the SDK, no event indexer required.
+     *
+     *         Walks `parent(node)` up the registry, reading `label(node)`
+     *         at each level, joining with `.`. All view calls. Returns
+     *         `""` when (a) no primary set, (b) round-trip fails (squat
+     *         protection), or (c) any node along the parent chain has
+     *         no on-chain label string (pre-spec/222 backfill not done).
+     */
+    function reverseResolveString(address agent) external view returns (string memory) {
+        bytes32 node = REGISTRY.primaryName(agent);
+        if (node == bytes32(0)) return "";
+        if (!REGISTRY.recordExists(node)) return "";
+        if (_resolveNameView(node) != agent) return "";
+        return _composeName(node);
+    }
+
+    /**
+     * @notice Compose the full dotted name string for `node` by walking
+     *         the parent chain. Generalizes: works for ANY registered
+     *         node, not just an agent's primary. Returns `""` if any
+     *         label in the chain is missing on chain.
+     */
+    function nameOf(bytes32 node) external view returns (string memory) {
+        if (node == bytes32(0)) return "";
+        if (!REGISTRY.recordExists(node)) return "";
+        return _composeName(node);
+    }
+
+    function _composeName(bytes32 startNode) internal view returns (string memory) {
+        // Collect labels walking up to root. Bounded depth = 10 to
+        // match the SDK's previous _reconstructName cap (no demo path
+        // exceeds 4 — alice7.demo.agent is 3).
+        string[10] memory labels;
+        uint256 depth = 0;
+        bytes32 cur = startNode;
+        while (cur != bytes32(0) && depth < 10) {
+            string memory lbl = REGISTRY.label(cur);
+            if (bytes(lbl).length == 0) return "";
+            labels[depth] = lbl;
+            cur = REGISTRY.parent(cur);
+            unchecked { depth++; }
+        }
+        if (depth == 0) return "";
+
+        // Concatenate labels[0..depth-1] with '.' separators.
+        uint256 totalLen = depth - 1; // for the dots
+        for (uint256 i = 0; i < depth; i++) totalLen += bytes(labels[i]).length;
+        bytes memory out = new bytes(totalLen);
+        uint256 pos = 0;
+        for (uint256 i = 0; i < depth; i++) {
+            bytes memory lbl = bytes(labels[i]);
+            for (uint256 j = 0; j < lbl.length; j++) out[pos++] = lbl[j];
+            if (i + 1 < depth) out[pos++] = 0x2e; // '.'
+        }
+        return string(out);
+    }
+
     function _resolveNameView(bytes32 node) internal view returns (address) {
         address resolverAddr = REGISTRY.resolver(node);
         if (resolverAddr != address(0)) {

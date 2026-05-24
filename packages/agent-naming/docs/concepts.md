@@ -149,3 +149,11 @@ Records make names useful to agents and tools:
 
 Endpoint records are discovery hints. A consumer that needs endpoint-control
 proof should compose with `@agenticprimitives/agent-identity`.
+
+## Read Paths (No `eth_getLogs`)
+
+Forward resolve and record reads use `readContract` only
+([ADR-0012](../../../docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md)).
+`reverseResolve` still reconstructs the dotted string from registration **events**
+via chunked `getLogs` — transitional until labels are stored on chain or served
+by an indexer. Prefer caching `address → name` in apps after `setPrimaryName`.
