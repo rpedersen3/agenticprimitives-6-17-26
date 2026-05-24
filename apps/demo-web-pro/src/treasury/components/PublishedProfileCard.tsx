@@ -3,6 +3,7 @@ import type { Address } from 'viem';
 import { useAgentProfile } from '../../lib/use-agent-identity';
 import { loadActiveSeat, loadSeats } from '../../lib/seats';
 import { config } from '../../config';
+import { NameDisplay } from './NameDisplay';
 
 /**
  * Read-side companion to PublishProfileForm. Renders the active PSA's
@@ -42,7 +43,7 @@ export function PublishedProfileCard() {
         <strong style={{ fontSize: 14 }}>Your PSA's published profile</strong>
         {psaAddr ? (
           <code style={{ fontSize: 11, color: '#6b7280' }}>
-            {psaAddr.slice(0, 6)}…{psaAddr.slice(-4)}
+            <NameDisplay address={psaAddr} />
           </code>
         ) : null}
       </div>

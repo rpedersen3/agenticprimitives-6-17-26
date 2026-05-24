@@ -12,6 +12,7 @@ import { config } from '../../config';
 import { loadActiveSeat, loadSeats } from '../../lib/seats';
 import { getPasskeyForSeat } from '../../lib/passkey';
 import { executeCallFromAgent } from '../../lib/execute-call';
+import { NameDisplay } from './NameDisplay';
 
 const TYPE_OPTIONS: Array<{ label: string; value: keyof typeof RELATIONSHIP_TYPE }> = [
   { label: 'HAS_MEMBER',            value: 'HAS_MEMBER' },
@@ -132,7 +133,7 @@ export function ProposeEdgeForm() {
           <div style={{ marginTop: 6, color: '#6b7280', fontSize: 12 }}>
             Subject (your PSA):{' '}
             <code>
-              {psaInfo.personAgent.slice(0, 6)}…{psaInfo.personAgent.slice(-4)}
+              <NameDisplay address={psaInfo.personAgent} />
             </code>
             . Edge enters <code>PROPOSED</code>; the object side must confirm before it goes to
             <code> ACTIVE</code>.

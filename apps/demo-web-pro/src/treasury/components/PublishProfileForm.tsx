@@ -13,6 +13,7 @@ import { config } from '../../config';
 import { loadActiveSeat, loadSeats } from '../../lib/seats';
 import { getPasskeyForSeat } from '../../lib/passkey';
 import { executeCallFromAgent } from '../../lib/execute-call';
+import { NameDisplay } from './NameDisplay';
 
 /**
  * "Publish profile for your PSA" form — exercises the full Phase 4
@@ -165,7 +166,7 @@ export function PublishProfileForm() {
           <div style={{ marginTop: 6, color: '#6b7280', fontSize: 12 }}>
             Active PSA:{' '}
             <code>
-              {psaInfo.personAgent.slice(0, 6)}…{psaInfo.personAgent.slice(-4)}
+              <NameDisplay address={psaInfo.personAgent} />
             </code>{' '}
             (seat {psaInfo.seatId}). Profile is anchored on chain via{' '}
             <code>AgentProfileResolver.setMetadata</code>; the JSON is encoded as a{' '}

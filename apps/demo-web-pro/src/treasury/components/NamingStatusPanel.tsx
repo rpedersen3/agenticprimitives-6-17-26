@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAgentNamingClient } from '../../lib/use-agent-naming';
 import { config } from '../../config';
 import { RegisterNameForm } from './RegisterNameForm';
+import { NameDisplay } from './NameDisplay';
 
 /**
  * Status panel for the Agent Naming Service. Shows:
@@ -98,7 +99,7 @@ export function NamingStatusPanel() {
             <code style={{ fontWeight: 600 }}>{d.name}</code>
             <span title={d.addr ?? 'unresolved'}>
               {d.addr
-                ? `${d.addr.slice(0, 6)}…${d.addr.slice(-4)}`
+                ? <NameDisplay address={d.addr} />
                 : '(unresolved)'}
               {d.displayName ? (
                 <span style={{ marginLeft: 8, color: '#6b7280', fontStyle: 'italic' }}>

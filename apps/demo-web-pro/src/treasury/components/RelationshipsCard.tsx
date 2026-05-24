@@ -19,6 +19,7 @@ import type { OrgRecord, TreasuryRecord } from '../../lib/demo-state';
 import { readApprovalsRequired, readIsCustodian } from '../../lib/chain-reads';
 import { shortAddress } from '../../components';
 import { config } from '../../config';
+import { NameDisplay } from './NameDisplay';
 
 type CheckMap = Map<string, boolean>;
 
@@ -170,7 +171,7 @@ export function RelationshipsCard({
               <td className="relationship-actor">
                 {aliceSeat.name}\'s Person Smart Agent
               </td>
-              <td><code>{shortAddress(aliceClaim.personAgent)}</code></td>
+              <td><code><NameDisplay address={aliceClaim.personAgent} /></code></td>
               <td>{renderCustodyLine(aliceClaim, aliceClaim.personAgent)}</td>
             </tr>
           )}
@@ -179,7 +180,7 @@ export function RelationshipsCard({
               <td className="relationship-actor">
                 {bobSeat.name}\'s Person Smart Agent
               </td>
-              <td><code>{shortAddress(bobClaim.personAgent)}</code></td>
+              <td><code><NameDisplay address={bobClaim.personAgent} /></code></td>
               <td>{renderCustodyLine(bobClaim, bobClaim.personAgent)}</td>
             </tr>
           )}
@@ -189,7 +190,7 @@ export function RelationshipsCard({
                 {orgConfig.name}{' '}
                 <span className="muted small">(Org Smart Agent)</span>
               </td>
-              <td><code>{shortAddress(org.address)}</code></td>
+              <td><code><NameDisplay address={org.address} /></code></td>
               <td>
                 {aliceClaim && (
                   <span>
@@ -218,7 +219,7 @@ export function RelationshipsCard({
                 Acme Treasury{' '}
                 <span className="muted small">(Service Smart Agent)</span>
               </td>
-              <td><code>{shortAddress(treasury.address)}</code></td>
+              <td><code><NameDisplay address={treasury.address} /></code></td>
               <td>
                 {aliceClaim && (
                   <span>

@@ -7,6 +7,7 @@
 import type { SeatDef } from '../../org-config';
 import { getPasskeyAuth, getSiweAuth, type SeatClaim } from '../../lib/seats';
 import { shortAddress } from '../../components';
+import { NameDisplay } from './NameDisplay';
 
 export function ActorCard({
   seat,
@@ -79,7 +80,7 @@ function ClaimedBody({ claim }: { claim: SeatClaim }) {
   return (
     <div className="actor-card-body">
       <p className="muted">Person Smart Agent</p>
-      <code>{shortAddress(claim.personAgent)}</code>
+      <code><NameDisplay address={claim.personAgent} /></code>
       {passkey && (
         <>
           <p className="muted" style={{ marginTop: 6 }}>Passkey identity (custodian)</p>

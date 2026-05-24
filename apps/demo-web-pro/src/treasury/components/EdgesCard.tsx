@@ -13,6 +13,7 @@ import { loadActiveSeat, loadSeats } from '../../lib/seats';
 import { getPasskeyForSeat } from '../../lib/passkey';
 import { executeCallFromAgent } from '../../lib/execute-call';
 import { config } from '../../config';
+import { NameDisplay } from './NameDisplay';
 
 /**
  * Read-side companion to ProposeEdgeForm. Shows the active PSA's
@@ -52,7 +53,7 @@ export function EdgesCard() {
         <strong style={{ fontSize: 14 }}>Your PSA's outbound edges</strong>
         {psaInfo ? (
           <code style={{ fontSize: 11, color: '#6b7280' }}>
-            {psaInfo.personAgent.slice(0, 6)}…{psaInfo.personAgent.slice(-4)}
+            <NameDisplay address={psaInfo.personAgent} />
           </code>
         ) : null}
       </div>
@@ -142,7 +143,7 @@ function EdgeRow({
     >
       <code style={{ fontSize: 11 }}>{typeName}</code>
       <code style={{ fontSize: 11 }}>
-        → {edge.object.slice(0, 6)}…{edge.object.slice(-4)}
+        → <NameDisplay address={edge.object} />
       </code>
       <span style={{ fontSize: 11, color: isTerminal ? '#dc2626' : '#059669' }}>{statusName}</span>
       <button
