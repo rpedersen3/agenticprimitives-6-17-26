@@ -22,7 +22,12 @@ import { config } from '../config';
 // is fine only for local anvil; in prod the env var is always set.
 const publicClient = createPublicClient({
   chain: baseSepolia,
-  transport: http(config.rpcUrl),
+  // JSON-RPC batching: the custody graph + dashboard fire several reads
+  // in the same tick (Promise.all of isCustodian / approvalsRequired /
+  // balance across four agents). Batching collapses them into ONE POST
+  // to the worker's /rpc passthrough → one upstream Alchemy call instead
+  // of N, which is what was tripping Alchemy's per-second 429s.
+  transport: http(config.rpcUrl, { batch: true }),
 });
 
 export interface AgentAccountInitParams {

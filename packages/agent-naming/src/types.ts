@@ -117,29 +117,8 @@ export interface AgentNamingClientOpts {
   registry: Address;
   /** AgentNameUniversalResolver contract address for this chain. */
   universalResolver: Address;
-  /**
-   * Lower bound for `eth_getLogs` scans used by reverse-resolve name
-   * reconstruction. When the client doesn't know the exact registry
-   * deployment block, set this to a value safely BEFORE deployment
-   * to bound the chunked scan. Default: `0n` (chunked scan walks back
-   * from `latest` in `getLogsChunkSize`-block windows; many providers
-   * — Alchemy, QuickNode — reject single calls wider than ~10k blocks
-   * with a 400, so the chunking is REQUIRED in practice on Base /
-   * Optimism / mainnet whether or not this is set).
-   */
-  fromBlock?: bigint;
-  /**
-   * Block-window size for chunked backward `eth_getLogs` scans.
-   * Default 9n — matches Alchemy's strictest tier ("Free" caps at 10
-   * blocks per request). Bump higher (~500-10_000) if you point at
-   * a paid Alchemy / QuickNode / public RPC with larger ranges.
-   */
-  getLogsChunkSize?: bigint;
-  /**
-   * Maximum number of chunks to scan before giving up. Default 250.
-   * 250 × 9 = 2_250 blocks ≈ 75 min on Base Sepolia (2s blocks).
-   * Adequate for a fresh-registration UX. Bump higher for older
-   * deployments; lower for tighter latency budgets.
-   */
-  getLogsMaxChunks?: number;
+  // No `eth_getLogs` knobs: reverse resolution is a single
+  // `reverseResolveString` view call (ADR-0013, no-fallback doctrine).
+  // The previous chunked log-walk fallback was removed — it was the
+  // sole getLogs walker in any product read path.
 }

@@ -5,7 +5,7 @@
 
 This document is the answer to "how do we decide what goes in one package vs. two."
 
-**Identity doctrine (load-bearing):** [ADR-0010](../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md) (canonical Smart Agent identifier), [ADR-0011](../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) (credentials rotate; identity persists), [spec 220](./220-agent-identity-bootstrap.md) (bootstrap sequence).
+**Identity doctrine (load-bearing):** [ADR-0010](../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md) (canonical Smart Agent identifier), [ADR-0011](../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) (credentials rotate; identity persists), [ADR-0012](../docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md) (no log scans in read paths), [spec 220](./220-agent-identity-bootstrap.md) (bootstrap sequence).
 
 ---
 
@@ -86,6 +86,19 @@ Every person, org, service, treasury, or role agent has **one** canonical identi
 **Bootstrap** (spec 220) is composed at the **app** layer: deploy SA → register naming facet → enroll custodians → optional profile facet → optional external facets. No single package owns the full orchestration.
 
 **CREATE2 salt** derives from auth methods + stable user scope only — **never** from a chosen `.agent` name or profile label. `identity-auth`'s `deriveSaltFromLabel` is a user-scope input, not a name registration.
+
+### RPC read discipline ([ADR-0012](../docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md))
+
+Product-facing reads in `packages/*` and `apps/*` use **`eth_call` / `readContract` only** — not `eth_getLogs`, `queryFilter`, or `watchContractEvent` in hot paths. Chunking log ranges does not make log scans acceptable.
+
+| Need | Use |
+| --- | --- |
+| Current on-chain state | `readContract` / multicall |
+| Human-readable reverse strings | On-chain stored label, or a **dedicated indexer** (ingest events once; query HTTP/DB), or app cache after write |
+| Chain history / audit timelines | Indexer service — not inline RPC log walks in capability packages |
+| One-off forensics | `scripts/` only — not imported by packages |
+
+**Known exception (remove, do not extend):** `agent-naming` `reverseResolve` → `_reconstructName` uses chunked `getLogs` until registry stores plaintext labels or a naming indexer exists.
 
 ---
 

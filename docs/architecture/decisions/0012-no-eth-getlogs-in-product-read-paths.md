@@ -66,16 +66,18 @@ To remove log dependence, pick one:
 3. **Weaker API:** return namehash / node only from chain; human string from
    cache (document in API).
 
-## Known exception (transitional)
+## Known exception (transitional) — RESOLVED 2026-05-24
 
-| Location | Violation | Exit criteria |
-| --- | --- | --- |
-| `packages/agent-naming/src/client.ts` — `_reconstructName`, `_findRegisteredEvent`, `_findRootEvent` | Chunked `getLogs` after `reverseResolve` `readContract` | Remove when [spec/222](../../../specs/222-ens-aligned-reverse-resolution.md) lands (on-chain label storage). Until then: do not add second log walkers. |
+The single transitional exception — `_reconstructName` / `_findRegisteredEvent`
+/ `_findRootEvent` / `_iterChunks` in `packages/agent-naming/src/client.ts` —
+**has been removed.** [spec/222](../../../specs/222-ens-aligned-reverse-resolution.md)
+`reverseResolveString` landed, so `reverseResolve` is now a single view call with
+no log walk and no fallback (see [ADR-0013](./0013-no-silent-fallbacks.md)).
+There are now **zero** `eth_getLogs` walkers in any product read path.
 
-Do not copy `_iterChunks` into other packages. If a second feature needs event
-history (audit feed, treasury timeline, edge log), design an indexer first or
-factor shared **indexer-client** utilities — not RPC log walks in capability
-packages.
+If a future feature needs event history (audit feed, treasury timeline, edge
+log), design an indexer first or factor shared **indexer-client** utilities —
+never reintroduce an RPC log walk in a capability package.
 
 The exit path: ENS stores the reverse string on a dedicated resolver and
 returns it via a single `readContract` — no event walk required. Our

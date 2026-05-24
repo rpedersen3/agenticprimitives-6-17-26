@@ -24,12 +24,22 @@ export function useAgentNamingClient(): AgentNamingClient | null {
   }, []);
 }
 
-/** Reverse-resolve an address to its primary `.agent` name (live read). */
-export function useAgentName(address: `0x${string}` | undefined) {
+/**
+ * Reverse-resolve an address to its primary `.agent` name (live read).
+ *
+ * `enabled` lets callers skip the chain read when they already have the
+ * name from the synchronous name cache (see `NameDisplay`). Per
+ * name-cache.ts the cache is the primary render source; the chain read
+ * is only a fallback for addresses we didn't mint locally.
+ */
+export function useAgentName(
+  address: `0x${string}` | undefined,
+  opts?: { enabled?: boolean },
+) {
   const client = useAgentNamingClient();
   return useQuery({
     queryKey: ['agent-name', address?.toLowerCase() ?? null],
-    enabled: !!client && !!address,
+    enabled: !!client && !!address && (opts?.enabled ?? true),
     queryFn: async () => {
       if (!client || !address) return null;
       return await client.reverseResolve(address);

@@ -360,7 +360,34 @@ These are enforced by the spec + the client + (Phase 3) the contracts:
 
 ---
 
-## 12. Acceptance criteria
+## 12. Read-path discipline — no `eth_getLogs` in product reads
+
+Binding: [ADR-0012](../docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md).
+
+| Operation | Allowed mechanism |
+| --- | --- |
+| `resolveName` | `readContract` via universal resolver |
+| `getRecords` | `readContract` (resolver + batch reads) |
+| `reverseResolve` — round-trip / squat check | `readContract` (`primaryName` → node; forward `addr` check on chain) |
+| `reverseResolve` — dotted string | **Must not** rely on `eth_getLogs` long term |
+
+**Current debt:** Phase 2 client `_reconstructName` walks `NameRegistered` /
+`RootInitialized` logs (chunked) because `NameRecord` stores `labelhash` only,
+not plaintext `label`. This is a **transitional violation** — do not add second
+log walkers; do not copy the pattern to other packages.
+
+**Exit (pick one):**
+
+1. **Contract:** persist `string label` (or `reverseName(address)`) in
+   `AgentNameRegistry` so reverse string reconstruction is `readContract`-only.
+2. **Indexer:** naming indexer ingests registration events; SDK or app queries
+   indexer (or injects `NameContext` after local write).
+
+Until exit, demos may also cache `address → name` after `setPrimaryName`.
+
+---
+
+## 13. Acceptance criteria
 
 For Phase 1 to be considered complete:
 - [ ] `pnpm --filter @agenticprimitives/agent-naming typecheck` passes.

@@ -25,6 +25,8 @@ pnpm-workspace monorepo: publishable capability packages + Foundry contracts + d
 - **`AgentAccount.sol` is a thin ERC-7579 modular core.** Threshold / guardians / spend / sessions are modules, not inlined. See `specs/209` + memory `feedback_erc7579_module_architecture`.
 - **No third-party multi-sig.** We ship our own; port patterns from Safe (signature packing) but no runtime deps.
 - **Per-package context budget:** `CLAUDE.md` ≤ 60 lines, `AUDIT.md` ≤ 150 lines, `README.md` ≤ 1800 words. If you're tempted to bloat one, fix the package shape.
+- **No `eth_getLogs` in product read paths.** Package and app hot paths use `readContract` only; chain history and human-readable reverse strings come from on-chain storage, an explicit indexer, or app cache — never inline log scans ([ADR-0012](docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md)). No exceptions: the last walker (`agent-naming` `reverseResolve` log fallback) was removed once spec/222 `reverseResolveString` landed.
+- **No silent fallbacks.** A read/auth path has exactly ONE mechanism. If the canonical path has no answer it returns `null`/empty or throws — it does NOT escalate to a second, different, more expensive mechanism (`try fast catch slow`, empty-result → log walk, strong-check → weak-check). Empty is an answer, not a trigger. Bounded retries of the *same* call and cache-first reads (cache holds the canonical answer) are fine; switching mechanism is not ([ADR-0013](docs/architecture/decisions/0013-no-silent-fallbacks.md)).
 
 ## Conventions
 

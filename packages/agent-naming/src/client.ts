@@ -1,4 +1,4 @@
-import { createPublicClient, http, parseAbiItem, type AbiEvent, type Address, type Hex, type PublicClient, type WalletClient } from 'viem';
+import { createPublicClient, http, type Address, type Hex, type PublicClient, type WalletClient } from 'viem';
 import {
   agentNameAttributeResolverAbi,
   agentNameRegistryAbi,
@@ -24,7 +24,6 @@ import type {
   SetSubregistryInput,
 } from './types';
 import { namehash, ZERO_NODE } from './namehash';
-import { normalizeAgentName } from './normalize';
 
 /**
  * Optional per-call submission context. When provided, the write
@@ -48,12 +47,12 @@ export interface WriteContext {
  * Round-trip discipline (security invariant from spec § 10):
  *   `reverseResolve(agent)` returns a name ONLY when the on-chain
  *   `resolveName(name) === agent`. The universal resolver enforces this
- *   on chain; we additionally reconstruct the dotted name off chain by
- *   walking the `NameRegistered` event log up the parent chain.
+ *   on chain and returns the full dotted name in a single view call.
  *
- * READ-PATH DEBT (ADR-0012): log walks are forbidden in product read paths
- * except this transitional `_reconstructName` path. Exit: on-chain label
- * storage or a naming indexer — do not add second log walkers.
+ * NO-FALLBACK DOCTRINE (ADR-0012 + ADR-0013): every read here is one
+ * `readContract`. There is NO `eth_getLogs` walk, no "try fast path then
+ * fall back to log scan." If the resolver has no answer, the read returns
+ * null/empty — it does not reach for an alternative path.
  */
 export class AgentNamingClient {
   private readonly publicClient: PublicClient;
@@ -95,38 +94,18 @@ export class AgentNamingClient {
    * Returns `null` when no primary name is set OR the round-trip
    * check fails on chain (squat protection).
    *
-   * The contract returns the namehash node; we walk up the parent
-   * chain via `NameRegistered` events to reconstruct the dotted
-   * label string.
+   * Single on-chain read: `reverseResolveString` returns the full
+   * dotted name; the resolver concatenates ancestor labels via view
+   * calls. No SDK-side log walk, no fallback path (ADR-0013).
    */
   async reverseResolve(agent: Address): Promise<string | null> {
-    // Spec/222 fast path: single readContract returns the full dotted
-    // name (the contract walks the parent chain via view calls and
-    // concatenates labels — no SDK-side eth_getLogs, no rate limits).
-    try {
-      const fullName = (await this.publicClient.readContract({
-        address: this.opts.universalResolver,
-        abi: agentNameUniversalResolverAbi,
-        functionName: 'reverseResolveString',
-        args: [agent],
-      })) as string;
-      if (fullName && fullName.length > 0) return fullName;
-    } catch {
-      // Older deployments without reverseResolveString — fall through
-      // to the legacy node + log-walk path.
-    }
-
-    // Legacy path (pre-spec/222 deployments only): get the node, then
-    // reconstruct via NameRegistered events. Subject to provider
-    // getLogs limits — see ADR-0012.
-    const node = await this.publicClient.readContract({
+    const fullName = (await this.publicClient.readContract({
       address: this.opts.universalResolver,
       abi: agentNameUniversalResolverAbi,
-      functionName: 'reverseResolve',
+      functionName: 'reverseResolveString',
       args: [agent],
-    });
-    if (node === ZERO_NODE) return null;
-    return await this._reconstructName(node);
+    })) as string;
+    return fullName && fullName.length > 0 ? fullName : null;
   }
 
   /**
@@ -351,136 +330,4 @@ export class AgentNamingClient {
     throw lastErr instanceof Error ? lastErr : new Error('[agent-naming] _submit: exceeded retries');
   }
 
-  // ─── Internals ──────────────────────────────────────────────────
-
-  /**
-   * Reconstruct the dotted name for `node` by walking up the parent
-   * chain via `NameRegistered` events. Each event carries the label
-   * as its `label` field (indexed by `node`), so a single
-   * `getLogs` per ancestor returns the label deterministically.
-   *
-   * TRANSITIONAL (ADR-0012): product reads should not use eth_getLogs.
-   * Replace with on-chain label storage or a naming indexer.
-   *
-   * Returns `null` if any ancestor's event is missing (would indicate
-   * a broken chain, e.g. stale state where a node exists but
-   * `NameRegistered` was never emitted — shouldn't happen).
-   */
-  private async _reconstructName(startNode: Hex): Promise<string | null> {
-    const labels: string[] = [];
-    let current = startNode;
-    const registeredEvent = parseAbiItem(
-      'event NameRegistered(bytes32 indexed node, bytes32 indexed parent, string label, address owner, address resolver, uint64 expiry)',
-    );
-    const rootEvent = parseAbiItem(
-      'event RootInitialized(bytes32 indexed rootNode, string label, address indexed owner, bytes32 kind)',
-    );
-    for (let depth = 0; depth < 10; depth++) {
-      if (current === ZERO_NODE) break;
-      const registered = await this._findRegisteredEvent(current, registeredEvent);
-      if (registered) {
-        labels.push(registered.label);
-        current = registered.parent;
-        continue;
-      }
-      const root = await this._findRootEvent(current, rootEvent);
-      if (root) {
-        labels.push(root);
-        break;
-      }
-      // Neither a NameRegistered nor a RootInitialized event for this
-      // node was found within the chunked scan window. Could mean:
-      // (a) the node really doesn't exist; (b) the event predates our
-      // scan lower bound. Caller treats as "name unresolvable".
-      return null;
-    }
-    if (labels.length === 0) return null;
-    const name = labels.join('.');
-    return normalizeAgentName(name) === name ? name : name.toLowerCase();
-  }
-
-  /**
-   * Walk backwards from `latest` in `getLogsChunkSize`-block windows
-   * until a `NameRegistered(node = target)` log is found, or until
-   * `getLogsMaxChunks` chunks have been scanned, or until the lower
-   * bound `fromBlock` is reached. Returns `null` when not found.
-   *
-   * Required because Alchemy / QuickNode / Infura cap a single
-   * `eth_getLogs` call at 10k blocks — `fromBlock: 0n` on Base Sepolia
-   * (25M+ blocks) gets a 400 back, so we MUST chunk.
-   */
-  private async _findRegisteredEvent(
-    node: Hex,
-    event: AbiEvent,
-  ): Promise<{ label: string; parent: Hex } | null> {
-    for await (const { fromBlock, toBlock } of this._iterChunks()) {
-      try {
-        const logs = await this.publicClient.getLogs({
-          address: this.opts.registry,
-          event,
-          args: { node },
-          fromBlock,
-          toBlock,
-        });
-        if (logs.length > 0) {
-          const args = logs[0]!.args as { label?: string; parent?: Hex };
-          if (args.label !== undefined) {
-            return { label: args.label, parent: (args.parent ?? ZERO_NODE) as Hex };
-          }
-        }
-      } catch {
-        // Ignore per-chunk RPC errors (rate limits, range caps, transient
-        // 5xx) and keep scanning. _reconstructName returns null only if
-        // EVERY chunk fails to find the event.
-      }
-    }
-    return null;
-  }
-
-  private async _findRootEvent(
-    node: Hex,
-    event: AbiEvent,
-  ): Promise<string | null> {
-    for await (const { fromBlock, toBlock } of this._iterChunks()) {
-      try {
-        const logs = await this.publicClient.getLogs({
-          address: this.opts.registry,
-          event,
-          args: { rootNode: node },
-          fromBlock,
-          toBlock,
-        });
-        if (logs.length > 0) {
-          const args = logs[0]!.args as { label?: string };
-          if (args.label !== undefined) return args.label;
-        }
-      } catch {
-        // Ignore per-chunk errors (see _findRegisteredEvent).
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Generator yielding chunked [fromBlock, toBlock] ranges walking
-   * backwards from `latest` to `opts.fromBlock` (default 0n), in
-   * `getLogsChunkSize`-block windows (default 10_000), capped at
-   * `getLogsMaxChunks` chunks (default 50). Each chunk is a single
-   * eth_getLogs call.
-   */
-  private async *_iterChunks(): AsyncIterable<{ fromBlock: bigint; toBlock: bigint }> {
-    const chunkSize = this.opts.getLogsChunkSize ?? 9n;
-    const maxChunks = this.opts.getLogsMaxChunks ?? 250;
-    const lowerBound = this.opts.fromBlock ?? 0n;
-    const latest = await this.publicClient.getBlockNumber();
-    let toBlock = latest;
-    for (let i = 0; i < maxChunks; i++) {
-      if (toBlock < lowerBound) break;
-      const tentativeFrom = toBlock + 1n > chunkSize ? toBlock + 1n - chunkSize : 0n;
-      const fromBlock = tentativeFrom < lowerBound ? lowerBound : tentativeFrom;
-      yield { fromBlock, toBlock };
-      if (fromBlock === lowerBound || fromBlock === 0n) break;
-      toBlock = fromBlock - 1n;
-    }
-  }
 }

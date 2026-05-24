@@ -11,6 +11,8 @@ The drift mode this prevents: an agent doesn't know *why* a boundary is where it
 - [`0003-tool-policy-protocol-agnostic.md`](./0003-tool-policy-protocol-agnostic.md) — why `tool-policy` cannot import MCP / A2A / LangChain.
 - [`0004-mcp-runtime-as-middleware.md`](./0004-mcp-runtime-as-middleware.md) — why `mcp-runtime` is middleware on the official MCP SDK, not a replacement.
 - [`0005-monorepo-with-product-boundaries.md`](./0005-monorepo-with-product-boundaries.md) — why we're a monorepo of independently-consumable packages, not a polyrepo and not a single SDK.
+- [`0012-no-eth-getlogs-in-product-read-paths.md`](./0012-no-eth-getlogs-in-product-read-paths.md) — no `eth_getLogs` in package/app read paths; use `readContract` or an indexer.
+- [`0013-no-silent-fallbacks.md`](./0013-no-silent-fallbacks.md) — one mechanism per read/auth path; empty is an answer, never a trigger to escalate to a second, more expensive path.
 
 ## Status discipline
 

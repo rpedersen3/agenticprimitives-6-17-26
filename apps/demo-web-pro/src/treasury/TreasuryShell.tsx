@@ -57,6 +57,7 @@ import {
   readIsCustodian,
   readPaymasterDeposit,
 } from '../lib/chain-reads';
+import { loadAllDelegations } from '../lib/delegations';
 import { formatEther } from 'viem';
 
 export function TreasuryShell() {
@@ -224,16 +225,11 @@ export function TreasuryShell() {
     if (Object.keys(seats).length > 0) set.add('create-alice');
     if (org) set.add('create-org');
     if (treasury) set.add('create-treasury');
-    // Act 5 = at least 2 delegations issued (alice + bob).
+    // Act 5 issues all eight Variant A envelopes through `lib/delegations`
+    // (the `:delegations` store). Read it via the same lib Act 5 writes to
+    // so the completion check can't drift onto a stale storage key.
     try {
-      // Lazy require to keep this hook synchronous.
-      const raw = localStorage.getItem('agenticprimitives:demo-web-pro:treasury-delegations');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length >= 8) {
-          set.add('delegate-treasury');
-        }
-      }
+      if (loadAllDelegations().length >= 8) set.add('delegate-treasury');
     } catch { /* tolerate */ }
     return set;
   }, [seats, org, treasury, chainCompletedSlugs]);

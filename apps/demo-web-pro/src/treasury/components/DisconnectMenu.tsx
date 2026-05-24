@@ -26,7 +26,6 @@ import { clearPasskeyForSeat } from '../../lib/passkey';
 import { clearDemoState } from '../../lib/demo-state';
 import { clearAllCachedNames } from '../../lib/name-cache';
 import { clearDelegations } from '../../lib/delegations';
-import { clearTreasuryDelegations } from '../../lib/treasury-delegations';
 
 export function DisconnectMenu({
   activeSeatId,
@@ -78,7 +77,6 @@ export function DisconnectMenu({
     clearDemoState();         // org + treasury records
     clearAllCachedNames();    // address → .agent name cache
     clearDelegations();       // act-5 delegation envelopes
-    clearTreasuryDelegations(); // treasury stewardship delegations
     // Defensive nuke: any other key under our prefix that we might
     // have missed. Demo state lives entirely under this namespace, so
     // wiping the whole prefix is correct + future-proof for any new

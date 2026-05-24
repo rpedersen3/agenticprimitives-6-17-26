@@ -37,10 +37,14 @@ export function NameDisplay({
     return () => window.removeEventListener(NAME_CACHE_EVENT, refresh);
   }, [address]);
 
-  // Single-call reverse (spec/222). Returns null when the SA has no
-  // primary, the round-trip fails (squat protection), or any ancestor
-  // label is un-backfilled.
-  const { data: onChain } = useAgentName(address);
+  // Single-call reverse (spec/222) — ONLY when the cache doesn't
+  // already have the name. The cache is the primary display source
+  // (name-cache.ts); flows that mint/claim names and the bounded
+  // boot-time reverse-resolve (App.tsx) populate it. Skipping the read
+  // when cached means the four demo agents render with zero RPC — no
+  // per-render reverse-resolve storm. One clean `reverseResolveString`
+  // (no log walk, ADR-0013) for any address we didn't mint locally.
+  const { data: onChain } = useAgentName(address, { enabled: !cached });
 
   // Prime the cache the first time chain returns a name — speeds up
   // future renders + lets the modal's "Primary name (cache)" row
