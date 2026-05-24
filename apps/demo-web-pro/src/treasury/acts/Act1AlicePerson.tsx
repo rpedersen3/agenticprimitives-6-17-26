@@ -455,6 +455,11 @@ function Act1Body({ seat, onComplete }: { seat: SeatDef; onComplete: () => void 
         open={dialogOpen}
         stage={stage}
         title={`Connect as ${seat.name}`}
+        credentialKind={
+          authChoice === 'passkey' ? 'passkey'
+            : authChoice === 'siwe' ? 'wallet'
+            : 'credential'
+        }
         scopeList={[
           `Sign every action taken by ${seat.name}\'s Person Smart Agent on Base Sepolia.`,
           `Authorize gasless transactions via the paymaster on ${seat.name}\'s behalf.`,

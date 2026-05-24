@@ -52,6 +52,12 @@ export interface ConnectionDialogProps {
   acceptDisabled?: boolean;
   /** Optional content rendered above the scope/limits — used by Act 1 for the auth-method picker. */
   preConsentSlot?: ReactNode;
+  /**
+   * Credential family being granted in this ceremony. Drives the scope
+   * heading label so SIWE flows don't read "This passkey will be able
+   * to". Default 'credential' — neutral, works for either path.
+   */
+  credentialKind?: 'passkey' | 'wallet' | 'credential';
 
   // ─── Working stage ─────────────────────────────────────────────────
   /** One-line phase label. e.g. "Registering Alice\'s passkey…". */
@@ -131,7 +137,7 @@ export function ConnectionDialog(props: ConnectionDialogProps) {
 function ConsentBody({
   scopeList = [],
   grantee = 'this Smart Agent',
-  duration = 'as long as the passkey exists',
+  duration = 'as long as your credential exists',
   limits = [],
   revokeNote,
   onAccept,
@@ -139,7 +145,12 @@ function ConsentBody({
   acceptLabel = 'Allow',
   acceptDisabled = false,
   preConsentSlot,
+  credentialKind = 'credential',
 }: ConnectionDialogProps) {
+  const scopeHeading =
+    credentialKind === 'passkey' ? 'This passkey will be able to'
+      : credentialKind === 'wallet' ? 'This wallet will be able to'
+      : 'This authority will be able to';
   return (
     <div className="connection-dialog__body">
       {preConsentSlot}
@@ -148,7 +159,7 @@ function ConsentBody({
       </p>
       {scopeList.length > 0 && (
         <section aria-label="What this permits">
-          <h3>This passkey will be able to</h3>
+          <h3>{scopeHeading}</h3>
           <ul className="connection-dialog__scope">
             {scopeList.map((s, i) => (
               <li key={i}>{s}</li>
