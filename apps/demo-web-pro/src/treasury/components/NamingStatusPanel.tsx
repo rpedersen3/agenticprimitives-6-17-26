@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAgentNamingClient } from '../../lib/use-agent-naming';
 import { config } from '../../config';
+import { RegisterNameForm } from './RegisterNameForm';
 
 /**
  * Status panel for the Agent Naming Service. Shows:
@@ -15,6 +16,7 @@ import { config } from '../../config';
  */
 export function NamingStatusPanel() {
   const client = useAgentNamingClient();
+  const queryClient = useQueryClient();
 
   const { data: demos, isLoading, error } = useQuery({
     queryKey: ['naming-status', config.agentNameRegistry ?? null],
@@ -116,10 +118,12 @@ export function NamingStatusPanel() {
           </div>
         ))}
       </div>
-      <div style={{ marginTop: 8, color: '#9ca3af', fontSize: 11 }}>
-        Per-user name registration ships in Phase 4 (writes via the actor's
-        CustodyPolicy quorum + ERC-1271).
-      </div>
+      <RegisterNameForm
+        onRegistered={() => {
+          // Force a re-fetch so the new name shows up in the list.
+          queryClient.invalidateQueries({ queryKey: ['naming-status'] });
+        }}
+      />
     </div>
   );
 }
