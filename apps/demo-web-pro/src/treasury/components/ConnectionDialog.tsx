@@ -267,16 +267,66 @@ function SuccessBody({
 
 function ErrorBody({ errorMessage, onRetry, onCancel, onSwitchWallet }: ConnectionDialogProps) {
   // Wallet-mismatch UX: when the error spells out "Wrong MetaMask
-  // account" the user shouldn't have to leave the page. Surface a
-  // dedicated button that opens MetaMask's account picker via the
-  // injected provider then re-runs the action.
+  // account" the user shouldn't have to leave the page. Pull the
+  // target address out of the message so the button + hint can name
+  // it explicitly — pasting hex is error-prone.
   const isWalletMismatch =
     !!errorMessage && /wrong metamask account/i.test(errorMessage);
+  // Match "switch to 0x<40 hex>" — case-insensitive.
+  const targetMatch = errorMessage?.match(/switch to (0x[0-9a-fA-F]{40})/);
+  const targetAddr = targetMatch?.[1];
+  const shortTarget = targetAddr ? `${targetAddr.slice(0, 6)}…${targetAddr.slice(-4)}` : '';
+
+  const copyTarget = () => {
+    if (!targetAddr) return;
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(targetAddr);
+    }
+  };
+
   return (
     <div className="connection-dialog__body">
       <p className="connection-dialog__error" role="alert">
         <strong>Couldn\'t complete.</strong> {errorMessage ?? 'Unknown error.'}
       </p>
+      {isWalletMismatch && targetAddr && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: 8,
+            background: '#fef3c7',
+            border: '1px solid #fcd34d',
+            borderRadius: 6,
+            fontSize: 12,
+            color: '#78350f',
+          }}
+        >
+          <div>
+            <strong>You need MetaMask on:</strong>{' '}
+            <code style={{ fontSize: 11 }}>{targetAddr}</code>
+            <button
+              type="button"
+              onClick={copyTarget}
+              style={{
+                marginLeft: 6,
+                padding: '1px 6px',
+                fontSize: 10,
+                background: 'transparent',
+                border: '1px solid #92400e',
+                borderRadius: 3,
+                cursor: 'pointer',
+              }}
+              title="Copy address"
+            >
+              copy
+            </button>
+          </div>
+          <div style={{ marginTop: 4, opacity: 0.85 }}>
+            If MetaMask doesn't show this account, you may need to import
+            it (its private key) into MetaMask first.
+          </div>
+        </div>
+      )}
       <div className="connection-dialog__actions">
         {onCancel && (
           <button type="button" className="secondary" onClick={onCancel}>
@@ -293,7 +343,7 @@ function ErrorBody({ errorMessage, onRetry, onCancel, onSwitchWallet }: Connecti
             autoFocus
             data-testid="connection-dialog-switch-wallet"
           >
-            Switch MetaMask account
+            {targetAddr ? `Switch to ${shortTarget}` : 'Switch MetaMask account'}
           </button>
         )}
         {onRetry && (
