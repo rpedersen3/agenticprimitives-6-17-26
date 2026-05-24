@@ -261,6 +261,24 @@ export async function claimPsaName(args: {
   const fullName = `${uniqueLabel}.demo.agent`;
   const node = namehash(fullName);
 
+  // Step 0.5 — pre-poll SA bytecode visibility. The bundler-side
+  // simulation reads `code(sender)`; Alchemy's load-balanced pool can
+  // serve stale views for a few seconds after factory.createAgentAccount
+  // mined, giving us a spurious AA20. Wait until we can see code from
+  // OUR read RPC before even attempting the userOp.
+  {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      try {
+        const code = await publicClient.getCode({ address: personAgent });
+        if (code && code !== '0x') break;
+      } catch {
+        // Ignore RPC transient errors.
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+
   // Step 1 — ATOMIC BATCH: subregistry.register(label, sa) +
   // registry.setPrimaryName(node) in ONE userOp via
   // AgentAccount.executeBatch. Both calls land in the same on-chain
@@ -271,6 +289,11 @@ export async function claimPsaName(args: {
   //   - the inter-step propagation wait that was costing ~6-12s
   // If either inner call reverts, the whole batch reverts — there is
   // never a "register landed but setPrimaryName didn't" half-state.
+  //
+  // Retry on AA20 / AA25 — the bundler's pre-flight simulation RPC
+  // can serve stale views (per the test-name-claim-eoa rig, this
+  // happens routinely on Base Sepolia even after the deploy receipt
+  // is in). 5 × 8s = up to 40s of patience.
   let registerTx: Hex | undefined;
   let primaryTx: Hex | undefined;
   {
@@ -287,29 +310,42 @@ export async function claimPsaName(args: {
       { to: registerCall.to as Address, value: registerCall.value, data: registerCall.data as Hex },
       { to: setPrimaryCall.to as Address, value: setPrimaryCall.value, data: setPrimaryCall.data as Hex },
     ]);
-    console.log('[claim-psa-name] v7-atomic-batch', {
+    console.log('[claim-psa-name] v8-atomic-batch+retry', {
       sender: personAgent,
       label: uniqueLabel,
       fullName,
       node,
-      registerTo: registerCall.to,
-      registerSelector: (registerCall.data as Hex).slice(0, 10),
-      setPrimaryTo: setPrimaryCall.to,
-      setPrimarySelector: (setPrimaryCall.data as Hex).slice(0, 10),
       batchSelector: batchCallData.slice(0, 10),
-      batchCallDataLen: batchCallData.length,
     });
-    const result = await executeCallFromAgent({
-      sender: personAgent,
-      passkey,
-      callData: batchCallData,
-    });
-    console.log('[claim-psa-name] batch result', result);
-    if (!result.ok) {
-      const reason = (result.reason ?? '').toLowerCase();
-      // AlreadyClaimed → this SA already registered a name in a prior
-      // run that left a stranded record. Retry the setPrimaryName step
-      // alone (the name already exists, the SA already owns it).
+
+    const MAX_ATTEMPTS = 5;
+    const RETRY_DELAY_MS = 8000;
+    let lastErr = '';
+    let result: Awaited<ReturnType<typeof executeCallFromAgent>> | null = null;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      result = await executeCallFromAgent({
+        sender: personAgent,
+        passkey,
+        callData: batchCallData,
+      });
+      console.log(`[claim-psa-name] batch attempt ${attempt + 1}`, result);
+      if (result.ok) break;
+      lastErr = (result.reason ?? result.error ?? '').toString();
+      const lowered = lastErr.toLowerCase();
+      const transient =
+        lowered.includes('aa20') ||
+        lowered.includes('account not deployed') ||
+        lowered.includes('aa25') ||
+        lowered.includes('invalid account nonce') ||
+        lowered.includes('replacement transaction underpriced');
+      if (transient && attempt + 1 < MAX_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
+      break;
+    }
+    if (!result || !result.ok) {
+      const reason = (result?.reason ?? '').toLowerCase();
       if (reason.includes('alreadyclaimed')) {
         const fallback = await sendSetPrimaryName(personAgent, passkey, node);
         if (!fallback.ok) return { ok: false, reason: fallback.reason };
@@ -317,7 +353,7 @@ export async function claimPsaName(args: {
       } else if (reason.includes('nodealreadyexists')) {
         return { ok: false, reason: `"${fullName}" was taken by another caller between discovery and submit; retry.` };
       } else {
-        return { ok: false, reason: result.reason ?? result.error };
+        return { ok: false, reason: `batch claim failed after retries: ${lastErr}` };
       }
     } else {
       registerTx = result.transactionHash;
