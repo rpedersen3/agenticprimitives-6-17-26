@@ -31,13 +31,15 @@ describe('AgentIdentityClient constructor', () => {
     );
   });
 
-  it('publishProfile throws I Phase 4', async () => {
+  it('publishProfile requires a WriteContext (walletClient)', async () => {
     const c = new AgentIdentityClient({ rpcUrl: 'http://localhost:8545', chainId: 84532, profileResolver: RESOLVER });
     await expect(
+      // @ts-expect-error — ctx required at runtime
       c.publishProfile({
         agent: '0x0000000000000000000000000000000000000001',
         profile: { type: 'person', displayName: 'A' },
+        metadataURI: 'ipfs://x',
       }),
-    ).rejects.toThrow(/I Phase 4/);
+    ).rejects.toThrow();
   });
 });

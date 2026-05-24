@@ -1,5 +1,13 @@
-import { createPublicClient, http, type Address, type Hex, type PublicClient } from 'viem';
+import { createPublicClient, http, type Address, type Hex, type PublicClient, type WalletClient } from 'viem';
 import { agentRelationshipAbi } from './abis';
+import {
+  buildAddRoleCall,
+  buildConfirmEdgeCall,
+  buildProposeEdgeCall,
+  buildRemoveRoleCall,
+  buildRevokeEdgeCall,
+} from './calls';
+import { computeEdgeId } from './edge-id';
 import type {
   AgentRelationshipsClientOpts,
   ConfirmEdgeInput,
@@ -11,6 +19,17 @@ import type {
 } from './types';
 import { EdgeStatus } from './types';
 import { UnknownRelationshipTypeError } from './errors';
+
+/**
+ * Optional per-call submission context. When provided, the write
+ * method submits the encoded call via `walletClient.sendTransaction`.
+ * Callers who want to compose into AgentAccount.execute / CustodyPolicy
+ * ceremonies / ERC-4337 UserOps should use the pure builders in
+ * `./calls` directly.
+ */
+export interface WriteContext {
+  walletClient: WalletClient;
+}
 
 const ZERO = '0x0000000000000000000000000000000000000000' as const;
 const ZERO_NODE = '0x0000000000000000000000000000000000000000000000000000000000000000' as const;
@@ -122,28 +141,138 @@ export class AgentRelationshipsClient {
     });
   }
 
-  // ─── Writes (wire in Phase 4) ────────────────────────────────────
+  // ─── Writes (Phase 4 — live) ─────────────────────────────────────
 
-  async proposeEdge(input: ProposeEdgeInput): Promise<Hex> {
-    void input;
-    throw new Error('R Phase 4 — wire to AgentRelationship.proposeEdge via ERC-1271 auth');
+  /**
+   * Propose a new edge. The walletClient's account MUST equal
+   * `input.subject` — the contract enforces `msg.sender == subject`.
+   * Returns the propose tx hash. The edgeId can be computed
+   * off-chain via `computeEdgeId(subject, object, relationshipType)`
+   * (matches the on-chain `keccak256(abi.encodePacked(...))`
+   * derivation).
+   *
+   * For PSA-controlled proposals (subject is a Smart Agent gated by
+   * CustodyPolicy), use `buildProposeEdgeCall` directly and compose
+   * into your AgentAccount.execute / CustodyPolicy ceremony.
+   */
+  async proposeEdge(input: ProposeEdgeInput, ctx: WriteContext): Promise<Hex> {
+    const call = buildProposeEdgeCall({
+      relationships: this.relationships,
+      subject: input.subject,
+      object: input.object,
+      relationshipType: input.relationshipType,
+      initialRoles: input.subjectRoles,
+      metadataURI: input.metadataUri,
+      metadataHash: input.metadataHash,
+    });
+    return await this._submit(ctx, call);
   }
 
-  async confirmEdge(input: ConfirmEdgeInput): Promise<Hex> {
-    void input;
-    throw new Error('R Phase 4 — wire to AgentRelationship.confirmEdge');
+  /**
+   * Confirm a PROPOSED edge. The walletClient's account MUST equal
+   * the object side (msg.sender == object on chain).
+   */
+  async confirmEdge(input: ConfirmEdgeInput, ctx: WriteContext): Promise<Hex> {
+    const call = buildConfirmEdgeCall({ relationships: this.relationships, edgeId: input.edgeId });
+    return await this._submit(ctx, call);
   }
 
-  async revokeEdge(input: RevokeEdgeInput): Promise<Hex> {
-    void input;
-    throw new Error('R Phase 4 — wire to AgentRelationship.revokeEdge');
+  /**
+   * Revoke an edge. Either party may revoke unilaterally (contract
+   * checks `msg.sender == subject || msg.sender == object`).
+   */
+  async revokeEdge(input: RevokeEdgeInput, ctx: WriteContext): Promise<Hex> {
+    const call = buildRevokeEdgeCall({ relationships: this.relationships, edgeId: input.edgeId });
+    return await this._submit(ctx, call);
   }
 
-  async setRoles(input: SetRolesInput): Promise<Hex> {
-    void input;
-    throw new Error('R Phase 4 — wire to AgentRelationship.addRole / removeRole');
+  /**
+   * Add / remove roles on an existing edge. Either party may modify
+   * the edge's role bag.
+   *
+   * Note: the on-chain `Edge` has a single role bag (no subject/object
+   * separation in storage); `SetRolesInput.subjectRoles` +
+   * `objectRoles` are coalesced into the same bag. The current set
+   * is computed via `getRoles(edgeId)` and the diff is submitted as
+   * N add / remove txs.
+   */
+  async setRoles(input: SetRolesInput, ctx: WriteContext): Promise<Hex[]> {
+    const desiredArr: Hex[] = [
+      ...(input.subjectRoles ?? []),
+      ...(input.objectRoles ?? []),
+    ];
+    const current = await this.publicClient.readContract({
+      address: this.relationships,
+      abi: agentRelationshipAbi,
+      functionName: 'getRoles',
+      args: [input.edgeId],
+    });
+    const desired = new Set(desiredArr.map((r) => r.toLowerCase()));
+    const existing = new Set([...current].map((r) => r.toLowerCase()));
+    const toAdd = desiredArr.filter((r) => !existing.has(r.toLowerCase()));
+    const toRemove = [...current].filter((r) => !desired.has(r.toLowerCase()));
+    const hashes: Hex[] = [];
+    for (const role of toAdd) {
+      hashes.push(
+        await this._submit(
+          ctx,
+          buildAddRoleCall({ relationships: this.relationships, edgeId: input.edgeId, role: role as never }),
+        ),
+      );
+    }
+    for (const role of toRemove) {
+      hashes.push(
+        await this._submit(
+          ctx,
+          buildRemoveRoleCall({ relationships: this.relationships, edgeId: input.edgeId, role: role as never }),
+        ),
+      );
+    }
+    return hashes;
+  }
+
+  /**
+   * Submit a single ContractCall via the bound walletClient. Uses
+   * explicit nonce fetch + retry on "replacement underpriced" to
+   * tolerate Base Sepolia's read-after-write lag.
+   */
+  private async _submit(ctx: WriteContext, call: { to: Address; value: bigint; data: Hex }): Promise<Hex> {
+    const { walletClient } = ctx;
+    const account = (walletClient as { account?: { address: Address } }).account;
+    if (!account) throw new Error('[agent-relationships] walletClient has no account');
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const nonce = await this.publicClient.getTransactionCount({
+          address: account.address,
+          blockTag: 'pending',
+        });
+        const hash = await walletClient.sendTransaction({
+          to: call.to,
+          value: call.value,
+          data: call.data,
+          nonce,
+          account: walletClient.account!,
+          chain: walletClient.chain ?? null,
+        });
+        await this.publicClient.waitForTransactionReceipt({ hash });
+        return hash;
+      } catch (err) {
+        lastErr = err;
+        const msg = (err as Error).message ?? '';
+        if (msg.includes('replacement') || msg.includes('underpriced')) {
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error('[agent-relationships] _submit: exceeded retries');
   }
 }
+
+/** Re-export for callers that want to compute edge IDs off-chain. */
+export { computeEdgeId };
 
 // ─── Internals ────────────────────────────────────────────────────
 

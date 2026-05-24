@@ -57,7 +57,16 @@
     "UnauthorizedActorError",
     "UnknownRelationshipTypeError",
     "agentRelationshipAbi",
-    "relationshipTypeRegistryAbi"
+    "relationshipTypeRegistryAbi",
+    "WriteContext",
+    "ContractCall",
+    "buildProposeEdgeCall",
+    "buildConfirmEdgeCall",
+    "buildActivateEdgeCall",
+    "buildRevokeEdgeCall",
+    "buildAddRoleCall",
+    "buildRemoveRoleCall",
+    "buildSetMetadataCall"
   ],
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },

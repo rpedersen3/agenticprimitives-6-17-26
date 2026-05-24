@@ -59,7 +59,15 @@
     "InvalidCaip10Error",
     "CAIP10_NAMESPACE_ALLOWLIST",
     "AGENT_CARD_SCHEMA_VERSION",
-    "agentProfileResolverAbi"
+    "agentProfileResolverAbi",
+    "WriteContext",
+    "ContractCall",
+    "buildRegisterProfileCall",
+    "buildSetProfileMetadataCall",
+    "buildSetProfileStringCall",
+    "buildSetProfileAddressCall",
+    "buildSetProfileBytes32Call",
+    "buildSetProfileActiveCall"
   ],
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },

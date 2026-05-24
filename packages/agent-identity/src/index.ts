@@ -44,10 +44,22 @@ export type {
   PublishProfileInput,
 } from './types';
 
-export { AgentIdentityClient } from './client';
+export { AgentIdentityClient, type WriteContext } from './client';
 
 // Phase 3 contract ABIs (live at deployed addresses recorded in
 // apps/contracts/deployments-<network>.json). Profile resolver
 // inherits AttributeStorage; predicates governed by the shared
 // OntologyTermRegistry from agent-naming.
 export { agentProfileResolverAbi } from './abis';
+
+// Phase 4 pure call builders. Compose into AgentAccount.execute /
+// CustodyPolicy ceremonies / ERC-4337 UserOps as needed.
+export {
+  buildRegisterProfileCall,
+  buildSetProfileMetadataCall,
+  buildSetProfileStringCall,
+  buildSetProfileAddressCall,
+  buildSetProfileBytes32Call,
+  buildSetProfileActiveCall,
+  type ContractCall,
+} from './calls';

@@ -102,8 +102,26 @@ export interface AgentIdentityClientOpts {
 export interface PublishProfileInput {
   /** Smart Agent address publishing the profile. */
   agent: Address;
-  /** Profile JSON to publish. */
+  /** Profile JSON to publish. The SDK computes its canonical content-hash. */
   profile: AgentCard;
-  /** Caller-computed content hash for self-check. */
+  /**
+   * URI where the canonical-JSON profile is hosted. The caller is
+   * responsible for uploading the JSON to this URI BEFORE calling
+   * publishProfile — storage is intentionally out of the SDK's scope
+   * (per ADR-0007: identity stack stays storage-agnostic).
+   */
+  metadataURI: string;
+  /** Optional caller-computed hash for self-check (asserted == computed). */
   expectedHash?: Hex;
+  /**
+   * For first-time publication only — registers the agent's profile
+   * with these initial fields before setting the metadata anchor.
+   * Omit (or pass {}) once the agent has already called `register`.
+   */
+  registerWith?: {
+    displayName?: string;
+    description?: string;
+    agentKind?: Hex;
+    profileSchemaURI?: string;
+  };
 }

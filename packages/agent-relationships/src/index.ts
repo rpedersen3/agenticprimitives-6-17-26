@@ -38,7 +38,7 @@ export {
   type AgentRelationshipsClientOpts,
 } from './types';
 
-export { AgentRelationshipsClient } from './client';
+export { AgentRelationshipsClient, type WriteContext } from './client';
 
 // Phase 3 contract ABIs (live at deployed addresses recorded in
 // apps/contracts/deployments-<network>.json).
@@ -46,3 +46,16 @@ export {
   agentRelationshipAbi,
   relationshipTypeRegistryAbi,
 } from './abis';
+
+// Phase 4 pure call builders. Compose into AgentAccount.execute /
+// CustodyPolicy ceremonies / ERC-4337 UserOps as needed.
+export {
+  buildProposeEdgeCall,
+  buildConfirmEdgeCall,
+  buildActivateEdgeCall,
+  buildRevokeEdgeCall,
+  buildAddRoleCall,
+  buildRemoveRoleCall,
+  buildSetMetadataCall,
+  type ContractCall,
+} from './calls';

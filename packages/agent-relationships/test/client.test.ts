@@ -23,13 +23,15 @@ describe('AgentRelationshipsClient constructor', () => {
     expect(() => new AgentRelationshipsClient({ rpcUrl: 'http://x', chainId: 1 })).toThrow(/relationships/);
   });
 
-  it('writes throw R Phase 4', async () => {
+  it('writes throw when called without a WriteContext (walletClient required)', async () => {
     const c = new AgentRelationshipsClient({ rpcUrl: 'http://localhost:8545', chainId: 84532, relationships: REL });
-    await expect(
-      c.proposeEdge({ subject: A, object: B, relationshipType: RELATIONSHIP_TYPE.HAS_MEMBER as never }),
-    ).rejects.toThrow(/R Phase 4/);
-    await expect(c.confirmEdge({ edgeId: ZERO_ID })).rejects.toThrow(/R Phase 4/);
-    await expect(c.revokeEdge({ edgeId: ZERO_ID })).rejects.toThrow(/R Phase 4/);
-    await expect(c.setRoles({ edgeId: ZERO_ID })).rejects.toThrow(/R Phase 4/);
+    // @ts-expect-error — second arg required at runtime
+    await expect(c.proposeEdge({ subject: A, object: B, relationshipType: RELATIONSHIP_TYPE.HAS_MEMBER as never })).rejects.toThrow();
+    // @ts-expect-error — second arg required at runtime
+    await expect(c.confirmEdge({ edgeId: ZERO_ID })).rejects.toThrow();
+    // @ts-expect-error — second arg required at runtime
+    await expect(c.revokeEdge({ edgeId: ZERO_ID })).rejects.toThrow();
+    // @ts-expect-error — second arg required at runtime
+    await expect(c.setRoles({ edgeId: ZERO_ID })).rejects.toThrow();
   });
 });
