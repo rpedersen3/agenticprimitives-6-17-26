@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./artifacts": {
+      "types": "./dist/artifacts.d.ts",
+      "import": "./dist/artifacts.js"
     }
   },
   "files": ["dist", "context.jsonld", "tbox", "cbox", "abox", "README.md"],

@@ -41,9 +41,12 @@ domain concept — that is its job; it does not USE them as runtime logic.
 5. `src/index.ts` — the IRI constants; then `tbox/` + `cbox/`.
 
 ## Stable public exports
-- `NS` — namespace IRI map. `CLASS` / `PREDICATE` / `SHAPE` — IRI constants.
-- `ARTIFACTS` — relative paths of shipped TTL/JSON-LD. `artifactPath(rel)` —
-  resolve to an absolute filesystem path. `ONTOLOGY_VERSION`.
+- **Main entry (BROWSER-SAFE — pure IRIs, no Node builtins):** `NS` (namespace IRI
+  map), `CLASS` / `PREDICATE` / `SHAPE` (IRI constants), `ONTOLOGY_VERSION`. This
+  is what `identity-directory` (→ `connect` → browser apps) imports.
+- **`/artifacts` subpath (NODE-ONLY — uses `node:url`/fs):** `ARTIFACTS` (relative
+  paths of shipped TTL/JSON-LD) + `artifactPath(rel)` (→ absolute filesystem path).
+  Import server-side only (a SPARQL loader / SHACL engine); never from browser code.
 
 ## Allowed imports
 `node:url` (builtin, for `artifactPath`). Nothing from `@agenticprimitives/*` —

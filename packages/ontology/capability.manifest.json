@@ -27,7 +27,7 @@
     "@agenticprimitives/agent-profile",
     "@agenticprimitives/agent-relationships"
   ],
-  "publicExports": ["NS", "CLASS", "PREDICATE", "SHAPE", "ARTIFACTS", "ONTOLOGY_VERSION", "artifactPath"],
+  "publicExports": ["NS", "CLASS", "PREDICATE", "SHAPE", "ONTOLOGY_VERSION"],
   "forbiddenTerms": [
     {
       "term": "buildCaip10Address",

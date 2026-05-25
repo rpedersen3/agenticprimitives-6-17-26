@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { NS, CLASS, PREDICATE, SHAPE, ARTIFACTS, ONTOLOGY_VERSION, artifactPath } from '../../src/index.js';
+import { NS, CLASS, PREDICATE, SHAPE, ONTOLOGY_VERSION } from '../../src/index.js';
+import { ARTIFACTS, artifactPath } from '../../src/artifacts.js';
 
 describe('ontology IRI constants', () => {
   it('namespaces share the pinned base', () => {

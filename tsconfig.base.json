@@ -33,6 +33,7 @@
       "@agenticprimitives/tool-policy": ["packages/tool-policy/src/index.ts"],
       "@agenticprimitives/mcp-runtime": ["packages/mcp-runtime/src/index.ts"],
       "@agenticprimitives/ontology": ["packages/ontology/src/index.ts"],
+      "@agenticprimitives/ontology/artifacts": ["packages/ontology/src/artifacts.ts"],
       "@agenticprimitives/identity-directory": ["packages/identity-directory/src/index.ts"],
       "@agenticprimitives/identity-directory-adapters": ["packages/identity-directory-adapters/src/index.ts"],
       "@agenticprimitives/connect": ["packages/connect/src/index.ts"]

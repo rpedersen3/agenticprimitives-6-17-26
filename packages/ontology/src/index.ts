@@ -10,8 +10,12 @@
 //   - ../../specs/225-ontology.md — the contract
 //   - ../../docs/architecture/decisions/0018-agenticprimitives-wide-formal-ontology.md
 //   - ../../docs/architecture/decisions/0009-on-chain-ontology-shacl-naming.md (the on-chain peer)
-
-import { fileURLToPath } from 'node:url';
+//
+// This entry is BROWSER-SAFE (pure IRI constants — no Node builtins), so
+// browser consumers (identity-directory → connect → demo-sso) can bundle it.
+// The Node-only artifact loaders (`ARTIFACTS` paths + `artifactPath`, which use
+// `node:url`/the filesystem) live in the `@agenticprimitives/ontology/artifacts`
+// subpath — import those only server-side.
 
 /** Bumped on any breaking change to the shipped vocabulary. */
 export const ONTOLOGY_VERSION = '0.1.0' as const;
@@ -63,22 +67,5 @@ export const SHAPE = {
   CredentialFacet: `${NS.apcr}CredentialFacetShape`,
 } as const;
 
-/**
- * Relative paths (from the package root) of the shipped vocabulary artifacts.
- * Resolve to an absolute filesystem path with {@link artifactPath} and load
- * into a SPARQL store / SHACL engine.
- */
-export const ARTIFACTS = {
-  context: 'context.jsonld',
-  tbox: ['tbox/core.ttl', 'tbox/identity.ttl'],
-  cbox: ['cbox/canonical-agent-id-shape.shacl.ttl', 'cbox/controlled-vocabularies.ttl'],
-} as const;
-
-/**
- * Resolve a shipped artifact's relative path (see {@link ARTIFACTS}) to an
- * absolute filesystem path. Works in dev (running from `src/`) and after build
- * (from `dist/`) — the artifacts ship at the package root in both cases.
- */
-export function artifactPath(relativePath: string): string {
-  return fileURLToPath(new URL(`../${relativePath}`, import.meta.url));
-}
+// `ARTIFACTS` + `artifactPath` (Node-only, `node:url`) live in the
+// `@agenticprimitives/ontology/artifacts` subpath — keep this entry browser-safe.
