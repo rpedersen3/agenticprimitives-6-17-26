@@ -8,6 +8,19 @@ import {
   BOB_PASSKEY,
 } from './broker';
 import type { AgentSession, CredentialPrincipal } from '@agenticprimitives/types';
+import { startGoogleSignIn, exchangeCode, verifyServerSession } from './server-client';
+import { canPerform } from './lib/broker-core';
+
+/** The demo page is itself the single relying site for the real-OIDC mode. */
+const SERVER_AUD = 'demo-sso';
+
+interface ServerState {
+  session?: AgentSession;
+  error?: string;
+  pending?: boolean;
+  actionMsg?: string;
+  actionOk?: boolean;
+}
 
 const RELYING_SITES = [
   { id: 'shop.example', label: 'Shop (relying site A)' },
@@ -26,9 +39,34 @@ export function App() {
   const [who, setWho] = useState('');
   const [sites, setSites] = useState<Record<string, SiteState>>({});
   const [busy, setBusy] = useState(false);
+  const [server, setServer] = useState<ServerState>({});
 
   useEffect(() => {
     createDemoBroker().then(setBroker);
+  }, []);
+
+  // Real Google OIDC: on return from /oidc/google/callback the server broker
+  // redirects here with ?code. Exchange it (server-to-server via /token) + verify
+  // against /jwks. Works when served by the Pages Function broker.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    if (!code) return;
+    setServer({ pending: true });
+    (async () => {
+      try {
+        const token = await exchangeCode(code, SERVER_AUD);
+        const v = await verifyServerSession(token, SERVER_AUD);
+        setServer(v.ok ? { session: v.session } : { error: v.reason });
+      } catch (e) {
+        setServer({ error: e instanceof Error ? e.message : 'sign-in failed' });
+      } finally {
+        // single-use: strip ?code/?state so a refresh doesn't re-exchange.
+        url.searchParams.delete('code');
+        url.searchParams.delete('state');
+        window.history.replaceState({}, '', url.toString());
+      }
+    })();
   }, []);
 
   async function signIn(principal: CredentialPrincipal, label: string) {
@@ -148,10 +186,64 @@ export function App() {
 
           <p className="muted" style={{ marginTop: '1rem' }}>
             One sign-in issues an <code>aud</code>-bound session to <strong>both</strong> sites with the same{' '}
-            <code>sub</code> (the canonical agent) — that's one-enroll SSO. Sign in with <strong>GitHub</strong>{' '}
-            (login-grade), then attempt the custody action: it's blocked until you step up with the passkey
-            (custody-grade) — ADR-0017 / CN-2.
+            <code>sub</code> (the canonical agent) — that's one-enroll SSO. The buttons above use the in-browser
+            broker (simulated credential); the panel below uses the <strong>server broker + real Google OIDC</strong>.
           </p>
+
+          <div className="panel broker" style={{ marginTop: '1rem' }}>
+            <h2>
+              Real Google OIDC <span className="badge">server broker</span>
+            </h2>
+            <p className="muted">
+              Redirects to the Pages Function broker: <code>/oidc/google/start</code> → Google →{' '}
+              <code>/oidc/google/callback</code> (token exchange + id_token verify) → back here with a single-use{' '}
+              <code>code</code> → <code>/token</code>, verified against <code>/jwks</code>. Works when the app is served
+              by <code>wrangler pages dev dist</code> (or a deploy) with the Google secrets set — see{' '}
+              <code>OIDC-SETUP.md</code>. Under plain <code>vite dev</code> the function routes 404.
+            </p>
+            {!server.session && !server.error && (
+              <button
+                disabled={server.pending}
+                onClick={() => startGoogleSignIn(SERVER_AUD, window.location.origin + '/')}
+              >
+                {server.pending ? 'Completing sign-in…' : 'Sign in with Google'}
+              </button>
+            )}
+            {server.error && <p className="err">⛔ {server.error}</p>}
+            {server.session && (
+              <>
+                <p className="ok">✓ Verified server-issued AgentSession (real Google OIDC, JWKS)</p>
+                <pre>
+                  {JSON.stringify(
+                    {
+                      sub: server.session.sub,
+                      assurance: server.session.assurance,
+                      principal: server.session.principal,
+                      aud: server.session.aud,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+                <button
+                  onClick={() => {
+                    const r = canPerform(server.session!, 'credential-change');
+                    setServer((p) => ({ ...p, actionOk: r.ok, actionMsg: r.ok ? 'Allowed — custody-grade.' : r.reason }));
+                  }}
+                >
+                  Attempt: rotate credential (custody-class)
+                </button>
+                <button onClick={() => setServer({})} style={{ marginLeft: '0.5rem' }}>
+                  Sign out
+                </button>
+                {server.actionMsg && <p className={server.actionOk ? 'ok' : 'err'}>{(server.actionOk ? '✓ ' : '⛔ ') + server.actionMsg}</p>}
+                <p className="muted">
+                  A Google session is <strong>login-grade</strong> — the custody-class action is blocked until step-up
+                  to a custody-grade credential (ADR-0017 / CN-2).
+                </p>
+              </>
+            )}
+          </div>
         </>
       )}
     </div>

@@ -79,12 +79,21 @@ wrangler pages dev dist                               # serves /jwks /authorize 
   secret, JWKS endpoint, single-use code exchange (CN-1/9). Real OIDC lands here
   (the client secret must be server-side). See `OIDC-SETUP.md`.
 
+## UI modes
+
+- **In-browser broker** (the sign-in buttons): simulated credential, key in-page —
+  runs under plain `vite dev`, no backend.
+- **Real Google OIDC** (the "Sign in with Google" panel, `src/server-client.ts`):
+  redirects to the server broker (`/oidc/google/start` → Google → `/oidc/google/callback`
+  → `?code` → `/token`), verified client-side against `/jwks`. Needs the app served
+  by the Pages Function broker (`wrangler pages dev dist` / deploy) with the Google
+  secrets set (`OIDC-SETUP.md`).
+
 ## Next (not yet built)
 
-- Wire the UI to call the server broker (`/oidc/google/start` → Google →
-  `/authorize` → `/token`) as a second mode; real on-chain `confirmsCredential`
-  (viem `readContract` against the deployed custody contract); the KV ids +
-  `BROKER_PRIVATE_JWK` secret + a deploy.
+- Real on-chain `confirmsCredential` (viem `readContract` against the deployed
+  custody contract, replacing the in-memory membership Set); provision the KV ids +
+  `BROKER_PRIVATE_JWK`/`GOOGLE_*` secrets + a deploy.
 
 ## Doctrine pinned to this app
 
