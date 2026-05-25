@@ -64,13 +64,17 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
     iss,
   );
   if (outcome.status !== 'issued') {
-    // 0 → bootstrap a new SA (spec 220); many → disambiguate. Demo: report.
-    return json({
-      status: outcome.status,
-      reason: outcome.status === 'rejected' ? outcome.reason : undefined,
-      oidcSubject: principal.id,
-      email: result.principal.email,
-    });
+    // 0 → bootstrap (no agent linked to this Google subject yet); many → disambiguate.
+    // Redirect BACK to the app with a status (never dead-end on a JSON page) so the UI
+    // can explain "create a workspace with a wallet/passkey, then link Google".
+    if (stash.rpRedirect) {
+      const dest = new URL(stash.rpRedirect);
+      dest.searchParams.set('connect_status', outcome.status);
+      dest.searchParams.set('via', 'google');
+      if (result.principal.email) dest.searchParams.set('email', result.principal.email);
+      return new Response(null, { status: 302, headers: { location: dest.toString() } });
+    }
+    return json({ status: outcome.status, oidcSubject: principal.id, email: result.principal.email });
   }
 
   // §4a / CN-9: stash under a single-use code; deliver the CODE, not the token.

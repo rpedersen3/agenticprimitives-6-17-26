@@ -4,6 +4,7 @@ import {
   AUD,
   siweLogin,
   bootstrapWithWallet,
+  claimName,
   fetchProfile,
   fetchSensitive,
   type BasicProfile,
@@ -30,6 +31,8 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [sensitive, setSensitive] = useState<{ email: string; phone: string } | null>(null);
   const [stepUpMsg, setStepUpMsg] = useState<string | null>(null);
+  const [desiredName, setDesiredName] = useState('');
+  const [googleNotice, setGoogleNotice] = useState<string | null>(null);
 
   const openSession = useCallback(async (token: string, via: string, fresh: boolean) => {
     setSession({ token, via, fresh });
@@ -39,6 +42,19 @@ export function App() {
   // Real Google OIDC return: ?code → exchange → token (login-grade session).
   useEffect(() => {
     const url = new URL(window.location.href);
+    // Google bootstrap (no agent linked to this subject yet) — the callback redirects
+    // back here with a status instead of dead-ending on a JSON page.
+    const connectStatus = url.searchParams.get('connect_status');
+    if (connectStatus) {
+      const email = url.searchParams.get('email');
+      setGoogleNotice(
+        `We recognized your Google account${email ? ` (${email})` : ''}, but no workspace is linked to it yet. ` +
+          `Create one with your wallet below — then Google becomes a quick login for it.`,
+      );
+      for (const k of ['connect_status', 'via', 'email']) url.searchParams.delete(k);
+      window.history.replaceState({}, '', url.toString());
+      return;
+    }
     const code = url.searchParams.get('code');
     if (!code) return;
     (async () => {
@@ -84,6 +100,10 @@ export function App() {
       setBootstrap((b) => (b ? { ...b, step: undefined, error: res.error } : b));
       return;
     }
+    // Claim a forced-unique <name>.demo.agent (best-effort; non-fatal on failure).
+    await claimName(res.agent, bootstrap.address, desiredName || 'agent', (step) =>
+      setBootstrap((b) => (b ? { ...b, step } : b)),
+    );
     // Workspace created — sign in to it for real (resolves on-chain now).
     setBootstrap((b) => (b ? { ...b, step: 'Finishing up…' } : b));
     try {
@@ -131,6 +151,7 @@ export function App() {
         <div className="panel broker">
           <h2>Connect</h2>
           <p className="muted">Choose how to sign in. First time? We'll create your workspace.</p>
+          {googleNotice && <p className="ok">ℹ️ {googleNotice}</p>}
           <p>
             <button disabled={busy} onClick={onConnectWallet}>
               {busy ? 'Connecting…' : 'Connect wallet'}
@@ -161,7 +182,21 @@ export function App() {
             <>
               <p className="muted">
                 No workspace yet for <code>{bootstrap.address}</code>. We'll deploy your personal Smart
-                Agent on Base Sepolia (gas sponsored — you won't pay) and link this wallet to it.
+                Agent on Base Sepolia (gas sponsored — you won't pay), link this wallet to it, and claim
+                a <code>.demo.agent</code> name.
+              </p>
+              <p>
+                <label className="muted">
+                  Pick a name:{' '}
+                  <input
+                    value={desiredName}
+                    onChange={(e) => setDesiredName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                    placeholder="e.g. alice"
+                    style={{ marginRight: '0.25rem' }}
+                  />
+                  <code>{(desiredName || 'agent')}.demo.agent</code>{' '}
+                  <span className="muted">(a number is appended if taken)</span>
+                </label>
               </p>
               <button onClick={onCreateWorkspace}>Create my workspace</button>{' '}
               <button onClick={signOut}>Cancel</button>

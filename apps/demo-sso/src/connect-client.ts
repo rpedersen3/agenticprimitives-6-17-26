@@ -1,9 +1,12 @@
 // Browser orchestration for the real wallet (SIWE) connect → resolve → bootstrap
 // → PII, all against the live broker + the deployed demo-a2a worker (via /a2a).
 import { buildMessage } from '@agenticprimitives/connect-auth/siwe';
+import { buildSubregistryRegisterCall, buildSetPrimaryNameCall } from '@agenticprimitives/agent-naming';
+import { buildExecuteCallData } from '@agenticprimitives/agent-account';
 import type { Address, Hex } from '@agenticprimitives/types';
 import { connectWallet, personalSign } from './lib/wallet';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
+import { CONTRACTS } from './lib/chain';
 
 export const AUD = 'demo-sso';
 const CHAIN_ID = 84532;
@@ -93,6 +96,73 @@ export async function bootstrapWithWallet(
     return { ok: false, error: ((await enrollRes.json()) as { error?: string }).error ?? 'enroll failed' };
   }
   return { ok: true, agent };
+}
+
+/** Execute a call FROM a deployed agent: build userOp -> sign hash -> submit (via /a2a). */
+async function executeCall(
+  sender: Address,
+  signerAddr: Address,
+  callData: Hex,
+): Promise<{ ok: true; txHash?: Hex } | { ok: false; error: string }> {
+  await ensureCsrfToken();
+  const buildRes = await fetch('/a2a/account/build-call-userop', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ sender, callData }),
+  });
+  const built = (await buildRes.json()) as {
+    ok?: boolean;
+    userOpHash?: Hex;
+    userOp?: Record<string, unknown>;
+    error?: string;
+  };
+  if (!buildRes.ok || !built.ok || !built.userOpHash || !built.userOp) {
+    return { ok: false, error: built.error ?? `build-call failed (HTTP ${buildRes.status})` };
+  }
+  const signature = await personalSign(signerAddr, built.userOpHash);
+  const submitRes = await fetch('/a2a/account/submit-call-userop', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
+  });
+  const submitted = (await submitRes.json()) as { ok?: boolean; transactionHash?: Hex; error?: string };
+  if (!submitRes.ok || !submitted.ok) {
+    return { ok: false, error: submitted.error ?? `submit-call failed (HTTP ${submitRes.status})` };
+  }
+  return { ok: true, txHash: submitted.transactionHash };
+}
+
+/** Claim a forced-unique `<base>[N].demo.agent` for the agent + set it as primary.
+ *  Two gasless execute UserOps signed by the EOA custodian. Best-effort: a failed
+ *  setPrimaryName still returns ok (the name is owned; reverse can be re-set later). */
+export async function claimName(
+  agent: Address,
+  signerAddr: Address,
+  base: string,
+  onStep?: (s: string) => void,
+): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
+  onStep?.('Finding a free name…');
+  const nameRes = await fetch(`/connect/name?base=${encodeURIComponent(base)}`);
+  const picked = (await nameRes.json()) as { label?: string; name?: string; node?: Hex; error?: string };
+  if (!nameRes.ok || !picked.name || !picked.node || !picked.label) {
+    return { ok: false, error: picked.error ?? 'no free name' };
+  }
+
+  onStep?.(`Claiming ${picked.name}…`);
+  const register = buildSubregistryRegisterCall({
+    subregistry: CONTRACTS.permissionlessSubregistry,
+    label: picked.label,
+    newOwner: agent,
+  });
+  const reg = await executeCall(agent, signerAddr, buildExecuteCallData(register));
+  if (!reg.ok) return { ok: false, error: `name register failed: ${reg.error}` };
+
+  onStep?.('Setting it as your primary name…');
+  const setPrimary = buildSetPrimaryNameCall({ registry: CONTRACTS.agentNameRegistry, node: picked.node });
+  await executeCall(agent, signerAddr, buildExecuteCallData(setPrimary)); // best-effort
+  return { ok: true, name: picked.name };
 }
 
 export interface BasicProfile {
