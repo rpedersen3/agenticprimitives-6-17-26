@@ -1,0 +1,54 @@
+# T-box — identity/credential/naming/org facets. Spec 225 §5.
+
+@prefix ap:   <https://agenticprimitives.dev/ns/core#> .
+@prefix apid: <https://agenticprimitives.dev/ns/identity#> .
+@prefix apcr: <https://agenticprimitives.dev/ns/credential#> .
+@prefix apnam: <https://agenticprimitives.dev/ns/naming#> .
+@prefix aporg: <https://agenticprimitives.dev/ns/org#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+apcr:CredentialFacet a owl:Class ;
+    rdfs:subClassOf ap:Facet ;
+    rdfs:label "CredentialFacet" ;
+    rdfs:comment "A control credential (passkey / SIWE-EOA / hardware / OIDC) that CONTROLS an Agent under its custody policy. Rotates without changing the Agent (ADR-0011). NEVER an owner." .
+
+apnam:NameFacet a owl:Class ;
+    rdfs:subClassOf ap:Facet ;
+    rdfs:label "NameFacet" ;
+    rdfs:comment "A resolvable name (e.g. alice.agent) that resolves to an Agent. Decorative/display — never the sole authority (ADR-0006)." .
+
+apid:OidcSubject a owl:Class ;
+    rdfs:subClassOf ap:Facet ;
+    rdfs:label "OidcSubject" ;
+    rdfs:comment "An OIDC issuer+subject claim recorded as a login facet, not custody (ADR-0017). Keyed on (iss, sub), never email." .
+
+aporg:Org a owl:Class ;
+    rdfs:subClassOf ap:Agent ;
+    rdfs:label "Org" ;
+    rdfs:comment "An organization Agent with members (membership is informational; authority lives in custody/relationships)." .
+
+# ─── Properties ───────────────────────────────────────────────────────
+
+apcr:controls a owl:ObjectProperty ;
+    rdfs:label "controls" ;
+    rdfs:domain apcr:CredentialFacet ;
+    rdfs:range ap:Agent ;
+    rdfs:comment "A credential controls an Agent under custody policy — authorization, never ownership (ADR-0016)." .
+
+apcr:credentialKind a owl:DatatypeProperty ;
+    rdfs:label "credentialKind" ;
+    rdfs:domain apcr:CredentialFacet ;
+    rdfs:range xsd:string ;
+    rdfs:comment "One of the apcr:credentialKind controlled vocabulary: passkey / siwe-eoa / hardware / oidc." .
+
+apnam:resolvesTo a owl:ObjectProperty ;
+    rdfs:label "resolvesTo" ;
+    rdfs:domain apnam:NameFacet ;
+    rdfs:range ap:Agent .
+
+aporg:memberOf a owl:ObjectProperty ;
+    rdfs:label "memberOf" ;
+    rdfs:domain ap:Agent ;
+    rdfs:range aporg:Org .

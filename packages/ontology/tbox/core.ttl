@@ -1,0 +1,59 @@
+# T-box — core vocabulary for agentic primitives.
+# RDFS/OWL terminology only (no instances, no constraints). Spec 225 §5.
+# The on-chain OntologyTermRegistry / ShapeRegistry (ADR-0009) instantiate
+# this vocabulary; off-chain TTL is the source of truth for the IRIs.
+
+@prefix ap:   <https://agenticprimitives.dev/ns/core#> .
+@prefix apid: <https://agenticprimitives.dev/ns/identity#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+ap: a owl:Ontology ;
+    rdfs:label "Agentic Primitives — core ontology" ;
+    owl:versionInfo "0.1.0" .
+
+# ─── Classes ──────────────────────────────────────────────────────────
+
+ap:Agent a owl:Class ;
+    rdfs:label "Agent" ;
+    rdfs:comment "The canonical ERC-4337 Smart Agent (ADR-0010). Every other node is a facet of, or edge to, an Agent. Identified by an ap:CanonicalAgentId." .
+
+ap:CanonicalAgentId a owl:Class ;
+    rdfs:label "CanonicalAgentId" ;
+    rdfs:comment "A branded CAIP-10 account identifier (eip155:* / hedera:* / solana:*). The SSO subject + directory key (ADR-0016). Validated by ap:CanonicalAgentIdShape." .
+
+ap:Facet a owl:Class ;
+    rdfs:label "Facet" ;
+    rdfs:comment "An abstract control/identity facet that points AT an Agent and rotates without changing it (ADR-0011). Subclasses: apcr:CredentialFacet, apnam:NameFacet, apid:OidcSubject." .
+
+ap:Evidence a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "Evidence" ;
+    rdfs:comment "Provenance for an asserted edge: which source asserted it, when, at what block, and at what assurance (spec 223)." .
+
+# ─── Properties ───────────────────────────────────────────────────────
+
+apid:isFacetOf a owl:ObjectProperty ;
+    rdfs:label "isFacetOf" ;
+    rdfs:domain ap:Facet ;
+    rdfs:range ap:Agent ;
+    rdfs:comment "A facet points at exactly one Agent." .
+
+ap:hasEvidence a owl:ObjectProperty ;
+    rdfs:label "hasEvidence" ;
+    rdfs:range ap:Evidence ;
+    rdfs:comment "Attaches provenance to an asserted association." .
+
+ap:assurance a owl:DatatypeProperty ;
+    rdfs:label "assurance" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Ordered assurance level: unverified < asserted < onchain-read < onchain-confirmed (apcus:assurance vocabulary)." .
+
+ap:controlStatus a owl:DatatypeProperty ;
+    rdfs:label "controlStatus" ;
+    rdfs:domain ap:CanonicalAgentId ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Whether the subject is custodied here (custodied) or addressable-only (identifier-only). Non-EVM namespaces are identifier-only (spec 226 §4)." .

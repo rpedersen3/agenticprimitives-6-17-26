@@ -1,0 +1,41 @@
+# C-box — SHACL shapes (constraints). Spec 225 §6.
+# Phase 1 ships the load-bearing shape (CanonicalAgentId) + a CredentialFacet
+# shape. SHACL-engine validation over instances is wired in Phase 2 (spec 225 §11);
+# the on-chain ShapeRegistry (ADR-0009) is the per-chain enforcement peer.
+
+@prefix ap:   <https://agenticprimitives.dev/ns/core#> .
+@prefix apcr: <https://agenticprimitives.dev/ns/credential#> .
+@prefix apid: <https://agenticprimitives.dev/ns/identity#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# A CanonicalAgentId value MUST be a CAIP-10 string whose namespace is in the
+# Phase-1 allowlist {eip155, hedera, solana} (ADR-0008). The pattern bakes the
+# allowlist into the grammar so a single sh:pattern enforces both.
+ap:CanonicalAgentIdShape a sh:NodeShape ;
+    rdfs:label "CanonicalAgentId shape" ;
+    rdfs:comment "Bind via sh:targetObjectsOf on any CanonicalAgentId-valued predicate (e.g. a subject's identifier). Phase 2 wires targets + the engine." ;
+    sh:nodeKind sh:Literal ;
+    sh:datatype xsd:string ;
+    sh:pattern "^(eip155|hedera|solana):[-_a-zA-Z0-9]{1,32}:[-.%a-zA-Z0-9]{1,128}$" ;
+    sh:message "CanonicalAgentId must be a CAIP-10 string with namespace in {eip155, hedera, solana}." .
+
+# A CredentialFacet references exactly one Agent and carries exactly one Evidence
+# (spec 223 §4). Modeled as property constraints; targets bound in Phase 2.
+ap:CredentialFacetShape a sh:NodeShape ;
+    rdfs:label "CredentialFacet shape" ;
+    sh:targetClass apcr:CredentialFacet ;
+    sh:property [
+        sh:path apid:isFacetOf ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class ap:Agent ;
+        sh:message "A CredentialFacet must reference exactly one Agent."
+    ] ;
+    sh:property [
+        sh:path ap:hasEvidence ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "A CredentialFacet must carry exactly one Evidence."
+    ] .

@@ -1,0 +1,29 @@
+{
+  "name": "@agenticprimitives/ontology",
+  "version": "0.0.1",
+  "description": "Monorepo-wide formal vocabulary (RDFS/OWL T-box + SHACL/SKOS C-box + A-box fixtures) for agentic primitives. Off-chain source of truth the on-chain ontology (ADR-0009) instantiates. Ships TTL/JSON-LD artifacts + typed IRI constants.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "context.jsonld", "tbox", "cbox", "abox", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["ontology", "rdfs", "owl", "shacl", "knowledge-graph", "agentic"],
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  }
+}

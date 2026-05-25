@@ -132,8 +132,9 @@ consult.
   ✅ landed (ADRs 0014–0018; specs 223–226; spec 100 §4; this doc; HCS advisor +
   crosswalk; architect + security audits with findings folded back in — see
   [`docs/audits/sso-wave-audit-findings.md`](../audits/sso-wave-audit-findings.md)).
-- **Phase 1:** `types` shapes + `ontology` `context.jsonld`/`tbox/core`+`identity`
-  + `CanonicalAgentIdShape`; `connect-auth` real OIDC (Google).
+- **Phase 1:** `types` shapes ✅ + `ontology` (`context.jsonld` + `tbox/core`+`identity`
+  + `CanonicalAgentIdShape` + controlled vocabularies + IRI constants) ✅;
+  `connect-auth` real OIDC (Google) — next.
 - **Phase 2:** `identity-directory` core + adapters (naming/on-chain/indexer/OIDC).
 - **Phase 3:** `connect` broker + asymmetric token/JWKS + entry flows + convergence.
 - **Phase 4:** `apps/demo-sso` (2 relying sites, one-enroll SSO, GitHub OIDC,

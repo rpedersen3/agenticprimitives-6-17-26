@@ -1,0 +1,54 @@
+{
+  "name": "@agenticprimitives/ontology",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/225-ontology.md",
+  "summary": "Monorepo-wide formal vocabulary: T-box (RDFS/OWL) + C-box (SHACL/SKOS) + A-box. Off-chain source of truth the on-chain ontology (ADR-0009) instantiates. Ships TTL/JSON-LD + IRI constants.",
+  "owns": {
+    "source": ["src/**", "tbox/**", "cbox/**", "abox/**", "context.jsonld"],
+    "tests": ["test/**"]
+  },
+  "imports": [],
+  "allowedImports": [],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/types",
+    "@agenticprimitives/connect-auth",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/audit",
+    "@agenticprimitives/account-custody",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
+  ],
+  "publicExports": ["NS", "CLASS", "PREDICATE", "SHAPE", "ARTIFACTS", "ONTOLOGY_VERSION", "artifactPath"],
+  "forbiddenTerms": [
+    {
+      "term": "buildCaip10Address",
+      "reason": "Runtime CAIP-10 builder belongs in agent-profile; ontology is declarative (IRIs + artifacts) only.",
+      "owningPackage": "@agenticprimitives/agent-profile"
+    },
+    {
+      "term": "evaluatePolicy",
+      "reason": "Runtime policy logic belongs in tool-policy; ontology has no runtime auth/policy logic.",
+      "owningPackage": "@agenticprimitives/tool-policy"
+    },
+    {
+      "term": "withDelegation",
+      "reason": "Belongs in mcp-runtime; ontology has no transport/runtime logic.",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    }
+  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

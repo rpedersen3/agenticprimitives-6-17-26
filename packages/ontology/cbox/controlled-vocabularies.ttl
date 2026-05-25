@@ -1,0 +1,58 @@
+# C-box — controlled vocabularies (SKOS concept schemes / closed codelists).
+# Spec 225 §6. These closed sets are the off-chain source of truth that the
+# on-chain OntologyTermRegistry enum-sets (ADR-0009) bind in lockstep, and that
+# the @agenticprimitives/types unions (AgentType, CredentialKind, Assurance,
+# CredentialRole) mirror. NOTE (audit P1-4): agentKind (4) and profileType (6)
+# are DISTINCT vocabularies.
+
+@prefix ap:   <https://agenticprimitives.dev/ns/core#> .
+@prefix apcr: <https://agenticprimitives.dev/ns/credential#> .
+@prefix apcus: <https://agenticprimitives.dev/ns/custody#> .
+@prefix apid: <https://agenticprimitives.dev/ns/identity#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# ─── agentKind — 4 values, on-chain-bound (ADR-0009 enum / types.AgentType) ──
+ap:agentKind a skos:ConceptScheme ;
+    rdfs:label "agentKind" ;
+    rdfs:comment "The 4-value on-chain-bound kind. Distinct from profileType (6 values; agent-profile/HCS-11)." ;
+    skos:hasTopConcept ap:Person, ap:OrgKind, ap:Service, ap:Treasury .
+ap:Person   a skos:Concept ; skos:inScheme ap:agentKind ; skos:prefLabel "person" .
+ap:OrgKind  a skos:Concept ; skos:inScheme ap:agentKind ; skos:prefLabel "org" .
+ap:Service  a skos:Concept ; skos:inScheme ap:agentKind ; skos:prefLabel "service" .
+ap:Treasury a skos:Concept ; skos:inScheme ap:agentKind ; skos:prefLabel "treasury" .
+
+# ─── credentialKind (types.CredentialKind) ───────────────────────────
+apcr:credentialKindScheme a skos:ConceptScheme ;
+    rdfs:label "credentialKind" ;
+    skos:hasTopConcept apcr:Passkey, apcr:SiweEoa, apcr:Hardware, apcr:Oidc .
+apcr:Passkey  a skos:Concept ; skos:inScheme apcr:credentialKindScheme ; skos:prefLabel "passkey" .
+apcr:SiweEoa  a skos:Concept ; skos:inScheme apcr:credentialKindScheme ; skos:prefLabel "siwe-eoa" .
+apcr:Hardware a skos:Concept ; skos:inScheme apcr:credentialKindScheme ; skos:prefLabel "hardware" .
+apcr:Oidc     a skos:Concept ; skos:inScheme apcr:credentialKindScheme ; skos:prefLabel "oidc" .
+
+# ─── credentialRole — login-grade vs custody-grade (ADR-0017) ─────────
+apcr:credentialRoleScheme a skos:ConceptScheme ;
+    rdfs:label "credentialRole" ;
+    skos:hasTopConcept apcr:LoginGrade, apcr:CustodyGrade .
+apcr:LoginGrade   a skos:Concept ; skos:inScheme apcr:credentialRoleScheme ; skos:prefLabel "login-grade" .
+apcr:CustodyGrade a skos:Concept ; skos:inScheme apcr:credentialRoleScheme ; skos:prefLabel "custody-grade" .
+
+# ─── assurance — ordered ladder (types.Assurance) ─────────────────────
+apcus:assuranceScheme a skos:ConceptScheme ;
+    rdfs:label "assurance" ;
+    rdfs:comment "Ordered low→high: unverified < asserted < onchain-read < onchain-confirmed." ;
+    skos:hasTopConcept apcus:Unverified, apcus:Asserted, apcus:OnchainRead, apcus:OnchainConfirmed .
+apcus:Unverified       a skos:Concept ; skos:inScheme apcus:assuranceScheme ; skos:prefLabel "unverified" ; skos:notation "0" .
+apcus:Asserted         a skos:Concept ; skos:inScheme apcus:assuranceScheme ; skos:prefLabel "asserted" ; skos:notation "1" ; skos:broader apcus:Unverified .
+apcus:OnchainRead      a skos:Concept ; skos:inScheme apcus:assuranceScheme ; skos:prefLabel "onchain-read" ; skos:notation "2" ; skos:broader apcus:Asserted .
+apcus:OnchainConfirmed a skos:Concept ; skos:inScheme apcus:assuranceScheme ; skos:prefLabel "onchain-confirmed" ; skos:notation "3" ; skos:broader apcus:OnchainRead .
+
+# ─── controlStatus — custodied vs identifier-only (spec 226 §4) ───────
+ap:controlStatusScheme a skos:ConceptScheme ;
+    rdfs:label "controlStatus" ;
+    skos:hasTopConcept ap:Custodied, ap:IdentifierOnly .
+ap:Custodied      a skos:Concept ; skos:inScheme ap:controlStatusScheme ; skos:prefLabel "custodied" ;
+    rdfs:comment "EVM (eip155) — custodied via ERC-4337/ERC-1271." .
+ap:IdentifierOnly a skos:Concept ; skos:inScheme ap:controlStatusScheme ; skos:prefLabel "identifier-only" ;
+    rdfs:comment "hedera:* / solana:* — addressable, not custodied by this stack." .
