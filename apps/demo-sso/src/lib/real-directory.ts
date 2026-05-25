@@ -30,6 +30,7 @@ import {
 import { AgentNamingClient } from '@agenticprimitives/agent-naming';
 import { AgentAccountClient } from '@agenticprimitives/agent-account';
 import type { Address } from '@agenticprimitives/types';
+import type { Hex } from 'viem';
 import { CHAIN_ID, CONTRACTS, DEFAULT_RPC_URL } from './chain';
 
 export interface RealDirectoryOpts {
@@ -65,13 +66,11 @@ export function buildRealDirectory(opts: RealDirectoryOpts = {}): IdentityDirect
         // OIDC is NEVER an on-chain custodian (P0-B / ADR-0017): login-grade only,
         // confirmed by the indexer, not here.
         if (p.kind === 'oidc') return false;
+        const account = addressOf(id);
+        // passkey: keyed on its credentialIdDigest -> AgentAccount.hasPasskey (U2).
+        if (p.kind === 'passkey') return accounts.hasPasskey(account, p.id as Hex);
         // EOA / hardware: the principal id IS the on-chain signer address.
-        if (p.kind === 'siwe-eoa' || p.kind === 'hardware') {
-          return accounts.isCustodian(addressOf(id), p.id as Address);
-        }
-        // passkey: needs (x,y)->PIA from the bootstrap record (spec 227 U2). Not yet
-        // wired in Phase A — fail closed (never a silent confirm).
-        return false;
+        return accounts.isCustodian(account, p.id as Address);
       },
     }),
     indexer: opts.indexer ?? createInMemoryIndexer([]),

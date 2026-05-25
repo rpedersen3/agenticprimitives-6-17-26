@@ -241,6 +241,21 @@ export class AgentAccountClient {
     }
   }
 
+  /**
+   * On-chain `hasPasskey(credentialIdDigest)` — is this passkey CURRENTLY a
+   * registered credential of the account? (Passkeys are tracked by digest, not as
+   * an EOA custodian.) Returns false if the account isn't deployed yet.
+   */
+  async hasPasskey(account: Address, credentialIdDigest: Hex): Promise<boolean> {
+    if (!(await this.isDeployed(account))) return false;
+    try {
+      const acct = getContract({ address: account, abi: agentAccountAbi, client: this.publicClient });
+      return (await acct.read.hasPasskey([credentialIdDigest])) as boolean;
+    } catch {
+      return false;
+    }
+  }
+
   async isDeployed(account: Address): Promise<boolean> {
     const code = await this.publicClient.getCode({ address: account });
     return code !== undefined && code !== '0x' && code.length > 2;
