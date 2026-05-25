@@ -66,8 +66,23 @@ const reverseNames: Record<string, string> = {
   [BOB_ADDR.toLowerCase()]: 'bob.agent',
 };
 
-/** Build the demo directory (mock ports + seeds). Shared by both broker variants. */
+const GOOGLE_ISS = 'https://accounts.google.com';
+function isGoogleOidc(p: CredentialPrincipal): boolean {
+  return p.kind === 'oidc' && p.id.startsWith(`${GOOGLE_ISS}#`);
+}
+
+/**
+ * Build the demo directory (mock ports + seeds). Shared by both broker variants.
+ *
+ * DEMO AID (so a real Google account that isn't pre-seeded still gets a session
+ * on the live site): ANY verified Google login resolves to Alice. A production
+ * directory instead maps a specific (iss, sub) → agent via a real indexer +
+ * on-chain `confirmsCredential` (and routes a brand-new subject to bootstrap,
+ * spec 220). This catch-all is purely a demo convenience, clearly fenced to the
+ * Google issuer.
+ */
 export function buildDemoDirectory(): IdentityDirectory {
+  const inMem = createInMemoryIndexer(indexEntries);
   return createDirectory({
     naming: makeNamingPort({
       client: {
@@ -78,9 +93,17 @@ export function buildDemoDirectory(): IdentityDirectory {
     }),
     onChain: makeOnChainReadPort({
       exists: async (id) => id === ALICE || id === BOB,
-      confirmsCredential: async (id, p) => onChainMembership.has(memberKey(id, p)),
+      // Demo aid: confirm any Google login for Alice; otherwise the seeded set.
+      confirmsCredential: async (id, p) => (isGoogleOidc(p) && id === ALICE) || onChainMembership.has(memberKey(id, p)),
     }),
-    indexer: createInMemoryIndexer(indexEntries),
+    indexer: {
+      agentsByCredential: (p) => inMem.agentsByCredential(p),
+      // Demo aid: any Google subject proposes Alice; everything else is seeded.
+      agentsByOidcSubject: async (iss, sub) =>
+        iss === GOOGLE_ISS
+          ? [{ agent: ALICE, assurance: 'asserted', ref: 'demo-google-catchall' }]
+          : inMem.agentsByOidcSubject(iss, sub),
+    },
   });
 }
 

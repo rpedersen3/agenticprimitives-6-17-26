@@ -100,6 +100,13 @@ Google → GET /oidc/google/callback?code&state
 relying site → POST /token { code, aud } → { agentSession }  → verify via GET /jwks
 ```
 
+**Demo resolution:** the directory is mock-seeded, so as a demo aid ANY verified
+Google login resolves to the demo agent **Alice** (`buildDemoDirectory` in
+`src/lib/broker-core.ts`, fenced to the Google issuer) — that's why a real Google
+account that isn't pre-seeded still gets a session here. A real deployment maps a
+specific `(iss, sub)` → agent via a real indexer + on-chain `confirmsCredential`,
+and routes a brand-new subject to bootstrap (spec 220).
+
 ## 4. What you do NOT need (divergence from smart-agent)
 
 smart-agent derives a **deterministic smart account from the Google user**
