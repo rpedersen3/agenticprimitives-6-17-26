@@ -47,7 +47,7 @@
 - "Add a delegation primitive, builder, or verifier" — **STOP.** Belongs in [`delegation`](../delegation). We consume `Delegation` as a type.
 - "Implement transport — write to a response, set a header" — **STOP.** We return decisions; consumers enforce.
 - "Add KMS, envelope encryption, or HMAC" — **STOP.** Belongs in [`key-custody`](../key-custody).
-- "Add an auth method, session, or JWT" — **STOP.** Belongs in [`identity-auth`](../identity-auth).
+- "Add an auth method, session, or JWT" — **STOP.** Belongs in [`identity-auth`](../connect-auth).
 
 ## Before you write code
 - [ ] Is the change about classification taxonomy, risk tiers, the decision engine, or exact-call policy?

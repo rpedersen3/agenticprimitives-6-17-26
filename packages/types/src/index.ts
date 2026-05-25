@@ -5,6 +5,17 @@ export type Hex = `0x${string}`;
 export type ChainId = number & { readonly __chainId: unique symbol };
 export type BrandedId<T extends string> = string & { readonly __brand: T };
 
+/**
+ * The canonical identity of every agent IS its ERC-4337 Smart Agent
+ * address ([ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)).
+ * This alias names that role: a value typed `CanonicalAgentIdentity` is
+ * THE identity — never a name, profile, EOA, or passkey (those are
+ * facets that point AT it and rotate without changing it; see ADR-0011).
+ * It is a plain `Address`, so it composes with every viem/`Address` API
+ * without a cast — the name is the contract, the brand is doctrinal.
+ */
+export type CanonicalAgentIdentity = Address;
+
 // ─── Agent identity shape ─────────────────────────────────────────────
 //
 // Cross-cutting shape so downstream packages (audit, tool-policy,

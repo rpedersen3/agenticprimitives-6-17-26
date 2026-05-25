@@ -1,7 +1,7 @@
 # @agenticprimitives/delegation — Claude guide
 
 ## NOT the credential-recovery layer
-A delegation is **agent → agent** authority: SA A grants SA B the right to take scoped actions on A's behalf. It is NOT a credential change. Adding, replacing, or removing a passkey / SIWE EOA / hardware wallet on an SA is a [credential-recovery operation](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) routed through [`@agenticprimitives/account-custody`](../custody) — NEVER through a Caveat, Steward grant, session, or token here. A delegation issued by an SA MUST remain valid across that SA's credential rotation (principal = SA address, not the credential). A delegated party MUST NOT gain custody powers through delegation. See [ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) + [spec 221](../../specs/221-credential-recovery.md).
+A delegation is **agent → agent** authority: SA A grants SA B the right to take scoped actions on A's behalf. It is NOT a credential change. Adding, replacing, or removing a passkey / SIWE EOA / hardware wallet on an SA is a [credential-recovery operation](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) routed through [`@agenticprimitives/account-custody`](../account-custody) — NEVER through a Caveat, Steward grant, session, or token here. A delegation issued by an SA MUST remain valid across that SA's credential rotation (principal = SA address, not the credential). A delegated party MUST NOT gain custody powers through delegation. See [ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) + [spec 221](../../specs/221-credential-recovery.md).
 
 ## What this package owns
 - `Delegation` struct, `Caveat` types, `DataScopeGrant`. EIP-712 hashing.
@@ -22,7 +22,7 @@ A delegation is **agent → agent** authority: SA A grants SA B the right to tak
 ## Vocabulary
 **Owns:** `Delegation`, `Caveat`, `Enforcer`, `DelegationToken`, `principal`, `SessionManager`, `SessionRow`, `SessionPackage`, `SessionMeta`, `JtiStore` (interface), `EnforcerAddressMap`.
 **Disambiguation (critical):**
-- **"session"** here = `SessionRow` binding a `Delegation` to a session-signing keypair. In [`identity-auth`](../identity-auth) "session" is a JWT-cookie session — completely different concept.
+- **"session"** here = `SessionRow` binding a `Delegation` to a session-signing keypair. In [`identity-auth`](../connect-auth) "session" is a JWT-cookie session — completely different concept.
 - **"signer"** here = a `Signer` from `identity-auth`. We consume; we don't define the interface.
 - **"AAD"** is named here at the shape level (what fields go in) but encoded by `key-custody.canonicalContextBytes`.
 - **"principal"** = the verified `delegator` address after verification. Used by `mcp-runtime` as `principal: Address` in handler args.
@@ -58,7 +58,7 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 - "Implement AES-GCM, envelope encryption, or a KMS backend" — **STOP.** Belongs in [`key-custody`](../key-custody). Consume the `A2AKeyProvider` interface; don't reimplement primitives. [ADR-0002](../../docs/architecture/decisions/0002-session-lifecycle-in-delegation.md).
 - "Add an MCP-specific verify wrapper or HMAC envelope" — **STOP.** Belongs in [`mcp-runtime`](../mcp-runtime). [ADR-0004](../../docs/architecture/decisions/0004-mcp-runtime-as-middleware.md).
 - "Define a risk tier or classification taxonomy" — **STOP.** Belongs in [`tool-policy`](../tool-policy). [ADR-0003](../../docs/architecture/decisions/0003-tool-policy-protocol-agnostic.md).
-- "Implement a custom auth method or JWT session" — **STOP.** Belongs in [`identity-auth`](../identity-auth).
+- "Implement a custom auth method or JWT session" — **STOP.** Belongs in [`identity-auth`](../connect-auth).
 - "Add an `AgentAccountClient` method (deploy / getAddress / etc.)" — **STOP.** Belongs in [`agent-account`](../agent-account).
 - "Add a permissive default to the caveat evaluator" — **HARD STOP.** Fail-closed is a security invariant. Unknown enforcer → reject. No exceptions.
 

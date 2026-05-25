@@ -22,10 +22,10 @@
   relationships-edge-based, in our model. The relationship-type
   `NAMESPACE_CONTAINS` from smart-agent is intentionally NOT
   included.
-- Profile / `AgentCard` → [`agent-identity`](../agent-identity).
+- Profile / `AgentCard` → [`agent-identity`](../agent-profile).
 - Naming registry / resolver → [`agent-naming`](../agent-naming).
 - Delegation / mint / verify → [`delegation`](../delegation).
-- Custody / quorum / recovery → [`custody`](../custody).
+- Custody / quorum / recovery → [`custody`](../account-custody).
 - Signed-claim layer (`AgentAssertion`) — deferred to v2 per ADR-0007.
 - Policy/resolver layer (`AgentRelationshipResolver`) — deferred to v2.
 - Skill registry / credential registry — deferred to future
@@ -92,7 +92,7 @@ constants.
 - "Add a name resolver" — **STOP.** Belongs in
   [`agent-naming`](../agent-naming).
 - "Add a profile schema" — **STOP.** Belongs in
-  [`agent-identity`](../agent-identity).
+  [`agent-identity`](../agent-profile).
 - "Add CustodyPolicy enforcement of relationship rules" — **STOP.**
   Authorization to write an edge goes through the actor's Smart
   Agent ERC-1271 → its CustodyPolicy quorum. The relationships

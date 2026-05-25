@@ -6,6 +6,9 @@ The canonical identifier is the Smart Agent address
 (`@agenticprimitives/agent-account`). This package registers names and records
 that point **at** that address — it does not create or own identity.
 
+> **Layer:** Discover — a naming **facet** (not canonical identity — that is `agent-account`).
+> **Canonical key:** the Smart Agent address the name resolves to.
+
 Use this package to resolve names like `alice.agent`, `acme.agent`, and
 `treasury.acme.agent` to Smart Agent addresses, read typed service-discovery
 records, and build encoded calls for name-management transactions.

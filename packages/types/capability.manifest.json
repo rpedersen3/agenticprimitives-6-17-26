@@ -13,7 +13,7 @@
   "imports": [],
   "allowedImports": [],
   "forbiddenImports": ["apps/*", "@agenticprimitives/*"],
-  "publicExports": ["Address", "Hex", "ChainId", "BrandedId", "AgentType", "NameContext"],
+  "publicExports": ["Address", "Hex", "ChainId", "BrandedId", "CanonicalAgentIdentity", "AgentType", "NameContext"],
   "forbiddenTerms": [
     {
       "term": "Delegation",

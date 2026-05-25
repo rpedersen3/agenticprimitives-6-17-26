@@ -7,10 +7,13 @@ and optional off-chain metadata anchored by a deterministic
 content-hash.
 
 Where [`agent-naming`](../agent-naming) resolves *names → addresses*
-and [`agent-identity`](../agent-identity) owns the *profile layer*,
+and [`agent-profile`](../agent-profile) owns the *profile layer*,
 this package owns the **relationship layer**: the on-chain graph of
 who-knows-whom that other layers compose against (org membership,
 governance assertions, validation trust, etc.).
+
+> **Layer:** Discover — the trust **graph** (not canonical identity — that is `agent-account`).
+> **Canonical key:** Smart Agent addresses. An edge connects anchors; an edge is **not** a delegation.
 
 ## Status
 

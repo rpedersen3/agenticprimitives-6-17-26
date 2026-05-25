@@ -22,10 +22,10 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 - Smart-account internals → [`agent-account`](../agent-account)
   (we consume `AgentAccountClient` for ERC-1271 verification +
   counterfactual address derivation).
-- Custody policy, scheduling, quorum → [`custody`](../custody).
+- Custody policy, scheduling, quorum → [`custody`](../account-custody).
   We expose call builders only — never import.
 - Delegation / caveat / mint → [`delegation`](../delegation).
-- Passkey ceremonies → [`identity-auth`](../identity-auth).
+- Passkey ceremonies → [`identity-auth`](../connect-auth).
 - MCP / A2A transport → demo apps + future `a2a-runtime`.
 - Contract source — that lives in `apps/contracts/src/naming/`
   (Phase 3+); this package ships ABIs + client only.
@@ -97,9 +97,9 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 - "Add a delegation-token mint or verify path" — **STOP.** Belongs
   in [`delegation`](../delegation).
 - "Add a CustodyAction to gate name rotation" — **STOP.** Belongs
-  in [`custody`](../custody). Compose via `agent-naming/custody`
+  in [`custody`](../account-custody). Compose via `agent-naming/custody`
   call builders here without importing.
-- "Add a passkey ceremony" — **STOP.** Belongs in [`identity-auth`](../identity-auth).
+- "Add a passkey ceremony" — **STOP.** Belongs in [`identity-auth`](../connect-auth).
 - "Reach for an MCP transport" — **STOP.** Out of scope.
 - "Auto-resolve name via a system-wide hook in the worker" — **STOP.**
   Demo-app integration only; the package itself is transport-agnostic.

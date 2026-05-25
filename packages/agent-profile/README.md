@@ -8,6 +8,9 @@ package publishes and verifies off-chain profile manifests **about** that
 address. It does not deploy accounts, resolve `.agent` names, or run login
 ceremonies.
 
+> **Layer:** Discover — a profile **facet** (not login — that is `connect-auth`; not canonical identity — that is `agent-account`).
+> **Canonical key:** the Smart Agent address the AgentCard describes.
+
 Where [`agent-naming`](../agent-naming) maps names → addresses, this package
 maps addresses → typed profiles and optional endpoint-control proofs.
 

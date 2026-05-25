@@ -22,7 +22,7 @@ Profiles are a **facet registration** anchored at the canonical Smart Agent addr
 - Naming (`.agent` TLD, namehash, registry) → [`agent-naming`](../agent-naming).
 - Relationships (trust-fabric edges, roles) → [`agent-relationships`](../agent-relationships).
 - Smart-account internals → [`agent-account`](../agent-account).
-- Custody / quorum / recovery → [`custody`](../custody) + spec 207.
+- Custody / quorum / recovery → [`custody`](../account-custody) + spec 207.
 - Delegations → [`delegation`](../delegation).
 - MCP / A2A transport → demo apps + future `a2a-runtime`.
 - UAID generation (refused per ADR-0008 — consumers derive locally

@@ -1,33 +1,66 @@
 # Spec 101 — v0 Package Proposal
 
-**Status:** v0 draft · 2026-05-19
+**Status:** v0 draft · 2026-05-19 · **roster refreshed 2026-05-25**
 **Depends on:** [`100-package-boundary-doctrine.md`](./100-package-boundary-doctrine.md)
 **Replaces:** the package list embedded in [`000-product-overview.md`](./000-product-overview.md). When this proposal lands, that overview is updated and the original four-package scaffold (`auth`, `delegation`, `kms`, `mcp-resources`) is restructured per [`103-spec-reorganization-map.md`](./103-spec-reorganization-map.md).
 
+> **Status update (2026-05-25).** This proposal scaffolded the v0 **seven**; the
+> shipped roster has since grown to **twelve** — the identity-stack split
+> (`agent-naming`, `agent-profile`, `agent-relationships` per ADR-0007), the
+> custody-layer carve-out (`account-custody` per spec 213), and `audit`. Three
+> packages were also **renamed** (commit `7861f4b`): `identity-auth → connect-auth`,
+> `agent-identity → agent-profile`, `custody → account-custody`. §1 below reflects
+> the current twelve; the per-package detail in §2 covers the original seven (the
+> five additions are documented in their own `README.md` / `CLAUDE.md`). The
+> authoritative, always-current roster + "which package do I import" map is
+> [`docs/architecture/package-consumer-map.md`](../docs/architecture/package-consumer-map.md).
+
 ---
 
-## 1. v0 package set: six capability + one shared = seven packages
+## 1. The shipped set: eleven capability + one shared = twelve packages
 
-The user's four capability areas (user auth + smart account, delegation, KMS, MCP resources) become six packages once the boundary doctrine is applied. One small shared package handles cross-cutting types.
+The user's four capability areas seeded the original seven; the identity-stack
+split, the custody-layer carve-out, and audit brought the shipped roster to
+twelve. `types` is the one shared leaf.
 
-| # | Package | Area | Status |
-| --- | --- | --- | --- |
-| 1 | `@agenticprimitives/connect-auth` | Auth + smart account (1 of 2) | v0 |
-| 2 | `@agenticprimitives/agent-account` | Auth + smart account (2 of 2) | v0 |
-| 3 | `@agenticprimitives/delegation` | Delegation | v0 |
-| 4 | `@agenticprimitives/key-custody` | KMS | v0 (narrower than my original scope) |
-| 5 | `@agenticprimitives/tool-policy` | MCP resources (1 of 2) | v0 |
-| 6 | `@agenticprimitives/mcp-runtime` | MCP resources (2 of 2) | v0 |
-| 7 | `@agenticprimitives/types` | Cross-cutting | v0 |
+| # | Package | Layer | Area | Status |
+| --- | --- | --- | --- | --- |
+| 1 | `@agenticprimitives/types` | Core | Cross-cutting shared types | shipped |
+| 2 | `@agenticprimitives/agent-account` | Core | Canonical identity anchor (ERC-4337 SA) | shipped |
+| 3 | `@agenticprimitives/connect-auth` | Connect | Passkey / SIWE / JWT / `Signer` *(was `identity-auth`)* | shipped |
+| 4 | `@agenticprimitives/account-custody` | Govern | CustodyPolicy / quorum / recovery *(was `custody`)* | shipped |
+| 5 | `@agenticprimitives/delegation` | Authorize | Delegation tokens + caveats + session rows | shipped |
+| 6 | `@agenticprimitives/tool-policy` | Authorize | Tool classification + risk tiers | shipped |
+| 7 | `@agenticprimitives/mcp-runtime` | Operate | Delegation-aware MCP middleware | shipped |
+| 8 | `@agenticprimitives/agent-naming` | Discover | `.agent` names → address (facet) | shipped |
+| 9 | `@agenticprimitives/agent-profile` | Discover | `AgentCard` / HCS-11 profile (facet) *(was `agent-identity`)* | shipped |
+| 10 | `@agenticprimitives/agent-relationships` | Discover | Trust-fabric edges (graph) | shipped |
+| 11 | `@agenticprimitives/key-custody` | Secrets | KMS / envelope encryption / HMAC | shipped |
+| 12 | `@agenticprimitives/audit` | Observe | Audit-event schema + sinks | shipped |
 
-**Deferred to v0.1+** (intentionally NOT in v0):
+### The layered story
 
-- `@agenticprimitives/a2a-runtime` (A2A protocol adapters; depend on `a2aproject/a2a-js` SDK)
-- `@agenticprimitives/adapter-langchain`, `adapter-vercel-ai`, `adapter-mcp-transport-stdio` (framework adapters)
-- `@agenticprimitives/contracts-abis`, `contracts-deployments` (when we publish our own contracts; we currently reference smart-agent's)
-- `@agenticprimitives/credential-proof` (VCs, AnonCreds; not part of the original four areas)
-- `@agenticprimitives/agent-naming` (ENS-style names; not part of the original four areas)
-- Domain-specific packages (`treasury-controls`, `wallet-actions`, etc.) — these are smart-agent's product surface, not ours
+Dependencies only ever point *up* this list (strict, no cycles — doctrine §4):
+
+| Layer | Package(s) | Role |
+| --- | --- | --- |
+| **Core** | `types`, `agent-account` | Canonical identity **anchor** — the SA address IS the identity. |
+| **Connect** | `connect-auth` | Connect a human: passkey / SIWE / JWT / `Signer`. |
+| **Govern** | `account-custody` | Who controls the account: custodians, trustees, quorum, recovery. |
+| **Authorize** | `delegation`, `tool-policy` | What an agent may do: delegation + caveats; tool risk policy. |
+| **Operate** | `mcp-runtime` (+ planned `a2a-runtime`) | Enforce authorization at a transport boundary. |
+| **Discover** | `agent-naming`, `agent-profile`, `agent-relationships` | **Facet** registries + the trust **graph** pointing AT the anchor. |
+| **Secrets** | `key-custody` | KMS / encryption / HMAC ("key" custody — distinct from account custody). |
+| **Observe** | `audit` | Audit-event schema + sinks (durable persistence wired by apps). |
+
+**Deferred (intentionally NOT shipped):**
+
+- `@agenticprimitives/a2a-runtime` — A2A adapters (mirror of `mcp-runtime`; depends on `a2aproject/a2a-js`).
+- `@agenticprimitives/adapter-langchain`, `adapter-vercel-ai`, `adapter-mcp-transport-stdio` — framework adapters.
+- `@agenticprimitives/contracts-abis`, `contracts-deployments` — when we publish our own contract artifacts (today consumers read `apps/contracts/deployments-*.json`).
+- `@agenticprimitives/agent-credentials` — VCs / AnonCreds / skill + credential registries (ADR-0007 "deferred to v2").
+- `@agenticprimitives/smart-agent` facade — wait for ≥3 consumers asking for "one import" (doctrine §7).
+- Domain packages (`treasury-controls`, `wallet-actions`, etc.) — product surface, not primitives.
 
 ---
 
@@ -465,21 +498,31 @@ export type BrandedId<T extends string> = string & { readonly __brand: T }
 
 ---
 
-## 3. Dependency graph (final)
+## 3. Dependency graph (shipped twelve)
+
+Edges are "imports from"; all point *up* toward leaves. No cycles, no back-edges
+(enforced by `check:package-boundaries`). `types` and `audit` are leaves.
 
 ```
-identity-auth      types              key-custody
-      ↑              ↑                       ↑
-agent-account ◄──────┼───────────────────────┤
-      ↑              │                       │
-delegation ──────────┼───────────────────────┘
-      ↑              │
-tool-policy ─────────┘
-      ↑
-mcp-runtime
+types            ← (everything)
+audit            ← delegation, key-custody, mcp-runtime
+connect-auth     → types
+agent-account    → types, connect-auth
+connect-auth ← agent-account, key-custody, delegation, agent-naming, agent-profile, agent-relationships
+key-custody      → types, audit, connect-auth
+delegation       → types, audit, connect-auth, agent-account, key-custody
+tool-policy      → types
+mcp-runtime      → types, audit, delegation, key-custody, tool-policy
+agent-naming     → types, connect-auth, agent-account
+agent-profile    → types, connect-auth, agent-account
+agent-relationships → types, connect-auth, agent-account
+account-custody  → types        (leaf today; consumed by apps + contracts, not by other packages)
 ```
 
-`types` is a leaf consumed by most others. No cycles. Each arrow represents "imports from."
+The facet registries (`agent-naming` / `agent-profile` / `agent-relationships`)
+MUST NOT import each other or the authorize/operate layer; `account-custody` is
+a leaf (the future re-shape where account-account/delegation consume it is not
+wired — see spec 213).
 
 ---
 
@@ -487,15 +530,20 @@ mcp-runtime
 
 | Package | Discoverable from name? | Doctrine violation? |
 | --- | --- | --- |
-| `identity-auth` | ✓ (auth + identity) | None |
+| `connect-auth` | ✓ (connect a human — passkey/SIWE/JWT) — renamed from `identity-auth` to stop colliding with `agent-profile` | None |
 | `agent-account` | ✓ (the agent's account) | None |
+| `account-custody` | ✓ (custody policy *of the account*) — renamed from `custody` to disambiguate from `key-custody` | None |
 | `delegation` | ✓ | None |
-| `key-custody` | ✓ (keys custodied by KMS) | None |
 | `tool-policy` | ✓ (policy applied to tools) | None |
 | `mcp-runtime` | ✓ (runtime layer for MCP servers) | None |
+| `key-custody` | ✓ (keys custodied by KMS) | None |
+| `agent-naming` | ✓ (`.agent` names) | None |
+| `agent-profile` | ✓ (the agent's profile/AgentCard) — renamed from `agent-identity` (login lives in `connect-auth`) | None |
+| `agent-relationships` | ✓ (trust edges) | None |
+| `audit` | ✓ | None |
 | `types` | weak (generic) — but smart-agent uses it, and convention is strong | Acceptable |
 
-All names are nouns of capability, kebab-case, scoped. No `core`/`common`/`utils`/`shared`.
+All names are nouns of capability, kebab-case, scoped. No `core`/`common`/`utils`/`shared`. The 2026-05-25 renames removed the only two collisions (login-vs-profile, account-custody-vs-key-custody).
 
 ---
 
@@ -516,7 +564,7 @@ Deferring is a feature, not a gap. Each of these has been considered and conscio
 
 Before scaffolding, the reader should answer:
 
-1. Do the 6 capability packages cleanly map to the original four areas? **(Yes:** auth+account → 2 packages; delegation → 1; KMS → 1 narrower; MCP resources → 2 (mcp-runtime + tool-policy).)
+1. Do the capability packages cleanly map to the areas? **(Yes:** the original 6 — auth+account → 2; delegation → 1; KMS → 1 narrower; MCP resources → 2 — plus the identity-stack split (3), the custody carve-out (1), and audit (1) = 11 capability + `types`.)
 2. Is any package likely to merge with another in the first 6 months? (If yes, defer the split.)
 3. Is any package missing a clear "what it does NOT own" boundary? (Per doctrine §2, all three questions for splitting should be "yes.")
 4. Does the dependency graph have any cycles or back-edges? (No.)

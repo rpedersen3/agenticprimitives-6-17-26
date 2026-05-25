@@ -3,12 +3,14 @@
 ## What this package owns
 - Branded primitive types: `Address`, `Hex`, `ChainId`.
 - `BrandedId<T>` helper for opaque IDs.
+- `CanonicalAgentIdentity` — alias of `Address` naming the ADR-0010 role
+  ("the agent's identity IS its SA address"). Doctrinal/marketing brand, not a
+  phantom brand — composes with `Address` APIs without a cast.
 - Cross-cutting shapes: `AgentType`, `NameContext` (display-only; canonical
-  authority stays `Address` / future `canonicalAgentId` per
+  authority stays `Address` / `CanonicalAgentIdentity` per
   [ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)).
   See [ADR-0006](../../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md).
-- Planned: `CanonicalAgentIdentity`, facet types from ADR-0010/0011 when ≥2
-  packages import them.
+- Planned: facet types from ADR-0010/0011 when ≥2 packages import them.
 - Nothing else. Types-only leaf package.
 
 ## What this package does NOT own
@@ -17,8 +19,8 @@
 - Anything used by only one other package.
 
 ## Vocabulary
-**Owns:** `Address`, `Hex`, `ChainId`, `BrandedId`, `AgentType`,
-`NameContext`.
+**Owns:** `Address`, `Hex`, `ChainId`, `BrandedId`, `CanonicalAgentIdentity`,
+`AgentType`, `NameContext`.
 **Disambiguation:**
 - **`AgentType`** lives here as a cross-cutting closed enum (≥2 consumers:
   audit, tool-policy, delegation, mcp-runtime, agent-naming). Naming-domain
@@ -37,6 +39,7 @@
 - `Address`, `Hex` — branded `0x${string}` types.
 - `ChainId` — branded number.
 - `BrandedId<T>` — generic opaque-ID helper.
+- `CanonicalAgentIdentity` — alias of `Address`; THE agent identity (ADR-0010).
 - `AgentType` — closed enum (`'person' | 'org' | 'service' | 'treasury'`).
 - `NameContext` — `{ agentName?: string; agentType?: AgentType }`.
 

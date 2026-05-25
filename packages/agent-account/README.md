@@ -8,6 +8,9 @@ that account, derives its address, builds UserOps, and verifies ERC-1271
 signatures. Names, profiles, and passkeys are **facets** handled by sibling
 packages.
 
+> **Layer:** Core — the canonical identity **anchor**.
+> **Canonical key:** Smart Agent address (CAIP-10 `eip155:<chainId>:<address>`). Names / profiles / edges point AT it; they never *are* the identity.
+
 ## Use This When
 
 - You need counterfactual or deployed Smart Agent addresses (CREATE2 factory).
