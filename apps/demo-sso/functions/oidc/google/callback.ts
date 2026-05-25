@@ -9,9 +9,10 @@
 // NOTE: the OIDC subject is keyed on (iss, sub) — never email (CN-3). The agent
 // is RESOLVED via the directory; it is not derived from the email.
 import { completeLogin, oidcFacetId } from '@agenticprimitives/connect-auth/google';
-import { newAuthCode, validateRedirectUri } from '@agenticprimitives/connect';
+import { newAuthCode, validateRedirectUri, importJwks, verifyAgentSession } from '@agenticprimitives/connect';
 import type { CredentialPrincipal } from '@agenticprimitives/types';
 import { issueForOidcSubject } from '../../../src/lib/broker-core';
+import { recordOidcFacet } from '../../../src/lib/kv-indexer';
 import { getServer, json, type FnContext } from '../../_lib/server-broker';
 
 export const onRequestGet = async ({ request, env }: FnContext): Promise<Response> => {
@@ -28,7 +29,13 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
   const stashRaw = await env.AUTH_CODES.get(stashKey);
   await env.AUTH_CODES.delete(stashKey);
   if (!stashRaw) return json({ error: 'unknown or expired state' }, 400);
-  const stash = JSON.parse(stashRaw) as { codeVerifier: string; nonce: string; aud: string; rpRedirect?: string };
+  const stash = JSON.parse(stashRaw) as {
+    codeVerifier: string;
+    nonce: string;
+    aud: string;
+    rpRedirect?: string;
+    linkToken?: string;
+  };
 
   // Token exchange (client_secret server-side) + id_token verification.
   const result = await completeLogin({
@@ -50,8 +57,30 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
     role: 'login-grade',
   };
 
-  const { signer, directory } = await getServer(env);
+  const { signer, directory, jwks } = await getServer(env);
   const iss = new URL(request.url).origin; // the Connect origin = this serving origin
+
+  // ── LINK this Google subject to an EXISTING agent (P0-C) ────────────
+  // Authorized by a custody-grade AgentSession of that agent (stash.linkToken).
+  // Records (iss,sub)->agent in the indexer; issues no session. Redirects back.
+  if (stash.linkToken) {
+    const back = (status: string, extra: Record<string, string> = {}): Response => {
+      if (!stash.rpRedirect) return json({ status, ...extra }, status === 'linked' ? 200 : 400);
+      const dest = new URL(stash.rpRedirect);
+      dest.searchParams.set('connect_status', status);
+      for (const [k, val] of Object.entries(extra)) dest.searchParams.set(k, val);
+      return new Response(null, { status: 302, headers: { location: dest.toString() } });
+    };
+    const keys = await importJwks(jwks);
+    const v = await verifyAgentSession(stash.linkToken, { keys, expectedIss: iss, expectedAud: stash.aud });
+    if (!v.ok) return back('link_failed', { reason: 'invalid session' });
+    if (v.session.assurance !== 'onchain-confirmed') {
+      return back('link_failed', { reason: 'a custody-grade session is required to link Google' });
+    }
+    await recordOidcFacet(env.AUTH_CODES, result.principal.iss, result.principal.sub, v.session.sub);
+    return back('linked', { email: result.principal.email ?? '' });
+  }
+
   // OIDC resolves by the verified (iss, sub) — resolveByOidcSubject, not by
   // credential — so the directory's OIDC-subject path (catch-all / indexer) is hit.
   const outcome = await issueForOidcSubject(

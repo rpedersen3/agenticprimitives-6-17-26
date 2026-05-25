@@ -10,11 +10,14 @@
 
 import { importJwks, verifyAgentSession, type VerifyResult } from '@agenticprimitives/connect';
 
-/** Redirect the browser to the Connect origin to begin Google OIDC. */
-export function startGoogleSignIn(aud: string, redirectUri: string): void {
+/** Redirect the browser to the Connect origin to begin Google OIDC. When
+ *  `linkToken` (a custody-grade AgentSession) is given, the callback LINKS the
+ *  Google subject to that agent instead of logging in/bootstrapping (P0-C). */
+export function startGoogleSignIn(aud: string, redirectUri: string, linkToken?: string): void {
   const u = new URL('/oidc/google/start', window.location.origin);
   u.searchParams.set('aud', aud);
   u.searchParams.set('redirect_uri', redirectUri);
+  if (linkToken) u.searchParams.set('link_token', linkToken);
   window.location.assign(u.toString());
 }
 

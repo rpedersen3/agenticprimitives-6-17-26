@@ -51,11 +51,20 @@ export function App() {
     const connectStatus = url.searchParams.get('connect_status');
     if (connectStatus) {
       const email = url.searchParams.get('email');
-      setGoogleNotice(
-        `We recognized your Google account${email ? ` (${email})` : ''}, but no workspace is linked to it yet. ` +
-          `Create one with your wallet below — then Google becomes a quick login for it.`,
-      );
-      for (const k of ['connect_status', 'via', 'email']) url.searchParams.delete(k);
+      const reason = url.searchParams.get('reason');
+      if (connectStatus === 'linked') {
+        setGoogleNotice(
+          `✓ Google${email ? ` (${email})` : ''} is now linked to your workspace — next time you can sign in with Google.`,
+        );
+      } else if (connectStatus === 'link_failed') {
+        setGoogleNotice(`Couldn't link Google: ${reason ?? 'please try again'}.`);
+      } else {
+        setGoogleNotice(
+          `We recognized your Google account${email ? ` (${email})` : ''}, but no workspace is linked to it yet. ` +
+            `Create one with a wallet/passkey — or sign in with your wallet/passkey and use "Link Google".`,
+        );
+      }
+      for (const k of ['connect_status', 'via', 'email', 'reason']) url.searchParams.delete(k);
       window.history.replaceState({}, '', url.toString());
       return;
     }
@@ -298,9 +307,17 @@ export function App() {
               <p className="muted">Loading your profile…</p>
             )}
             <button onClick={signOut}>Sign out</button>
+            {session.via !== 'Google' && (
+              <p style={{ marginTop: '0.5rem' }}>
+                <button onClick={() => startGoogleSignIn(AUD, window.location.origin + '/', session.token)}>
+                  Link Google to this workspace
+                </button>{' '}
+                <span className="muted">— adds Google as a quick login (custody-authorized, P0-C).</span>
+              </p>
+            )}
             <p className="muted" style={{ marginTop: '0.5rem' }}>
-              Your workspace stays safe. Sign back in anytime with the same wallet — it resolves to this same
-              agent.
+              Your workspace stays safe. Sign back in anytime with the same credential — it resolves to this
+              same agent.
             </p>
           </div>
 

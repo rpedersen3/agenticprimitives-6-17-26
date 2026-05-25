@@ -14,6 +14,9 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
   const url = new URL(request.url);
   const aud = url.searchParams.get('aud'); // the relying site (its client_id)
   const rpRedirect = url.searchParams.get('redirect_uri') ?? undefined; // where to deliver the code
+  // Optional: a custody-grade AgentSession token to LINK this Google subject to an
+  // existing agent (instead of login/bootstrap). Verified in the callback (P0-C).
+  const linkToken = url.searchParams.get('link_token') ?? undefined;
   if (!aud) return json({ error: 'aud query param required (the relying site)' }, 400);
 
   const { authUrl, codeVerifier, state, nonce } = beginLogin({
@@ -25,7 +28,7 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
   // Stash the PKCE verifier + nonce + relying-site context, keyed on `state`.
   await env.AUTH_CODES.put(
     `oidc:${state}`,
-    JSON.stringify({ codeVerifier, nonce, aud, rpRedirect }),
+    JSON.stringify({ codeVerifier, nonce, aud, rpRedirect, linkToken }),
     { expirationTtl: 600 },
   );
 
