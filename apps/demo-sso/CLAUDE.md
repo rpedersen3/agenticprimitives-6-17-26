@@ -20,10 +20,42 @@ packages together: `connect` (token + convergence + issuance) +
 apps/demo-sso/
 ├── index.html
 ├── vite.config.ts        ← dev server on :5373 (demo-web 5173, demo-web-pro 5273)
+├── wrangler.toml         ← Pages config (KV binding for the auth-code store)
+├── scripts/gen-broker-key.mjs   ← generate the Ed25519 broker key (a Pages secret)
+├── functions/            ← the SERVER broker (Pages Functions; key from env)
+│   ├── _lib/server-broker.ts    ← signer-from-env + directory + helpers
+│   ├── jwks.ts                  ← GET  /jwks
+│   ├── authorize.ts             ← POST /authorize  (→ single-use code; CN-1/9)
+│   └── token.ts                 ← POST /token      (code → AgentSession)
 └── src/
     ├── main.tsx
-    ├── broker.ts          ← the integration core: wires connect + directory + adapters
-    └── App.tsx            ← Connect origin + 2 relying-site panels + step-up gate
+    ├── lib/broker-core.ts       ← shared directory + issuance/verify (signer injected)
+    ├── broker.ts                ← in-browser demo broker (key in-page) over broker-core
+    └── App.tsx                  ← Connect origin + 2 relying-site panels + step-up gate
+```
+
+Two broker variants share `src/lib/broker-core.ts`: the **in-browser** broker
+(`src/broker.ts`, key generated in-page — runnable with no backend, used by the
+UI) and the **server** broker (`functions/`, key from an env secret — the
+production-correct shape). Same directory + issuance/verification logic.
+
+## Server broker (Pages Functions)
+
+```
+GET  /jwks       → the broker's public JWKS (relying sites verify with this)
+POST /authorize  { credential, aud, redirectUri? } → { status:'issued', code } | bootstrap | disambiguate | rejected
+POST /token      { code, aud } → { agentSession }   (single-use code exchange; CN-1/9)
+```
+
+The signing key lives ONLY server-side (`BROKER_PRIVATE_JWK` secret); the browser
+sees only the JWKS. Run it:
+
+```bash
+node scripts/gen-broker-key.mjs                       # → kid + private JWK
+wrangler kv namespace create AUTH_CODES               # provision the code store
+pnpm --filter @agenticprimitives-demo/sso build
+wrangler pages secret put BROKER_PRIVATE_JWK          # paste the private JWK
+wrangler pages dev dist                               # serves /jwks /authorize /token
 ```
 
 ## What it demonstrates
@@ -38,23 +70,21 @@ apps/demo-sso/
   (`credential-change`) is blocked until step-up to a custody-grade passkey
   (ADR-0017 / CN-2).
 
-## Demo simplifications (honest about them)
+## Two paths: in-browser demo broker vs server broker
 
-- **The broker key is generated in-browser** so the demo is self-contained. In
-  production it lives server-side at the Connect origin (a Cloudflare Pages
-  Function / Worker); the browser only ever sees the JWKS. The `src/broker.ts`
-  header says so.
-- **Credential verification is simulated** (passkey/OIDC) and the on-chain
-  membership is an in-memory Set. `connect-auth` owns the real ceremonies and
-  the adapters wrap real `agent-naming` + `readContract`; this demo's focus is
-  the SSO flow + package integration + the security gates, not re-proving
-  passkey/OIDC (connect-auth tests those).
+- **In-browser** (`src/broker.ts`, used by the UI): key generated in-page,
+  credential verification simulated, on-chain membership an in-memory Set. Runs
+  with no backend — the fast "see the flow" path.
+- **Server** (`functions/`): the production-correct shape — key from a Pages
+  secret, JWKS endpoint, single-use code exchange (CN-1/9). Real OIDC lands here
+  (the client secret must be server-side). See `OIDC-SETUP.md`.
 
 ## Next (not yet built)
 
-- A Pages Function broker (real server-side key + JWKS endpoint + the §4a
-  redirect/code-exchange flow), real GitHub OIDC token exchange (needs the
-  client secret server-side), real on-chain `confirmsCredential`, and a deploy.
+- Wire the UI to call the server broker (`/oidc/google/start` → Google →
+  `/authorize` → `/token`) as a second mode; real on-chain `confirmsCredential`
+  (viem `readContract` against the deployed custody contract); the KV ids +
+  `BROKER_PRIVATE_JWK` secret + a deploy.
 
 ## Doctrine pinned to this app
 

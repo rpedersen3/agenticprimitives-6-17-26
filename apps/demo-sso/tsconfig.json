@@ -10,5 +10,5 @@
     // dist). Override the base src path-mappings so TS resolves the built dist.
     "paths": {}
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "functions/**/*"]
 }

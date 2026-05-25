@@ -1,0 +1,27 @@
+# Cloudflare Pages config for demo-sso (the Connect broker origin).
+#
+# Local dev:
+#   pnpm --filter @agenticprimitives-demo/sso dev          # Vite only (in-app broker)
+#   pnpm --filter @agenticprimitives-demo/sso build
+#   wrangler pages dev dist                                 # serves the Function broker too
+# Deploy:
+#   wrangler pages deploy dist
+#
+# Secrets (set via `wrangler pages secret put <NAME>`):
+#   BROKER_PRIVATE_JWK     — Ed25519 private JWK (JSON). Generate:
+#                            node scripts/gen-broker-key.mjs
+#   BROKER_KID             — e.g. "broker-1"
+#   REDIRECT_URI_ALLOWLIST — comma-separated exact-match relying-site redirect URIs (CN-1)
+
+name = "demo-sso"
+compatibility_date = "2026-05-25"
+pages_build_output_dir = "dist"
+
+# Single-use auth-code store (CN-9). Provision once:
+#   wrangler kv namespace create AUTH_CODES
+#   wrangler kv namespace create AUTH_CODES --preview   # for `wrangler pages dev`
+# then paste the ids below.
+[[kv_namespaces]]
+binding = "AUTH_CODES"
+id = "REPLACE_WITH_AUTH_CODES_KV_ID"
+preview_id = "REPLACE_WITH_AUTH_CODES_PREVIEW_KV_ID"
