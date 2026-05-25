@@ -35,11 +35,16 @@ authority it does not have.
   plus `Caip10Parts { namespace, reference, address }`, `buildCaip10Address(parts):
   Caip10Address`, `parseCaip10(value): Caip10Parts`, `isValidCaip10`, and
   `CAIP10_NAMESPACE_ALLOWLIST` (`eip155`/`hedera`/`solana`) under its `/caip10`
-  subpath (ADR-0008). This wave **moves that primitive into `types`** and defines
-  `type CanonicalAgentId = Caip10Address` (a semantic alias for the subject role);
-  `agent-profile` re-exports from `types`. There is exactly **one brand and one
-  builder**, namespace-plural by construction — NOT an `eip155`-only
-  `(chainId, address)` form (which could not express `hedera:*`).
+  subpath (ADR-0008). This wave **moves the TYPE into `types`** — the
+  `Caip10Address` brand + `Caip10Parts` — and defines `type CanonicalAgentId =
+  Caip10Address` (a semantic alias for the subject role). The **runtime builder
+  + parser + allowlist (`buildCaip10Address`/`parseCaip10`/`isValidCaip10`/
+  `CAIP10_NAMESPACE_ALLOWLIST`/`InvalidCaip10Error`) STAY in `agent-profile`**,
+  because `@agenticprimitives/types` is a runtime-free, zero-dep leaf (its
+  invariant) and ADR-0008 already placed the builder there; they are re-typed to
+  the promoted brand and re-exported. Net: exactly **one brand and one builder**,
+  namespace-plural by construction — NOT an `eip155`-only `(chainId, address)`
+  form (which could not express `hedera:*`).
 - **Builds on [ADR-0008](./0008-caip10-nativeid-record-predicate.md).** The
   `(chainId, address)` signature sketched in ADR-0008 (2026-05-23) never shipped;
   the shipped `Caip10Parts` form is authoritative. We still do NOT mint HCS-14

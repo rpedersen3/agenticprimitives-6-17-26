@@ -10,7 +10,14 @@
   authority stays `Address` / `CanonicalAgentIdentity` per
   [ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)).
   See [ADR-0006](../../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md).
-- Planned: facet types from ADR-0010/0011 when ≥2 packages import them.
+- **CAIP-10 brand:** `Caip10Address` (the one brand — audit P0-2), its alias
+  `CanonicalAgentId` (the SSO subject / directory key, ADR-0016), and `Caip10Parts`.
+  The TYPE lives here; the RUNTIME builder `buildCaip10Address` stays in
+  `@agenticprimitives/agent-profile` (this package is runtime-free; ADR-0008).
+- **SSO/session shapes** (ADR-0016/0017; specs 223/224): `AgentSession` (no
+  `owner`), `CredentialPrincipal`, `Assurance`, `CredentialKind`, `CredentialRole`.
+  Here — not in `connect` — because identity-directory + connect + relying-site
+  SDKs share them WITHOUT runtime coupling (same rationale as `NameContext`).
 - Nothing else. Types-only leaf package.
 
 ## What this package does NOT own
@@ -20,7 +27,8 @@
 
 ## Vocabulary
 **Owns:** `Address`, `Hex`, `ChainId`, `BrandedId`, `CanonicalAgentIdentity`,
-`AgentType`, `NameContext`.
+`AgentType`, `NameContext`, `Caip10Address`, `CanonicalAgentId`, `Caip10Parts`,
+`AgentSession`, `CredentialPrincipal`, `Assurance`, `CredentialKind`, `CredentialRole`.
 **Disambiguation:**
 - **`AgentType`** lives here as a cross-cutting closed enum (≥2 consumers:
   audit, tool-policy, delegation, mcp-runtime, agent-naming). Naming-domain
@@ -42,6 +50,10 @@
 - `CanonicalAgentIdentity` — alias of `Address`; THE agent identity (ADR-0010).
 - `AgentType` — closed enum (`'person' | 'org' | 'service' | 'treasury'`).
 - `NameContext` — `{ agentName?: string; agentType?: AgentType }`.
+- `Caip10Address` — branded CAIP-10 string; `CanonicalAgentId` — its alias (SSO
+  subject, ADR-0016); `Caip10Parts` — `{ namespace, reference, address }`.
+- `Assurance`, `CredentialKind`, `CredentialRole`, `CredentialPrincipal`,
+  `AgentSession` (no `owner`) — the SSO/session shapes (specs 223/224).
 
 ## Allowed imports
 None. Zero deps.
@@ -51,7 +63,12 @@ None. Zero deps.
 - Any other `@agenticprimitives/*` package.
 
 ## Drift triggers — STOP and route
-- "Add a domain type (User, Org, Profile, Session, etc.)" — **STOP.** Domain types live in the package that owns the concept.
+- "Add a domain type (User, Org, Profile, Session, etc.)" — **STOP**, with one
+  documented exception: the SSO `AgentSession`/`CredentialPrincipal`/`Assurance`
+  shapes live here ON PURPOSE because ≥2 packages (identity-directory + connect)
+  and relying-site SDKs share them and must not runtime-couple (the `NameContext`
+  rationale). A NEW session-ish type still STOPs unless it clears the same
+  ≥2-consumer + no-runtime-coupling bar.
 - "Add a runtime function or const" — **STOP.** Types-only.
 - "Add a type used in only one package" — **STOP.** Move it to that package; only promote here when ≥2 packages need it.
 

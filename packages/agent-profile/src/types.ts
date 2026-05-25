@@ -1,4 +1,9 @@
-import type { Address, Hex } from '@agenticprimitives/types';
+import type { Address, Hex, Caip10Address } from '@agenticprimitives/types';
+
+// `Caip10Address` is the canonical CAIP-10 brand, now owned by
+// `@agenticprimitives/types` (one brand — audit P0-2). Re-exported here so
+// existing `@agenticprimitives/agent-profile` importers keep working.
+export type { Caip10Address };
 
 /**
  * Discriminator for AgentCard sub-shapes. Mirrors HCS-11 § typed-profile
@@ -17,13 +22,6 @@ export type ProfileType =
   | 'treasury'
   | 'mcpServer'
   | 'multisig';
-
-/**
- * Branded CAIP-10 string — `<namespace>:<reference>:<address>`.
- * Constructed only via `buildCaip10Address` so callers can't bypass
- * the namespace allowlist (Phase 1 enforcement; see ADR-0008).
- */
-export type Caip10Address = string & { readonly __brand: 'caip10' };
 
 /**
  * Endpoint-control verification methods (matches GoDaddy ANS

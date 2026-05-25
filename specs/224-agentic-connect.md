@@ -257,12 +257,14 @@ identity-persists model (ADR-0011). Full rows in spec 226 (AP-10, AP-15).
 
 ## 12. Phased plan
 
-1. `types`: **promote `agent-profile`'s `Caip10Address` brand + `Caip10Parts` +
-   `buildCaip10Address(parts)` + `parseCaip10` + `CAIP10_NAMESPACE_ALLOWLIST` into
-   `types`** as `CanonicalAgentId` (`agent-profile` re-exports — one brand, one
-   builder, namespace-plural; P0-1/P0-2). Add `AgentSession`, `CredentialPrincipal`,
-   `Assurance`; keep the P8 `CanonicalAgentIdentity = Address` as the within-chain
-   EVM handle (a *different* concept, not renamed).
+1. `types`: **promote the CAIP-10 TYPE into `types`** — the `Caip10Address` brand +
+   `Caip10Parts` — as `CanonicalAgentId` (one brand; `agent-profile` re-exports).
+   The **runtime builder/parser/allowlist stay in `agent-profile`** (types is
+   runtime-free; ADR-0008 placed them there), re-typed to the promoted brand
+   (P0-1/P0-2). Add `AgentSession`, `CredentialPrincipal`, `Assurance`,
+   `CredentialKind`, `CredentialRole`; keep the P8 `CanonicalAgentIdentity =
+   Address` as the within-chain EVM handle (a *different* concept, not renamed).
+   ✅ **DONE** (Phase 1).
 2. `connect-auth`: real OIDC (Google) with PKCE/state/nonce + `email_verified`;
    WebAuthn challenge + UV hardening. **Specify the `JwtClaims` (spec 200 §3) →
    `AgentSession` translation** (security audit P2-5): re-resolve

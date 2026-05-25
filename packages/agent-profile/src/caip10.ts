@@ -14,17 +14,16 @@
 
 import { CAIP10_NAMESPACE_ALLOWLIST } from './constants';
 import { InvalidCaip10Error } from './errors';
-import type { Caip10Address } from './types';
+import type { Caip10Address, Caip10Parts } from '@agenticprimitives/types';
 
+// `Caip10Address` + `Caip10Parts` now live in `@agenticprimitives/types`
+// (one brand — audit P0-2). The runtime builder/parser stay HERE because
+// `types` is runtime-free (ADR-0008 placed `buildCaip10Address` in this
+// package). Re-export both so the `/caip10` subpath surface is unchanged.
+export type { Caip10Address, Caip10Parts };
 export { CAIP10_NAMESPACE_ALLOWLIST };
 
 const CAIP10_GRAMMAR = /^([-a-z0-9]{3,8}):([-_a-zA-Z0-9]{1,32}):([-.%a-zA-Z0-9]{1,128})$/;
-
-export interface Caip10Parts {
-  namespace: string;
-  reference: string;
-  address: string;
-}
 
 /**
  * Build a CAIP-10 string. Strict on the encode side — namespace must

@@ -58,13 +58,12 @@ the per-chain enforcement of the same vocabulary.
 | `@agenticprimitives/connect` | SSO broker state machine + token issuer | types, connect-auth, identity-directory |
 
 **Updated (3):**
-- `types` — **promote `agent-profile`'s `Caip10Address` brand + `Caip10Parts` +
-  `buildCaip10Address(parts)` + `parseCaip10` + `CAIP10_NAMESPACE_ALLOWLIST` into
-  `types`** as `CanonicalAgentId` (one brand, one builder, namespace-plural;
-  `agent-profile` re-exports — audit P0-1/P0-2); add `CredentialPrincipal`,
-  `AgentSession` (no `owner`), `Assurance`, `CredentialRole`; keep
-  `CanonicalAgentIdentity = Address` as the within-chain EVM handle (a different
-  concept).
+- `types` — **promote the CAIP-10 TYPE into `types`** (`Caip10Address` brand +
+  `Caip10Parts`) as `CanonicalAgentId`; the runtime builder/parser/allowlist STAY
+  in `agent-profile` (types is runtime-free), re-typed + re-exported — one brand,
+  one builder (audit P0-1/P0-2). Add `CredentialPrincipal`, `AgentSession` (no
+  `owner`), `Assurance`, `CredentialKind`, `CredentialRole`; keep
+  `CanonicalAgentIdentity = Address` as the within-chain EVM handle. **✅ done.**
 - `connect-auth` — replace the Google **stub** with real OIDC (PKCE/state/nonce +
   `email_verified`); WebAuthn challenge + UV + origin hardening for the broker
   origin; specify the `JwtClaims`→`AgentSession` translation.
