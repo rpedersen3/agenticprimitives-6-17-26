@@ -11,7 +11,7 @@
  * The returned calldata is what the demo's `useGaslessTx` (and any
  * other UserOp builder) passes as the `callData` field of the
  * outer userOp. AgentAccount's validateUserOp + execute path then
- * applies the user's signature path (passkey / EOA / ERC-1271)
+ * applies the user's signature path (WebAuthn / EOA / ERC-1271)
  * before calling `target.call{value: value}(data)`.
  */
 

@@ -48,7 +48,10 @@
     "ADMIN_VERB_PROPOSE",
     "ADMIN_VERB_EXECUTE",
     "ADMIN_VERB_CANCEL",
-    "SafeSignatureSlot"
+    "SafeSignatureSlot",
+    "buildExecuteCallData",
+    "buildExecuteBatchCallData",
+    "ContractCall"
   ],
   "forbiddenTerms": [
     {

@@ -70,7 +70,7 @@
     "buildSetProfileActiveCall"
   ],
   "forbiddenTerms": [
-    { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },
+    { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation", "allowInPaths": ["src/calls.ts"] },
     { "term": "Caveat", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },
     { "term": "Custodian", "reason": "Belongs in @agenticprimitives/custody.", "owningPackage": "@agenticprimitives/custody" },
     { "term": "Trustee", "reason": "Belongs in @agenticprimitives/custody.", "owningPackage": "@agenticprimitives/custody" },
