@@ -68,7 +68,12 @@ export async function deploySmartAccount(
   owner: Address,
 ): Promise<DeployResult | DeployFlowError> {
   return deployWithSigner({
-    body: { owner },
+    // `initMethod: 'eoa'` is REQUIRED: the worker only maps `owner` →
+    // an EOA custodian when it's present (index.ts normalization).
+    // Without it `custodians` stays empty and /session/deploy rejects
+    // with "at least one of custodians[] or passkey must be supplied".
+    // Mirrors the passkey path's `initMethod: 'passkey'`.
+    body: { initMethod: 'eoa', owner },
     signUserOpHash: async (hash) => wallet.signHash({ hash }),
   });
 }
