@@ -58,6 +58,13 @@ export type SignTypedDataFn = (args: {
   primaryType: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   message: any;
+  /**
+   * Pin the signing account to the connection's specific EOA (not the
+   * wallet's active selection). MetaMask signs `eth_signTypedData_v4`
+   * with the named account when it's permitted on the connection, so a
+   * 2-of-2 SIWE ceremony never needs the user to switch active accounts.
+   */
+  account?: `0x${string}`;
 }) => Promise<Hex>;
 
 /**
@@ -131,44 +138,42 @@ async function signCeremonyHash(args: {
       'Seat has no signing method available — needs either a local DemoPasskey or a connected wallet + signTypedDataAsync callback.',
     );
   }
-  // Guard: every signTypedData call uses the wallet's CURRENT active
-  // address, not the address bound to this seat. If the user switched
-  // MetaMask accounts (e.g. to claim Bob), the signature will recover
-  // to the wrong address and the quorum check will revert with
-  // `AdminUnauthorizedSigner`. On mismatch we trigger MetaMask's
-  // account picker so the user can switch with one click; if they
-  // still pick the wrong account (or dismiss), we throw a clear error.
-  if (signer.getWalletAddress) {
-    let active = signer.getWalletAddress();
-    if (!active && signer.promptSwitchWalletAccount) {
-      active = await signer.promptSwitchWalletAccount();
-    }
-    if (!active) {
-      throw new Error(
-        'No wallet account connected. Connect MetaMask + select the account bound to this seat, then retry.',
-      );
-    }
-    if (active.toLowerCase() !== siwe.eoa.toLowerCase() && signer.promptSwitchWalletAccount) {
-      // Prompt for switch automatically.
-      const after = await signer.promptSwitchWalletAccount();
-      if (after) active = after;
-    }
-    if (active.toLowerCase() !== siwe.eoa.toLowerCase()) {
-      throw new Error(
-        `Wrong MetaMask account active: wallet is on ${active} but this seat was claimed with ${siwe.eoa}. Open MetaMask → switch to ${siwe.eoa}, then retry the action.`,
-      );
-    }
-  }
+  // Account pinning (same fix as demo-web-pro, commit "pin SIWE signer
+  // account to fix 2-of-2 ceremonies"): pass `siwe.eoa` to
+  // signTypedDataAsync so the wallet signs with THAT specific account —
+  // the connection's bound EOA — not whichever account is "active" in
+  // the MetaMask UI. This removes the manual account-switching dance for
+  // 2-of-2 SIWE (Alice's account active when we need Bob's signature).
+  // If that account isn't permitted on the connection yet, the call
+  // throws; we open the picker once so the user can grant it, then retry.
   const domainForWallet = custodyDomain({
     chainId: args.domain.chainId,
     verifyingContract: args.domain.verifyingContract,
   });
-  const signature = await signer.signTypedDataAsync({
-    domain: domainForWallet,
-    types: args.types,
-    primaryType: args.primaryType,
-    message: args.message,
-  });
+  let signature: Hex;
+  try {
+    signature = await signer.signTypedDataAsync({
+      domain: domainForWallet,
+      types: args.types,
+      primaryType: args.primaryType,
+      message: args.message,
+      account: siwe.eoa,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/unauthor|permission|not.*found|unknown account/i.test(msg) && signer.promptSwitchWalletAccount) {
+      await signer.promptSwitchWalletAccount();
+      signature = await signer.signTypedDataAsync({
+        domain: domainForWallet,
+        types: args.types,
+        primaryType: args.primaryType,
+        message: args.message,
+        account: siwe.eoa,
+      });
+    } else {
+      throw e;
+    }
+  }
   return { type: 'ecdsa', signer: siwe.eoa, signature };
 }
 
