@@ -13,6 +13,7 @@ import { keccak256, encodeAbiParameters, type Address } from 'viem';
 import { config } from '../config';
 import { registerPasskeyForSeat, savePasskeyForSeat, type DemoPasskey } from './passkey';
 import { loadSeats, type AuthMethod, type SeatClaim } from './seats';
+import { getSessionSalt } from './session-salt';
 
 export type EnrollChoice = 'passkey' | 'siwe';
 
@@ -126,7 +127,11 @@ export async function directDeploy(args: {
           }
         : {}),
       timelockOverrides: args.timelockOverrides,
-      salt: args.salt ?? '0',
+      // Session-scoped salt: stable within a demo session (so reloads
+      // don't drift the address) but fresh after Reset — each new run
+      // deploys NEW Smart Agents and claims the next unique name
+      // (sam → sam2 → …), matching demo-web-pro.
+      salt: args.salt ?? getSessionSalt(),
     }),
   });
   const body = (await res.json()) as Record<string, unknown>;
