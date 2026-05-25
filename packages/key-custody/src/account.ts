@@ -32,7 +32,10 @@ export async function createKmsAccount(
   opts?: { sessionId?: string; chainId?: number; provider?: 'local-aes' | 'aws-kms' | 'gcp-kms' },
 ): Promise<KMSSignerShape> {
   const address = await backend.getSignerAddress();
-  const provider = opts?.provider ?? 'local-aes';
+  // Derive from the real backend (audit F-6) — an explicit opts.provider
+  // still wins, but the default is the backend's actual kind, never a
+  // misleading 'local-aes' for a production GCP/AWS signer.
+  const provider = opts?.provider ?? backend.provider;
 
   return {
     address,

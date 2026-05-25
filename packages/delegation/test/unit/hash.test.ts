@@ -46,17 +46,21 @@ describe('hashDelegation', () => {
     expect(base).not.toBe(altered);
   });
 
-  it('treats missing args as "0x" — same hash as explicit "0x"', () => {
-    const noArgs = hashDelegation(fixtureDelegation, CHAIN_ID, DELEGATION_MANAGER);
-    const explicit = hashDelegation(
+  it('EXCLUDES caveat args from the hash — different args, same hash (F-1)', () => {
+    // args is redeemer-supplied runtime data and MUST NOT be part of the
+    // signed delegation hash — it must match AgentDelegationManager's
+    // CAVEAT_TYPEHASH = keccak256("Caveat(address enforcer,bytes terms)").
+    // Mirrors the Solidity test_hashDelegation_ignores_args_field.
+    const base = hashDelegation(fixtureDelegation, CHAIN_ID, DELEGATION_MANAGER);
+    const withArgs = hashDelegation(
       {
         ...fixtureDelegation,
-        caveats: fixtureDelegation.caveats.map((c) => ({ ...c, args: '0x' as const })),
+        caveats: fixtureDelegation.caveats.map((c) => ({ ...c, args: '0xdeadbeef' as const })),
       },
       CHAIN_ID,
       DELEGATION_MANAGER,
     );
-    expect(noArgs).toBe(explicit);
+    expect(withArgs).toBe(base);
   });
 });
 

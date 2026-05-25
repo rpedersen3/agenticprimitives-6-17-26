@@ -50,28 +50,64 @@ if (!existsSync(INDEX_PATH)) {
 
 const indexText = readFileSync(INDEX_PATH, 'utf8');
 
-// Parse the table — rows look like:
-//   | **Capability** | [spec](path) | [demo](path) | `pkg1`, `pkg2` | status |
-// The header + separator rows are skipped (they don't contain links).
-const rows: CapabilityRow[] = [];
-const rowLine = /^\|\s*\*\*([^*]+)\*\*\s*\|\s*\[[^\]]+\]\(([^)]+)\)\s*\|\s*\[[^\]]+\]\(([^)]+)\)\s*\|\s*([^|]+)\|\s*[^|]+\|\s*$/;
+// Expected number of capability rows. A row-count sentinel: if a row
+// stops parsing (cell shape drifts), this fails LOUDLY instead of the
+// old failure mode where rows were silently skipped and CI stayed green
+// while only a subset was checked (audit AUD-06).
+const EXPECTED_ROWS = 3;
 
-for (const line of indexText.split('\n')) {
-  const m = rowLine.exec(line.trim());
-  if (!m) continue;
-  const [, name, specRel, demoRel, pkgsStr] = m;
-  // The index uses relative paths from `docs/architecture/`. Resolve.
-  const indexDir = path.dirname(INDEX_PATH);
-  const specPath = path.resolve(indexDir, specRel);
-  const demoGuidePath = path.resolve(indexDir, demoRel);
-  // pkgsStr is `agent-account, delegation, tool-policy, audit, mcp-runtime`
-  // (the leading/trailing whitespace + ` markers are tolerated).
-  const participatingPackages = pkgsStr
+// Parse the table by splitting each `| **Name** | … |` row on `|`
+// (table cells never contain a literal pipe). Cells may hold MULTIPLE
+// links + prose — e.g. the multi-sig row cites specs 207/209/213, and an
+// in-flight row's demo cell is "TBD — …" with no link. We extract the
+// FIRST [text](path) link from the spec + demo cells; a demo cell with
+// no link means the guide is planned (skip its existence check).
+const firstLink = (cell: string): string | null => {
+  const m = /\[[^\]]+\]\(([^)]+)\)/.exec(cell);
+  return m ? m[1]!.trim() : null;
+};
+
+interface ParsedRow extends Omit<CapabilityRow, 'demoGuidePath'> {
+  demoGuidePath: string | null;
+}
+const rows: ParsedRow[] = [];
+const indexDir = path.dirname(INDEX_PATH);
+
+for (const rawLine of indexText.split('\n')) {
+  const line = rawLine.trim();
+  if (!/^\|\s*\*\*/.test(line)) continue; // only **Name**-led capability rows
+  const cells = line.split('|').map((c) => c.trim());
+  // ['', '**Name**', specCell, demoCell, pkgsCell, statusCell, '']
+  if (cells.length < 7) continue;
+  const name = cells[1]!.replace(/\*\*/g, '').trim();
+  const specRel = firstLink(cells[2]!);
+  const demoRel = firstLink(cells[3]!);
+  // Strip backticks + parenthetical annotations (e.g. "tool-policy (T3+ …)"),
+  // then keep only package-name tokens. Listed packages are validated
+  // strictly below — a stale/renamed name (e.g. `custody` after the rename)
+  // must FAIL, not be silently dropped, so we do NOT existence-filter here.
+  const participatingPackages = cells[4]!
     .replace(/`/g, '')
+    .replace(/\([^)]*\)/g, '')
     .split(',')
     .map((s) => s.trim())
-    .filter(Boolean);
-  rows.push({ name, specPath, demoGuidePath, participatingPackages });
+    .filter((s) => /^[a-z][a-z0-9-]+$/.test(s));
+  if (!specRel) issues(name, 'spec cell has no resolvable [text](path) link');
+  rows.push({
+    name,
+    specPath: specRel ? path.resolve(indexDir, specRel) : '',
+    demoGuidePath: demoRel ? path.resolve(indexDir, demoRel) : null,
+    participatingPackages,
+  });
+}
+
+if (rows.length !== EXPECTED_ROWS) {
+  issues(
+    'index',
+    `parsed ${rows.length} capability row(s) but expected ${EXPECTED_ROWS}. ` +
+      'A row stopped matching (cell shape drifted) or a row was added/removed — ' +
+      'update EXPECTED_ROWS in this script and confirm every row is intended.',
+  );
 }
 
 if (rows.length === 0) {
@@ -92,13 +128,14 @@ if (rows.length === 0) {
 console.log(`[cross-cutting] checking ${rows.length} capability row(s)`);
 
 for (const row of rows) {
-  // 1. Spec exists
-  if (!existsSync(row.specPath)) {
+  // 1. Spec exists (the no-link case is already reported in the parser).
+  if (row.specPath && !existsSync(row.specPath)) {
     issues(row.name, `spec missing: ${path.relative(REPO_ROOT, row.specPath)}`);
   }
 
-  // 2. Demo guide exists
-  if (!existsSync(row.demoGuidePath)) {
+  // 2. Demo guide exists — only when the cell links one. A "TBD" cell
+  //    means the guide is planned for an in-flight capability; skip.
+  if (row.demoGuidePath && !existsSync(row.demoGuidePath)) {
     issues(row.name, `demo guide missing: ${path.relative(REPO_ROOT, row.demoGuidePath)}`);
   }
 
@@ -110,14 +147,16 @@ for (const row of rows) {
       continue;
     }
     const claudeText = readFileSync(claudeMd, 'utf8');
-    // Look for the "Capabilities this package participates in" section
-    // AND a reference to this capability's name within ~the next section.
-    const sectionRe = /##\s+Capabilities this package participates in([\s\S]*?)(?:\n##\s|$)/;
+    // Look for a Capabilities section AND a reference to this capability's
+    // name within it. Tolerate the two header variants in use today:
+    // "## Capabilities this package participates in" and
+    // "## Capabilities (cross-cutting)".
+    const sectionRe = /##\s+Capabilities[^\n]*\n([\s\S]*?)(?:\n##\s|$)/;
     const sectionMatch = sectionRe.exec(claudeText);
     if (!sectionMatch) {
       issues(
         row.name,
-        `participating package ${pkg} CLAUDE.md missing "## Capabilities this package participates in" section`,
+        `participating package ${pkg} CLAUDE.md missing a "## Capabilities …" section`,
       );
       continue;
     }

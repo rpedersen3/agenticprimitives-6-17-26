@@ -61,6 +61,13 @@ export interface A2AKeyProvider {
 }
 
 export interface KmsAccountBackend {
+  /**
+   * The concrete backend kind. `createKmsAccount` reads this so the
+   * emitted `provider` / `keyId` reflect the REAL backend (audit
+   * provenance), instead of a defaulted `'local-aes'` label that could
+   * mislabel a production GCP signer (audit F-6).
+   */
+  readonly provider: 'local-aes' | 'aws-kms' | 'gcp-kms';
   signA2AAction: NonNullable<A2AKeyProvider['signA2AAction']>;
   getSignerAddress(): Promise<Address>;
 }

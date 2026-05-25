@@ -58,7 +58,6 @@ export class DelegationClient {
         caveats: delegation.caveats.map((c) => ({
           enforcer: c.enforcer,
           terms: c.terms,
-          args: c.args ?? '0x',
         })),
         salt: delegation.salt,
       },

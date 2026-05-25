@@ -92,6 +92,7 @@ pnpm check:forbidden-terms
 ## Capabilities this package participates in
 - **Multi-sig + threshold policy** — see [spec 207](../../specs/207-smart-account-threshold-policy.md) + [demo guide](../../apps/demo-web-pro/docs/multi-sig/guide.md). This package owns: `buildQuorumCaveat` (peer of the existing caveat builders) + the `requireQuorumForTier` opt on `verifyDelegationToken`. Signer set is implicit in the caveats a `Delegation` carries; threshold=1 is the trivial case.
 - **Audit / forensics trail** — see [spec 206](../../specs/206-audit.md) + [demo guide](../../apps/demo-mcp/docs/audit/guide.md). This package emits: `delegation.mint` (on `mintDelegationToken`), `delegation.verify.accept` + `delegation.verify.reject` (on `verifyDelegationToken`).
+- **DTK interop + caveat enforcer registry** — see [dtk-alignment-audit](../../docs/architecture/dtk-alignment-audit.md) + [spec 208](../../specs/208-argument-level-caveats.md). This package owns the off-chain `Caveat` + `EnforcerAddressMap` shapes that mirror the on-chain enforcer registry; T3+ delegations carry argument-level caveats. (The signed `Caveat` hash matches `DelegationManager` CAVEAT_TYPEHASH — enforcer + terms only, no args.)
 - Index of cross-cutting capabilities: [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md).
 
 ## Generated files (ignore)

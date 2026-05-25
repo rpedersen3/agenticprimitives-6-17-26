@@ -205,8 +205,10 @@ describe('parseDerEcdsa', () => {
   });
 
   it('handles leading-zero padding for high-bit r', () => {
-    // r with the high bit set requires a 0x00 prefix byte in DER.
-    const r = 0xff_00112233445566778899aabbccddeeff00112233445566778899aabbccddeeffn;
+    // r with the high bit set requires a 0x00 prefix byte in DER. Use a
+    // valid 32-byte value (top bit set, < curve order n) so it exercises
+    // the leading-zero path AND passes the r/s range check (F-7).
+    const r = 0x8000000000000000000000000000000000000000000000000000000000000001n;
     const s = 0x01n;
     const der = derEncodeEcdsaSig(r, s);
     const out = parseDerEcdsa(der);

@@ -3,6 +3,23 @@
 > **Vocabulary note (phase 6g.1 / spec 213):** the first module extraction was originally named `ThresholdValidator`. Phase 6g.1 renamed it to `CustodyPolicy` to align with the custody / agency vocabulary firewall (spec 212 § 2.2 + spec 213). All references here use the new name; `(was ThresholdValidator)` is annotated where helpful for one cycle.
 
 **Status:** drafted 2026-05-20 · supersedes spec 207 § 14
+
+> **Implementation status (2026-05-25) — plan vs shipped (audit AUD-03).** This
+> spec is the architectural *plan*; the contracts have diverged and this records
+> reality so the catalog below isn't read as "all shipped":
+> - **Shipped:** d.0 `executeFromModule` + d.1 `CustodyPolicy` (the EIP-170
+>   unblock). These are live.
+> - **`GuardianRecoveryValidator` (d.2) was NOT extracted** — guardian/trustee
+>   recovery is the **T6 `RecoverAccount` path inside `CustodyPolicy`**, not a
+>   separate validator. The §2.2 / §4 / §7 rows naming it describe a plan that
+>   was consciously folded into `CustodyPolicy`. If that's permanent (it is, for
+>   now), it warrants an ADR; treat the d.2 rows as "absorbed", not pending.
+> - **Hooks (d.3) + executors (d.4) + `CaveatVerifierHook` (d.5) are NOT built.**
+>   The only `Allowed*` / `Value*` contracts on disk are **delegation caveat
+>   enforcers** (`apps/contracts/src/enforcers/*Enforcer.sol`) — a DIFFERENT
+>   taxonomy from this spec's account-level **hooks** (`AllowedTargetsHook`,
+>   etc.). Do not conflate `AllowedTargetsEnforcer` (caveat, redeem-time) with
+>   the planned `AllowedTargetsHook` (account hook, execute-time).
 **Closes:** the architectural problem revealed by phase 6c.5-c — `AgentAccount` runtime bytecode hit 26,876 bytes (2,300 over the EIP-170 ceiling) because optional / policy-heavy / risky surfaces were inlined into the core contract.
 **Builds on:** spec 201 (`agent-account` core), spec 202 (`delegation`), spec 204 (`tool-policy`), spec 206 (`audit`), spec 207 (threshold-policy product surface). Does NOT build on spec 207 § 14's "AdminModule delegatecall blob" plan — that plan is superseded by this one.
 **Reference: industry patterns to port:** ERC-7579 (modular smart account standard — module type IDs, install/uninstall hooks, the `onInstall` / `onUninstall` lifecycle), Safe's module/guard pattern (separately-deployed module contracts that call back into the Safe via `execTransactionFromModule`), Rhinestone's ModuleKit, Biconomy's V2 modular accounts. The existing `installModule` / `uninstallModule` / `isModuleInstalled` / `accountId` surface in `apps/contracts/src/AgentAccount.sol:769-921` is the in-tree ERC-7579 registry — this spec makes it load-bearing.

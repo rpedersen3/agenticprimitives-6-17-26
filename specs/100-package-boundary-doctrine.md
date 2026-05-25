@@ -106,37 +106,37 @@ Product-facing reads in `packages/*` and `apps/*` use **`eth_call` / `readContra
 
 Implementation layering (signer interfaces, cycle avoidance) is **not** the same as semantic identity ownership:
 
+Shipped graph (12 packages). Edges are "imports from"; all point *up* toward
+the two leaves (`types`, `audit`). No cycles, no back-edges (CI-enforced by
+`check:package-boundaries`):
+
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ types              (leaf; Address, NameContext, future        │
-│                     canonical-identity shapes)               │
-│      ↑                                                       │
-│ identity-auth      (no other @ap/* deps; auth + Signer IFs;  │
-│                     resolves credential → SA at app layer)   │
-│      ↑                                                       │
-│ agent-account      (canonical SA owner; consumes Signer)     │
-│      ↑                                                       │
-│ ┌────┴────┐  custody (credential set on SA; forbidden from   │
-│ │         │  importing facet registries)                     │
-│ agent-naming   agent-identity   (sibling facet packages;     │
-│ (names)        (profiles)        must not import each other) │
-│      ↑                                                       │
-│ key-custody        (pure crypto; no @ap/* deps)              │
-│      ↑                                                       │
-│ delegation         (agent → agent authority; principals = SA)│
-│      ↑                                                       │
-│ tool-policy        (protocol-agnostic policy engine)          │
-│      ↑                                                       │
-│ mcp-runtime        (MCP transport + delegation glue)         │
-└──────────────────────────────────────────────────────────────┘
+types               ← (every package)
+audit               → types            (leaf; consumed by delegation, key-custody, mcp-runtime)
+connect-auth        → types
+agent-account       → types, connect-auth
+key-custody         → types, audit, connect-auth
+delegation          → types, audit, connect-auth, agent-account, key-custody
+tool-policy         → types
+mcp-runtime         → types, audit, delegation, key-custody, tool-policy
+agent-naming        → types, connect-auth, agent-account     ┐ sibling facet
+agent-profile       → types, connect-auth, agent-account     ┤ registries — must
+agent-relationships → types, connect-auth, agent-account     ┘ NOT import each other
+account-custody     → types, viem        (LEAF today: consumed by apps + contracts,
+                                          not by other packages; spec 213)
 ```
+
+`account-custody` (renamed from `custody`) is currently a **leaf** — the future
+re-shape in which `agent-account` / `delegation` consume its ABI is documented
+but **not wired** ([spec 213](../specs/213-custody-layer-carve-out.md)). Do not
+model an edge that doesn't exist.
 
 Hard rules (CI-enforced):
 
 - No back-edges. If `delegation` needs something from `mcp-runtime`, raise the shared type into `delegation` or into `@agenticprimitives/types`.
 - No deep imports across packages. Only public entry points (`./` and declared subpaths) may be imported.
-- `agent-naming` and `agent-identity` are **siblings** — neither imports the other. Apps compose name → address → profile.
-- `delegation`, `mcp-runtime`, `tool-policy`, `audit`, `custody` MUST NOT import `agent-naming` or `agent-identity`. Optional human-readable context is injected via `NameContext` from `types` ([ADR-0006](../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md)).
+- `agent-naming`, `agent-profile`, `agent-relationships` are **siblings** — none imports another. Apps compose name → address → profile → edges.
+- `delegation`, `mcp-runtime`, `tool-policy`, `audit`, `key-custody`, `account-custody` MUST NOT import `agent-naming`, `agent-profile`, or `agent-relationships` (denylisted in each manifest's `forbiddenImports`). Optional human-readable context is injected via `NameContext` from `types` ([ADR-0006](../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md)).
 - `tool-policy` and `key-custody` MUST stay protocol-agnostic.
 - Domain vocabulary (vertical-specific) does NOT live in agenticprimitives v0 unless it earns a dedicated package.
 

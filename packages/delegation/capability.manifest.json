@@ -30,7 +30,10 @@
   "forbiddenImports": [
     "apps/*",
     "@agenticprimitives/tool-policy",
-    "@agenticprimitives/mcp-runtime"
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
   ],
   "publicExports": [
     "ROOT_AUTHORITY",

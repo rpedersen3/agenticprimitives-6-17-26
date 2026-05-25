@@ -9,6 +9,9 @@ import type { Address } from '@agenticprimitives/types';
 export function getRelayOnlySigner(opts: BuildOpts): KmsAccountBackend {
   const inner = buildSignerBackend(opts);
   return {
+    // Report the wrapped backend's real kind (audit F-6) — the relay-only
+    // shim changes capability, not provenance.
+    provider: inner.provider,
     async getSignerAddress(): Promise<Address> {
       return inner.getSignerAddress();
     },

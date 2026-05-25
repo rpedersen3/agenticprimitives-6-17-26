@@ -27,11 +27,13 @@ graph TD
   toolPolicy["@agenticprimitives/tool-policy"]
   mcpRuntime["@agenticprimitives/mcp-runtime"]
   audit["@agenticprimitives/audit"]
+  agentNaming["@agenticprimitives/agent-naming"]
+  agentProfile["@agenticprimitives/agent-profile"]
+  agentRelationships["@agenticprimitives/agent-relationships"]
 
   identityAuth --> types
   agentAccount --> types
   agentAccount --> identityAuth
-  agentAccount --> custody
 
   keyCustody --> types
   keyCustody --> identityAuth
@@ -42,7 +44,6 @@ graph TD
   delegation --> agentAccount
   delegation --> keyCustody
   delegation --> audit
-  delegation --> custody
 
   toolPolicy --> types
 
@@ -53,6 +54,16 @@ graph TD
   mcpRuntime --> audit
 
   custody --> types
+
+  agentNaming --> types
+  agentNaming --> identityAuth
+  agentNaming --> agentAccount
+  agentProfile --> types
+  agentProfile --> identityAuth
+  agentProfile --> agentAccount
+  agentRelationships --> types
+  agentRelationships --> identityAuth
+  agentRelationships --> agentAccount
 
   audit --> types
 ```

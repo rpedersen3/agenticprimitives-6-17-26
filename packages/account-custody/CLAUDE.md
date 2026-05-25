@@ -34,8 +34,11 @@ This package is the **authorization layer for credential add / replace / remove*
 
 ## Allowed imports
 
-`@agenticprimitives/types`, `viem`. Nothing else from `@agenticprimitives/*`
-— this package is upstream of `agent-account` and `delegation`.
+`@agenticprimitives/types`, `viem`. Nothing else from `@agenticprimitives/*`.
+This package is a **leaf today** — consumed by apps + contracts, NOT by other
+packages. The future re-shape in which `agent-account` / `delegation` consume
+its ABI is documented but not wired ([spec 213](../../specs/213-custody-layer-carve-out.md));
+do not assert a present-tense "upstream of" edge that doesn't exist.
 
 ## Drift triggers — STOP
 

@@ -256,7 +256,15 @@ export function parseDerEcdsa(der: Uint8Array): { r: bigint; s: bigint } {
   if (at(i++) !== 0x02) throw new Error('DER: expected INTEGER tag for s');
   const sLen = at(i++);
   const sBytes = der.slice(i, i + sLen);
-  return { r: bytesToBigInt(rBytes), s: bytesToBigInt(sBytes) };
+  const r = bytesToBigInt(rBytes);
+  const s = bytesToBigInt(sBytes);
+  // Range-validate (audit F-7): a malformed/compromised KMS response with
+  // r/s = 0 or ≥ n is never a valid ECDSA signature — fail closed here
+  // rather than letting a degenerate value flow into recovery.
+  if (r <= 0n || r >= SECP256K1_N || s <= 0n || s >= SECP256K1_N) {
+    throw new Error('DER: r/s out of range (require 0 < r,s < n)');
+  }
+  return { r, s };
 }
 
 function bytesToBigInt(bytes: Uint8Array): bigint {
@@ -326,6 +334,7 @@ export function findRecoveryByte(
 // ─────────────────────────────────────────────────────────────────────
 
 export class GcpKmsSigner implements KmsAccountBackend {
+  readonly provider = 'gcp-kms' as const;
   private readonly keyName: string;
   private readonly serviceAccount: ServiceAccount;
   private readonly auditSink?: AuditSink;

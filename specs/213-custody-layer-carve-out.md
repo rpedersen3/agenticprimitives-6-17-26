@@ -208,7 +208,7 @@ packages/account-custody/
 └── package.json
 ```
 
-**Dependencies**: `@agenticprimitives/types`, `@agenticprimitives/connect-auth` (for type-only Signer interface), `viem`. NOT dependent on `delegation` or `agent-account` (custody is upstream of both in a future re-shape; for now, no cycles).
+**Dependencies**: `@agenticprimitives/types`, `viem` — and nothing else (this matches `capability.manifest.json` `allowedImports`; the package's `src/` imports no `connect-auth` Signer type today). NOT dependent on `delegation` or `agent-account` — `account-custody` is a leaf; the re-shape in which it becomes upstream of both is future work, not wired (no cycles today).
 
 **What moves into `custody/` from existing packages**:
 - From `@agenticprimitives/agent-account`: the `agentAccountAbi`, `agentAccountFactoryAbi`, `quorum.ts` helpers (insofar as they're custody-related — the `packSafeSignatures` etc.) — these stay in `agent-account` if they're used by both layers; move only if exclusively custody.

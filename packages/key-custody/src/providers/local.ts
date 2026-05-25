@@ -181,6 +181,7 @@ export class LocalAesProvider implements A2AKeyProvider {
 }
 
 export class LocalSecp256k1Signer implements KmsAccountBackend {
+  readonly provider = 'local-aes' as const;
   private readonly priv: Uint8Array;
   private readonly addr: Address;
   private readonly auditSink?: AuditSink;

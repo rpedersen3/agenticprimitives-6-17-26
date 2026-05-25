@@ -13,6 +13,7 @@ export class AwsKmsProvider implements A2AKeyProvider {
 }
 
 export class AwsKmsSigner implements KmsAccountBackend {
+  readonly provider = 'aws-kms' as const;
   async signA2AAction(): Promise<never> { throw new Error(NOT_IMPLEMENTED); }
   async getSignerAddress(): Promise<Address> { throw new Error(NOT_IMPLEMENTED); }
 }
