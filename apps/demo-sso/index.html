@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agentic Connect — SSO demo</title>
+    <style>
+      body { font-family: system-ui, -apple-system, sans-serif; max-width: 920px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #1a1a2e; }
+      h1 { font-size: 1.5rem; } h2 { font-size: 1.1rem; }
+      button { padding: 0.45rem 0.9rem; margin: 0.2rem 0.4rem 0.2rem 0; cursor: pointer; border: 1px solid #c7c7d9; border-radius: 6px; background: #fff; }
+      button:hover { background: #f3f3fb; } button:disabled { opacity: 0.5; cursor: default; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      .panel { padding: 1rem; border: 1px solid #e0e0ea; border-radius: 8px; background: #fbfbfe; }
+      .broker { border-color: #5b5bd6; background: #f4f4ff; }
+      pre { background: #f5f5f7; padding: 0.6rem; border-radius: 4px; overflow-x: auto; font-size: 0.78rem; }
+      .ok { color: #0a7d0a; } .err { color: #b00020; } .muted { color: #666; font-size: 0.88rem; }
+      code { background: #eee; padding: 0 0.2rem; border-radius: 3px; }
+      .badge { display: inline-block; font-size: 0.72rem; padding: 0.1rem 0.4rem; border-radius: 10px; background: #e8e8f5; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

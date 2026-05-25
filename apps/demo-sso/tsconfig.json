@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // Demo apps consume BUILT packages via package.json:exports (node_modules →
+    // dist). Override the base src path-mappings so TS resolves the built dist.
+    "paths": {}
+  },
+  "include": ["src/**/*"]
+}
