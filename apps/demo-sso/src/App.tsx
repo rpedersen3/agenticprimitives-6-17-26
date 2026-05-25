@@ -1,254 +1,250 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { Address } from '@agenticprimitives/types';
 import {
-  createDemoBroker,
-  type DemoBroker,
-  ALICE_PASSKEY,
-  ALICE_OIDC,
-  BOB_PASSKEY,
-} from './broker';
+  AUD,
+  siweLogin,
+  bootstrapWithWallet,
+  fetchProfile,
+  fetchSensitive,
+  type BasicProfile,
+} from './connect-client';
+import { hasWallet } from './lib/wallet';
+import { startGoogleSignIn, exchangeCode } from './server-client';
 
-/** The Connect origin = wherever this app is served (local :5373/:8788, or a deploy). */
-const CONNECT_ORIGIN = typeof window !== 'undefined' ? window.location.origin : '';
-import type { AgentSession, CredentialPrincipal } from '@agenticprimitives/types';
-import { startGoogleSignIn, exchangeCode, verifyServerSession } from './server-client';
-import { canPerform } from './lib/broker-core';
-
-/** The demo page is itself the single relying site for the real-OIDC mode. */
-const SERVER_AUD = 'demo-sso';
-
-interface ServerState {
-  session?: AgentSession;
-  error?: string;
-  pending?: boolean;
-  actionMsg?: string;
-  actionOk?: boolean;
+interface Session {
+  token: string;
+  via: string; // 'wallet' | 'Google'
+  fresh: boolean; // true = just created (welcome) vs reconnected (welcome back)
 }
-
-const RELYING_SITES = [
-  { id: 'shop.example', label: 'Shop (relying site A)' },
-  { id: 'forum.example', label: 'Forum (relying site B)' },
-];
-
-interface SiteState {
-  session?: AgentSession;
+interface BootstrapState {
+  address: Address;
+  step?: string;
   error?: string;
-  actionMsg?: string;
-  actionOk?: boolean;
 }
 
 export function App() {
-  const [broker, setBroker] = useState<DemoBroker | null>(null);
-  const [who, setWho] = useState('');
-  const [sites, setSites] = useState<Record<string, SiteState>>({});
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<BasicProfile | null>(null);
+  const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
   const [busy, setBusy] = useState(false);
-  const [server, setServer] = useState<ServerState>({});
+  const [error, setError] = useState<string | null>(null);
+  const [sensitive, setSensitive] = useState<{ email: string; phone: string } | null>(null);
+  const [stepUpMsg, setStepUpMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    createDemoBroker().then(setBroker);
+  const openSession = useCallback(async (token: string, via: string, fresh: boolean) => {
+    setSession({ token, via, fresh });
+    setProfile(await fetchProfile(token));
   }, []);
 
-  // Real Google OIDC: on return from /oidc/google/callback the server broker
-  // redirects here with ?code. Exchange it (server-to-server via /token) + verify
-  // against /jwks. Works when served by the Pages Function broker.
+  // Real Google OIDC return: ?code → exchange → token (login-grade session).
   useEffect(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
     if (!code) return;
-    setServer({ pending: true });
     (async () => {
       try {
-        const token = await exchangeCode(code, SERVER_AUD);
-        const v = await verifyServerSession(token, SERVER_AUD);
-        setServer(v.ok ? { session: v.session } : { error: v.reason });
+        const token = await exchangeCode(code, AUD);
+        await openSession(token, 'Google', true);
       } catch (e) {
-        setServer({ error: e instanceof Error ? e.message : 'sign-in failed' });
+        setError(e instanceof Error ? e.message : 'Google sign-in failed');
       } finally {
-        // single-use: strip ?code/?state so a refresh doesn't re-exchange.
         url.searchParams.delete('code');
         url.searchParams.delete('state');
         window.history.replaceState({}, '', url.toString());
       }
     })();
-  }, []);
+  }, [openSession]);
 
-  async function signIn(principal: CredentialPrincipal, label: string) {
-    if (!broker) return;
+  async function onConnectWallet() {
+    setError(null);
     setBusy(true);
-    setWho(label);
-    // One sign-in → issue an aud-bound AgentSession to EACH relying site.
-    const next: Record<string, SiteState> = {};
-    for (const site of RELYING_SITES) {
-      const outcome = await broker.login(principal, site.id);
-      if (outcome.status === 'issued') {
-        const v = await broker.verifyForRelyingSite(outcome.token, site.id);
-        next[site.id] = v.ok ? { session: v.session } : { error: v.reason };
-      } else if (outcome.status === 'rejected') {
-        next[site.id] = { error: outcome.reason };
+    try {
+      const out = await siweLogin();
+      if (out.status === 'issued') {
+        await openSession(out.token, 'wallet', false);
+      } else if (out.status === 'bootstrap') {
+        setBootstrap({ address: out.address });
       } else {
-        next[site.id] = { error: `convergence → ${outcome.status} (would route to bootstrap/disambiguation)` };
+        setError(out.reason ?? `Could not sign you in (${out.status}).`);
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'wallet connect failed');
+    } finally {
+      setBusy(false);
     }
-    setSites(next);
-    setBusy(false);
   }
 
-  function tryCustodyAction(siteId: string) {
-    if (!broker) return;
-    const session = sites[siteId]?.session;
+  async function onCreateWorkspace() {
+    if (!bootstrap) return;
+    setBootstrap({ ...bootstrap, error: undefined, step: 'Starting…' });
+    const res = await bootstrapWithWallet(bootstrap.address, (step) =>
+      setBootstrap((b) => (b ? { ...b, step } : b)),
+    );
+    if (!res.ok) {
+      setBootstrap((b) => (b ? { ...b, step: undefined, error: res.error } : b));
+      return;
+    }
+    // Workspace created — sign in to it for real (resolves on-chain now).
+    setBootstrap((b) => (b ? { ...b, step: 'Finishing up…' } : b));
+    try {
+      const out = await siweLogin();
+      if (out.status === 'issued') {
+        setBootstrap(null);
+        await openSession(out.token, 'wallet', true);
+      } else {
+        setBootstrap((b) => (b ? { ...b, step: undefined, error: `created, but sign-in returned ${out.status}` } : b));
+      }
+    } catch (e) {
+      setBootstrap((b) => (b ? { ...b, step: undefined, error: e instanceof Error ? e.message : 'sign-in failed' } : b));
+    }
+  }
+
+  async function onRevealSensitive() {
     if (!session) return;
-    const r = broker.canPerform(session, 'credential-change');
-    setSites((prev) => ({
-      ...prev,
-      [siteId]: { ...prev[siteId], actionOk: r.ok, actionMsg: r.ok ? 'Allowed — custody-grade session.' : r.reason },
-    }));
+    setStepUpMsg(null);
+    const r = await fetchSensitive(session.token);
+    if (r.ok) setSensitive({ email: r.email, phone: r.phone });
+    else setStepUpMsg(r.reason);
   }
 
   function signOut() {
-    setWho('');
-    setSites({});
+    setSession(null);
+    setProfile(null);
+    setSensitive(null);
+    setStepUpMsg(null);
+    setBootstrap(null);
+    setError(null);
   }
 
   return (
     <div>
-      <h1>Agentic Connect — SSO demo</h1>
+      <h1>Agentic Connect</h1>
       <p className="muted">
-        Enroll one credential at the Connect origin, then sign in across two relying sites (one-enroll SSO). The
-        <code>AgentSession</code> is asymmetric + JWKS-verified, its subject is a CAIP-10 <code>CanonicalAgentId</code>,
-        and it has no <code>owner</code> field. Custody-class actions require a custody-grade credential (step-up).
-        Wires <code>connect</code> + <code>identity-directory</code> + adapters (spec 224).
+        Your portable workspace — created once, on Base Sepolia, and reachable from any app with any
+        sign-in. One canonical agent; your wallet, passkey, social, or agent name all return the same you.
       </p>
 
-      {!broker && <p>Starting the Connect broker…</p>}
+      {error && <p className="err">⛔ {error}</p>}
 
-      {broker && (
+      {/* ── Not signed in: connect ───────────────────────────────── */}
+      {!session && !bootstrap && (
+        <div className="panel broker">
+          <h2>Connect</h2>
+          <p className="muted">Choose how to sign in. First time? We'll create your workspace.</p>
+          <p>
+            <button disabled={busy} onClick={onConnectWallet}>
+              {busy ? 'Connecting…' : 'Connect wallet'}
+            </button>{' '}
+            <button disabled={busy} onClick={() => startGoogleSignIn(AUD, window.location.origin + '/')}>
+              Continue with Google
+            </button>
+          </p>
+          {!hasWallet() && (
+            <p className="muted">
+              <em>No wallet detected.</em> Install MetaMask (or another Ethereum wallet) to connect with a
+              wallet, or continue with Google.
+            </p>
+          )}
+          <p className="muted">
+            Google is a <strong>login-grade</strong> facet — it lets you read your basic profile, but
+            creating/securing a workspace and viewing sensitive details need a custody-grade credential
+            (wallet or passkey). Passkey connect is coming next.
+          </p>
+        </div>
+      )}
+
+      {/* ── Bootstrap: create the workspace ──────────────────────── */}
+      {bootstrap && (
+        <div className="panel broker">
+          <h2>Create your workspace</h2>
+          {!bootstrap.step && !bootstrap.error && (
+            <>
+              <p className="muted">
+                No workspace yet for <code>{bootstrap.address}</code>. We'll deploy your personal Smart
+                Agent on Base Sepolia (gas sponsored — you won't pay) and link this wallet to it.
+              </p>
+              <button onClick={onCreateWorkspace}>Create my workspace</button>{' '}
+              <button onClick={signOut}>Cancel</button>
+            </>
+          )}
+          {bootstrap.step && (
+            <>
+              <p className="ok">⏳ {bootstrap.step}</p>
+              <p className="muted">This usually takes 15–30 seconds. Confirm any wallet prompt.</p>
+            </>
+          )}
+          {bootstrap.error && (
+            <>
+              <p className="err">⛔ {bootstrap.error}</p>
+              <p className="muted">Nothing was charged. You can try again.</p>
+              <button onClick={onCreateWorkspace}>Try again</button>{' '}
+              <button onClick={signOut}>Cancel</button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Signed in: the agent card + PII ──────────────────────── */}
+      {session && (
         <>
           <div className="panel broker">
             <h2>
-              Connect origin <span className="badge">{CONNECT_ORIGIN}</span>
+              {session.fresh ? '✓ Welcome to your workspace' : '✓ Welcome back'}{' '}
+              <span className="badge">via {session.via}</span>
             </h2>
-            <p className="muted">
-              Broker signing key <code>kid {broker.kid}</code> · JWKS published ({broker.jwks.keys.length} key, alg{' '}
-              {broker.jwks.keys[0]?.alg ?? 'ES256'}).
-              <br />
-              <em>Demo note:</em> the broker key is generated in-browser so the demo is self-contained; in production it
-              lives server-side at the Connect origin (the browser only sees the JWKS).
-            </p>
-            {who ? (
-              <p>
-                Signed in as <strong>{who}</strong>. <button onClick={signOut}>Sign out</button>
-              </p>
-            ) : (
-              <p>
-                <button disabled={busy} onClick={() => signIn(ALICE_PASSKEY, 'Alice · passkey (custody-grade)')}>
-                  Sign in — Alice passkey
-                </button>
-                <button disabled={busy} onClick={() => signIn(ALICE_OIDC, 'Alice · GitHub OIDC (login-grade)')}>
-                  Sign in — Alice GitHub
-                </button>
-                <button disabled={busy} onClick={() => signIn(BOB_PASSKEY, 'Bob · passkey (custody-grade)')}>
-                  Sign in — Bob passkey
-                </button>
-              </p>
-            )}
-          </div>
-
-          <h2>Relying sites</h2>
-          <div className="grid">
-            {RELYING_SITES.map((site) => {
-              const s = sites[site.id];
-              return (
-                <div key={site.id} className="panel">
-                  <h2>
-                    {site.label} <span className="badge">aud: {site.id}</span>
-                  </h2>
-                  {!s && <p className="muted">No session. Sign in at the Connect origin →</p>}
-                  {s?.error && <p className="err">⛔ {s.error}</p>}
-                  {s?.session && (
-                    <>
-                      <p className="ok">✓ Verified AgentSession (asymmetric, via JWKS)</p>
-                      <pre>
-                        {JSON.stringify(
-                          {
-                            sub: s.session.sub,
-                            assurance: s.session.assurance,
-                            principal: s.session.principal,
-                            aud: s.session.aud,
-                          },
-                          null,
-                          2,
-                        )}
-                      </pre>
-                      <button onClick={() => tryCustodyAction(site.id)}>Attempt: rotate credential (custody-class)</button>
-                      {s.actionMsg && <p className={s.actionOk ? 'ok' : 'err'}>{(s.actionOk ? '✓ ' : '⛔ ') + s.actionMsg}</p>}
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <p className="muted" style={{ marginTop: '1rem' }}>
-            One sign-in issues an <code>aud</code>-bound session to <strong>both</strong> sites with the same{' '}
-            <code>sub</code> (the canonical agent) — that's one-enroll SSO. The buttons above use the in-browser
-            broker (simulated credential); the panel below uses the <strong>server broker + real Google OIDC</strong>.
-          </p>
-
-          <div className="panel broker" style={{ marginTop: '1rem' }}>
-            <h2>
-              Real Google OIDC <span className="badge">server broker</span>
-            </h2>
-            <p className="muted">
-              Redirects to the Pages Function broker: <code>/oidc/google/start</code> → Google →{' '}
-              <code>/oidc/google/callback</code> (token exchange + id_token verify) → back here with a single-use{' '}
-              <code>code</code> → <code>/token</code>, verified against <code>/jwks</code>. Works when the app is served
-              by <code>wrangler pages dev dist</code> (or a deploy) with the Google secrets set — see{' '}
-              <code>OIDC-SETUP.md</code>. Under plain <code>vite dev</code> the function routes 404.
-            </p>
-            {!server.session && !server.error && (
-              <button
-                disabled={server.pending}
-                onClick={() => startGoogleSignIn(SERVER_AUD, window.location.origin + '/')}
-              >
-                {server.pending ? 'Completing sign-in…' : 'Sign in with Google'}
-              </button>
-            )}
-            {server.error && <p className="err">⛔ {server.error}</p>}
-            {server.session && (
+            {profile ? (
               <>
-                <p className="ok">✓ Verified server-issued AgentSession (real Google OIDC, JWKS)</p>
-                <pre>
-                  {JSON.stringify(
-                    {
-                      sub: server.session.sub,
-                      assurance: server.session.assurance,
-                      principal: server.session.principal,
-                      aud: server.session.aud,
-                    },
-                    null,
-                    2,
-                  )}
-                </pre>
-                <button
-                  onClick={() => {
-                    const r = canPerform(server.session!, 'credential-change');
-                    setServer((p) => ({ ...p, actionOk: r.ok, actionMsg: r.ok ? 'Allowed — custody-grade.' : r.reason }));
-                  }}
-                >
-                  Attempt: rotate credential (custody-class)
-                </button>
-                <button onClick={() => setServer({})} style={{ marginLeft: '0.5rem' }}>
-                  Sign out
-                </button>
-                {server.actionMsg && <p className={server.actionOk ? 'ok' : 'err'}>{(server.actionOk ? '✓ ' : '⛔ ') + server.actionMsg}</p>}
+                <p>
+                  <strong>{profile.name ?? 'your workspace'}</strong>
+                  <br />
+                  <span className="muted">Canonical agent</span> <code>{profile.agent}</code>
+                  <br />
+                  <span className="muted">Signed in with</span> {profile.credential} ·{' '}
+                  <span className="muted">access:</span>{' '}
+                  <strong>{profile.access === 'standard' ? 'standard' : 'full (confirmed with device)'}</strong>
+                </p>
+                {!profile.name && (
+                  <p className="muted">
+                    <em>No <code>.demo.agent</code> name yet.</em> (Name claim lands next; your agent address
+                    is the canonical identity regardless.)
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="muted">Loading your profile…</p>
+            )}
+            <button onClick={signOut}>Sign out</button>
+            <p className="muted" style={{ marginTop: '0.5rem' }}>
+              Your workspace stays safe. Sign back in anytime with the same wallet — it resolves to this same
+              agent.
+            </p>
+          </div>
+
+          <div className="panel">
+            <h2>Your contact details</h2>
+            {sensitive ? (
+              <pre>{JSON.stringify(sensitive, null, 2)}</pre>
+            ) : (
+              <>
+                <p className="muted" style={{ filter: 'blur(4px)', userSelect: 'none' }}>
+                  ▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒ · +1 ▒▒▒ ▒▒▒ ▒▒▒▒
+                </p>
+                <button onClick={onRevealSensitive}>Confirm to view contact details</button>
+                {stepUpMsg && <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {stepUpMsg}</p>}
                 <p className="muted">
-                  A Google session is <strong>login-grade</strong> — the custody-class action is blocked until step-up
-                  to a custody-grade credential (ADR-0017 / CN-2).
+                  Sensitive details are protected — they require a <strong>custody-grade</strong> session
+                  (wallet/passkey). A Google (login-grade) session is asked to step up (ADR-0017 / CN-2).
                 </p>
               </>
             )}
           </div>
         </>
       )}
+
+      <p className="muted" style={{ marginTop: '1rem', fontSize: '0.85em' }}>
+        Real on Base Sepolia (chain 84532): identity resolves on-chain, the workspace is a deployed
+        ERC-4337 Smart Agent, and PII is gated by the verified <code>AgentSession</code> (spec 227).
+      </p>
     </div>
   );
 }
