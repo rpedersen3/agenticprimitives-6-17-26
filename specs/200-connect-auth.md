@@ -30,6 +30,34 @@ Out of scope (by design): the smart account itself (`agent-account`), KMS backen
 
 Tree-shakable: importing `@agenticprimitives/connect-auth/passkey` does NOT pull SIWE or Google code.
 
+### Google OIDC method (`/google`) — implemented 2026-05-25 (replaces the v0 stub)
+
+`@agenticprimitives/connect-auth/google` implements real OIDC (authorization-code
++ PKCE) — not just OAuth — for the Connect broker (spec 224 §6; ADR-0017):
+
+```ts
+beginLogin({ clientId, redirectUri, scope?, prompt?, config? })
+  → { authUrl, codeVerifier, state, nonce }   // store the latter 3 in the BrokerSession; redirect to authUrl
+completeLogin({ code, returnedState, expectedState, expectedNonce, codeVerifier,
+                redirectUri, clientId, clientSecret, config?, fetchImpl?, now? })
+  → { ok: true, principal: { iss, sub, email, emailVerified, name } } | { ok: false, reason }
+oidcFacetId(iss, sub) → "iss#sub"            // the (iss, sub) facet key a directory keys on
+GOOGLE_OIDC: OidcProviderConfig              // pinned Google endpoints; override `config` for other providers/tests
+```
+
+Security controls (audit CN-3 / CN-4):
+- **PKCE (S256)** + **`state`** (constant-time compare, before any network call)
+  + **`nonce`** (matched against the id_token) are mandatory.
+- **`alg` is pinned to RS256** — the token's own `alg` header never selects the
+  algorithm; `alg: none` / HS\* are rejected (alg-confusion defense). The id_token
+  signature is verified via **Web Crypto** against the provider JWKS (no JWT lib).
+- **`iss` + `aud`** are validated; **`email_verified === true`** is REQUIRED.
+- The method returns a **verified OIDC principal only** — it does NOT resolve to a
+  canonical Smart Agent (that binding is the directory's job, spec 223; connect-auth
+  must not import it). The facet is keyed on **`(iss, sub)`**, never on email.
+- Endpoints/`fetch`/clock are injectable (`config`/`fetchImpl`/`now`) for tests
+  (state+nonce roundtrip with a mocked IdP per § Testing).
+
 ### Why these three (and not Privy directly)
 Privy is a hosted IdP — fine for many apps, but creates lock-in. Smart-agent demonstrated that a thin self-hosted stack covers the same UX: passkey for new users without wallets, SIWE for crypto-native users, Google for the broad consumer case.
 

@@ -133,8 +133,9 @@ consult.
   crosswalk; architect + security audits with findings folded back in — see
   [`docs/audits/sso-wave-audit-findings.md`](../audits/sso-wave-audit-findings.md)).
 - **Phase 1:** `types` shapes ✅ + `ontology` (`context.jsonld` + `tbox/core`+`identity`
-  + `CanonicalAgentIdShape` + controlled vocabularies + IRI constants) ✅;
-  `connect-auth` real OIDC (Google) — next.
+  + `CanonicalAgentIdShape` + controlled vocabularies + IRI constants) ✅ +
+  `connect-auth` real Google OIDC (PKCE/state/nonce + RS256/JWKS via Web Crypto +
+  `email_verified`; spec 200) ✅. **Phase 1 complete.**
 - **Phase 2:** `identity-directory` core + adapters (naming/on-chain/indexer/OIDC).
 - **Phase 3:** `connect` broker + asymmetric token/JWKS + entry flows + convergence.
 - **Phase 4:** `apps/demo-sso` (2 relying sites, one-enroll SSO, GitHub OIDC,
