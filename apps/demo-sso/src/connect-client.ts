@@ -5,8 +5,12 @@ import { buildSubregistryRegisterCall, buildSetPrimaryNameCall } from '@agenticp
 import { buildExecuteCallData } from '@agenticprimitives/agent-account';
 import type { Address, Hex } from '@agenticprimitives/types';
 import { connectWallet, personalSign } from './lib/wallet';
+import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from './lib/passkey';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
 import { CONTRACTS } from './lib/chain';
+
+/** A function that signs a 32-byte hash (EOA personal_sign or WebAuthn). */
+export type SignHash = (hash: Hex) => Promise<Hex>;
 
 export const AUD = 'demo-sso';
 const CHAIN_ID = 84532;
@@ -101,7 +105,7 @@ export async function bootstrapWithWallet(
 /** Execute a call FROM a deployed agent: build userOp -> sign hash -> submit (via /a2a). */
 async function executeCall(
   sender: Address,
-  signerAddr: Address,
+  signHash: SignHash,
   callData: Hex,
 ): Promise<{ ok: true; txHash?: Hex } | { ok: false; error: string }> {
   await ensureCsrfToken();
@@ -120,7 +124,7 @@ async function executeCall(
   if (!buildRes.ok || !built.ok || !built.userOpHash || !built.userOp) {
     return { ok: false, error: built.error ?? `build-call failed (HTTP ${buildRes.status})` };
   }
-  const signature = await personalSign(signerAddr, built.userOpHash);
+  const signature = await signHash(built.userOpHash);
   const submitRes = await fetch('/a2a/account/submit-call-userop', {
     method: 'POST',
     credentials: 'include',
@@ -139,7 +143,7 @@ async function executeCall(
  *  setPrimaryName still returns ok (the name is owned; reverse can be re-set later). */
 export async function claimName(
   agent: Address,
-  signerAddr: Address,
+  signHash: SignHash,
   base: string,
   onStep?: (s: string) => void,
 ): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
@@ -156,13 +160,90 @@ export async function claimName(
     label: picked.label,
     newOwner: agent,
   });
-  const reg = await executeCall(agent, signerAddr, buildExecuteCallData(register));
+  const reg = await executeCall(agent, signHash, buildExecuteCallData(register));
   if (!reg.ok) return { ok: false, error: `name register failed: ${reg.error}` };
 
   onStep?.('Setting it as your primary name…');
   const setPrimary = buildSetPrimaryNameCall({ registry: CONTRACTS.agentNameRegistry, node: picked.node });
-  await executeCall(agent, signerAddr, buildExecuteCallData(setPrimary)); // best-effort
+  await executeCall(agent, signHash, buildExecuteCallData(setPrimary)); // best-effort
   return { ok: true, name: picked.name };
+}
+
+// ── Passkey (WebAuthn) ──────────────────────────────────────────────
+export type { DemoPasskey };
+export type PasskeyOutcome =
+  | { status: 'issued'; token: string; passkey: DemoPasskey }
+  | { status: 'bootstrap'; passkey: DemoPasskey }
+  | { status: 'disambiguate' | 'rejected'; passkey?: DemoPasskey; reason?: string };
+
+/** A signHash backed by the registered passkey (WebAuthn). */
+export const passkeySignHash: SignHash = (hash) => signWithPasskey(hash);
+
+/** Sign in with a passkey (registering one first if none on this device), then resolve. */
+export async function passkeyLogin(registerIfMissing = true): Promise<PasskeyOutcome> {
+  let passkey = loadPasskey();
+  if (!passkey) {
+    if (!registerIfMissing) return { status: 'rejected', reason: 'no passkey on this device' };
+    passkey = await registerPasskey('Agentic Connect passkey');
+  }
+  const { challenge } = (await (await fetch('/connect/passkey-challenge')).json()) as { challenge: Hex };
+  const signature = await signWithPasskey(challenge);
+  const r = await fetch('/connect/passkey', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ credentialIdDigest: passkey.credentialIdDigest, challenge, signature, aud: AUD }),
+  });
+  const body = (await r.json()) as { status: string; token?: string };
+  if (body.status === 'issued' && body.token) return { status: 'issued', token: body.token, passkey };
+  if (body.status === 'bootstrap') return { status: 'bootstrap', passkey };
+  return { status: (body.status as 'disambiguate' | 'rejected') ?? 'rejected', passkey };
+}
+
+/** Bootstrap a passkey-direct person SA (no server custodian ever, P0-A) + enroll the facet. */
+export async function bootstrapWithPasskey(
+  passkey: DemoPasskey,
+  onStep?: (s: string) => void,
+): Promise<{ ok: true; agent: Address } | { ok: false; error: string }> {
+  await ensureCsrfToken();
+  onStep?.('Preparing your workspace…');
+  const buildRes = await fetch('/a2a/session/deploy', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({
+      initMethod: 'passkey',
+      credentialIdDigest: passkey.credentialIdDigest,
+      pubKeyX: passkey.pubKeyX.toString(),
+      pubKeyY: passkey.pubKeyY.toString(),
+    }),
+  });
+  if (buildRes.status === 409) return { ok: false, error: 'Gas sponsorship is not enabled on the backend (paymaster).' };
+  const built = (await buildRes.json()) as { ok?: boolean; userOpHash?: Hex; userOp?: Record<string, unknown>; error?: string };
+  if (!buildRes.ok || !built.ok || !built.userOpHash || !built.userOp) {
+    return { ok: false, error: built.error ?? `deploy build failed (HTTP ${buildRes.status})` };
+  }
+  onStep?.('Confirm with your device…');
+  const signature = await signWithPasskey(built.userOpHash);
+  onStep?.('Securing on the network…');
+  const submitRes = await fetch('/a2a/session/deploy/submit', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
+  });
+  const submitted = (await submitRes.json()) as { ok?: boolean; deployedAddress?: Address; error?: string };
+  if (!submitRes.ok || !submitted.ok || !submitted.deployedAddress) {
+    return { ok: false, error: submitted.error ?? `deploy submit failed (HTTP ${submitRes.status})` };
+  }
+  const agent = submitted.deployedAddress;
+  onStep?.('Linking your passkey…');
+  const enrollRes = await fetch('/connect/enroll', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ kind: 'passkey', id: passkey.credentialIdDigest, agent }),
+  });
+  if (!enrollRes.ok) return { ok: false, error: ((await enrollRes.json()) as { error?: string }).error ?? 'enroll failed' };
+  return { ok: true, agent };
 }
 
 export interface BasicProfile {

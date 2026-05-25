@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Address } from '@agenticprimitives/types';
+import type { Address, Hex } from '@agenticprimitives/types';
 import {
   AUD,
   siweLogin,
   bootstrapWithWallet,
+  passkeyLogin,
+  bootstrapWithPasskey,
+  passkeySignHash,
   claimName,
   fetchProfile,
   fetchSensitive,
   type BasicProfile,
+  type DemoPasskey,
 } from './connect-client';
-import { hasWallet } from './lib/wallet';
+import { hasWallet, personalSign } from './lib/wallet';
 import { startGoogleSignIn, exchangeCode } from './server-client';
 
 interface Session {
@@ -17,11 +21,9 @@ interface Session {
   via: string; // 'wallet' | 'Google'
   fresh: boolean; // true = just created (welcome) vs reconnected (welcome back)
 }
-interface BootstrapState {
-  address: Address;
-  step?: string;
-  error?: string;
-}
+type BootstrapState =
+  | { kind: 'wallet'; address: Address; step?: string; error?: string }
+  | { kind: 'passkey'; passkey: DemoPasskey; step?: string; error?: string };
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -79,7 +81,7 @@ export function App() {
       if (out.status === 'issued') {
         await openSession(out.token, 'wallet', false);
       } else if (out.status === 'bootstrap') {
-        setBootstrap({ address: out.address });
+        setBootstrap({ kind: 'wallet', address: out.address });
       } else {
         setError(out.reason ?? `Could not sign you in (${out.status}).`);
       }
@@ -90,32 +92,58 @@ export function App() {
     }
   }
 
-  async function onCreateWorkspace() {
-    if (!bootstrap) return;
-    setBootstrap({ ...bootstrap, error: undefined, step: 'Starting…' });
-    const res = await bootstrapWithWallet(bootstrap.address, (step) =>
-      setBootstrap((b) => (b ? { ...b, step } : b)),
-    );
-    if (!res.ok) {
-      setBootstrap((b) => (b ? { ...b, step: undefined, error: res.error } : b));
-      return;
-    }
-    // Claim a forced-unique <name>.demo.agent (best-effort; non-fatal on failure).
-    await claimName(res.agent, bootstrap.address, desiredName || 'agent', (step) =>
-      setBootstrap((b) => (b ? { ...b, step } : b)),
-    );
-    // Workspace created — sign in to it for real (resolves on-chain now).
-    setBootstrap((b) => (b ? { ...b, step: 'Finishing up…' } : b));
+  async function onConnectPasskey() {
+    setError(null);
+    setBusy(true);
     try {
-      const out = await siweLogin();
+      const out = await passkeyLogin();
       if (out.status === 'issued') {
-        setBootstrap(null);
-        await openSession(out.token, 'wallet', true);
+        await openSession(out.token, 'passkey', false);
+      } else if (out.status === 'bootstrap') {
+        setBootstrap({ kind: 'passkey', passkey: out.passkey });
       } else {
-        setBootstrap((b) => (b ? { ...b, step: undefined, error: `created, but sign-in returned ${out.status}` } : b));
+        setError(out.reason ?? `Could not sign you in (${out.status}).`);
       }
     } catch (e) {
-      setBootstrap((b) => (b ? { ...b, step: undefined, error: e instanceof Error ? e.message : 'sign-in failed' } : b));
+      setError(e instanceof Error ? e.message : 'passkey connect failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onCreateWorkspace() {
+    const bs = bootstrap;
+    if (!bs) return;
+    const setStep = (step: string) => setBootstrap((b) => (b ? { ...b, step } : b));
+    const fail = (error: string) => setBootstrap((b) => (b ? { ...b, step: undefined, error } : b));
+    setBootstrap({ ...bs, error: undefined, step: 'Starting…' });
+
+    let agent: Address;
+    let signHash: (h: Hex) => Promise<Hex>;
+    if (bs.kind === 'wallet') {
+      const res = await bootstrapWithWallet(bs.address, setStep);
+      if (!res.ok) return fail(res.error);
+      agent = res.agent;
+      signHash = (h) => personalSign(bs.address, h);
+    } else {
+      const res = await bootstrapWithPasskey(bs.passkey, setStep);
+      if (!res.ok) return fail(res.error);
+      agent = res.agent;
+      signHash = passkeySignHash;
+    }
+    // Claim a forced-unique <name>.demo.agent (best-effort; non-fatal).
+    await claimName(agent, signHash, desiredName || 'agent', setStep);
+    setStep('Finishing up…');
+    try {
+      const out = bs.kind === 'wallet' ? await siweLogin() : await passkeyLogin(false);
+      if (out.status === 'issued') {
+        setBootstrap(null);
+        await openSession(out.token, bs.kind, true);
+      } else {
+        fail(`created, but sign-in returned ${out.status}`);
+      }
+    } catch (e) {
+      fail(e instanceof Error ? e.message : 'sign-in failed');
     }
   }
 
@@ -153,8 +181,11 @@ export function App() {
           <p className="muted">Choose how to sign in. First time? We'll create your workspace.</p>
           {googleNotice && <p className="ok">ℹ️ {googleNotice}</p>}
           <p>
+            <button disabled={busy} onClick={onConnectPasskey}>
+              {busy ? 'Working…' : 'Use a passkey'}
+            </button>{' '}
             <button disabled={busy} onClick={onConnectWallet}>
-              {busy ? 'Connecting…' : 'Connect wallet'}
+              Connect wallet
             </button>{' '}
             <button disabled={busy} onClick={() => startGoogleSignIn(AUD, window.location.origin + '/')}>
               Continue with Google
@@ -162,14 +193,14 @@ export function App() {
           </p>
           {!hasWallet() && (
             <p className="muted">
-              <em>No wallet detected.</em> Install MetaMask (or another Ethereum wallet) to connect with a
-              wallet, or continue with Google.
+              <em>No browser wallet detected</em> — use a passkey (your device) or continue with Google.
             </p>
           )}
           <p className="muted">
-            Google is a <strong>login-grade</strong> facet — it lets you read your basic profile, but
-            creating/securing a workspace and viewing sensitive details need a custody-grade credential
-            (wallet or passkey). Passkey connect is coming next.
+            <strong>Passkey</strong> or <strong>wallet</strong> are custody-grade — they create/secure your
+            workspace and unlock sensitive details. <strong>Google</strong> is login-grade: it reads your
+            basic profile, but you'll add a passkey/wallet to your workspace for anything sensitive
+            (ADR-0017).
           </p>
         </div>
       )}
@@ -181,9 +212,14 @@ export function App() {
           {!bootstrap.step && !bootstrap.error && (
             <>
               <p className="muted">
-                No workspace yet for <code>{bootstrap.address}</code>. We'll deploy your personal Smart
-                Agent on Base Sepolia (gas sponsored — you won't pay), link this wallet to it, and claim
-                a <code>.demo.agent</code> name.
+                No workspace yet for your{' '}
+                {bootstrap.kind === 'wallet' ? (
+                  <>wallet <code>{bootstrap.address}</code></>
+                ) : (
+                  <>passkey</>
+                )}
+                . We'll deploy your personal Smart Agent on Base Sepolia (gas sponsored — you won't pay),
+                link this credential to it, and claim a <code>.demo.agent</code> name.
               </p>
               <p>
                 <label className="muted">
