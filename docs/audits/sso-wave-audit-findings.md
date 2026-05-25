@@ -23,7 +23,7 @@ load-bearing. Findings cluster in (a) doc-accuracy against shipped code and
 |---|---|---|---|
 | P0-1 | `toCanonicalAgentId(chainId,address)` / `buildCaip10Address(chainId,address)` don't match shipped `buildCaip10Address(parts: Caip10Parts): Caip10Address`; the `(chainId,address)` form is eip155-only and can't express `hedera:*` | **FIXED** | ADR-0016 Decision; ADR-0008 amendment; spec 224 §12.1 |
 | P0-2 | `CanonicalAgentId` (new `types` brand) vs already-shipped `agent-profile` `Caip10Address` = two brands for one concept | **FIXED** | ADR-0016 (promotion clause: `type CanonicalAgentId = Caip10Address`, move primitive to `types`, re-export); spec 224 §12.1; vocabulary-map row |
-| P1-1 | `identity-directory-adapters → agent-naming` is the right home, BUT firewall is per-manifest only (no global cycle/denylist check); spec 100 "denylisted packages" prose implies a central denylist that doesn't exist | **FIXED** (prose + core-forbids rule) + **OPEN-HW** (`check:dependency-graph`) | spec 100 §4; product-readiness TODO |
+| P1-1 | `identity-directory-adapters → agent-naming` is the right home, BUT firewall is per-manifest only (no global cycle/denylist check); spec 100 "denylisted packages" prose implies a central denylist that doesn't exist | **FIXED** (prose + core-forbids rule + **`check:dependency-graph` landed** — caught/fixed 3 real gaps: agent-account, connect-auth, agent-naming siblings) | spec 100 §4; `scripts/check-dependency-graph.ts` |
 | P1-2 | `NamingPort` claims `CanonicalAgentId` but shipped `agent-naming` is `Address`-keyed with no chainId; lift point unspecified | **FIXED** | spec 223 §5 (adapter chainId-lift invariant + naming-null-terminal) |
 | P1-3 | Ontology lockstep hand-wavy: on-chain `atl:` vs off-chain `ap*:` CURIEs unmapped; "shape match" undefined | **FIXED** (crosswalk requirement + match definition) + **OPEN-HW** (`check:ontology-lockstep`) | spec 225 §8/§11; ADR-0018 |
 | P1-4 | `agentKind` (4 values, on-chain) vs `ProfileType` (6 values) conflated in C-box | **FIXED** | spec 225 §6 (two distinct vocabularies + subtype mapping) |
@@ -73,9 +73,11 @@ token exfiltration (CN-1), alg-confusion forgery (CN-4), phishing the single RP
 `packages/connect` scaffolds.
 
 ## Structural checks to add to `check:all` (when packages exist)
-1. **`check:dependency-graph`** (P1-1, highest value) — cross-manifest import
-   graph: assert acyclicity + authority-denylist presence. Closes the gap that
-   per-manifest `check:package-boundaries` cannot catch.
+1. **`check:dependency-graph`** (P1-1, highest value) — ✅ **DONE**
+   (`scripts/check-dependency-graph.ts`, in `check:all`): cross-manifest import
+   graph — edge validity + acyclicity + facet-registry firewall. Closed the gap
+   that per-manifest `check:package-boundaries` cannot catch, and fixed three
+   real denylist gaps it surfaced (agent-account, connect-auth, agent-naming).
 2. **`check:ontology-lockstep`** (P1-3, Phase 4) — every on-chain term has an IRI
    in `tbox/`; every `ShapeRegistry` shape matches a `cbox/` `sh:property` (per the
    spec 225 §8 "shape match" definition + the `atl:`⟷`ap*:` crosswalk).

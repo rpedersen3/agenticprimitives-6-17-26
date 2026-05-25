@@ -22,7 +22,10 @@
     "@agenticprimitives/delegation",
     "@agenticprimitives/key-custody",
     "@agenticprimitives/tool-policy",
-    "@agenticprimitives/mcp-runtime"
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
   ],
   "publicExports": [
     "AgentAccountClient",

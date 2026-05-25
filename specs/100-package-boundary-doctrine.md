@@ -161,15 +161,18 @@ runtime wiring. Two precise rules:
   `identity-directory-adapters` in its `forbiddenImports`; only the **adapters**
   package and apps may import `agent-naming`. The adapters package is the *sole*
   new naming consumer.
-- **Caveat — the firewall is enforced per-manifest only.** `check:package-boundaries`
-  reads each package's own `allowedImports`/`forbiddenImports`; there is **no
-  global cycle/back-edge detector and no central denylist**. The
-  "delegation/mcp-runtime/… must not import agent-naming" invariant holds only
-  because each of those manifests independently lists it. **TODO (structural
-  check):** add `scripts/check-dependency-graph.ts` — build the cross-manifest
-  import graph, assert acyclicity, and assert the canonical authority denylist
-  (`agent-naming`/`agent-profile`/`agent-relationships`) appears in every
-  authority manifest. Tracked in `docs/architecture/product-readiness-audit.md`.
+- **Global enforcement: `check:dependency-graph`** (closes audit P1-1). In
+  addition to the per-manifest `check:package-boundaries`, `scripts/check-dependency-graph.ts`
+  builds the cross-manifest `imports` graph and asserts (a) **edge validity**
+  (every imported `@agenticprimitives/*` exists + is in the importer's
+  `allowedImports`), (b) **acyclicity** (no cycles / back-edges), and (c) the
+  **facet-registry firewall** — every package lists each of
+  `agent-naming`/`agent-profile`/`agent-relationships` in `forbiddenImports`
+  unless it IS that registry, is permitted to import it (`allowedImports`), or
+  forbids all `@agenticprimitives/*` via the wildcard. This is what stops a
+  future package — or a silently-dropped denylist entry — from importing a facet
+  registry. (Landing it caught + fixed three real gaps: `agent-account`,
+  `connect-auth`, and `agent-naming`'s sibling-firewall entries.) Part of `check:all`.
 
 Hard rules (CI-enforced):
 

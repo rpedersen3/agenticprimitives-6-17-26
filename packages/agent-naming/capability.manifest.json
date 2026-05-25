@@ -74,6 +74,8 @@
     "@agenticprimitives/key-custody",
     "@agenticprimitives/audit",
     "@agenticprimitives/account-custody",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
     "@modelcontextprotocol/sdk"
   ],
   "publicExports": [
