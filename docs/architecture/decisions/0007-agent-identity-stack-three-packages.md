@@ -6,7 +6,7 @@
 **Related:** [ADR-0006](./0006-agent-naming-as-resolution-layer.md)
 (agent-naming as resolution layer); [spec 215](../../../specs/215-agent-naming.md),
 [spec 216](../../../specs/216-agent-relationships.md),
-[spec 217](../../../specs/217-agent-identity.md).
+[spec 217](../../../specs/217-agent-profile.md).
 
 ## Context
 

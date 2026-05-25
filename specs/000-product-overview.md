@@ -21,7 +21,7 @@ Each package is a **product boundary**: a separately publishable, independently 
 
 | # | Package | Capability area | Spec |
 | --- | --- | --- | --- |
-| 1 | [`@agenticprimitives/connect-auth`](../packages/connect-auth) | Auth + smart account (1 of 2) | [`200`](./200-identity-auth.md) |
+| 1 | [`@agenticprimitives/connect-auth`](../packages/connect-auth) | Auth + smart account (1 of 2) | [`200`](./200-connect-auth.md) |
 | 2 | [`@agenticprimitives/agent-account`](../packages/agent-account) | Auth + smart account (2 of 2) | [`201`](./201-agent-account.md) |
 | 3 | [`@agenticprimitives/delegation`](../packages/delegation) | Delegation + session lifecycle | [`202`](./202-delegation.md) |
 | 4 | [`@agenticprimitives/key-custody`](../packages/key-custody) | KMS abstraction (narrower than v1) | [`203`](./203-key-custody.md) |
@@ -139,7 +139,7 @@ agenticprimitives/
 │   ├── 101-v0-package-proposal.md         (per-package justifications)
 │   ├── 102-manifest-and-claude-md-template.md   (agent-context contract)
 │   ├── 103-spec-reorganization-map.md     (current → new mapping)
-│   ├── 200-identity-auth.md
+│   ├── 200-connect-auth.md
 │   ├── 201-agent-account.md
 │   ├── 202-delegation.md
 │   ├── 203-key-custody.md

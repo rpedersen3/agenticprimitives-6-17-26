@@ -9,10 +9,10 @@ This is the routing index for Claude (and other agents) starting work in this re
 | Package | Kind | Stability | Spec | Depends on |
 | --- | --- | --- | --- | --- |
 | `@agenticprimitives/types` | shared | experimental | [101-v0-package-proposal.md](../../specs/101-v0-package-proposal.md) | _none_ |
-| `@agenticprimitives/agent-account` | capability | experimental | [201-agent-account.md](../../specs/201-agent-account.md) | `types`, `identity-auth` |
-| `@agenticprimitives/delegation` | capability | experimental | [202-delegation.md](../../specs/202-delegation.md) | `types`, `identity-auth`, `agent-account`, `key-custody` |
-| `@agenticprimitives/connect-auth` | capability | experimental | [200-identity-auth.md](../../specs/200-identity-auth.md) | `types` |
-| `@agenticprimitives/key-custody` | capability | experimental | [203-key-custody.md](../../specs/203-key-custody.md) | `types`, `identity-auth` |
+| `@agenticprimitives/agent-account` | capability | experimental | [201-agent-account.md](../../specs/201-agent-account.md) | `types`, `connect-auth` |
+| `@agenticprimitives/delegation` | capability | experimental | [202-delegation.md](../../specs/202-delegation.md) | `types`, `connect-auth`, `agent-account`, `key-custody` |
+| `@agenticprimitives/connect-auth` | capability | experimental | [200-connect-auth.md](../../specs/200-connect-auth.md) | `types` |
+| `@agenticprimitives/key-custody` | capability | experimental | [203-key-custody.md](../../specs/203-key-custody.md) | `types`, `connect-auth` |
 | `@agenticprimitives/mcp-runtime` | capability | experimental | [205-mcp-runtime.md](../../specs/205-mcp-runtime.md) | `types`, `delegation`, `key-custody`, `tool-policy` |
 | `@agenticprimitives/tool-policy` | capability | experimental | [204-tool-policy.md](../../specs/204-tool-policy.md) | `types` |
 
@@ -78,10 +78,10 @@ Protocol-agnostic classification taxonomy + risk tiers + exact-call DSL + decisi
 
 ```
 types                (leaf)
-agent-account        → types, identity-auth
-delegation           → types, identity-auth, agent-account, key-custody
-identity-auth        → types
-key-custody          → types, identity-auth
+agent-account        → types, connect-auth
+delegation           → types, connect-auth, agent-account, key-custody
+connect-auth        → types
+key-custody          → types, connect-auth
 mcp-runtime          → types, delegation, key-custody, tool-policy
 tool-policy          → types
 ```

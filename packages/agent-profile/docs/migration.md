@@ -39,5 +39,5 @@ and derive UAIDs locally if still required ([ADR-0008](../../../docs/architectur
 1. `README.md`, `docs/api.md`
 2. `docs/security.md` when hash or verification rules change
 3. `capability.manifest.json`
-4. `specs/217-agent-identity.md`
+4. `specs/217-agent-profile.md`
 5. Golden tests for `profileContentHash` and CAIP-10 vectors

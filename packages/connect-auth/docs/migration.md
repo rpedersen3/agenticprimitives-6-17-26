@@ -35,5 +35,5 @@ JWT only ([ADR-0002](../../../docs/architecture/decisions/0002-session-lifecycle
 1. `README.md`, `docs/api.md`
 2. `docs/security.md`
 3. `capability.manifest.json`
-4. `specs/200-identity-auth.md`
+4. `specs/200-connect-auth.md`
 5. Notify `delegation` consumers if `JwtClaims` changes

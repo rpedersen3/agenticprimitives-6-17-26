@@ -96,7 +96,7 @@ What this package does NOT own (per its `CLAUDE.md`):
 
 - [ ] **(H1)** Wire CSRF middleware in demo-a2a. This package's helpers are correct; consumer-side wiring is the gap. Top-5 pass.
 - [ ] **(H4)** Implement Google OAuth OR remove the export. Mark experimental until a real implementation lands.
-- [ ] **(IA-1)** Document the `PasskeyAssertion` (raw) vs `WebAuthnAssertion` (structured) distinction in `specs/200-identity-auth.md`.
+- [ ] **(IA-1)** Document the `PasskeyAssertion` (raw) vs `WebAuthnAssertion` (structured) distinction in `specs/200-connect-auth.md`.
 - [ ] **(IA-2)** Add property test for `deriveSaltFromLabel`.
 - [ ] **(system C3)** Emit audit events from `mintSession` / `verifySession` / SIWE `verifyOnchain` failures.
 
@@ -105,7 +105,7 @@ What this package does NOT own (per its `CLAUDE.md`):
 An external auditor evaluating this package needs:
 
 - `pnpm build` + `pnpm test` (68 tests)
-- `specs/200-identity-auth.md`
+- `specs/200-connect-auth.md`
 - This audit doc + system audit
 - Source: `sessions.ts`, `csrf.ts`, `salt.ts`, `verify-signature.ts`, `methods/passkey.ts`, `methods/siwe.ts`
 - Notable test vectors: golden SIWE messages in `test/unit/siwe.test.ts`; passkey CBOR fixtures in `test/unit/passkey.test.ts`

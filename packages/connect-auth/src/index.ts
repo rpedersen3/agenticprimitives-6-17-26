@@ -1,6 +1,6 @@
 // @agenticprimitives/connect-auth — public API
 //
-// See ../../specs/200-identity-auth.md for the full contract.
+// See ../../specs/200-connect-auth.md for the full contract.
 
 export { mintSession, verifySession, SESSION_COOKIE, SESSION_TTL_SECONDS } from './sessions';
 export { csrfTokenFor, verifyCsrf } from './csrf';

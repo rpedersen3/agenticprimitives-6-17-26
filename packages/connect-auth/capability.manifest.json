@@ -4,7 +4,7 @@
   "stability": "experimental",
   "agentEntry": "CLAUDE.md",
   "publicEntry": "src/index.ts",
-  "specEntry": "../../specs/200-identity-auth.md",
+  "specEntry": "../../specs/200-connect-auth.md",
   "summary": "User auth (passkey + SIWE + Google OAuth), JWT sessions, CSRF, and pluggable Signer interfaces consumed by agent-account and delegation.",
   "owns": {
     "source": ["src/**"],

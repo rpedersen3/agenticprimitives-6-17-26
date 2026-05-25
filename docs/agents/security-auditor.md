@@ -32,7 +32,7 @@ as integration evidence — they don't shift the package's risk score.
 The trust boundaries you most often verify:
 
 - **Browser ↔ demo-a2a Worker** — CSRF, CORS allowlist, JWT sessions,
-  rate limit, input validation. Owns: `identity-auth`, `delegation`.
+  rate limit, input validation. Owns: `connect-auth`, `delegation`.
 - **demo-a2a ↔ demo-mcp** — service-MAC envelope, key rotation,
   `mcp-runtime.verifyServiceMac`. Owns: `key-custody`, `mcp-runtime`.
 - **demo-mcp ↔ tool handler** — `withDelegation` (Wave H1 prod-default),
@@ -44,7 +44,7 @@ The trust boundaries you most often verify:
   dispatch (ECDSA / WebAuthn / ERC-1271 / ERC-6492), `installModule`
   authority closure. Owns: `agent-account`, contracts.
 - **CustodyPolicy ↔ AgentAccount** — schedule/apply/cancel, T1-T6 timelock
-  tiers, recovery via trustee quorum. Owns: `custody`, contracts.
+  tiers, recovery via trustee quorum. Owns: `account-custody`, contracts.
 - **Factory ↔ Account deploy** — `createAgentAccount(params,
   timelockOverrides, salt)`, CustodyPolicy factory-immutable address,
   mode>0 → trustees>0 invariant. Owns: `agent-account`, contracts.

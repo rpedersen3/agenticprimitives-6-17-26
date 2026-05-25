@@ -49,7 +49,7 @@ Profiles are a **facet registration** anchored at the canonical Smart Agent addr
 ## Read these first (in order)
 1. `capability.manifest.json` — boundary.
 2. `src/index.ts` — public API.
-3. `../../specs/217-agent-identity.md` — the spec.
+3. `../../specs/217-agent-profile.md` — the spec.
 4. `../../docs/architecture/decisions/0007-agent-identity-stack-three-packages.md`
 5. `../../docs/architecture/decisions/0008-caip10-nativeid-record-predicate.md`
 6. `src/caip10.ts` + `src/profile.ts` — the pure substrate.
@@ -102,7 +102,7 @@ Profiles are a **facet registration** anchored at the canonical Smart Agent addr
       `CAIP10_NAMESPACE_ALLOWLIST` AND add a golden vector test?
 - [ ] If I'm adding a profile field, did I update the canonical-JSON
       serialization AND the content-hash invariant tests?
-- [ ] Did I update `specs/217-agent-identity.md` if the public API
+- [ ] Did I update `specs/217-agent-profile.md` if the public API
       or AgentCard schema changed?
 
 ## Security invariants (DO NOT BREAK)

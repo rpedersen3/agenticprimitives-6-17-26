@@ -4,7 +4,7 @@
   "stability": "experimental",
   "agentEntry": "CLAUDE.md",
   "publicEntry": "src/index.ts",
-  "specEntry": "../../specs/217-agent-identity.md",
+  "specEntry": "../../specs/217-agent-profile.md",
   "summary": "Typed AgentCard profile schema (HCS-11-aligned), CAIP-10 nativeId helpers, endpoint verification methods. Phase 1: pure helpers + types + client skeleton.",
   "owns": {
     "source": ["src/**"],

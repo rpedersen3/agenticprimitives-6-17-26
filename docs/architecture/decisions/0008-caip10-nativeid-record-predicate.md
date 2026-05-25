@@ -5,7 +5,7 @@
 **Related:** [ADR-0006](./0006-agent-naming-as-resolution-layer.md),
 [ADR-0007](./0007-agent-identity-stack-three-packages.md),
 [spec 215](../../../specs/215-agent-naming.md) (records schema),
-[spec 217](../../../specs/217-agent-identity.md) (profile schema).
+[spec 217](../../../specs/217-agent-profile.md) (profile schema).
 
 ## Context
 

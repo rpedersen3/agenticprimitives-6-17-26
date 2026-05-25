@@ -10,7 +10,7 @@
 
 ```
 specs/001-auth.md
-    ├──► specs/200-identity-auth.md       (auth methods, sessions, CSRF)
+    ├──► specs/200-connect-auth.md       (auth methods, sessions, CSRF)
     └──► specs/201-agent-account.md       (smart-account substrate, factory, EIP-4337)
 
 specs/002-delegation.md
@@ -36,8 +36,8 @@ Numbering: existing 000-004 stay (with 000 updated). New per-package specs use t
 | Original section in 001 | Destination | Notes |
 | --- | --- | --- |
 | §1 Goal | Split: auth half → 200, account half → 201 | Two clean halves. |
-| §2 Auth methods (passkey/SIWE/Google) | **200-identity-auth.md** | Verbatim. |
-| §3 Session model (JWT, cookie, claims) | **200-identity-auth.md** | Verbatim. |
+| §2 Auth methods (passkey/SIWE/Google) | **200-connect-auth.md** | Verbatim. |
+| §3 Session model (JWT, cookie, claims) | **200-connect-auth.md** | Verbatim. |
 | §4 Smart account model (factory, salt derivation, lazy deploy) | **201-agent-account.md** | Verbatim. |
 | §5 Public API | Split | Auth/session/CSRF/signer-interfaces → 200; `AgentAccountClient`, salt helpers → 201. |
 | §6 Security boundaries | Split | JWT/CSRF/replay items → 200; salt-collision / contract-trust items → 201. |

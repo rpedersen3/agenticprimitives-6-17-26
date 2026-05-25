@@ -26,7 +26,7 @@ Per [ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re
 ## Read these first (in order)
 1. `capability.manifest.json` — boundary
 2. `src/index.ts` — public API
-3. `../../specs/200-identity-auth.md` — the contract
+3. `../../specs/200-connect-auth.md` — the contract
 4. `../../docs/architecture/vocabulary-map.md` — only if your change touches a term that lives in two packages
 
 ## Stable public exports
@@ -55,7 +55,7 @@ Per [ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re
 - [ ] Does the change stay inside auth methods, JWT sessions, CSRF, salt derivation, or `Signer` interfaces?
 - [ ] If "session" appears in my change, am I sure I mean **JWT-cookie session** (this package) and not the `delegation` `SessionRow`?
 - [ ] Am I producing or consuming `Signer`? (Producing concrete signers = wrong package; that's `key-custody`. Defining the interface = right place.)
-- [ ] Did I update `specs/200-identity-auth.md` if the public API changed?
+- [ ] Did I update `specs/200-connect-auth.md` if the public API changed?
 - [ ] Are JWT secrets, OAuth client secrets, and any sensitive material kept out of logs and error messages?
 
 ## Security invariants (DO NOT BREAK)

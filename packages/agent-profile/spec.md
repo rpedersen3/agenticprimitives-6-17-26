@@ -1,6 +1,6 @@
 # @agenticprimitives/agent-profile — spec
 
-The full design lives in [`../../specs/217-agent-identity.md`](../../specs/217-agent-identity.md).
+The full design lives in [`../../specs/217-agent-profile.md`](../../specs/217-agent-profile.md).
 
 Architecture decisions:
 

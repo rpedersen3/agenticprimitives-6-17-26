@@ -3,7 +3,7 @@
 // See:
 //   - capability.manifest.json — boundary
 //   - CLAUDE.md — doctrine
-//   - specs/217-agent-identity.md — the contract
+//   - specs/217-agent-profile.md — the contract
 //   - docs/architecture/decisions/0007-agent-identity-stack-three-packages.md
 //   - docs/architecture/decisions/0008-caip10-nativeid-record-predicate.md
 

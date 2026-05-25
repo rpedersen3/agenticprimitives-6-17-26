@@ -38,7 +38,7 @@ when they slip.
 - Each package is a product boundary. One reviewer should be able to
   evaluate a package by reading just its source + `AUDIT.md`.
 - Dependency graph (acyclic, one-directional):
-  `types ← identity-auth ← agent-account ← delegation ← mcp-runtime`,
+  `types ← connect-auth ← agent-account ← delegation ← mcp-runtime`,
   plus `key-custody → delegation`, `tool-policy → mcp-runtime`,
   custody fork: `types ← custody` (depended on by `agent-account`
   + `delegation`).
@@ -47,18 +47,18 @@ when they slip.
   LangChain / Vercel imports.
 
 ### Vocabulary firewall (spec 213)
-- The `custody` package owns custody-domain words: `Custodian`,
+- The `account-custody` package owns custody-domain words: `Custodian`,
   `Trustee`, `CustodyAction`. The `delegation` package owns
   delegation-domain words: `Caveat`, `Enforcer`, `Steward`,
   `principal`. The two MUST NOT leak across the boundary.
 - Words that historically went both ways and got disambiguated:
-  - "session" — `identity-auth` (JWT) vs `delegation` (SessionRow)
+  - "session" — `connect-auth` (JWT) vs `delegation` (SessionRow)
     vs `key-custody` (session-data-key). Each scope is documented in
     `docs/architecture/vocabulary-map.md`; an audit finding fires if
     these get conflated.
   - "envelope" — `mcp-runtime` (HTTP envelope with HMAC) vs
     `key-custody` (AES-GCM envelope encryption). Different concepts.
-  - "custody" — `key-custody` (KMS / key custody) vs `custody`
+  - "custody" — `key-custody` (KMS / key custody) vs `account-custody`
     (account custody, custodians/trustees). Different concepts.
 
 ### Contract architecture (specs 207, 209, 211, 213)
@@ -101,11 +101,11 @@ feature X?":
 | New caveat enforcer | `delegation` + `apps/contracts/src/enforcers` | `mcp-runtime` |
 | New risk tier or `@sa-tool` value | `tool-policy` | `delegation` |
 | New KMS backend | `key-custody/src/providers/` | `delegation` |
-| New auth flow (OIDC, WebAuthn-with-attestation) | `identity-auth` | `agent-account` |
-| New `CustodyAction` variant | `custody` + `apps/contracts/src/custody/CustodyPolicy.sol` | `agent-account` |
+| New auth flow (OIDC, WebAuthn-with-attestation) | `connect-auth` | `agent-account` |
+| New `CustodyAction` variant | `account-custody` + `apps/contracts/src/custody/CustodyPolicy.sol` | `agent-account` |
 | New MCP transport adapter | `mcp-runtime/src/sdk-adapter.ts` | `delegation` |
 | New audit sink (Cloud Logging) | `audit` | `mcp-runtime` |
-| Session-lifecycle change | `delegation/src/sessions.ts` (ADR-0002) | `key-custody` or `identity-auth` |
+| Session-lifecycle change | `delegation/src/sessions.ts` (ADR-0002) | `key-custody` or `connect-auth` |
 | Contract-address rotation policy | `apps/contracts/script/Deploy.s.sol` + `apps/contracts/deployments-<network>.json` | inside any package |
 
 Whenever a PR adds a concept to the wrong package, the audit fires a

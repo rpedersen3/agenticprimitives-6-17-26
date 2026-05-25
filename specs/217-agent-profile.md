@@ -1,8 +1,9 @@
-# Spec 217 — Agent Identity (profile + verification + CAIP-10 alignment)
+# Spec 217 — Agent Profile (profile + verification + CAIP-10 alignment)
 
 **Status:** v0 (architecture locked; Phase 1 implementation pending).
-**Owner:** `@agenticprimitives/agent-profile` package (to be
-scaffolded).
+**Owner:** `@agenticprimitives/agent-profile` package (renamed from
+`agent-identity`, 2026-05-25 — "profile facet", distinct from login which
+lives in `connect-auth`).
 **Architecture commitment:** [ADR-0006](../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md)
 + [ADR-0007](../docs/architecture/decisions/0007-agent-identity-stack-three-packages.md)
 + [ADR-0008](../docs/architecture/decisions/0008-caip10-nativeid-record-predicate.md).
