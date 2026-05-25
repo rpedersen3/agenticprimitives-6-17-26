@@ -120,6 +120,27 @@ export async function issueForRelyingSite(
   return issueForResolution({ resolution, principal, signer, aud, iss, ttlSeconds: SESSION_TTL_SECONDS });
 }
 
+/**
+ * Resolve a VERIFIED OIDC subject → agent(s) and issue an aud-bound AgentSession.
+ * OIDC resolves via `resolveByOidcSubject(oidcIss, oidcSub)`, NOT
+ * `resolveByCredential`: the (iss, sub) pair is the key, and both the demo
+ * catch-all and a production indexer live on that path (identity-directory
+ * doctrine — the broker passes the already-verified subject in). `principal` is
+ * the login-grade OIDC facet; `connectIss` is the token issuer (the Connect origin).
+ */
+export async function issueForOidcSubject(
+  directory: IdentityDirectory,
+  signer: BrokerSigner,
+  principal: CredentialPrincipal,
+  oidcIss: string,
+  oidcSub: string,
+  aud: string,
+  connectIss: string,
+): Promise<IssueOutcome> {
+  const resolution = await directory.resolveByOidcSubject(oidcIss, oidcSub);
+  return issueForResolution({ resolution, principal, signer, aud, iss: connectIss, ttlSeconds: SESSION_TTL_SECONDS });
+}
+
 /** Relying-site side: verify a delivered token against a published JWKS. */
 export async function verifyTokenWithJwks(
   jwks: Parameters<typeof importJwks>[0],

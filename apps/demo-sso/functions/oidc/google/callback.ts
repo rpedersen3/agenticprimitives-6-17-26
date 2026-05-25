@@ -11,7 +11,7 @@
 import { completeLogin, oidcFacetId } from '@agenticprimitives/connect-auth/google';
 import { newAuthCode, validateRedirectUri } from '@agenticprimitives/connect';
 import type { CredentialPrincipal } from '@agenticprimitives/types';
-import { issueForRelyingSite } from '../../../src/lib/broker-core';
+import { issueForOidcSubject } from '../../../src/lib/broker-core';
 import { getServer, json, type FnContext } from '../../_lib/server-broker';
 
 export const onRequestGet = async ({ request, env }: FnContext): Promise<Response> => {
@@ -52,7 +52,17 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
 
   const { signer, directory } = await getServer(env);
   const iss = new URL(request.url).origin; // the Connect origin = this serving origin
-  const outcome = await issueForRelyingSite(directory, signer, principal, stash.aud, iss);
+  // OIDC resolves by the verified (iss, sub) — resolveByOidcSubject, not by
+  // credential — so the directory's OIDC-subject path (catch-all / indexer) is hit.
+  const outcome = await issueForOidcSubject(
+    directory,
+    signer,
+    principal,
+    result.principal.iss,
+    result.principal.sub,
+    stash.aud,
+    iss,
+  );
   if (outcome.status !== 'issued') {
     // 0 → bootstrap a new SA (spec 220); many → disambiguate. Demo: report.
     return json({
