@@ -99,8 +99,14 @@ interface IndexerPort {                // the home for "indexed registry" reads
   agentsByCredential(principal: CredentialPrincipal): Promise<EvidenceLink[]>;
   agentsByOidcSubject(iss: string, sub: string): Promise<EvidenceLink[]>;
 }
-interface OidcPort { /* verify an OIDC claim → CredentialPrincipal */ }
 ```
+
+> **Reconciliation (implemented 2026-05-25):** an earlier draft sketched an
+> `OidcPort` for "verify an OIDC claim → CredentialPrincipal". OIDC **verification**
+> (id_token, PKCE/state/nonce) lives in `@agenticprimitives/connect-auth` (ADR-0017),
+> NOT the directory — so the shipped core has **three** ports (Naming / OnChainRead
+> / Indexer). The broker verifies the claim via connect-auth, then calls
+> `resolveByOidcSubject(iss, sub)` with the already-verified subject.
 
 Each port returns `null`/empty as a terminal answer. There is no "try port A,
 fall back to port B" — that violates ADR-0013. Composition is explicit and

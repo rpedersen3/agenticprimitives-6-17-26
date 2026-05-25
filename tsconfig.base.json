@@ -31,7 +31,9 @@
       "@agenticprimitives/key-custody/aws": ["packages/key-custody/src/providers/aws.ts"],
       "@agenticprimitives/key-custody/gcp": ["packages/key-custody/src/providers/gcp.ts"],
       "@agenticprimitives/tool-policy": ["packages/tool-policy/src/index.ts"],
-      "@agenticprimitives/mcp-runtime": ["packages/mcp-runtime/src/index.ts"]
+      "@agenticprimitives/mcp-runtime": ["packages/mcp-runtime/src/index.ts"],
+      "@agenticprimitives/ontology": ["packages/ontology/src/index.ts"],
+      "@agenticprimitives/identity-directory": ["packages/identity-directory/src/index.ts"]
     }
   }
 }

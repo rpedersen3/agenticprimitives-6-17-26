@@ -1,0 +1,86 @@
+{
+  "name": "@agenticprimitives/identity-directory",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/223-identity-directory.md",
+  "summary": "Evidence-backed read model over canonical agents (ADR-0015 / spec 223): ports (Naming/OnChainRead/Indexer) + query API with provenance + assurance. Not authority; no getLogs; no fallback.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": ["@agenticprimitives/types", "@agenticprimitives/audit", "@agenticprimitives/ontology"],
+  "allowedImports": ["@agenticprimitives/types", "@agenticprimitives/audit", "@agenticprimitives/ontology"],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/connect-auth",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/account-custody"
+  ],
+  "publicExports": [
+    "EvidenceSource",
+    "Evidence",
+    "AgentRecord",
+    "CredentialFacet",
+    "AgentWithEvidence",
+    "Resolution",
+    "AgentView",
+    "EvidenceLink",
+    "OnChainReadPort",
+    "NamingPort",
+    "IndexerPort",
+    "DirectoryPorts",
+    "DirectoryOpts",
+    "IdentityDirectory",
+    "ASSURANCE_ORDER",
+    "compareAssurance",
+    "maxAssurance",
+    "createDirectory"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "Delegation",
+      "reason": "Delegation primitive belongs in delegation; the directory only reads + resolves.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "Caveat",
+      "reason": "Belongs in delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "evaluatePolicy",
+      "reason": "Policy evaluation belongs in tool-policy.",
+      "owningPackage": "@agenticprimitives/tool-policy"
+    },
+    {
+      "term": "withDelegation",
+      "reason": "Belongs in mcp-runtime.",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    },
+    {
+      "term": "buildCaip10Address",
+      "reason": "Runtime CAIP-10 builder belongs in agent-profile; the directory consumes CanonicalAgentId, it does not build it.",
+      "owningPackage": "@agenticprimitives/agent-profile"
+    },
+    {
+      "term": "SessionManager",
+      "reason": "Session lifecycle belongs in delegation; this is a read model, not a session store.",
+      "owningPackage": "@agenticprimitives/delegation"
+    }
+  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

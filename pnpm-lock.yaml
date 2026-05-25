@@ -441,6 +441,22 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
 
+  packages/identity-directory:
+    dependencies:
+      '@agenticprimitives/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@agenticprimitives/ontology':
+        specifier: workspace:*
+        version: link:../ontology
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
   packages/key-custody:
     dependencies:
       '@agenticprimitives/audit':
