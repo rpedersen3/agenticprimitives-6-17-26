@@ -21,7 +21,7 @@ apps/demo-sso/
 ├── index.html
 ├── vite.config.ts        ← dev server on :5373 (demo-web 5173, demo-web-pro 5273)
 ├── wrangler.toml         ← Pages config (KV binding for the auth-code store)
-├── scripts/gen-broker-key.mjs   ← generate the Ed25519 broker key (a Pages secret)
+├── scripts/gen-broker-key.mjs   ← generate the ES256 broker key (a Pages secret)
 ├── functions/            ← the SERVER broker (Pages Functions; key from env)
 │   ├── _lib/server-broker.ts    ← signer-from-env + directory + helpers
 │   ├── jwks.ts                  ← GET  /jwks

@@ -1,4 +1,4 @@
-// Generate an Ed25519 broker signing keypair and print the PRIVATE JWK + kid.
+// Generate an ES256 (ECDSA P-256) broker signing keypair and print the PRIVATE JWK + kid.
 //
 //   node apps/demo-sso/scripts/gen-broker-key.mjs
 //
@@ -12,7 +12,9 @@
 
 import { webcrypto as crypto } from 'node:crypto';
 
-const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+// ES256 (ECDSA P-256) — supported in workerd + browsers + Node (Ed25519 is NOT
+// in the Cloudflare Workers Web Crypto runtime). spec 224 §4.
+const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
 const privateJwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
 const kid = 'broker-' + Buffer.from(crypto.getRandomValues(new Uint8Array(4))).toString('hex');
 

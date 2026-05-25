@@ -17,7 +17,7 @@ export interface KVNamespace {
 }
 
 export interface Env {
-  /** Ed25519 PRIVATE JWK (JSON string). Secret: `wrangler pages secret put BROKER_PRIVATE_JWK`. */
+  /** ES256 (ECDSA P-256) PRIVATE JWK (JSON string). Secret: `wrangler pages secret put BROKER_PRIVATE_JWK`. */
   BROKER_PRIVATE_JWK: string;
   /** Key id published in the JWKS. */
   BROKER_KID?: string;

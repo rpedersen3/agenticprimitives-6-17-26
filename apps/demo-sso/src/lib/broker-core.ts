@@ -143,13 +143,26 @@ export function canPerform(session: AgentSession, action: string): { ok: boolean
 }
 
 /**
- * Build a BrokerSigner from a stored Ed25519 PRIVATE JWK (the server path — the
- * key lives in an env secret, not in the browser). Derives the public key from
- * the JWK's `x`. Web Crypto, so it runs in the Workers/Pages runtime.
+ * Build a BrokerSigner from a stored ES256 (ECDSA P-256) PRIVATE JWK (the server
+ * path — the key lives in an env secret, not in the browser). Derives the public
+ * key from the JWK's `x`/`y`. ES256 (not EdDSA) because the Cloudflare Workers
+ * runtime (`workerd`) does not support Ed25519 in Web Crypto — ES256 is supported
+ * everywhere (workerd, browsers, Node), and is the spec's designated algorithm
+ * for cross-environment broker tokens (spec 224 §4).
  */
-export async function signerFromPrivateJwk(jwk: JsonWebKey & { x?: string }, kid: string): Promise<BrokerSigner> {
-  const alg: BrokerAlg = 'EdDSA';
-  const privateKey = await crypto.subtle.importKey('jwk', jwk, { name: 'Ed25519' }, false, ['sign']);
-  const publicKey = await crypto.subtle.importKey('jwk', { kty: jwk.kty, crv: jwk.crv, x: jwk.x } as JsonWebKey, { name: 'Ed25519' }, true, ['verify']);
+export async function signerFromPrivateJwk(
+  jwk: JsonWebKey & { x?: string; y?: string },
+  kid: string,
+): Promise<BrokerSigner> {
+  const alg: BrokerAlg = 'ES256';
+  const params: EcKeyImportParams = { name: 'ECDSA', namedCurve: 'P-256' };
+  const privateKey = await crypto.subtle.importKey('jwk', jwk, params, false, ['sign']);
+  const publicKey = await crypto.subtle.importKey(
+    'jwk',
+    { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y } as JsonWebKey,
+    params,
+    true,
+    ['verify'],
+  );
   return { kid, alg, privateKey, publicKey };
 }

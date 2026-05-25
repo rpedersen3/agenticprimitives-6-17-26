@@ -127,7 +127,8 @@ export function App() {
               Connect origin <span className="badge">{CONNECT_ORIGIN}</span>
             </h2>
             <p className="muted">
-              Broker signing key <code>kid {broker.kid}</code> · JWKS published ({broker.jwks.keys.length} key, alg EdDSA).
+              Broker signing key <code>kid {broker.kid}</code> · JWKS published ({broker.jwks.keys.length} key, alg{' '}
+              {broker.jwks.keys[0]?.alg ?? 'ES256'}).
               <br />
               <em>Demo note:</em> the broker key is generated in-browser so the demo is self-contained; in production it
               lives server-side at the Connect origin (the browser only sees the JWKS).

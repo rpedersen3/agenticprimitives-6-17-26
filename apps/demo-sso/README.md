@@ -11,7 +11,7 @@ pnpm --filter @agenticprimitives-demo/sso dev   # http://localhost:5373
 
 ## What you'll see
 
-1. The **Connect origin** starts a broker (asymmetric signing key, EdDSA; JWKS published).
+1. The **Connect origin** starts a broker (asymmetric signing key, ES256; JWKS published).
 2. **Sign in once** — Alice passkey, Alice GitHub (OIDC), or Bob passkey.
 3. **Both relying sites** (Shop, Forum) receive an `aud`-bound `AgentSession` with
    the **same `sub`** (the canonical agent) — verified against the JWKS.

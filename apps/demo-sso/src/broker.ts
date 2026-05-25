@@ -28,7 +28,7 @@ export interface DemoBroker {
 }
 
 export async function createDemoBroker(): Promise<DemoBroker> {
-  const signer = await generateBrokerKeypair('EdDSA');
+  const signer = await generateBrokerKeypair('ES256'); // ES256 — works in workerd + browsers + Node
   const jwks = await publishJwks([signer]);
   const directory = buildDemoDirectory();
   return {
