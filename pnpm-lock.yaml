@@ -126,6 +126,12 @@ importers:
 
   apps/demo-sso:
     dependencies:
+      '@agenticprimitives/agent-account':
+        specifier: workspace:*
+        version: link:../../packages/agent-account
+      '@agenticprimitives/agent-naming':
+        specifier: workspace:*
+        version: link:../../packages/agent-naming
       '@agenticprimitives/connect':
         specifier: workspace:*
         version: link:../../packages/connect

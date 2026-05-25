@@ -7,7 +7,9 @@
 // in-browser demo uses; only the key source + the transport differ.
 
 import { publishJwks } from '@agenticprimitives/connect';
-import { signerFromPrivateJwk, buildDemoDirectory } from '../../src/lib/broker-core';
+import { signerFromPrivateJwk } from '../../src/lib/broker-core';
+import { buildRealDirectory } from '../../src/lib/real-directory';
+import { createKvIndexer } from '../../src/lib/kv-indexer';
 
 /** Minimal Cloudflare KV surface (avoids a @cloudflare/workers-types dep). */
 export interface KVNamespace {
@@ -21,8 +23,11 @@ export interface Env {
   BROKER_PRIVATE_JWK: string;
   /** Key id published in the JWKS. */
   BROKER_KID?: string;
-  /** Single-use auth-code store (CN-9). `[[kv_namespaces]]` binding in wrangler.toml. */
+  /** Single-use auth-code store (CN-9) + the persistent login-facet index
+   *  (`facet:` keys; spec 227 §5). `[[kv_namespaces]]` binding in wrangler.toml. */
   AUTH_CODES: KVNamespace;
+  /** Base Sepolia RPC for on-chain resolution. Defaults to the public endpoint. */
+  RPC_URL?: string;
   /** Comma-separated exact-match relying-site redirect URIs (CN-1). */
   REDIRECT_URI_ALLOWLIST?: string;
 
@@ -47,7 +52,9 @@ export async function getServer(env: Env) {
     throw new Error('BROKER_PRIVATE_JWK is not set. Generate one (see CLAUDE.md) and `wrangler pages secret put BROKER_PRIVATE_JWK`.');
   }
   const signer = await signerFromPrivateJwk(JSON.parse(env.BROKER_PRIVATE_JWK), env.BROKER_KID ?? 'broker-1');
-  const directory = buildDemoDirectory();
+  // Real Base Sepolia resolution (spec 227 §5): live naming + on-chain custody +
+  // a persistent KV login-facet index. Replaces the in-memory demo directory.
+  const directory = buildRealDirectory({ rpcUrl: env.RPC_URL, indexer: createKvIndexer(env.AUTH_CODES) });
   const jwks = await publishJwks([signer]);
   return { signer, directory, jwks };
 }
