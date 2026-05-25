@@ -197,7 +197,12 @@ export function oidcFacetId(iss: string, sub: string): string {
 
 export async function completeLogin(input: CompleteLoginInput): Promise<CompleteLoginResult> {
   const config = input.config ?? GOOGLE_OIDC;
-  const doFetch = input.fetchImpl ?? globalThis.fetch;
+  // Bind the global fetch to globalThis: the Cloudflare workerd runtime throws
+  // "Illegal invocation" if its native `fetch` is invoked with a `this` other
+  // than the global (e.g. `ctx.fetchImpl(url)` — a method call sets `this=ctx`).
+  // A bound function ignores the call-site `this`, so it is safe to pass around
+  // and call as a property. A caller-supplied mock is used as-is.
+  const doFetch = input.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const nowMs = (input.now ?? Date.now)();
 
   // 1. State (CSRF / mix-up defense) — constant-time, before any network call.
