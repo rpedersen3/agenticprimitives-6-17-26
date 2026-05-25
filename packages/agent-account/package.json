@@ -24,7 +24,7 @@
   "keywords": ["erc-4337", "smart-account", "account-abstraction", "erc-1271", "agentic"],
   "license": "UNLICENSED",
   "peerDependencies": {
-    "@agenticprimitives/identity-auth": "workspace:*",
+    "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
     "viem": "^2.21.0"
   },

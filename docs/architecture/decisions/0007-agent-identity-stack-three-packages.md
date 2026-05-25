@@ -42,7 +42,7 @@ universal-resolver client, name records schema. See
 [spec 215](../../../specs/215-agent-naming.md). Architecture per
 ADR-0006 (resolution layer; injection via `NameContext`).
 
-### `@agenticprimitives/agent-identity` — new
+### `@agenticprimitives/agent-profile` — new
 
 Owns:
 - **HCS-11-aligned typed profile schema** with discriminator

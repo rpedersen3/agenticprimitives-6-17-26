@@ -11,7 +11,7 @@
 //     production must use platform secure storage or hardware-backed
 //     IDB.
 //
-// All ceremony helpers come from `@agenticprimitives/identity-auth/passkey`;
+// All ceremony helpers come from `@agenticprimitives/connect-auth/passkey`;
 // the on-chain wire encoder from `@agenticprimitives/agent-account`.
 // This module is the glue between the browser's WebAuthn API and the
 // abstract primitives our other packages export.
@@ -20,8 +20,8 @@ import { keccak256 } from 'viem';
 import {
   parseAttestationObject,
   buildWebAuthnAssertion,
-} from '@agenticprimitives/identity-auth/passkey';
-import type { WebAuthnAssertion } from '@agenticprimitives/identity-auth/passkey';
+} from '@agenticprimitives/connect-auth/passkey';
+import type { WebAuthnAssertion } from '@agenticprimitives/connect-auth/passkey';
 import { encodeWebAuthnSignature } from '@agenticprimitives/agent-account';
 import type { Hex } from '@agenticprimitives/types';
 

@@ -19,7 +19,7 @@
 // never inspects the signature shape (signer-agnostic doctrine).
 
 import { hashMessage } from 'viem';
-import { buildMessage } from '@agenticprimitives/identity-auth/siwe';
+import { buildMessage } from '@agenticprimitives/connect-auth/siwe';
 import type { Address, Hex } from '@agenticprimitives/types';
 import {
   loadPasskey,

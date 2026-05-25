@@ -12,7 +12,7 @@ The user's four capability areas (user auth + smart account, delegation, KMS, MC
 
 | # | Package | Area | Status |
 | --- | --- | --- | --- |
-| 1 | `@agenticprimitives/identity-auth` | Auth + smart account (1 of 2) | v0 |
+| 1 | `@agenticprimitives/connect-auth` | Auth + smart account (1 of 2) | v0 |
 | 2 | `@agenticprimitives/agent-account` | Auth + smart account (2 of 2) | v0 |
 | 3 | `@agenticprimitives/delegation` | Delegation | v0 |
 | 4 | `@agenticprimitives/key-custody` | KMS | v0 (narrower than my original scope) |
@@ -37,7 +37,7 @@ For each package: name, scope, what it owns, what it does NOT own, smart-agent p
 
 ---
 
-### Package 1 — `@agenticprimitives/identity-auth`
+### Package 1 — `@agenticprimitives/connect-auth`
 
 **One-line:** Authenticate a user (passkey + SIWE + Google OAuth), mint sessions, expose pluggable signer interfaces.
 
@@ -83,9 +83,9 @@ export interface EOASigner extends Signer { /* viem-compatible */ }
 export interface KMSSigner extends Signer { keyId; provider: string }
 
 // Auth method subpaths
-import * as passkey from '@agenticprimitives/identity-auth/passkey'
-import * as siwe from '@agenticprimitives/identity-auth/siwe'
-import * as google from '@agenticprimitives/identity-auth/google'
+import * as passkey from '@agenticprimitives/connect-auth/passkey'
+import * as siwe from '@agenticprimitives/connect-auth/siwe'
+import * as google from '@agenticprimitives/connect-auth/google'
 
 // Types
 export type JwtClaims, AuthenticatedUser, AuthMethod

@@ -13,12 +13,12 @@
   "imports": [
     "@agenticprimitives/types",
     "@agenticprimitives/audit",
-    "@agenticprimitives/identity-auth"
+    "@agenticprimitives/connect-auth"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
     "@agenticprimitives/audit",
-    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/connect-auth",
     "viem",
     "@noble/curves",
     "@noble/hashes",
@@ -65,9 +65,9 @@
     { "term": "evaluatePolicy", "reason": "Belongs in tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
     { "term": "withDelegation", "reason": "Belongs in mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
     { "term": "@modelcontextprotocol", "reason": "MCP transport is not key-custody's concern.", "owningPackage": "@agenticprimitives/mcp-runtime" },
-    { "term": "passkey", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] },
-    { "term": "OAuth", "reason": "Auth method; belongs in identity-auth. Exception: GcpKmsSigner uses Google's OAuth 2.0 service-account JWT-bearer flow as an upstream client to Cloud KMS — this is not user-facing auth, it's how the signer authenticates to GCP.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md", "src/providers/gcp.ts", "test/unit/gcp-signer.test.ts"] },
-    { "term": "SIWE", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/identity-auth", "allowInPaths": ["spec.md", "README.md"] }
+    { "term": "passkey", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/connect-auth", "allowInPaths": ["spec.md", "README.md"] },
+    { "term": "OAuth", "reason": "Auth method; belongs in identity-auth. Exception: GcpKmsSigner uses Google's OAuth 2.0 service-account JWT-bearer flow as an upstream client to Cloud KMS — this is not user-facing auth, it's how the signer authenticates to GCP.", "owningPackage": "@agenticprimitives/connect-auth", "allowInPaths": ["spec.md", "README.md", "src/providers/gcp.ts", "test/unit/gcp-signer.test.ts"] },
+    { "term": "SIWE", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/connect-auth", "allowInPaths": ["spec.md", "README.md"] }
   ],
   "ignoreForAgentContext": [
     "dist/**",

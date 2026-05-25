@@ -28,7 +28,7 @@ import { hashMessage, hashTypedData, type Hex as ViemHex } from 'viem';
 import {
   buildWebAuthnAssertion,
   type WebAuthnAssertion,
-} from '@agenticprimitives/identity-auth/passkey';
+} from '@agenticprimitives/connect-auth/passkey';
 import { encodeWebAuthnSignature } from '@agenticprimitives/agent-account';
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { DemoPasskey } from './passkey-flow';

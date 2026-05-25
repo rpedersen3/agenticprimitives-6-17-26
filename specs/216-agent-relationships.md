@@ -79,7 +79,7 @@ No back-edges. No coupling to naming or identity.
 
 **Allowed imports:**
 - `@agenticprimitives/types`
-- `@agenticprimitives/identity-auth` (`Signer` type only — for client
+- `@agenticprimitives/connect-auth` (`Signer` type only — for client
   write methods)
 - `@agenticprimitives/agent-account` (`AgentAccountClient` — for
   ERC-1271 verification of edge-write authorization)

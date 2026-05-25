@@ -49,7 +49,7 @@
   },
   "peerDependencies": {
     "@agenticprimitives/audit": "workspace:*",
-    "@agenticprimitives/identity-auth": "workspace:*",
+    "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
     "viem": "^2.21.0"
   },

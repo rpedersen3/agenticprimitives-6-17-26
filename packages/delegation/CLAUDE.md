@@ -1,7 +1,7 @@
 # @agenticprimitives/delegation — Claude guide
 
 ## NOT the credential-recovery layer
-A delegation is **agent → agent** authority: SA A grants SA B the right to take scoped actions on A's behalf. It is NOT a credential change. Adding, replacing, or removing a passkey / SIWE EOA / hardware wallet on an SA is a [credential-recovery operation](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) routed through [`@agenticprimitives/custody`](../custody) — NEVER through a Caveat, Steward grant, session, or token here. A delegation issued by an SA MUST remain valid across that SA's credential rotation (principal = SA address, not the credential). A delegated party MUST NOT gain custody powers through delegation. See [ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) + [spec 221](../../specs/221-credential-recovery.md).
+A delegation is **agent → agent** authority: SA A grants SA B the right to take scoped actions on A's behalf. It is NOT a credential change. Adding, replacing, or removing a passkey / SIWE EOA / hardware wallet on an SA is a [credential-recovery operation](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) routed through [`@agenticprimitives/account-custody`](../custody) — NEVER through a Caveat, Steward grant, session, or token here. A delegation issued by an SA MUST remain valid across that SA's credential rotation (principal = SA address, not the credential). A delegated party MUST NOT gain custody powers through delegation. See [ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md) + [spec 221](../../specs/221-credential-recovery.md).
 
 ## What this package owns
 - `Delegation` struct, `Caveat` types, `DataScopeGrant`. EIP-712 hashing.
@@ -47,7 +47,7 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 **Types:** `Delegation`, `Caveat`, `DataScopeGrant`, `DelegationTokenClaims`, `EnforcerAddressMap`, `JtiStore`, `CaveatContext`, `VerifyOpts`, `VerifyError`, `SessionRow`, `SessionPackage`, `SessionMeta`
 
 ## Allowed imports
-`@agenticprimitives/types`, `@agenticprimitives/identity-auth` (`Signer` types), `@agenticprimitives/agent-account` (ERC-1271 verification), `@agenticprimitives/key-custody` (`A2AKeyProvider`, `canonicalContextBytes`), `viem`, `@noble/curves`, `@noble/hashes`.
+`@agenticprimitives/types`, `@agenticprimitives/connect-auth` (`Signer` types), `@agenticprimitives/agent-account` (ERC-1271 verification), `@agenticprimitives/key-custody` (`A2AKeyProvider`, `canonicalContextBytes`), `viem`, `@noble/curves`, `@noble/hashes`.
 
 ## Forbidden imports
 - `apps/*`

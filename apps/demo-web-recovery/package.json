@@ -13,9 +13,9 @@
   "dependencies": {
     "@agenticprimitives/agent-account": "workspace:*",
     "@agenticprimitives/agent-naming": "workspace:*",
-    "@agenticprimitives/custody": "workspace:*",
+    "@agenticprimitives/account-custody": "workspace:*",
     "@agenticprimitives/delegation": "workspace:*",
-    "@agenticprimitives/identity-auth": "workspace:*",
+    "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
     "@tanstack/react-query": "^5.0.0",
     "react": "^18.3.0",

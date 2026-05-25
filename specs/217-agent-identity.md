@@ -1,7 +1,7 @@
 # Spec 217 — Agent Identity (profile + verification + CAIP-10 alignment)
 
 **Status:** v0 (architecture locked; Phase 1 implementation pending).
-**Owner:** `@agenticprimitives/agent-identity` package (to be
+**Owner:** `@agenticprimitives/agent-profile` package (to be
 scaffolded).
 **Architecture commitment:** [ADR-0006](../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md)
 + [ADR-0007](../docs/architecture/decisions/0007-agent-identity-stack-three-packages.md)
@@ -91,7 +91,7 @@ that order, in the demo layer.
 
 **Allowed imports:**
 - `@agenticprimitives/types`
-- `@agenticprimitives/identity-auth` (`Signer` type only)
+- `@agenticprimitives/connect-auth` (`Signer` type only)
 - `@agenticprimitives/agent-account` (`AgentAccountClient` for
   ERC-1271 verification of profile-write authorization)
 - `viem`
@@ -247,7 +247,7 @@ Other packages don't import `agent-identity`. The demo layer composes:
 ```ts
 // Demo worker, NOT inside any @agenticprimitives/* package:
 import { AgentNamingClient } from '@agenticprimitives/agent-naming';
-import { AgentIdentityClient } from '@agenticprimitives/agent-identity';
+import { AgentIdentityClient } from '@agenticprimitives/agent-profile';
 import { buildEvent } from '@agenticprimitives/audit';
 
 const name = await naming.reverseResolve(actor);     // 'alice.agent'
@@ -310,7 +310,7 @@ Emitted via consumer-supplied `AuditSink`:
 ## 11. Acceptance criteria (per phase)
 
 **Phase 1:**
-- `pnpm --filter @agenticprimitives/agent-identity typecheck` passes.
+- `pnpm --filter @agenticprimitives/agent-profile typecheck` passes.
 - CAIP-10 grammar validation: encoder rejects malformed; decoder
   accepts any grammar-valid string. Round-trip golden vectors for
   `eip155`, `hedera`, `solana`.

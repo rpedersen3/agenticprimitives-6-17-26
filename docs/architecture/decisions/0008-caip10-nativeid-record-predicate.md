@@ -23,7 +23,7 @@ they can discover the agent's `nativeId`.
 
 Two options for our `.agent` registry:
 
-1. **Generate full UAIDs in `@agenticprimitives/agent-identity`** —
+1. **Generate full UAIDs in `@agenticprimitives/agent-profile`** —
    compute and store the `uaid:aid:…` string per name. Full two-way
    interop: third parties can route to our agents by UAID, and our
    agents can advertise their UAID.
@@ -46,7 +46,7 @@ Concretely:
 - `@agenticprimitives/agent-naming/records` adds an encoder/decoder
   + range validation for the CAIP-10 grammar (chain namespace
   whitelist + bytes32 address validation).
-- `@agenticprimitives/agent-identity` (spec 217) provides a pure
+- `@agenticprimitives/agent-profile` (spec 217) provides a pure
   helper that builds the CAIP-10 string from `(chainId, address)`:
   ```ts
   export function buildCaip10Address(chainId: number, address: Address): string;

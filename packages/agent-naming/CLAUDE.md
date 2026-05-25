@@ -69,11 +69,11 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 
 - `/records` — predicate constants + encoders/decoders.
 - `/custody` — pure encoded call builders for custody-gated name
-  rotation (no `@agenticprimitives/custody` import).
+  rotation (no `@agenticprimitives/account-custody` import).
 
 ## Allowed imports
 
-`@agenticprimitives/types`, `@agenticprimitives/identity-auth`
+`@agenticprimitives/types`, `@agenticprimitives/connect-auth`
 (`Signer` type only), `@agenticprimitives/agent-account`
 (`AgentAccountClient`), `viem`, `@noble/hashes` (transitive via viem).
 
@@ -110,7 +110,7 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
   `src/records.ts`; update tests and `docs/api.md`.
 - Adding resolver reads? Start in `src/client.ts`.
 - Adding name rotation calls? Start in `src/custody.ts`; do not import
-  `@agenticprimitives/custody`.
+  `@agenticprimitives/account-custody`.
 - Adding passkey behavior? Stop. Route to `identity-auth`.
 - Adding delegation or caveat behavior? Stop. Route to `delegation`.
 - Adding MCP/A2A transport? Stop. Route to app/runtime packages.
@@ -156,7 +156,7 @@ pnpm check:forbidden-terms
 - New client method → `src/client.ts` (Phase 1 stub with
   `throw new Error('NS Phase 2')`; wire in Phase 2).
 - New custody-rotation call builder → `src/custody.ts` (subpath
-  `/custody`; pure encoded call — no `@agenticprimitives/custody`
+  `/custody`; pure encoded call — no `@agenticprimitives/account-custody`
   import).
 
 ## Capabilities this package participates in

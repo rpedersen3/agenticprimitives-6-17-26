@@ -20,7 +20,7 @@ import {
   type TransactionReceipt,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import type { Signer } from '@agenticprimitives/identity-auth';
+import type { Signer } from '@agenticprimitives/connect-auth';
 import { agentAccountFactoryAbi, agentAccountAbi, ERC1271_MAGIC_VALUE } from './abis';
 import { BundlerClient, packGasLimits, type PackedUserOperation } from './bundler-client';
 

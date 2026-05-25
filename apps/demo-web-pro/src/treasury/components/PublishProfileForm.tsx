@@ -7,7 +7,7 @@ import {
   canonicalProfileJson,
   profileContentHash,
   type AgentCard,
-} from '@agenticprimitives/agent-identity';
+} from '@agenticprimitives/agent-profile';
 import { buildExecuteCallData } from '@agenticprimitives/agent-account';
 import { config } from '../../config';
 import { loadActiveSeat, loadSeats } from '../../lib/seats';
@@ -22,7 +22,7 @@ import { NameDisplay } from './NameDisplay';
  *   1. Build AgentCard from form fields → canonical JSON → content hash.
  *   2. Encode JSON as a data: URI (no off-chain storage needed for the demo).
  *   3. Build register (first time) + setMetadata call builders from
- *      @agenticprimitives/agent-identity.
+ *      @agenticprimitives/agent-profile.
  *   4. Wrap each via buildExecuteCallData (@agenticprimitives/agent-account).
  *   5. Submit each via executeCallFromAgent → demo-a2a relay → passkey
  *      WebAuthn sign → on-chain.

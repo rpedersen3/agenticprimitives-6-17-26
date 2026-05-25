@@ -35,8 +35,8 @@ pnpm add @agenticprimitives/agent-account
 
 ```ts
 import { AgentAccountClient } from '@agenticprimitives/agent-account';
-import { deriveSaltFromEmail } from '@agenticprimitives/identity-auth';
-import type { Signer } from '@agenticprimitives/identity-auth';
+import { deriveSaltFromEmail } from '@agenticprimitives/connect-auth';
+import type { Signer } from '@agenticprimitives/connect-auth';
 
 const account = new AgentAccountClient({
   rpcUrl: process.env.RPC_URL!,

@@ -14,6 +14,6 @@ Forwards `/a2a/*` to `http://127.0.0.1:8787` so the browser can call the a2a age
 
 UI scaffold present; all three step handlers are TODOs that wire up as the @agenticprimitives/* packages get implemented (per spec 101 priority order):
 
-1. SIWE flow — unblocks once `@agenticprimitives/identity-auth/siwe` + `@agenticprimitives/agent-account` are real
+1. SIWE flow — unblocks once `@agenticprimitives/connect-auth/siwe` + `@agenticprimitives/agent-account` are real
 2. Delegation issuance — unblocks once `@agenticprimitives/delegation` is real
 3. MCP tool call via agent — unblocks once `@agenticprimitives/mcp-runtime` is real

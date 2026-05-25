@@ -19,14 +19,14 @@ cross-cutting concerns.
 - **Index of all audits:** [`docs/audits/index.md`](../audits/index.md)
 - **Per-package audits:**
   [types](../../packages/types/AUDIT.md) ·
-  [identity-auth](../../packages/identity-auth/AUDIT.md) ·
+  [identity-auth](../../packages/connect-auth/AUDIT.md) ·
   [agent-account](../../packages/agent-account/AUDIT.md) ·
   [delegation](../../packages/delegation/AUDIT.md) ·
   [key-custody](../../packages/key-custody/AUDIT.md) ·
   [tool-policy](../../packages/tool-policy/AUDIT.md) ·
   [mcp-runtime](../../packages/mcp-runtime/AUDIT.md) ·
   [audit](../../packages/audit/AUDIT.md) ·
-  [custody](../../packages/custody/AUDIT.md)
+  [custody](../../packages/account-custody/AUDIT.md)
 - **Template for new package audits:** [`docs/audits/_template.md`](../audits/_template.md)
 - **Findings ID convention:** system-level findings use letter+number (C1, H3, N2); package-local findings use `<PKG>-N` (e.g. `DEL-1`, `KC-1`).
 
@@ -55,7 +55,7 @@ External audit pass on 2026-05-23 noted material improvement and reclassified se
 | --- | --- | --- |
 | **H1 (mcp-runtime)** | `withDelegation` is now **production by default**. `inferEnvironment()` resolves to 'production' unless `environment: 'development'` or `developmentMode: true` is set OR `process.env.NODE_ENV !== 'production'`. Production mode throws at wrapper construction if `classification` or `auditSink` is missing. 7 new tests cover the inverted default + escape paths. | **Closes the audit's P0 finding "production-safe behavior is opt-in"** for mcp-runtime. The package API is now structurally impossible to misuse — a forgotten env option produces production gates, not silent permissive defaults. |
 | **H1 (key-custody)** | `buildKeyProvider` / `buildSignerBackend` use the same `inferEnvironment()` shape. In production with no explicit `opts.backend` AND no `A2A_KMS_BACKEND` env, `backendOrEnv()` **throws** instead of falling back to `local-aes`. The existing `LocalAesProvider` NODE_ENV=production guard stays as a second line of defense. | **Closes the audit's P1 finding "key-custody default is too permissive."** Production consumers cannot silently get a dev signer; they must opt in. |
-| **H2 (custody)** | Every action builder in `@agenticprimitives/custody/src/actions.ts` validates inputs at the wire-format boundary: `uint8`/`uint256` range, address/`bytes32` shape, semantic guards (e.g. C-6 zero-digest rejection). New `buildRecoverAccountArgs` + `buildRotateAllCustodiansArgs`. **60 custody tests passing** (was 28). The recovery demo now imports `buildRecoverAccountArgs` instead of inlining ABI encoding. | **Closes the audit's P1 finding "custody package lacks enough test evidence."** Wire-format mistakes now surface as `RangeError` at call time instead of opaque on-chain reverts. |
+| **H2 (custody)** | Every action builder in `@agenticprimitives/account-custody/src/actions.ts` validates inputs at the wire-format boundary: `uint8`/`uint256` range, address/`bytes32` shape, semantic guards (e.g. C-6 zero-digest rejection). New `buildRecoverAccountArgs` + `buildRotateAllCustodiansArgs`. **60 custody tests passing** (was 28). The recovery demo now imports `buildRecoverAccountArgs` instead of inlining ABI encoding. | **Closes the audit's P1 finding "custody package lacks enough test evidence."** Wire-format mistakes now surface as `RangeError` at call time instead of opaque on-chain reverts. |
 | **H4** | Release-CI job runs `pnpm install --frozen-lockfile --strict-peer-dependencies`. Local `.npmrc` stays permissive for dev ergonomics; release builds re-resolve strictly. | **Closes the audit's P1 finding "peer strictness still unresolved."** |
 
 ---
@@ -221,7 +221,7 @@ Primary trust boundaries:
 
 ## Package Review (deltas only since 2026-05-19)
 
-### `@agenticprimitives/identity-auth`
+### `@agenticprimitives/connect-auth`
 
 - **+** `verifyUserSignature` / `verifyUserSignatureView` / `verifyOnchain` (siwe) now ship, calling the universal validator.
 - **+** Passkey methods (`buildWebAuthnAssertion`, `parseAttestationObject`, etc.) fully implemented.

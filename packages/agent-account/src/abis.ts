@@ -143,7 +143,7 @@ export const agentAccountAbi = [
   { type: 'event', name: 'PasskeyRemoved', inputs: [{ name: 'credentialIdDigest', type: 'bytes32', indexed: true }] },
 ] as const;
 
-// custodyPolicyAbi was relocated to `@agenticprimitives/custody` per
+// custodyPolicyAbi was relocated to `@agenticprimitives/account-custody` per
 // spec 213 § 2.6 (phase 6g.3). Source of truth lives there now.
 
 /**

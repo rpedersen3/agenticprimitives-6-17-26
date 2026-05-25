@@ -20,7 +20,7 @@ import {
   parseAttestationObject,
   buildWebAuthnAssertion,
   type WebAuthnAssertion,
-} from '@agenticprimitives/identity-auth/passkey';
+} from '@agenticprimitives/connect-auth/passkey';
 
 const STORAGE_KEY = 'agenticprimitives:demo-web-pro:passkeys';
 

@@ -12,13 +12,13 @@
   },
   "imports": [
     "@agenticprimitives/types",
-    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/connect-auth",
     "@agenticprimitives/agent-account",
     "viem"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
-    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/connect-auth",
     "@agenticprimitives/agent-account",
     "viem",
     "@noble/hashes"
@@ -30,9 +30,9 @@
     "@agenticprimitives/tool-policy",
     "@agenticprimitives/key-custody",
     "@agenticprimitives/audit",
-    "@agenticprimitives/custody",
+    "@agenticprimitives/account-custody",
     "@agenticprimitives/agent-naming",
-    "@agenticprimitives/agent-identity",
+    "@agenticprimitives/agent-profile",
     "@modelcontextprotocol/sdk"
   ],
   "publicExports": [
@@ -71,13 +71,13 @@
   "forbiddenTerms": [
     { "term": "Delegation", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation", "allowInPaths": ["src/calls.ts"] },
     { "term": "Caveat", "reason": "Belongs in @agenticprimitives/delegation.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "Custodian", "reason": "Belongs in @agenticprimitives/custody.", "owningPackage": "@agenticprimitives/custody" },
-    { "term": "Trustee", "reason": "Belongs in @agenticprimitives/custody.", "owningPackage": "@agenticprimitives/custody" },
+    { "term": "Custodian", "reason": "Belongs in @agenticprimitives/account-custody.", "owningPackage": "@agenticprimitives/account-custody" },
+    { "term": "Trustee", "reason": "Belongs in @agenticprimitives/account-custody.", "owningPackage": "@agenticprimitives/account-custody" },
     { "term": "RiskTier", "reason": "Belongs in @agenticprimitives/tool-policy.", "owningPackage": "@agenticprimitives/tool-policy" },
     { "term": "KMS", "reason": "Belongs in @agenticprimitives/key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
     { "term": "JtiStore", "reason": "Belongs in @agenticprimitives/mcp-runtime.", "owningPackage": "@agenticprimitives/mcp-runtime" },
     { "term": "namehash", "reason": "Naming-domain primitive.", "owningPackage": "@agenticprimitives/agent-naming" },
-    { "term": "AgentCard", "reason": "Identity-domain primitive.", "owningPackage": "@agenticprimitives/agent-identity" },
+    { "term": "AgentCard", "reason": "Identity-domain primitive.", "owningPackage": "@agenticprimitives/agent-profile" },
     { "term": "NAMESPACE_CONTAINS", "reason": "Naming hierarchy lives in agent-naming (parent-pointer) per ADR-0006. NOT a relationship type in our model.", "owningPackage": "@agenticprimitives/agent-naming", "allowInPaths": ["src/constants.ts", "CLAUDE.md", "AUDIT.md", "README.md", "test/taxonomy.test.ts"] }
   ],
   "ignoreForAgentContext": [

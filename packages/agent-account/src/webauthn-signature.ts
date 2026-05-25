@@ -2,7 +2,7 @@
  * WebAuthn on-chain signature wire format.
  *
  * Encodes a structured `WebAuthnAssertion` (produced by the ceremony in
- * `@agenticprimitives/identity-auth/passkey`) into the byte layout
+ * `@agenticprimitives/connect-auth/passkey`) into the byte layout
  * `AgentAccount._validateSig` dispatches on:
  *
  *   0x01 || abi.encode(Assertion)
@@ -17,7 +17,7 @@
  */
 
 import { encodeAbiParameters, concat } from 'viem';
-import type { WebAuthnAssertion } from '@agenticprimitives/identity-auth/passkey';
+import type { WebAuthnAssertion } from '@agenticprimitives/connect-auth/passkey';
 
 /** First byte of the on-chain WebAuthn signature blob — matches
  *  `SIG_TYPE_WEBAUTHN = 0x01` in AgentAccount.sol. */

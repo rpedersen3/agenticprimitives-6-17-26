@@ -5,7 +5,7 @@
  * Compose these into a custody ceremony, a direct EOA tx, an
  * ERC-4337 UserOp, or anything else that submits a transaction.
  * The package boundary (spec 215 § 3) prohibits importing
- * `@agenticprimitives/custody` from here — these builders MUST stay
+ * `@agenticprimitives/account-custody` from here — these builders MUST stay
  * pure encode-only.
  *
  * Each builder returns a `ContractCall` shape (`{ to, value, data }`)

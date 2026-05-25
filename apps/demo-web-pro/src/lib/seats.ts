@@ -179,7 +179,7 @@ export function migrateSeatsToAuthMethods(
 
 // Replicated locally to avoid cross-package import cycle just for migration.
 function deriveLegacyPia(x: bigint, y: bigint): Address {
-  // Mirror `passkeyIdentity` from @agenticprimitives/custody. Kept inline
+  // Mirror `passkeyIdentity` from @agenticprimitives/account-custody. Kept inline
   // so this migration helper can run before the package is initialised.
   // The shape is: address(uint160(uint256(keccak256(abi.encode(x, y))))).
   // We can't compute keccak here without a hashing lib, so callers MUST

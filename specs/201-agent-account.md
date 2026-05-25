@@ -8,7 +8,7 @@
 
 ## 1. Goal
 
-Provide the smart-account substrate one layer below delegation: given a `Signer` (from `@agenticprimitives/identity-auth`), determine the user's deterministic ERC-4337 smart account address, deploy it lazily, sign as the account via ERC-1271, and build UserOps.
+Provide the smart-account substrate one layer below delegation: given a `Signer` (from `@agenticprimitives/connect-auth`), determine the user's deterministic ERC-4337 smart account address, deploy it lazily, sign as the account via ERC-1271, and build UserOps.
 
 This is **smaller** than my original `auth` spec because identity (passkey/SIWE/Google) is now `identity-auth`. The signer-vs-account split mirrors the four major AA SDKs: signer is pluggable.
 

@@ -14,7 +14,7 @@ export {
   approvedHashRegistryAbi,
   entryPointAbi,
 } from './abis';
-// custodyPolicyAbi moved to @agenticprimitives/custody (spec 213 § 2.6).
+// custodyPolicyAbi moved to @agenticprimitives/account-custody (spec 213 § 2.6).
 
 // Spec 207 threshold-policy + quorum utilities (6c.3-c).
 export {

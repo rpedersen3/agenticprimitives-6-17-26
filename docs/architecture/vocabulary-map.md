@@ -56,7 +56,7 @@ What each package owns and what it deliberately does NOT use. (Reproduced from e
 - **Owns:** `Address`, `Hex`, `ChainId`, `BrandedId`.
 - **Does not use:** anything domain-specific. No `User`, `Session`, `Tool`, `Delegation`. Types-only leaf.
 
-### `@agenticprimitives/identity-auth`
+### `@agenticprimitives/connect-auth`
 - **Owns:** session (JWT, cookie-bound), claims, CSRF, auth methods (passkey / SIWE / Google), `Signer` interfaces.
 - **Does not use:** `Delegation`, `Caveat`, `Enforcer`, KMS backends, MCP, JTI, envelope encryption, session-data-key.
 

@@ -281,14 +281,14 @@ Audit events MUST NOT use the `delegation.*` action namespace.
 
 ## 7. Per-package contracts
 
-### `@agenticprimitives/custody`
+### `@agenticprimitives/account-custody`
 - Owns `CustodyAction.RecoverAccount` enum value + `buildRecoverAccountArgs`.
 - Owns the EIP-712 typed-data shapes for the schedule + apply
   ceremony.
 - MUST expose helpers usable by both demo apps and production
   consumers without leaking delegation-domain vocabulary.
 
-### `@agenticprimitives/identity-auth`
+### `@agenticprimitives/connect-auth`
 - Authentication resolves credential → canonical SA.
 - After recovery, the new credential authenticates as the SAME SA.
 - JWT primary subject = canonical SA; credential / EOA = signer claim.

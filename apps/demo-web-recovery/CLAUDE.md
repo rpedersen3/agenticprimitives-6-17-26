@@ -21,8 +21,8 @@ Headline doctrine the UI must teach:
 
 - Treasury onboarding story → `apps/demo-web-pro`.
 - Contract custody semantics → `apps/contracts` + `specs/207` / `specs/213`.
-- Passkey ceremony primitives → `packages/identity-auth`.
-- Custody encoding and quorum helpers → `packages/custody`.
+- Passkey ceremony primitives → `packages/connect-auth`.
+- Custody encoding and quorum helpers → `packages/account-custody`.
 
 ## Read These First
 

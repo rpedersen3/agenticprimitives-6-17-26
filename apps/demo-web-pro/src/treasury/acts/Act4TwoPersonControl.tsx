@@ -41,7 +41,7 @@ import {
   buildAddCustodianArgs,
   buildAddPasskeyCredentialArgs,
   buildChangeApprovalsRequiredArgs,
-} from '@agenticprimitives/custody';
+} from '@agenticprimitives/account-custody';
 import { readApprovalsRequired, readIsCustodian } from '../../lib/chain-reads';
 import { scheduleAndApply, type CeremonyResult, type CeremonyPhase } from '../../lib/custody-ceremony';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';

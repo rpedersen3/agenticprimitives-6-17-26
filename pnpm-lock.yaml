@@ -46,12 +46,12 @@ importers:
       '@agenticprimitives/audit':
         specifier: workspace:*
         version: link:../../packages/audit
+      '@agenticprimitives/connect-auth':
+        specifier: workspace:*
+        version: link:../../packages/connect-auth
       '@agenticprimitives/delegation':
         specifier: workspace:*
         version: link:../../packages/delegation
-      '@agenticprimitives/identity-auth':
-        specifier: workspace:*
-        version: link:../../packages/identity-auth
       '@agenticprimitives/key-custody':
         specifier: workspace:*
         version: link:../../packages/key-custody
@@ -132,12 +132,12 @@ importers:
       '@agenticprimitives/agent-naming':
         specifier: workspace:*
         version: link:../../packages/agent-naming
+      '@agenticprimitives/connect-auth':
+        specifier: workspace:*
+        version: link:../../packages/connect-auth
       '@agenticprimitives/delegation':
         specifier: workspace:*
         version: link:../../packages/delegation
-      '@agenticprimitives/identity-auth':
-        specifier: workspace:*
-        version: link:../../packages/identity-auth
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -175,27 +175,27 @@ importers:
 
   apps/demo-web-pro:
     dependencies:
+      '@agenticprimitives/account-custody':
+        specifier: workspace:*
+        version: link:../../packages/account-custody
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../../packages/agent-account
-      '@agenticprimitives/agent-identity':
-        specifier: workspace:*
-        version: link:../../packages/agent-identity
       '@agenticprimitives/agent-naming':
         specifier: workspace:*
         version: link:../../packages/agent-naming
+      '@agenticprimitives/agent-profile':
+        specifier: workspace:*
+        version: link:../../packages/agent-profile
       '@agenticprimitives/agent-relationships':
         specifier: workspace:*
         version: link:../../packages/agent-relationships
-      '@agenticprimitives/custody':
+      '@agenticprimitives/connect-auth':
         specifier: workspace:*
-        version: link:../../packages/custody
+        version: link:../../packages/connect-auth
       '@agenticprimitives/delegation':
         specifier: workspace:*
         version: link:../../packages/delegation
-      '@agenticprimitives/identity-auth':
-        specifier: workspace:*
-        version: link:../../packages/identity-auth
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -233,21 +233,21 @@ importers:
 
   apps/demo-web-recovery:
     dependencies:
+      '@agenticprimitives/account-custody':
+        specifier: workspace:*
+        version: link:../../packages/account-custody
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../../packages/agent-account
       '@agenticprimitives/agent-naming':
         specifier: workspace:*
         version: link:../../packages/agent-naming
-      '@agenticprimitives/custody':
+      '@agenticprimitives/connect-auth':
         specifier: workspace:*
-        version: link:../../packages/custody
+        version: link:../../packages/connect-auth
       '@agenticprimitives/delegation':
         specifier: workspace:*
         version: link:../../packages/delegation
-      '@agenticprimitives/identity-auth':
-        specifier: workspace:*
-        version: link:../../packages/identity-auth
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -283,30 +283,8 @@ importers:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@22.19.19)
 
-  packages/agent-account:
+  packages/account-custody:
     dependencies:
-      '@agenticprimitives/identity-auth':
-        specifier: workspace:*
-        version: link:../identity-auth
-      '@agenticprimitives/types':
-        specifier: workspace:*
-        version: link:../types
-      viem:
-        specifier: ^2.21.0
-        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
-    devDependencies:
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@22.19.19)
-
-  packages/agent-identity:
-    dependencies:
-      '@agenticprimitives/agent-account':
-        specifier: workspace:*
-        version: link:../agent-account
-      '@agenticprimitives/identity-auth':
-        specifier: workspace:*
-        version: link:../identity-auth
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../types
@@ -321,14 +299,52 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
 
+  packages/agent-account:
+    dependencies:
+      '@agenticprimitives/connect-auth':
+        specifier: workspace:*
+        version: link:../connect-auth
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      viem:
+        specifier: ^2.21.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+    devDependencies:
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
   packages/agent-naming:
     dependencies:
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../agent-account
-      '@agenticprimitives/identity-auth':
+      '@agenticprimitives/connect-auth':
         specifier: workspace:*
-        version: link:../identity-auth
+        version: link:../connect-auth
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      viem:
+        specifier: ^2.21.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.19.19
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
+  packages/agent-profile:
+    dependencies:
+      '@agenticprimitives/agent-account':
+        specifier: workspace:*
+        version: link:../agent-account
+      '@agenticprimitives/connect-auth':
+        specifier: workspace:*
+        version: link:../connect-auth
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../types
@@ -348,9 +364,9 @@ importers:
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../agent-account
-      '@agenticprimitives/identity-auth':
+      '@agenticprimitives/connect-auth':
         specifier: workspace:*
-        version: link:../identity-auth
+        version: link:../connect-auth
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../types
@@ -375,18 +391,21 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
 
-  packages/custody:
+  packages/connect-auth:
     dependencies:
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../types
+      '@noble/curves':
+        specifier: ^1.6.0
+        version: 1.9.7
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
       viem:
         specifier: ^2.21.0
         version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
     devDependencies:
-      '@types/node':
-        specifier: ^22.7.0
-        version: 22.19.19
       vitest:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
@@ -399,31 +418,12 @@ importers:
       '@agenticprimitives/audit':
         specifier: workspace:*
         version: link:../audit
-      '@agenticprimitives/identity-auth':
+      '@agenticprimitives/connect-auth':
         specifier: workspace:*
-        version: link:../identity-auth
+        version: link:../connect-auth
       '@agenticprimitives/key-custody':
         specifier: workspace:*
         version: link:../key-custody
-      '@agenticprimitives/types':
-        specifier: workspace:*
-        version: link:../types
-      '@noble/curves':
-        specifier: ^1.6.0
-        version: 1.9.1
-      '@noble/hashes':
-        specifier: ^1.5.0
-        version: 1.8.0
-      viem:
-        specifier: ^2.21.0
-        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
-    devDependencies:
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@22.19.19)
-
-  packages/identity-auth:
-    dependencies:
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../types
@@ -446,9 +446,9 @@ importers:
       '@agenticprimitives/audit':
         specifier: workspace:*
         version: link:../audit
-      '@agenticprimitives/identity-auth':
+      '@agenticprimitives/connect-auth':
         specifier: workspace:*
-        version: link:../identity-auth
+        version: link:../connect-auth
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../types
@@ -5712,7 +5712,7 @@ snapshots:
 
   '@scure/bip32@1.7.0':
     dependencies:
-      '@noble/curves': 1.9.1
+      '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       '@scure/base': 1.2.6
 
@@ -8365,7 +8365,7 @@ snapshots:
   ox@0.6.7(typescript@5.9.3)(zod@3.25.76):
     dependencies:
       '@adraffy/ens-normalize': 1.11.1
-      '@noble/curves': 1.9.1
+      '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
@@ -8379,7 +8379,7 @@ snapshots:
   ox@0.6.7(typescript@5.9.3)(zod@4.4.3):
     dependencies:
       '@adraffy/ens-normalize': 1.11.1
-      '@noble/curves': 1.9.1
+      '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
@@ -8393,7 +8393,7 @@ snapshots:
   ox@0.6.9(typescript@5.9.3)(zod@3.25.76):
     dependencies:
       '@adraffy/ens-normalize': 1.11.1
-      '@noble/curves': 1.9.1
+      '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
@@ -8407,7 +8407,7 @@ snapshots:
   ox@0.6.9(typescript@5.9.3)(zod@4.4.3):
     dependencies:
       '@adraffy/ens-normalize': 1.11.1
-      '@noble/curves': 1.9.1
+      '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0

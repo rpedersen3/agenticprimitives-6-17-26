@@ -26,7 +26,7 @@ import {
   custodyDomain,
   packQuorumSigs,
   type QuorumSlot,
-} from '@agenticprimitives/custody';
+} from '@agenticprimitives/account-custody';
 import {
   computeDomainSeparator,
   hashScheduleCustodyChange,
@@ -188,7 +188,7 @@ export interface ScheduleAndApplyArgs {
   account: Address;
   /** Which CustodyPolicy action to schedule + apply. */
   action: CustodyAction;
-  /** The action's abi-encoded args blob (see packages/custody/src/actions.ts). */
+  /** The action's abi-encoded args blob (see packages/account-custody/src/actions.ts). */
   innerArgs: Hex;
   /**
    * One or more signers. Each contributes one QuorumSlot to both the

@@ -11,7 +11,7 @@ This is the routing index for Claude (and other agents) starting work in this re
 | `@agenticprimitives/types` | shared | experimental | [101-v0-package-proposal.md](../../specs/101-v0-package-proposal.md) | _none_ |
 | `@agenticprimitives/agent-account` | capability | experimental | [201-agent-account.md](../../specs/201-agent-account.md) | `types`, `identity-auth` |
 | `@agenticprimitives/delegation` | capability | experimental | [202-delegation.md](../../specs/202-delegation.md) | `types`, `identity-auth`, `agent-account`, `key-custody` |
-| `@agenticprimitives/identity-auth` | capability | experimental | [200-identity-auth.md](../../specs/200-identity-auth.md) | `types` |
+| `@agenticprimitives/connect-auth` | capability | experimental | [200-identity-auth.md](../../specs/200-identity-auth.md) | `types` |
 | `@agenticprimitives/key-custody` | capability | experimental | [203-key-custody.md](../../specs/203-key-custody.md) | `types`, `identity-auth` |
 | `@agenticprimitives/mcp-runtime` | capability | experimental | [205-mcp-runtime.md](../../specs/205-mcp-runtime.md) | `types`, `delegation`, `key-custody`, `tool-policy` |
 | `@agenticprimitives/tool-policy` | capability | experimental | [204-tool-policy.md](../../specs/204-tool-policy.md) | `types` |
@@ -42,13 +42,13 @@ EIP-712 delegations spanning web app → agent → MCP. Caveats, token envelope,
 
 **Read first:** [`CLAUDE.md`](../../packages/delegation/CLAUDE.md) · [`capability.manifest.json`](../../packages/delegation/capability.manifest.json) · [`src/index.ts`](../../packages/delegation/src/index.ts)
 
-### `@agenticprimitives/identity-auth`
+### `@agenticprimitives/connect-auth`
 
 User auth (passkey + SIWE + Google OAuth), JWT sessions, CSRF, and pluggable Signer interfaces consumed by agent-account and delegation.
 
 **Public exports** (20): `mintSession`, `verifySession`, `SESSION_COOKIE`, `SESSION_TTL_SECONDS`, `csrfTokenFor`, `verifyCsrf`, `deriveSaltFromLabel`, `deriveSaltFromEmail`, `Signer`, `PasskeySigner`, `PasskeyAssertion`, `EOASigner`, `KMSSigner`, `TypedDataDomain`, `TypedDataTypes`, `JwtClaims`, `AuthenticatedUser`, `AuthMethod`, `Address`, `Hex`
 
-**Read first:** [`CLAUDE.md`](../../packages/identity-auth/CLAUDE.md) · [`capability.manifest.json`](../../packages/identity-auth/capability.manifest.json) · [`src/index.ts`](../../packages/identity-auth/src/index.ts)
+**Read first:** [`CLAUDE.md`](../../packages/connect-auth/CLAUDE.md) · [`capability.manifest.json`](../../packages/connect-auth/capability.manifest.json) · [`src/index.ts`](../../packages/connect-auth/src/index.ts)
 
 ### `@agenticprimitives/key-custody`
 

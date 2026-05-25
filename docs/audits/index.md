@@ -37,15 +37,15 @@ The agenticprimitives audit lives in two layers:
 | --- | --- | --- | --- |
 | `@agenticprimitives/types` | low | [packages/types/AUDIT.md](../../packages/types/AUDIT.md) | — |
 | `@agenticprimitives/audit` | medium (cross-cutting forensics) | [packages/audit/AUDIT.md](../../packages/audit/AUDIT.md) | [specs/206-audit.md](../../specs/206-audit.md) (TODO) |
-| `@agenticprimitives/identity-auth` | high | [packages/identity-auth/AUDIT.md](../../packages/identity-auth/AUDIT.md) | [specs/200-identity-auth.md](../../specs/200-identity-auth.md) |
+| `@agenticprimitives/connect-auth` | high | [packages/connect-auth/AUDIT.md](../../packages/connect-auth/AUDIT.md) | [specs/200-identity-auth.md](../../specs/200-identity-auth.md) |
 | `@agenticprimitives/agent-account` | high | [packages/agent-account/AUDIT.md](../../packages/agent-account/AUDIT.md) | [specs/201-agent-account.md](../../specs/201-agent-account.md) |
 | `@agenticprimitives/delegation` | **critical** (keystone) | [packages/delegation/AUDIT.md](../../packages/delegation/AUDIT.md) | [specs/202-delegation.md](../../specs/202-delegation.md) |
 | `@agenticprimitives/key-custody` | **critical** (KMS surface) | [packages/key-custody/AUDIT.md](../../packages/key-custody/AUDIT.md) | [specs/203-key-custody.md](../../specs/203-key-custody.md) |
 | `@agenticprimitives/tool-policy` | medium | [packages/tool-policy/AUDIT.md](../../packages/tool-policy/AUDIT.md) | [specs/204-tool-policy.md](../../specs/204-tool-policy.md) |
 | `@agenticprimitives/mcp-runtime` | high | [packages/mcp-runtime/AUDIT.md](../../packages/mcp-runtime/AUDIT.md) | [specs/205-mcp-runtime.md](../../specs/205-mcp-runtime.md) |
-| `@agenticprimitives/custody` | high (custody policy ABI + arg builders) | [packages/custody/AUDIT.md](../../packages/custody/AUDIT.md) | [specs/213-custody-layer-carve-out.md](../../specs/213-custody-layer-carve-out.md) |
+| `@agenticprimitives/account-custody` | high (custody policy ABI + arg builders) | [packages/account-custody/AUDIT.md](../../packages/account-custody/AUDIT.md) | [specs/213-custody-layer-carve-out.md](../../specs/213-custody-layer-carve-out.md) |
 | `@agenticprimitives/agent-naming` | medium (Phase 1 — pure SDK + spec; on-chain authority + writes land in Phase 3+) | [packages/agent-naming/AUDIT.md](../../packages/agent-naming/AUDIT.md) | [specs/215-agent-naming.md](../../specs/215-agent-naming.md) |
-| `@agenticprimitives/agent-identity` | medium (Phase 1 — HCS-11 typed profile + HCS-14 CAIP-10 alignment + endpoint verification methods; client wires in Phase 2+) | [packages/agent-identity/AUDIT.md](../../packages/agent-identity/AUDIT.md) | [specs/217-agent-identity.md](../../specs/217-agent-identity.md) |
+| `@agenticprimitives/agent-profile` | medium (Phase 1 — HCS-11 typed profile + HCS-14 CAIP-10 alignment + endpoint verification methods; client wires in Phase 2+) | [packages/agent-profile/AUDIT.md](../../packages/agent-profile/AUDIT.md) | [specs/217-agent-identity.md](../../specs/217-agent-identity.md) |
 | `@agenticprimitives/agent-relationships` | medium (Phase 1 — trust-fabric edge primitive + role taxonomy; contracts + writes land Phase 3+) | [packages/agent-relationships/AUDIT.md](../../packages/agent-relationships/AUDIT.md) | [specs/216-agent-relationships.md](../../specs/216-agent-relationships.md) |
 
 ## Cross-cutting audits

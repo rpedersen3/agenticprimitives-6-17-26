@@ -40,7 +40,7 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 **AAD helpers:** `canonicalContextBytes`
 
 ## Allowed imports
-`@agenticprimitives/types`, `@agenticprimitives/identity-auth` (`KMSSigner` type), `viem`, `@noble/curves`, `@noble/hashes`, `@aws-sdk/client-kms`, `@google-cloud/kms`.
+`@agenticprimitives/types`, `@agenticprimitives/connect-auth` (`KMSSigner` type), `viem`, `@noble/curves`, `@noble/hashes`, `@aws-sdk/client-kms`, `@google-cloud/kms`.
 
 ## Forbidden imports
 - `apps/*`

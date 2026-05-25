@@ -58,4 +58,4 @@ by `AgentAccount._validateSig`:
 - `approvedHashRegistryAbi`
 - `entryPointAbi`
 
-`custodyPolicyAbi` moved to `@agenticprimitives/custody` (spec 213).
+`custodyPolicyAbi` moved to `@agenticprimitives/account-custody` (spec 213).

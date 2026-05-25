@@ -184,7 +184,7 @@ EOAs may appear as bundler signers, paymaster signers, or governance keys (opera
 | Package | Embodiment |
 | --- | --- |
 | `@agenticprimitives/types` | Define `SmartAgent` as a first-class type (address + class + metadata). Define `Delegation` as between SmartAgents. |
-| `@agenticprimitives/identity-auth` | Passkey is the auth primitive. EOA is a legacy compat surface. Document the asymmetry. |
+| `@agenticprimitives/connect-auth` | Passkey is the auth primitive. EOA is a legacy compat surface. Document the asymmetry. |
 | `@agenticprimitives/agent-account` | AgentAccount IS the Smart Agent's on-chain embodiment. Public surface speaks in Smart Agent terms. |
 | `@agenticprimitives/delegation` | Already correct shape (Delegation is between addresses). Audit + ensure docs use "Smart Agent" not "user." |
 | `@agenticprimitives/key-custody` | Session keys are owned by Smart Agents (via delegation), not by users. |

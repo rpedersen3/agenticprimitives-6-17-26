@@ -70,8 +70,8 @@ What this package does NOT own (per its `CLAUDE.md`):
 | `SIG_TYPE_WEBAUTHN`, `encodeAssertion`, `encodeWebAuthnSignature` | const / fns | On-chain WebAuthn signature wire format. |
 
 Subpath imports allowed by manifest:
-- `@agenticprimitives/identity-auth` (Signer types only — per CLAUDE.md)
-- `@agenticprimitives/identity-auth/passkey` (the `WebAuthnAssertion` type)
+- `@agenticprimitives/connect-auth` (Signer types only — per CLAUDE.md)
+- `@agenticprimitives/connect-auth/passkey` (the `WebAuthnAssertion` type)
 
 ## 4. Threat model
 

@@ -192,10 +192,10 @@ These classes are FORMALLY DISTINCT from the agency-layer classes (`ap:ServiceAg
 
 ### 2.6 Package boundary
 
-New package: **`@agenticprimitives/custody`**.
+New package: **`@agenticprimitives/account-custody`**.
 
 ```
-packages/custody/
+packages/account-custody/
 ├── src/
 │   ├── index.ts                 ← public exports
 │   ├── policy.ts                ← CustodyPolicyClient (off-chain helper for typed-data signing + chain calls)
@@ -208,7 +208,7 @@ packages/custody/
 └── package.json
 ```
 
-**Dependencies**: `@agenticprimitives/types`, `@agenticprimitives/identity-auth` (for type-only Signer interface), `viem`. NOT dependent on `delegation` or `agent-account` (custody is upstream of both in a future re-shape; for now, no cycles).
+**Dependencies**: `@agenticprimitives/types`, `@agenticprimitives/connect-auth` (for type-only Signer interface), `viem`. NOT dependent on `delegation` or `agent-account` (custody is upstream of both in a future re-shape; for now, no cycles).
 
 **What moves into `custody/` from existing packages**:
 - From `@agenticprimitives/agent-account`: the `agentAccountAbi`, `agentAccountFactoryAbi`, `quorum.ts` helpers (insofar as they're custody-related — the `packSafeSignatures` etc.) — these stay in `agent-account` if they're used by both layers; move only if exclusively custody.
@@ -244,7 +244,7 @@ The vocabulary firewall is canonized in memory:
 | **6g.0 (this spec)** | Spec 213 + ontology turtle file + memory entries. NO code changes. | n/a — docs only | ~2-3 hours |
 | **6g.1** | Contract rename: CustodyPolicy + CustodyAction + scheduleCustodyChange + state vars + AgentAccount custodian-renames + factory custodian-renames. All Forge tests adapted. Redeploy CustodyPolicy + AgentAccount impl + Factory. | 172 Forge tests + 191 workspace tests must still pass | ~5-7 hours |
 | **6g.2** | Directory restructure: `apps/contracts/src/{custody,agency,enforcers}/`. Import paths updated. Deploy.s.sol paths updated. | Tests still pass post-restructure | ~1-2 hours |
-| **6g.3** | New `@agenticprimitives/custody` package. Pull custody-related SDK surfaces in. CLAUDE.md + AUDIT.md. Workspace dependencies updated. | Workspace builds + typechecks | ~3-5 hours |
+| **6g.3** | New `@agenticprimitives/account-custody` package. Pull custody-related SDK surfaces in. CLAUDE.md + AUDIT.md. Workspace dependencies updated. | Workspace builds + typechecks | ~3-5 hours |
 | **6g.4** | Specs 207/209/210/211 updated to custody vocabulary. Cross-references + memories refreshed. | All `pnpm check:*` rails pass | ~2-3 hours |
 
 Total: **~13-20 hours, 4-5 sessions**.

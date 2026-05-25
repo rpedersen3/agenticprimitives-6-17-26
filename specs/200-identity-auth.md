@@ -1,4 +1,4 @@
-# Spec 200 — `@agenticprimitives/identity-auth`
+# Spec 200 — `@agenticprimitives/connect-auth`
 
 **Capability:** Authenticate a user via passkey + SIWE + Google OAuth, mint sessions, expose pluggable signer interfaces that `agent-account` and `delegation` consume.
 **Status:** v0 draft · 2026-05-19
@@ -28,7 +28,7 @@ Out of scope (by design): the smart account itself (`agent-account`), KMS backen
 | **SIWE (EOA wallet)** | EOA address | the user's EOA | `api/auth/siwe-verify/route.ts:41-144` |
 | **Google OAuth** | email hash → CREATE2 salt | `auth-bootstrap` relayer signer | `api/auth/google-callback/route.ts:40-100+` |
 
-Tree-shakable: importing `@agenticprimitives/identity-auth/passkey` does NOT pull SIWE or Google code.
+Tree-shakable: importing `@agenticprimitives/connect-auth/passkey` does NOT pull SIWE or Google code.
 
 ### Why these three (and not Privy directly)
 Privy is a hosted IdP — fine for many apps, but creates lock-in. Smart-agent demonstrated that a thin self-hosted stack covers the same UX: passkey for new users without wallets, SIWE for crypto-native users, Google for the broad consumer case.
@@ -114,9 +114,9 @@ export function deriveSaltFromLabel(label: string): bigint;
 export function deriveSaltFromEmail(email: string, rotation: number): bigint;
 
 // Auth method subpaths (tree-shakable)
-import * as passkey from '@agenticprimitives/identity-auth/passkey';
-import * as siwe from '@agenticprimitives/identity-auth/siwe';
-import * as google from '@agenticprimitives/identity-auth/google';
+import * as passkey from '@agenticprimitives/connect-auth/passkey';
+import * as siwe from '@agenticprimitives/connect-auth/siwe';
+import * as google from '@agenticprimitives/connect-auth/google';
 
 // Types
 export type { JwtClaims, AuthenticatedUser, AuthMethod };

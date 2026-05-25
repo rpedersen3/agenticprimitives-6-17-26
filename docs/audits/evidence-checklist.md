@@ -49,9 +49,9 @@ Companion docs: [`threat-model.md`](./threat-model.md) ·
 
 | ID | Control | Status | Source | Test | Audit event |
 | --- | --- | --- | --- | --- | --- |
-| **CR-1** | Zero credentialIdDigest rejected at `initialize`, `addPasskey`, and inside RecoverAccount. | closed-2026-05-22 — Wave 2C C-6 + H2 (`buildRecoverAccountArgs`) | `apps/contracts/src/AgentAccount.sol` `InvalidCredentialIdDigest`; `packages/custody/src/actions.ts` C-6 echo | `test_C6_*` + `buildRecoverAccountArgs > rejects zero credentialIdDigest in addPasskeys` | — |
+| **CR-1** | Zero credentialIdDigest rejected at `initialize`, `addPasskey`, and inside RecoverAccount. | closed-2026-05-22 — Wave 2C C-6 + H2 (`buildRecoverAccountArgs`) | `apps/contracts/src/AgentAccount.sol` `InvalidCredentialIdDigest`; `packages/account-custody/src/actions.ts` C-6 echo | `test_C6_*` + `buildRecoverAccountArgs > rejects zero credentialIdDigest in addPasskeys` | — |
 | **CR-2** | `SetRecoveryApprovals(0)` rejected at apply. | closed-2026-05-22 — Wave 2C C-9 | `apps/contracts/src/custody/CustodyPolicy.sol` `_applySetRecoveryThreshold` | (locked at source; full ceremony exercised by `AdminFlowsViaValidator`) | — |
-| **CR-3** | `RotateAllCustodians(add, remove)` actually removes old set. | closed-2026-05-22 — Wave 2C C-10 | `apps/contracts/src/custody/CustodyPolicy.sol` `_applyRotateAllOwners`; `packages/custody/src/actions.ts:buildRotateAllCustodiansArgs` | `buildRotateAllCustodiansArgs > encodes add+remove together` | `CustodiansRemovedDuringRotation` event |
+| **CR-3** | `RotateAllCustodians(add, remove)` actually removes old set. | closed-2026-05-22 — Wave 2C C-10 | `apps/contracts/src/custody/CustodyPolicy.sol` `_applyRotateAllOwners`; `packages/account-custody/src/actions.ts:buildRotateAllCustodiansArgs` | `buildRotateAllCustodiansArgs > encodes add+remove together` | `CustodiansRemovedDuringRotation` event |
 | **CR-4** | `ChangeApprovalsRequired` tier-escalates reductions to T5. | closed-2026-05-22 — Wave 2C C-8 | `apps/contracts/src/custody/CustodyPolicy.sol` `_effectiveTierFor` | `test_admin_changeApprovalsRequired_revertsOnZero` | — |
 | **CR-5** | T6 timelock bounded by `timelockOverrides[6]` (default 48h). | closed-2026-05-23 — Wave H1.5 | `apps/contracts/src/AgentAccountFactory.sol` `_buildValidatorInitData` | `AgentAccountFactoryModeTest` + recovery-demo Act 1 with `timelockOverrides: [0,0,0,0,1,0,10]` | — |
 
@@ -88,7 +88,7 @@ Companion docs: [`threat-model.md`](./threat-model.md) ·
 | --- | --- | --- | --- | --- | --- |
 | **IV-1** | Every Worker route uses `validate.ts` helpers for browser input. | closed-2026-05-21 — N11 close | `apps/demo-a2a/src/validate.ts`; every `/session/*` + `/account/*` route uses `parseAddress` / `parseBytes32` / `parseUint256Decimal` / etc. | — (would benefit from a route-by-route lint) | — |
 | **IV-2** | CORS exact-origin allowlist for credentialed routes; wildcards forbidden when `credentials: true`. | closed-2026-05-21 — N12 close | `apps/demo-a2a/src/cors.ts:buildAllowedOriginMatcher` + `ALLOWED_ORIGINS` env | — | — |
-| **IV-3** | CSRF token HMAC-bound to origin + timestamp; constant-time compare. | closed | `packages/identity-auth/src/csrf.ts` | `packages/identity-auth/test/csrf.test.ts` | — |
+| **IV-3** | CSRF token HMAC-bound to origin + timestamp; constant-time compare. | closed | `packages/connect-auth/src/csrf.ts` | `packages/connect-auth/test/csrf.test.ts` | — |
 | **IV-4** | Service-MAC envelope between workers verified BEFORE route handler. | closed | `packages/mcp-runtime/src/service-mac.ts:verifyServiceMac` + `apps/demo-mcp/src/index.ts` middleware | `packages/mcp-runtime/test/unit/service-mac.test.ts` (20 tests) | `mcp-runtime.service-mac.{accept,reject}` |
 
 ---

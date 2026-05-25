@@ -136,7 +136,7 @@ The four package directories I created (`packages/{auth,delegation,kms,mcp-resou
 | Option | Action | Cost |
 | --- | --- | --- |
 | **Wipe** | `rm -rf packages/*/`, scaffold fresh from 101 | Loses ~400 lines of type declarations |
-| **Rename + restructure** | Move `packages/auth/src/index.ts` content half to `packages/identity-auth/`, half to `packages/agent-account/`; same for others | Preserves declarations but bookkeeping-heavy |
+| **Rename + restructure** | Move `packages/auth/src/index.ts` content half to `packages/connect-auth/`, half to `packages/agent-account/`; same for others | Preserves declarations but bookkeeping-heavy |
 | **Salvage select pieces, wipe the rest** | Keep `packages/delegation/src/index.ts` (mostly maps cleanly); wipe and re-author the other three | Pragmatic middle |
 
 **Recommendation: wipe.** The type declarations were thin skeletons (no real implementation). Re-authoring against the new 6-package boundary is faster than re-bucketing line by line. Cost: ~30 minutes of writing. The specs are the durable artifact; the package skeletons are derivative.

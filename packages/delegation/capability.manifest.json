@@ -13,14 +13,14 @@
   "imports": [
     "@agenticprimitives/types",
     "@agenticprimitives/audit",
-    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/connect-auth",
     "@agenticprimitives/agent-account",
     "@agenticprimitives/key-custody"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
     "@agenticprimitives/audit",
-    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/connect-auth",
     "@agenticprimitives/agent-account",
     "@agenticprimitives/key-custody",
     "viem",
@@ -152,13 +152,13 @@
     {
       "term": "passkey",
       "reason": "Auth method internals belong in identity-auth.",
-      "owningPackage": "@agenticprimitives/identity-auth",
+      "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"]
     },
     {
       "term": "SIWE",
       "reason": "Auth method belongs in identity-auth.",
-      "owningPackage": "@agenticprimitives/identity-auth",
+      "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["spec.md", "README.md"]
     }
   ],

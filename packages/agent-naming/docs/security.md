@@ -99,7 +99,7 @@ permissive so clients do not fail on future namespaces.
 an agent service claims to be reachable.
 
 They do not prove endpoint control. If a product needs endpoint-control proof,
-compose with `@agenticprimitives/agent-identity` verification methods.
+compose with `@agenticprimitives/agent-profile` verification methods.
 
 ## Naming Is Not Account Safety Policy
 

@@ -27,7 +27,7 @@
   "license": "UNLICENSED",
   "peerDependencies": {
     "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/identity-auth": "workspace:*",
+    "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/agent-account": "workspace:*",
     "viem": "^2.21.0"
   },

@@ -5,7 +5,7 @@ import {
   encodeAssertion,
   encodeWebAuthnSignature,
 } from '../../src/webauthn-signature';
-import type { WebAuthnAssertion } from '@agenticprimitives/identity-auth/passkey';
+import type { WebAuthnAssertion } from '@agenticprimitives/connect-auth/passkey';
 
 const FIXTURE: WebAuthnAssertion = {
   authenticatorData:

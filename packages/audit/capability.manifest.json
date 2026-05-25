@@ -14,7 +14,7 @@
   "allowedImports": ["@agenticprimitives/types"],
   "forbiddenImports": [
     "apps/*",
-    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/connect-auth",
     "@agenticprimitives/agent-account",
     "@agenticprimitives/delegation",
     "@agenticprimitives/key-custody",
@@ -75,7 +75,7 @@
     {
       "term": "passkey",
       "reason": "Belongs in identity-auth.",
-      "owningPackage": "@agenticprimitives/identity-auth",
+      "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["spec.md", "README.md", "AUDIT.md", "CLAUDE.md"]
     },
     {

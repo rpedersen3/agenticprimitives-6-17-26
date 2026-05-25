@@ -1,10 +1,10 @@
 // SIWE login flow for the demo web app. Composes:
-//   - @agenticprimitives/identity-auth/siwe.buildMessage
+//   - @agenticprimitives/connect-auth/siwe.buildMessage
 //   - SessionWallet.signMessage (mnemonic test wallet or external connected wallet)
 //   - POST to /a2a/auth/siwe-verify
 // On success: smart account address is rendered.
 
-import { buildMessage } from '@agenticprimitives/identity-auth/siwe';
+import { buildMessage } from '@agenticprimitives/connect-auth/siwe';
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { SessionWallet } from './session-wallet';
 import { csrfHeaders } from './csrf';

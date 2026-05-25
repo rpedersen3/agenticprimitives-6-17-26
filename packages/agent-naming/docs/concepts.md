@@ -148,7 +148,7 @@ Records make names useful to agents and tools:
 - `displayName` gives UI a stable label.
 
 Endpoint records are discovery hints. A consumer that needs endpoint-control
-proof should compose with `@agenticprimitives/agent-identity`.
+proof should compose with `@agenticprimitives/agent-profile`.
 
 ## Read Paths (No `eth_getLogs`)
 

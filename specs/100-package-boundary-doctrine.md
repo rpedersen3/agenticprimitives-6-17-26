@@ -196,6 +196,8 @@ A primitives library exposes the algorithms and types; the consumer app wires th
 
 ## 8. Package consumer documentation standard
 
+Front door for consumers: [`docs/architecture/package-consumer-map.md`](../docs/architecture/package-consumer-map.md) — the "I need to do X → import this package" table + the layered story. Link it from every package `README.md` documentation map.
+
 Reference implementation: [`packages/agent-naming/`](../packages/agent-naming/). Identity-stack packages (`agent-account`, `agent-identity`, `identity-auth`) follow the same shape.
 
 Every capability package ships:

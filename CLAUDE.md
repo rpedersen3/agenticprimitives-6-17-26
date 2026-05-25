@@ -6,6 +6,7 @@ pnpm-workspace monorepo: publishable capability packages + Foundry contracts + d
 
 | You're working on                    | Read first                                                                            |
 | ------------------------------------ | ------------------------------------------------------------------------------------- |
+| Which package do I import for X      | `docs/architecture/package-consumer-map.md`                                           |
 | Unsure which package owns it         | `docs/architecture/task-routing.md`                                                   |
 | Contract code                        | Relevant `specs/2XX-*.md` + `apps/contracts/src/`                                     |
 | A specific package                   | `packages/<name>/CLAUDE.md` only — it routes to the spec + key files                  |

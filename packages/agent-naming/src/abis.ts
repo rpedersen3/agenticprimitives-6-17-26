@@ -4,7 +4,7 @@
 // so callers get full viem type-inference without runtime JSON loads.
 //
 // Convention matches packages/agent-account/src/abis.ts +
-// packages/custody/src/abi.ts — typed `as const` arrays.
+// packages/account-custody/src/abi.ts — typed `as const` arrays.
 
 // ─── AgentNameRegistry ─────────────────────────────────────────────
 

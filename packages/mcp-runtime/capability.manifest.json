@@ -62,19 +62,19 @@
     {
       "term": "passkey",
       "reason": "Auth method internals belong in identity-auth. mcp-runtime may reference the term in cross-cutting-capability docstrings (spec 207 UV gate is a passkey concept).",
-      "owningPackage": "@agenticprimitives/identity-auth",
+      "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["src/with-delegation.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"]
     },
     {
       "term": "SIWE",
       "reason": "Auth method belongs in identity-auth.",
-      "owningPackage": "@agenticprimitives/identity-auth",
+      "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["spec.md", "README.md"]
     },
     {
       "term": "OAuth",
       "reason": "Auth method belongs in identity-auth.",
-      "owningPackage": "@agenticprimitives/identity-auth",
+      "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["spec.md", "README.md"]
     },
     {

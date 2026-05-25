@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AgentIdentityClient } from '@agenticprimitives/agent-identity';
+import { AgentIdentityClient } from '@agenticprimitives/agent-profile';
 import { config } from '../config';
 
 /**

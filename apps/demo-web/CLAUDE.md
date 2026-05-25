@@ -10,7 +10,7 @@ experience, not the full Treasury Service Agent story.
 
 - Vite/React UI for the simple delegation path.
 - Browser-side wallet connection and demo state.
-- Calls into `@agenticprimitives/identity-auth`, `agent-account`, and
+- Calls into `@agenticprimitives/connect-auth`, `agent-account`, and
   `delegation` as a consumer.
 
 ## What this app does not own

@@ -116,12 +116,12 @@ delegation cards.
 
 `agent-naming/custody` subpath ships **pure encoded call builders**
 that produce custody-policy-compatible payloads for naming-related
-actions (rotate name owner, update resolver). No `@agenticprimitives/custody`
+actions (rotate name owner, update resolver). No `@agenticprimitives/account-custody`
 import. This avoids the back-edge.
 
 **Allowed imports:**
 - `@agenticprimitives/types`
-- `@agenticprimitives/identity-auth` (`Signer` type only — for client
+- `@agenticprimitives/connect-auth` (`Signer` type only — for client
   write methods)
 - `@agenticprimitives/agent-account` (`AgentAccountClient` — for
   ERC-1271 verification of name-owner signatures and address

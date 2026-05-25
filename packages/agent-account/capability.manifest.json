@@ -10,11 +10,11 @@
     "source": ["src/**"],
     "tests": ["test/**"]
   },
-  "imports": ["@agenticprimitives/types", "@agenticprimitives/identity-auth"],
+  "imports": ["@agenticprimitives/types", "@agenticprimitives/connect-auth"],
   "allowedImports": [
     "@agenticprimitives/types",
-    "@agenticprimitives/identity-auth",
-    "@agenticprimitives/identity-auth/passkey",
+    "@agenticprimitives/connect-auth",
+    "@agenticprimitives/connect-auth/passkey",
     "viem"
   ],
   "forbiddenImports": [
@@ -104,7 +104,7 @@
     {
       "term": "passkey",
       "reason": "Auth method internals belong in identity-auth. The on-chain factory methods (createAccountWithPasskey / getAddressForPasskey) and the signature dispatch ABI are agent-account's contract surface; the WebAuthn signature encoder may reference identity-auth's subpath URL.",
-      "owningPackage": "@agenticprimitives/identity-auth",
+      "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": [
         "spec.md",
         "README.md",
@@ -118,7 +118,7 @@
     {
       "term": "OAuth",
       "reason": "Auth method internals belong in identity-auth.",
-      "owningPackage": "@agenticprimitives/identity-auth",
+      "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["spec.md", "README.md"]
     }
   ],

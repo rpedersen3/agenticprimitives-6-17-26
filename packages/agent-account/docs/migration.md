@@ -22,7 +22,7 @@ credentials as signer metadata only.
 
 ## CustodyPolicy Extraction
 
-Custody-policy ABIs and SDK helpers moved to `@agenticprimitives/custody` (spec
+Custody-policy ABIs and SDK helpers moved to `@agenticprimitives/account-custody` (spec
 213). Import `custodyPolicyAbi` from `custody`, not `agent-account`.
 
 ## Salt From Names

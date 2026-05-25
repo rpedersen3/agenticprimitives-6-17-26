@@ -39,12 +39,12 @@
   "integrationPoints": {
     "consumes": [
       "@agenticprimitives/types",
-      "@agenticprimitives/identity-auth",
+      "@agenticprimitives/connect-auth",
       "@agenticprimitives/agent-account"
     ],
     "mustNotImport": [
       "@agenticprimitives/delegation",
-      "@agenticprimitives/custody",
+      "@agenticprimitives/account-custody",
       "@agenticprimitives/mcp-runtime",
       "@agenticprimitives/key-custody"
     ]
@@ -55,13 +55,13 @@
   },
   "imports": [
     "@agenticprimitives/types",
-    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/connect-auth",
     "@agenticprimitives/agent-account",
     "viem"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
-    "@agenticprimitives/identity-auth",
+    "@agenticprimitives/connect-auth",
     "@agenticprimitives/agent-account",
     "viem",
     "@noble/hashes"
@@ -73,7 +73,7 @@
     "@agenticprimitives/tool-policy",
     "@agenticprimitives/key-custody",
     "@agenticprimitives/audit",
-    "@agenticprimitives/custody",
+    "@agenticprimitives/account-custody",
     "@modelcontextprotocol/sdk"
   ],
   "publicExports": [
@@ -142,13 +142,13 @@
     },
     {
       "term": "Custodian",
-      "reason": "Belongs in @agenticprimitives/custody. Compose via agent-naming/custody subpath builders without import.",
-      "owningPackage": "@agenticprimitives/custody"
+      "reason": "Belongs in @agenticprimitives/account-custody. Compose via agent-naming/custody subpath builders without import.",
+      "owningPackage": "@agenticprimitives/account-custody"
     },
     {
       "term": "Trustee",
-      "reason": "Belongs in @agenticprimitives/custody.",
-      "owningPackage": "@agenticprimitives/custody"
+      "reason": "Belongs in @agenticprimitives/account-custody.",
+      "owningPackage": "@agenticprimitives/account-custody"
     },
     {
       "term": "RiskTier",

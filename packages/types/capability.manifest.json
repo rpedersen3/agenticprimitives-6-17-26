@@ -24,7 +24,7 @@
     {
       "term": "Signer",
       "reason": "Belongs in identity-auth.",
-      "owningPackage": "@agenticprimitives/identity-auth"
+      "owningPackage": "@agenticprimitives/connect-auth"
     },
     {
       "term": "AccountClient",

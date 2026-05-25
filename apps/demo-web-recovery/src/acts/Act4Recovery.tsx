@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAccount, useConnectors, useSignTypedData } from 'wagmi';
-import { CustodyAction, buildRecoverAccountArgs } from '@agenticprimitives/custody';
+import { CustodyAction, buildRecoverAccountArgs } from '@agenticprimitives/account-custody';
 import { loadSeats, getPasskeyAuth, type SeatClaim } from '../lib/seats';
 import { loadRecoveryState, saveRecoveryState, credentialLabel } from '../lib/recovery-state';
 import { getPasskeyForSeat } from '../lib/passkey';

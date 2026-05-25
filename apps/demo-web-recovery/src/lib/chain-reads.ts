@@ -11,7 +11,7 @@
 import { createPublicClient, http, type Address, type Hex } from 'viem';
 import { baseSepolia } from 'viem/chains';
 import { agentAccountFactoryAbi } from '@agenticprimitives/agent-account';
-import { custodyPolicyAbi } from '@agenticprimitives/custody';
+import { custodyPolicyAbi } from '@agenticprimitives/account-custody';
 import { config } from '../config';
 
 // Use the same RPC the worker uses (Alchemy on prod) when available;

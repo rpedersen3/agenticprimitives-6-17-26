@@ -21,9 +21,9 @@ records, and build encoded calls for name-management transactions.
 
 ## Do Not Use This For
 
-- Passkey ceremonies or auth flows. Use `@agenticprimitives/identity-auth`.
+- Passkey ceremonies or auth flows. Use `@agenticprimitives/connect-auth`.
 - Smart-account deployment or UserOps. Use `@agenticprimitives/agent-account`.
-- Account safety policy and approval scheduling. Use `@agenticprimitives/custody`.
+- Account safety policy and approval scheduling. Use `@agenticprimitives/account-custody`.
 - Permission-token minting or attenuation. Use `@agenticprimitives/delegation`.
 - MCP/A2A transport wiring. Use demo apps or runtime packages.
 

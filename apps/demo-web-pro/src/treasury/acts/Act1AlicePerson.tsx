@@ -18,7 +18,7 @@ import {
 import { claimSeat, setActiveSeat, type AuthMethod } from '../../lib/seats';
 import { deployPersonAgent } from '../../lib/deploy-person';
 import { claimPsaName, claimPsaNameViaEoa, predictUniqueAgentLabel } from '../../lib/claim-psa-name';
-import { passkeyIdentity } from '@agenticprimitives/custody';
+import { passkeyIdentity } from '@agenticprimitives/account-custody';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { config } from '../../config';

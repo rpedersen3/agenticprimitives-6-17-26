@@ -25,7 +25,7 @@ export interface EnrolledCredential {
   passkey?: DemoPasskey;
 }
 
-/** keccak256(abi.encode(x,y)) → PIA, mirrors @agenticprimitives/custody. */
+/** keccak256(abi.encode(x,y)) → PIA, mirrors @agenticprimitives/account-custody. */
 export function passkeyIdentity(x: bigint, y: bigint): Address {
   const h = keccak256(encodeAbiParameters([{ type: 'uint256' }, { type: 'uint256' }], [x, y]));
   return ('0x' + h.slice(-40)) as Address;

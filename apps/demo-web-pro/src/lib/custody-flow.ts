@@ -31,7 +31,7 @@ import {
   custodyDomain,
   type ApplyCustodyChangeMessage,
   type ScheduleCustodyChangeMessage,
-} from '@agenticprimitives/custody';
+} from '@agenticprimitives/account-custody';
 
 // EIP-712 typehashes — must hash to the exact same bytes the contract uses.
 const EIP712_DOMAIN_TYPEHASH = keccak256(

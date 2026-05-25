@@ -44,7 +44,7 @@ import {
   CustodyAction,
   buildAddCustodianArgs,
   buildAddPasskeyCredentialArgs,
-} from '@agenticprimitives/custody';
+} from '@agenticprimitives/account-custody';
 import { scheduleAndApply } from '../../lib/custody-ceremony';
 import {
   readIsCustodian,

@@ -4,13 +4,13 @@ Composable primitives for building agentic web3 apps. Eight capability packages 
 
 | Package | Purpose |
 | --- | --- |
-| [`@agenticprimitives/identity-auth`](./packages/identity-auth) | Privy-style auth (passkey / SIWE / Google) + JWT sessions + pluggable Signer interfaces |
+| [`@agenticprimitives/connect-auth`](./packages/connect-auth) | Privy-style auth (passkey / SIWE / Google) + JWT sessions + pluggable Signer interfaces |
 | [`@agenticprimitives/agent-account`](./packages/agent-account) | ERC-4337 smart-account substrate: deterministic addressing, ERC-1271, UserOp building |
 | [`@agenticprimitives/delegation`](./packages/delegation) | EIP-712 delegations + session lifecycle (web → agent → MCP) |
 | [`@agenticprimitives/key-custody`](./packages/key-custody) | Envelope encryption + signers + HMAC (local-AES / AWS KMS / GCP KMS) |
 | [`@agenticprimitives/tool-policy`](./packages/tool-policy) | Protocol-agnostic classification + risk tiers + exact-call DSL |
 | [`@agenticprimitives/mcp-runtime`](./packages/mcp-runtime) | Delegation-aware middleware around the official MCP SDK |
-| [`@agenticprimitives/custody`](./packages/custody) | Custody-layer SDK: CustodyPolicy ABI, action enum + arg builders, EIP-712 typed-data, custodian/trustee/recovery types |
+| [`@agenticprimitives/account-custody`](./packages/account-custody) | Custody-layer SDK: CustodyPolicy ABI, action enum + arg builders, EIP-712 typed-data, custodian/trustee/recovery types |
 | [`@agenticprimitives/audit`](./packages/audit) | Audit-event schema, sink interface, in-band sinks (console / memory / PII guardrail), plus the `MetricsSink` observability primitive |
 | [`@agenticprimitives/types`](./packages/types) | Cross-cutting branded primitives |
 

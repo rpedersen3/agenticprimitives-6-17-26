@@ -70,7 +70,7 @@ constants.
 - `/taxonomy` — relationship-type + role constants + semantics map.
 
 ## Allowed imports
-`@agenticprimitives/types`, `@agenticprimitives/identity-auth`
+`@agenticprimitives/types`, `@agenticprimitives/connect-auth`
 (`Signer` type only), `@agenticprimitives/agent-account`
 (`AgentAccountClient` for ERC-1271 auth in Phase 4), `viem`,
 `@noble/hashes` (transitive via viem).

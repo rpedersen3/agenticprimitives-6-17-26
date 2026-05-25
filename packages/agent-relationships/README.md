@@ -109,7 +109,7 @@ await rel.confirmEdge({ edgeId: '0x…', selfRoles: [] });
 
 Each write is authorized via the actor's Smart Agent ERC-1271 →
 its CustodyPolicy module. The relationships package itself stays
-custody-agnostic (no `@agenticprimitives/custody` import).
+custody-agnostic (no `@agenticprimitives/account-custody` import).
 
 ## Subpath exports
 

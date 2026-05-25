@@ -19,9 +19,9 @@ Companion docs: [`threat-model.md`](./threat-model.md) ·
 ```mermaid
 graph TD
   types["@agenticprimitives/types"]
-  identityAuth["@agenticprimitives/identity-auth"]
+  identityAuth["@agenticprimitives/connect-auth"]
   keyCustody["@agenticprimitives/key-custody"]
-  custody["@agenticprimitives/custody"]
+  custody["@agenticprimitives/account-custody"]
   agentAccount["@agenticprimitives/agent-account"]
   delegation["@agenticprimitives/delegation"]
   toolPolicy["@agenticprimitives/tool-policy"]
