@@ -47,11 +47,21 @@ Concretely:
   + range validation for the CAIP-10 grammar (chain namespace
   whitelist + bytes32 address validation).
 - `@agenticprimitives/agent-profile` (spec 217) provides a pure
-  helper that builds the CAIP-10 string from `(chainId, address)`:
-  ```ts
-  export function buildCaip10Address(chainId: number, address: Address): string;
-  ```
-  Plus a parser for the reverse direction.
+  helper that builds the CAIP-10 string.
+
+  > **Amendment (2026-05-25):** the signature sketched here as
+  > `buildCaip10Address(chainId: number, address: Address): string` never
+  > shipped that way. The shipped form is namespace-plural and returns a
+  > branded type:
+  > ```ts
+  > interface Caip10Parts { namespace: string; reference: string; address: string }
+  > export function buildCaip10Address(parts: Caip10Parts): Caip10Address;
+  > export function parseCaip10(value: string): Caip10Parts;
+  > ```
+  > This is authoritative (it can express `hedera:*`, which an `eip155`-only
+  > `(chainId, address)` form cannot). [ADR-0016](./0016-canonical-agent-id-is-the-sso-subject.md)
+  > promotes this brand + helpers into `@agenticprimitives/types` as
+  > `CanonicalAgentId`; `agent-profile` re-exports them.
 - **No UAID computation in any package we ship.** Consumers who
   need a UAID-shaped identifier can compute it from our records
   using HCS-14's algorithm + their own canonical-JSON serializer.

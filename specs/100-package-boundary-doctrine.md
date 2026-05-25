@@ -131,6 +131,45 @@ re-shape in which `agent-account` / `delegation` consume its ABI is documented
 but **not wired** ([spec 213](../specs/213-custody-layer-carve-out.md)). Do not
 model an edge that doesn't exist.
 
+### Planned additions — SSO + ontology wave (12 → 16 packages)
+
+Four new packages (specs [223](../specs/223-identity-directory.md) /
+[224](../specs/224-agentic-connect.md) / [225](../specs/225-ontology.md);
+ADRs 0014–0018), **not yet built**. Edges still point up toward the leaves; no
+back-edges. `ontology` becomes a second vocabulary root alongside `types`:
+
+```
+ontology                     → (no internal deps)   (vocabulary root / near-leaf; spec 225)
+identity-directory           → types, audit, ontology                          (read-model core; spec 223)
+identity-directory-adapters  → types, identity-directory, agent-naming, viem   (ports' impls; spec 223)
+connect                      → types, connect-auth, identity-directory          (SSO broker; spec 224)
+```
+
+Updated packages: `types` (+ `CanonicalAgentId` CAIP-10, `CredentialPrincipal`,
+`AgentSession`, `Assurance`, `CredentialRole` — reconciling the P8
+`CanonicalAgentIdentity = Address` alias to ADR-0016); `connect-auth` (real OIDC:
+PKCE/state/nonce, Google then GitHub; WebAuthn challenge hardening);
+`agent-profile` (HCS-11 alignment pass, [spec 226](../specs/226-hcs-alignment-and-standards.md) §7).
+
+**Resolved by the architecture audit (P1-1):** `identity-directory-adapters`
+importing `agent-naming` is **approved** — it is the intended ports/adapters
+composition (cf. "apps compose name → address → profile" above), the same
+category the firewall permits, and it is consumed only by apps + `connect`
+runtime wiring. Two precise rules:
+- `identity-directory` **core** lists BOTH `agent-naming` AND
+  `identity-directory-adapters` in its `forbiddenImports`; only the **adapters**
+  package and apps may import `agent-naming`. The adapters package is the *sole*
+  new naming consumer.
+- **Caveat — the firewall is enforced per-manifest only.** `check:package-boundaries`
+  reads each package's own `allowedImports`/`forbiddenImports`; there is **no
+  global cycle/back-edge detector and no central denylist**. The
+  "delegation/mcp-runtime/… must not import agent-naming" invariant holds only
+  because each of those manifests independently lists it. **TODO (structural
+  check):** add `scripts/check-dependency-graph.ts` — build the cross-manifest
+  import graph, assert acyclicity, and assert the canonical authority denylist
+  (`agent-naming`/`agent-profile`/`agent-relationships`) appears in every
+  authority manifest. Tracked in `docs/architecture/product-readiness-audit.md`.
+
 Hard rules (CI-enforced):
 
 - No back-edges. If `delegation` needs something from `mcp-runtime`, raise the shared type into `delegation` or into `@agenticprimitives/types`.
