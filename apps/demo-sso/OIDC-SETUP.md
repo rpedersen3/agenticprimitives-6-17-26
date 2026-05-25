@@ -47,6 +47,29 @@ wrangler pages deploy dist
 (`*_SECRET` / `BROKER_PRIVATE_JWK` MUST be secrets; the rest can be plain Pages
 env vars, but secrets are fine.)
 
+### Production specifics (the live demo site)
+
+- **Your deployed Pages origin IS the Connect origin** (e.g.
+  `https://demo-sso.pages.dev` or a custom domain). The token `iss` is **derived
+  from the serving origin automatically** — there's nothing to set; server + the
+  browser (same origin) agree by construction. (Local :5373 / :8788 just work too.)
+- **`GOOGLE_REDIRECT_URI` = `https://<your-prod-origin>/oidc/google/callback`** —
+  must match the Pages origin exactly, and be registered in the Google console.
+- **KV is required in prod, not optional** — `/authorize` and `/token` (and the
+  OIDC `state`) may run on different isolates, so the auth-code store MUST be a
+  real KV namespace (uncomment `[[kv_namespaces]]` + paste the id). The in-memory
+  store only works in single-isolate local dev.
+- **Real (multi-origin) relying sites:** register each relying site's callback in
+  `REDIRECT_URI_ALLOWLIST` (comma-separated, exact-match) — the broker refuses to
+  deliver the code anywhere else (CN-1). In this demo the relying site is the
+  demo page itself, so its own origin is the only entry needed.
+- **Key rotation:** generate a new key, publish BOTH `kid`s in the JWKS during the
+  overlap window, then retire the old one (verifiers pin alg per `kid`).
+- **Deploy command:** `wrangler pages deploy dist` (after the one-time
+  project/secrets/KV setup above). It is not yet wired into
+  `scripts/deploy-cloudflare.ts` — that script auto-injects the demo URLs, but the
+  Google OAuth creds + broker key are out-of-band one-time secrets.
+
 ## 2. Google Cloud Console
 
 **APIs & Services → Credentials → Create credentials → OAuth client ID → Web application.**

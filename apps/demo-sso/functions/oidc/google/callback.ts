@@ -51,7 +51,8 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
   };
 
   const { signer, directory } = await getServer(env);
-  const outcome = await issueForRelyingSite(directory, signer, principal, stash.aud);
+  const iss = new URL(request.url).origin; // the Connect origin = this serving origin
+  const outcome = await issueForRelyingSite(directory, signer, principal, stash.aud, iss);
   if (outcome.status !== 'issued') {
     // 0 → bootstrap a new SA (spec 220); many → disambiguate. Demo: report.
     return json({

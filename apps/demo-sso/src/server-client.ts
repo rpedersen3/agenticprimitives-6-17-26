@@ -9,7 +9,6 @@
 // public key it fetched from /jwks.
 
 import { importJwks, verifyAgentSession, type VerifyResult } from '@agenticprimitives/connect';
-import { CONNECT_ORIGIN } from './broker';
 
 /** Redirect the browser to the Connect origin to begin Google OIDC. */
 export function startGoogleSignIn(aud: string, redirectUri: string): void {
@@ -37,5 +36,6 @@ export async function verifyServerSession(token: string, aud: string): Promise<V
   if (!res.ok) throw new Error(`/jwks returned ${res.status} — is the server broker running (wrangler pages dev)?`);
   const jwks = (await res.json()) as Parameters<typeof importJwks>[0];
   const keys = await importJwks(jwks);
-  return verifyAgentSession(token, { keys, expectedIss: CONNECT_ORIGIN, expectedAud: aud });
+  // The broker (served from this same origin) minted iss = its request origin.
+  return verifyAgentSession(token, { keys, expectedIss: window.location.origin, expectedAud: aud });
 }

@@ -11,7 +11,10 @@ import type { CredentialPrincipal, AgentSession } from '@agenticprimitives/types
 import type { IdentityDirectory } from '@agenticprimitives/identity-directory';
 import { buildDemoDirectory, issueForRelyingSite, verifyTokenWithJwks, canPerform } from './lib/broker-core';
 
-export { ALICE_PASSKEY, ALICE_OIDC, BOB_PASSKEY, CONNECT_ORIGIN, ALICE, BOB } from './lib/broker-core';
+export { ALICE_PASSKEY, ALICE_OIDC, BOB_PASSKEY, ALICE, BOB } from './lib/broker-core';
+
+/** The Connect origin for this (in-browser) broker = the serving origin. */
+const ISS = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5373';
 
 export type Jwks = Awaited<ReturnType<typeof publishJwks>>;
 
@@ -32,8 +35,8 @@ export async function createDemoBroker(): Promise<DemoBroker> {
     kid: signer.kid,
     jwks,
     directory,
-    login: (principal, aud) => issueForRelyingSite(directory, signer, principal, aud),
-    verifyForRelyingSite: (token, aud) => verifyTokenWithJwks(jwks, token, aud),
+    login: (principal, aud) => issueForRelyingSite(directory, signer, principal, aud, ISS),
+    verifyForRelyingSite: (token, aud) => verifyTokenWithJwks(jwks, token, aud, ISS),
     canPerform,
   };
 }

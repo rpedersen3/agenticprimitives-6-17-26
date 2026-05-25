@@ -31,7 +31,8 @@ export const onRequestPost = async ({ request, env }: FnContext): Promise<Respon
   }
 
   const { signer, directory } = await getServer(env);
-  const outcome = await issueForRelyingSite(directory, signer, body.credential, body.aud);
+  const iss = new URL(request.url).origin; // the Connect origin = this serving origin
+  const outcome = await issueForRelyingSite(directory, signer, body.credential, body.aud, iss);
 
   if (outcome.status === 'bootstrap') return json({ status: 'bootstrap' });
   if (outcome.status === 'disambiguate') return json({ status: 'disambiguate', agents: outcome.agents });

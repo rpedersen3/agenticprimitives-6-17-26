@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import {
   createDemoBroker,
   type DemoBroker,
-  CONNECT_ORIGIN,
   ALICE_PASSKEY,
   ALICE_OIDC,
   BOB_PASSKEY,
 } from './broker';
+
+/** The Connect origin = wherever this app is served (local :5373/:8788, or a deploy). */
+const CONNECT_ORIGIN = typeof window !== 'undefined' ? window.location.origin : '';
 import type { AgentSession, CredentialPrincipal } from '@agenticprimitives/types';
 import { startGoogleSignIn, exchangeCode, verifyServerSession } from './server-client';
 import { canPerform } from './lib/broker-core';

@@ -25,8 +25,13 @@ import {
 import type { Address, CanonicalAgentId, CredentialPrincipal, AgentSession } from '@agenticprimitives/types';
 
 export const CHAIN = 8453;
-export const CONNECT_ORIGIN = 'https://connect.demo.local';
 const SESSION_TTL_SECONDS = 600;
+
+// The token `iss` is the ACTUAL Connect origin (derived from the serving origin),
+// not a hardcoded constant — so it is correct in every environment (local
+// :5373/:8788, a *.pages.dev deploy, a custom domain). Server functions pass the
+// request origin; the browser passes `window.location.origin`. Server + client,
+// served from the same origin, agree by construction.
 
 const ALICE_ADDR = '0x1111111111111111111111111111111111111111' as Address;
 const BOB_ADDR = '0x2222222222222222222222222222222222222222' as Address;
@@ -85,9 +90,11 @@ export async function issueForRelyingSite(
   signer: BrokerSigner,
   principal: CredentialPrincipal,
   aud: string,
+  /** The Connect origin (the issuer). Server: `new URL(request.url).origin`. */
+  iss: string,
 ): Promise<IssueOutcome> {
   const resolution = await directory.resolveByCredential(principal);
-  return issueForResolution({ resolution, principal, signer, aud, iss: CONNECT_ORIGIN, ttlSeconds: SESSION_TTL_SECONDS });
+  return issueForResolution({ resolution, principal, signer, aud, iss, ttlSeconds: SESSION_TTL_SECONDS });
 }
 
 /** Relying-site side: verify a delivered token against a published JWKS. */
@@ -95,9 +102,11 @@ export async function verifyTokenWithJwks(
   jwks: Parameters<typeof importJwks>[0],
   token: string,
   aud: string,
+  /** Expected issuer — the Connect origin (browser: `window.location.origin`). */
+  expectedIss: string,
 ): Promise<VerifyResult> {
   const keys = await importJwks(jwks);
-  return verifyAgentSession(token, { keys, expectedIss: CONNECT_ORIGIN, expectedAud: aud });
+  return verifyAgentSession(token, { keys, expectedIss, expectedAud: aud });
 }
 
 /** Step-up gate: custody-class actions need a custody-grade credential. */
