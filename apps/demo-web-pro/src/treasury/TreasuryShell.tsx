@@ -430,7 +430,7 @@ function TopBar({
                 setDetail({
                   address: treasury.address,
                   label: 'Acme Treasury',
-                  kind: 'treasury',
+                  kind: 'service', // treasury is a service agent (specs 217/225 §6); "Acme Treasury" shows via `label`
                 })
             : undefined,
           <><span className="dot" /> Treasury</>,

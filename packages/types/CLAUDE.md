@@ -48,7 +48,8 @@
 - `ChainId` — branded number.
 - `BrandedId<T>` — generic opaque-ID helper.
 - `CanonicalAgentIdentity` — alias of `Address`; THE agent identity (ADR-0010).
-- `AgentType` — closed enum (`'person' | 'org' | 'service' | 'treasury'`).
+- `AgentType` — closed enum (`'person' | 'org' | 'service'`). treasury is NOT a
+  kind — it is a service subtype (`ProfileType`/`serviceType`; specs 217/225 §6).
 - `NameContext` — `{ agentName?: string; agentType?: AgentType }`.
 - `Caip10Address` — branded CAIP-10 string; `CanonicalAgentId` — its alias (SSO
   subject, ADR-0016); `Caip10Parts` — `{ namespace, reference, address }`.

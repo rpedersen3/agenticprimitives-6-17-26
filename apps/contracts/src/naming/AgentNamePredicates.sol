@@ -60,12 +60,15 @@ library AgentNamePredicates {
     /// `atl:AgentName` — the class id for ShapeRegistry validation.
     bytes32 internal constant CLASS_AGENT_NAME               = keccak256("atl:AgentName");
 
-    /// Enum set bound to `atl:agentKind`. Contains the four hashed
+    /// Enum set bound to `atl:agentKind`. Contains the three hashed
     /// member ids below.
     bytes32 internal constant AGENT_KIND_ENUM                = keccak256("atl:AgentKindEnum");
 
+    // agentKind is 3-valued (person/org/service). A treasury is a KIND OF
+    // SERVICE (agentKind=service), distinguished at the profile layer
+    // (ProfileType/serviceType='treasury'; specs 210/217/225 §6) — NOT its own
+    // agent kind. Do not re-add AGENT_KIND_TREASURY.
     bytes32 internal constant AGENT_KIND_PERSON              = keccak256("person");
     bytes32 internal constant AGENT_KIND_ORG                 = keccak256("org");
     bytes32 internal constant AGENT_KIND_SERVICE             = keccak256("service");
-    bytes32 internal constant AGENT_KIND_TREASURY            = keccak256("treasury");
 }

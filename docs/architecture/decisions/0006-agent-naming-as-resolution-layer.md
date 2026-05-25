@@ -53,7 +53,7 @@ The cross-package primitive is `NameContext`, defined in
 `@agenticprimitives/types`:
 
 ```ts
-export type AgentType = 'person' | 'org' | 'service' | 'treasury';
+export type AgentType = 'person' | 'org' | 'service'; // treasury ⊂ service (profile subtype; specs 217/225 §6)
 
 export interface NameContext {
   /** Resolved name of the subject (caller, delegator, actor, etc.). */

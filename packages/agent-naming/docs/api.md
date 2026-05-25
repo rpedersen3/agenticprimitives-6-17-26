@@ -41,7 +41,7 @@ Write methods:
 
 ## Core Types
 
-- `AgentKind`: `'person' | 'org' | 'service' | 'treasury'`.
+- `AgentKind`: `'person' | 'org' | 'service'` (treasury is a service subtype at the profile layer, not an agent kind — specs 217/225 §6).
 - `AgentNameRecords`: typed resolver record bundle.
 - `RegisterSubnameInput`: registration input for child names.
 - `SetPrimaryNameInput`: reverse-record update input.

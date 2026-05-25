@@ -333,11 +333,14 @@ contract Deploy is Script {
         console2.log("  registered %s AgentName predicates", vm.toString(ids.length));
 
         // ─── 2. Define the AGENT_KIND enum set ───────────────────────
-        bytes32[] memory kinds = new bytes32[](4);
+        // 3-valued (person/org/service). treasury is a service subtype at the
+        // profile layer, not an agent kind (specs 210/217/225 §6). Existing
+        // testnet name records with keccak256("treasury") as atl:agentKind are
+        // re-seeded as 'service' on redeploy.
+        bytes32[] memory kinds = new bytes32[](3);
         kinds[0] = AgentNamePredicates.AGENT_KIND_PERSON;
         kinds[1] = AgentNamePredicates.AGENT_KIND_ORG;
         kinds[2] = AgentNamePredicates.AGENT_KIND_SERVICE;
-        kinds[3] = AgentNamePredicates.AGENT_KIND_TREASURY;
         shapes.defineEnumSet(AgentNamePredicates.AGENT_KIND_ENUM, kinds);
 
         // ─── 3. Define the AgentName shape ──────────────────────────

@@ -180,7 +180,7 @@ Phase 1 record predicates:
 | Predicate key | Type | Meaning |
 | --- | --- | --- |
 | `addr` | `Address` | Forward resolution target (the Smart Agent address this name points to). |
-| `agent-kind` | `'person' \| 'org' \| 'service' \| 'treasury'` | Discriminator for UI + audit context. |
+| `agent-kind` | `'person' \| 'org' \| 'service'` | Discriminator for UI + audit context. treasury is a service subtype (profile layer), not an agent kind — specs 217/225 §6. |
 | `display-name` | `string` | Human-friendly label (may differ from the normalized name). |
 | `a2a-endpoint` | `string` (URL) | A2A service endpoint for this agent. |
 | `mcp-endpoint` | `string` (URL) | MCP service endpoint for this agent. |
@@ -205,7 +205,7 @@ export function namehash(name: string): Hex;
 // Types
 export interface AgentNameRecords {
   addr?: Address;
-  agentKind?: 'person' | 'org' | 'service' | 'treasury';
+  agentKind?: 'person' | 'org' | 'service'; // treasury ⊂ service (profile layer)
   displayName?: string;
   a2aEndpoint?: string;
   mcpEndpoint?: string;

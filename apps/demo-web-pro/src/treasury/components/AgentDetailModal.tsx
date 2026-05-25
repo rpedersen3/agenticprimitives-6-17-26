@@ -42,7 +42,11 @@ import { getPasskeyForSeat } from '../../lib/passkey';
 import { setPrimaryNameOnly } from '../../lib/claim-psa-name';
 import { getCachedName, NAME_CACHE_EVENT } from '../../lib/name-cache';
 
-export type AgentDetailKind = 'person' | 'org' | 'service' | 'treasury';
+// Agent KIND is 3-valued (mirrors @agenticprimitives/types AgentType). A treasury
+// is a SERVICE agent ("Treasury is a Service Agent, not a wallet" — app doctrine);
+// its treasury-ness shows via the header `label` (e.g. "Acme Treasury"), not a
+// separate kind (specs 217/225 §6).
+export type AgentDetailKind = 'person' | 'org' | 'service';
 
 interface Props {
   open: boolean;
@@ -557,6 +561,5 @@ function kindLabel(kind: AgentDetailKind): string {
     case 'person': return 'Person Smart Agent';
     case 'org': return 'Organization Smart Agent';
     case 'service': return 'Service Smart Agent';
-    case 'treasury': return 'Treasury Service Agent';
   }
 }

@@ -49,7 +49,8 @@ describe('PREDICATE_ID (golden vectors — match AgentNamePredicates.sol)', () =
     expect(AGENT_KIND_ID.person).toBe(keccak256(toHex('person')));
     expect(AGENT_KIND_ID.org).toBe(keccak256(toHex('org')));
     expect(AGENT_KIND_ID.service).toBe(keccak256(toHex('service')));
-    expect(AGENT_KIND_ID.treasury).toBe(keccak256(toHex('treasury')));
+    // treasury is NOT an agent kind — it is a service subtype (specs 217/225 §6).
+    expect('treasury' in AGENT_KIND_ID).toBe(false);
   });
 });
 
@@ -76,7 +77,7 @@ describe('encodeRecords', () => {
 
   it('rejects unknown agentKind', () => {
     // @ts-expect-error — testing runtime guard
-    expect(() => encodeRecords({ agentKind: 'robot' })).toThrow(/person\|org\|service\|treasury/);
+    expect(() => encodeRecords({ agentKind: 'robot' })).toThrow(/person\|org\|service/);
   });
 
   it('routes display-name + a2a-endpoint + mcp-endpoint + metadata-uri + native-id as string', () => {

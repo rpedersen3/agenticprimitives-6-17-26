@@ -47,7 +47,11 @@ to be? what can it do? how do I verify it?).
 **Owns:**
 - `AgentProfile` (the typed JSON schema).
 - `ProfileType` (`'person' | 'org' | 'service' | 'treasury' |
-  'mcpServer' | 'multisig'` — discriminator).
+  'mcpServer' | 'multisig'` — profile discriminator). NOTE: this is the
+  PROFILE-layer type, NOT the agent kind. `treasury`/`mcpServer`/`multisig` are
+  profile subtypes of a 3-value agent kind (`treasury`/`mcpServer` ⊂ `service`,
+  `multisig` ⊂ `org`/`service`); the agent kind (`AgentType`, on-chain
+  `agentKind`) is only `person | org | service` (spec 225 §6).
 - Sub-objects: `AiAgentProfile`, `McpServerProfile`,
   `MultisigProfile`, `ServiceProfile`.
 - `Caip10Address` (typed string with the CAIP-10 grammar).
@@ -114,7 +118,8 @@ The `agent-naming` records schema (spec 215 § 5) already includes:
 
 - `metadata-uri` (URL to off-chain JSON)
 - `metadata-hash` (content hash of the JSON for integrity)
-- `agent-kind` (one of: `person | org | service | treasury`)
+- `agent-kind` (one of: `person | org | service` — treasury is a service subtype
+  carried by `ProfileType`/`serviceType`, NOT an agent kind; §2 + spec 225 §6)
 - `display-name`
 
 Spec 217 ADDS one predicate:

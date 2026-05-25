@@ -68,7 +68,8 @@ Encode is strict. Known fields validate their expected shape:
 
 - addresses must be 20-byte hex strings
 - `bytes32` values must be 32-byte hex strings
-- `agentKind` must be `person`, `org`, `service`, or `treasury`
+- `agentKind` must be `person`, `org`, or `service` (a treasury is a `service`
+  agent; the `treasury` distinction lives on the profile, not the agent kind)
 - `nativeId` must match CAIP-10 grammar and use an allowed namespace
 
 ## Native ID Validation Failed

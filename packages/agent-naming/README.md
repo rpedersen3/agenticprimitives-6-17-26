@@ -90,7 +90,7 @@ import {
 
 const encoded = encodeRecords({
   addr: '0x0000000000000000000000000000000000000003',
-  agentKind: 'treasury',
+  agentKind: 'service', // a treasury is a service agent; 'treasury' is a profile subtype
   displayName: 'Acme Treasury',
   nativeId: 'eip155:84532:0x0000000000000000000000000000000000000003',
 });

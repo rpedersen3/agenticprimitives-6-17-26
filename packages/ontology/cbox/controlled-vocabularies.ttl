@@ -15,12 +15,11 @@
 # ─── agentKind — 4 values, on-chain-bound (ADR-0009 enum / types.AgentType) ──
 ap:agentKind a skos:ConceptScheme ;
     rdfs:label "agentKind" ;
-    rdfs:comment "The 4-value on-chain-bound kind. Distinct from profileType (6 values; agent-profile/HCS-11)." ;
-    skos:hasTopConcept ap:Person, ap:OrgKind, ap:Service, ap:Treasury .
+    rdfs:comment "The 3-value on-chain-bound kind (person/org/service). Distinct from profileType (6 values; agent-profile/HCS-11). treasury is NOT an agentKind — it is a profileType ⊂ service (ap:Treasury rdfs:subClassOf ap:ServiceAgent; tbox/identity)." ;
+    skos:hasTopConcept ap:Person, ap:OrgKind, ap:Service .
 ap:Person   a skos:Concept ; skos:inScheme ap:agentKind ; skos:prefLabel "person" .
 ap:OrgKind  a skos:Concept ; skos:inScheme ap:agentKind ; skos:prefLabel "org" .
 ap:Service  a skos:Concept ; skos:inScheme ap:agentKind ; skos:prefLabel "service" .
-ap:Treasury a skos:Concept ; skos:inScheme ap:agentKind ; skos:prefLabel "treasury" .
 
 # ─── credentialKind (types.CredentialKind) ───────────────────────────
 apcr:credentialKindScheme a skos:ConceptScheme ;

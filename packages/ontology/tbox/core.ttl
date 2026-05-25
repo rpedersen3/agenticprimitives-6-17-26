@@ -25,6 +25,18 @@ ap:CanonicalAgentId a owl:Class ;
     rdfs:label "CanonicalAgentId" ;
     rdfs:comment "A branded CAIP-10 account identifier (eip155:* / hedera:* / solana:*). The SSO subject + directory key (ADR-0016). Validated by ap:CanonicalAgentIdShape." .
 
+# Agent-kind subclasses. agentKind is 3-valued (person/org/service; cbox); the
+# kind hierarchy is OWL. treasury is NOT an agentKind — it is a KIND OF SERVICE.
+ap:ServiceAgent a owl:Class ;
+    rdfs:subClassOf ap:Agent ;
+    rdfs:label "ServiceAgent" ;
+    rdfs:comment "An agent of kind 'service' (agentKind=service). Service profiles and treasuries are ServiceAgents." .
+
+ap:Treasury a owl:Class ;
+    rdfs:subClassOf ap:ServiceAgent ;
+    rdfs:label "Treasury" ;
+    rdfs:comment "A custody-policy-governed asset account — a KIND OF SERVICE (agentKind=service), distinguished by ProfileType/serviceType='treasury' (specs 210/217/225 §6). NOT a top-level agent kind." .
+
 ap:Facet a owl:Class ;
     rdfs:label "Facet" ;
     rdfs:comment "An abstract control/identity facet that points AT an Agent and rotates without changing it (ADR-0011). Subclasses: apcr:CredentialFacet, apnam:NameFacet, apid:OidcSubject." .

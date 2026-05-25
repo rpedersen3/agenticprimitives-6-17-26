@@ -300,7 +300,7 @@ export function RelationshipsCard({
                     setDetail({
                       address: treasury.address,
                       label: getCachedName(treasury.address) ?? 'Treasury',
-                      kind: 'treasury',
+                      kind: 'service', // a treasury is a service agent (specs 217/225 §6); the "Treasury" name shows via `label`
                     })
                   }
                 />

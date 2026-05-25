@@ -176,7 +176,10 @@ package can import them without taking a domain-package dependency).
 
 ```ts
 // types/src/canonical-identity.ts
-export type AgentKind = 'person' | 'org' | 'service' | 'treasury' | 'role';
+// Three kinds only (canonical `AgentType` in types/src/index.ts). treasury is a
+// service subtype at the profile layer (ProfileType/serviceType; specs 217/225 §6),
+// and 'role' is not a modeled agent kind — neither is an agentKind value.
+export type AgentKind = 'person' | 'org' | 'service';
 
 export interface CanonicalAgentIdentity {
   /** CAIP-10 account id, e.g. `eip155:84532:0x...`. The root identity. */

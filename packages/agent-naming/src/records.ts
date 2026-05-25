@@ -60,14 +60,12 @@ export const AGENT_KIND_ID: Record<AgentKind, Hex> = {
   person:   _predId('person'),
   org:      _predId('org'),
   service:  _predId('service'),
-  treasury: _predId('treasury'),
 };
 
 const KNOWN_AGENT_KINDS: ReadonlySet<AgentKind> = new Set([
   'person',
   'org',
   'service',
-  'treasury',
 ]);
 
 // ─── Class + enum-set ids ──────────────────────────────────────────
@@ -204,7 +202,7 @@ function _validateBytes32(value: string): Hex {
 function _encodeAgentKind(value: AgentKind): Hex {
   if (!KNOWN_AGENT_KINDS.has(value)) {
     throw new Error(
-      `[agent-naming/records] agent-kind must be one of person|org|service|treasury (got "${value}")`,
+      `[agent-naming/records] agent-kind must be one of person|org|service (treasury is a service subtype, set via the profile, not the agent kind) (got "${value}")`,
     );
   }
   return AGENT_KIND_ID[value];

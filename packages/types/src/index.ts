@@ -107,8 +107,14 @@ export interface AgentSession {
 // rendering layer; binding stays at addresses. NameContext is the
 // injected display + filter axis other packages can branch on.
 
-/** Discriminator for the kind of Smart Agent a name points to. */
-export type AgentType = 'person' | 'org' | 'service' | 'treasury';
+/**
+ * Discriminator for the KIND of Smart Agent a name points to.
+ *
+ * Three kinds only. `treasury` is NOT an agent kind — it is a kind of SERVICE
+ * (`agentKind: 'service'` + a profile `serviceType` / `ProfileType: 'treasury'`
+ * subtype; specs 217/225 §6). Do not re-add it here.
+ */
+export type AgentType = 'person' | 'org' | 'service';
 
 /**
  * Optional naming context other packages accept as injected
@@ -127,6 +133,6 @@ export type AgentType = 'person' | 'org' | 'service' | 'treasury';
 export interface NameContext {
   /** Resolved name of the subject (e.g. 'alice.agent'). */
   agentName?: string;
-  /** Discriminator for branching: person vs org vs service vs treasury. */
+  /** Discriminator for branching: person vs org vs service (treasury ⊂ service — not branched here). */
   agentType?: AgentType;
 }

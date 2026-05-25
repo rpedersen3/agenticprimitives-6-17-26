@@ -9,7 +9,9 @@ const agentAddress = '0x0000000000000000000000000000000000000003';
 
 const encoded = encodeRecords({
   addr: agentAddress,
-  agentKind: 'treasury',
+  // A treasury is a SERVICE agent (agentKind='service'); 'treasury' is a profile
+  // subtype (ProfileType/serviceType), not an agent kind (specs 210/217/225 §6).
+  agentKind: 'service',
   displayName: 'Acme Treasury',
   a2aEndpoint: 'https://a2a.acme.example',
   mcpEndpoint: 'https://mcp.acme.example',
@@ -32,7 +34,7 @@ const decoded = decodeRecords({
     [PREDICATE_ID.addr]: agentAddress,
   },
   bytes32s: {
-    [PREDICATE_ID.agentKind]: AGENT_KIND_ID.treasury,
+    [PREDICATE_ID.agentKind]: AGENT_KIND_ID.service,
   },
 });
 

@@ -76,7 +76,9 @@ Specifically:
    `keccak256("atl:AgentName")`) is defined in Deploy.s.sol with all
    properties OPTIONAL initially; a future migration may tighten
    cardinality. `agentKind` carries an enum set bound to the closed
-   {`person`, `org`, `service`, `treasury`} domain.
+   {`person`, `org`, `service`} domain. (Updated 2026-05-25: dropped `treasury`
+   — a treasury is a service subtype at the profile layer, not an agent kind;
+   specs 217/225 §6. Existing testnet records re-seeded as `service` on redeploy.)
 
 ## Consequences
 

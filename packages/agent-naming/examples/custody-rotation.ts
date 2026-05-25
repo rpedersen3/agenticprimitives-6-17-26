@@ -35,7 +35,7 @@ const recordCalls = buildRecordCalls({
   node,
   records: {
     addr: newOwner,
-    agentKind: 'treasury',
+    agentKind: 'service', // treasury is a service subtype (profile), not an agent kind
     displayName: 'Acme Treasury',
     nativeId: `eip155:84532:${newOwner}`,
   },

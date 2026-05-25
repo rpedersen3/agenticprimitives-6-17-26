@@ -112,13 +112,14 @@ External: `rdf`, `rdfs`, `owl`, `xsd`, `sh` (SHACL), `prov`, `skos`.
 - **`CredentialFacetShape`** — a `CredentialFacet` references exactly one
   `ap:Agent` and carries exactly one `ap:Evidence`.
 - **Two distinct "kind" controlled vocabularies (audit P1-4) — do not conflate:**
-  - `agentKind` `{person, org, service, treasury}` — the **4-value, on-chain-bound**
-    set (ADR-0009's enum / `types.AgentType`).
+  - `agentKind` `{person, org, service}` — the **3-value, on-chain-bound** set
+    (ADR-0009's enum / `types.AgentType`). **treasury is NOT an agentKind** — it
+    is a kind of service (`ap:Treasury rdfs:subClassOf ap:ServiceAgent`; tbox/core).
   - `profileType` `{person, org, service, treasury, mcpServer, multisig}` — the
-    **6-value** `agent-profile`/HCS-11 set (spec 217). `mcpServer` and `multisig`
-    are modeled as `profileType` subtypes of an `agentKind` (`mcpServer ⊂ service`,
-    `multisig ⊂ org`/`service`); this mapping feeds the AP-11 alignment pass
-    (spec 226 §7).
+    **6-value** `agent-profile`/HCS-11 set (spec 217). `treasury`, `mcpServer`,
+    and `multisig` are modeled as `profileType` subtypes of an `agentKind`
+    (`treasury ⊂ service`, `mcpServer ⊂ service`, `multisig ⊂ org`/`service`);
+    this mapping feeds the AP-11 alignment pass (spec 226 §7).
 - **Other controlled vocabularies (SKOS):** `riskTier` `{T1…T6}`, `credentialKind`
   `{passkey, siwe-eoa, hardware, oidc}`, `assurance`
   `{unverified, asserted, onchain-read, onchain-confirmed}`.

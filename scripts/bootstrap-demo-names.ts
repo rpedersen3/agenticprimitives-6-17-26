@@ -13,7 +13,8 @@
  *
  * For each name, sets:
  *   atl:addr        → deployer (placeholder until per-user agents register)
- *   atl:agentKind   → keccak256("org" | "treasury" | "service")
+ *   atl:agentKind   → keccak256("org" | "service")  (3-value; treasury is a
+ *                     service agent — the treasury distinction lives on the profile)
  *   atl:displayName → human label
  *
  * Then sets deployer's primary name = demo.agent so reverseResolve(deployer)
@@ -60,7 +61,8 @@ const AGENT_KIND_ID = {
   person:   keccak256(toHex('person')),
   org:      keccak256(toHex('org')),
   service:  keccak256(toHex('service')),
-  treasury: keccak256(toHex('treasury')),
+  // No `treasury`: a treasury is a SERVICE agent (the 3-value on-chain enum has
+  // no treasury member; specs 217/225 §6). Register treasuries as 'service'.
 } as const;
 
 const ZERO_NODE = '0x0000000000000000000000000000000000000000000000000000000000000000' as const;
@@ -160,7 +162,7 @@ async function main() {
 
   await registerOrSkip(publicClient, wallet, registry, resolverAddr, agentRoot, 'acme', account.address, 'Acme Construction', 'org');
   const acmeNode = namehash('acme.agent');
-  await registerOrSkip(publicClient, wallet, registry, resolverAddr, acmeNode, 'treasury', account.address, 'Acme Treasury', 'treasury');
+  await registerOrSkip(publicClient, wallet, registry, resolverAddr, acmeNode, 'treasury', account.address, 'Acme Treasury', 'service');
   await registerOrSkip(publicClient, wallet, registry, resolverAddr, agentRoot, 'demo', account.address, 'Demo Deployer', 'service');
 
   const demoNode = namehash('demo.agent');

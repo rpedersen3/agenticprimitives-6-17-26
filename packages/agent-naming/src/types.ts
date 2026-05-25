@@ -1,12 +1,15 @@
 import type { Address, Hex } from '@agenticprimitives/types';
 
 /**
- * Discriminator for the kind of Smart Agent a name points to.
- * Demo UIs use this to render different cards (person avatars,
- * org cards, service tiles). Audit context attaches the discriminator
- * so forensics can filter "all events involving a service agent."
+ * Discriminator for the KIND of Smart Agent a name points to. Three kinds only
+ * — mirrors `@agenticprimitives/types` `AgentType` and the on-chain
+ * `AGENT_KIND_ENUM` (must stay in lockstep). `treasury` is NOT an agent kind: a
+ * treasury is a SERVICE agent (`'service'`) distinguished at the profile layer
+ * (`ProfileType: 'treasury'` / `serviceType`; specs 217/225 §6).
+ * Demo UIs use this to render different cards; audit context attaches it so
+ * forensics can filter "all events involving a service agent."
  */
-export type AgentKind = 'person' | 'org' | 'service' | 'treasury';
+export type AgentKind = 'person' | 'org' | 'service';
 
 /**
  * The typed bag of records a resolver may hold for a name. Every
