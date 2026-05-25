@@ -3,6 +3,13 @@
 import { buildMessage } from '@agenticprimitives/connect-auth/siwe';
 import { buildSubregistryRegisterCall, buildSetPrimaryNameCall } from '@agenticprimitives/agent-naming';
 import { buildExecuteCallData } from '@agenticprimitives/agent-account';
+import {
+  buildProposeEdgeCall,
+  buildConfirmEdgeCall,
+  computeEdgeId,
+  RELATIONSHIP_TYPE,
+  type RelationshipType,
+} from '@agenticprimitives/agent-relationships';
 import type { Address, Hex } from '@agenticprimitives/types';
 import { connectWallet, personalSign } from './lib/wallet';
 import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from './lib/passkey';
@@ -244,6 +251,96 @@ export async function bootstrapWithPasskey(
   });
   if (!enrollRes.ok) return { ok: false, error: ((await enrollRes.json()) as { error?: string }).error ?? 'enroll failed' };
   return { ok: true, agent };
+}
+
+// ── A2A service agent + relationship edge (spec 227 §6 / M5) ────────
+
+/** Deploy a Smart Agent via demo-a2a (no facet enroll). Used for the A2A agent. */
+async function deployAgent(
+  deployBody: Record<string, unknown>,
+  signHash: SignHash,
+): Promise<{ ok: true; agent: Address } | { ok: false; error: string }> {
+  await ensureCsrfToken();
+  const buildRes = await fetch('/a2a/session/deploy', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify(deployBody),
+  });
+  if (buildRes.status === 409) return { ok: false, error: 'paymaster not enabled' };
+  const built = (await buildRes.json()) as { ok?: boolean; userOpHash?: Hex; userOp?: Record<string, unknown>; error?: string };
+  if (!buildRes.ok || !built.ok || !built.userOpHash || !built.userOp) {
+    return { ok: false, error: built.error ?? `deploy build failed (HTTP ${buildRes.status})` };
+  }
+  const signature = await signHash(built.userOpHash);
+  const submitRes = await fetch('/a2a/session/deploy/submit', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
+  });
+  const submitted = (await submitRes.json()) as { ok?: boolean; deployedAddress?: Address; error?: string };
+  if (!submitRes.ok || !submitted.ok || !submitted.deployedAddress) {
+    return { ok: false, error: submitted.error ?? `deploy submit failed (HTTP ${submitRes.status})` };
+  }
+  return { ok: true, agent: submitted.deployedAddress };
+}
+
+export interface ProvisionResult {
+  a2aAgent: Address;
+  edgeId: Hex;
+}
+
+/** Provision a 2nd SA (the A2A service agent) custodied by the same credential, and
+ *  link `a2a --OPERATES_ON_BEHALF_OF--> person` (a2a proposes as subject; person
+ *  confirms as object — architect F1). Both txs signed by the user's one credential. */
+export async function provisionA2aAgent(
+  via: 'wallet' | 'passkey',
+  personAgent: Address,
+  onStep?: (s: string) => void,
+): Promise<{ ok: true; result: ProvisionResult } | { ok: false; error: string }> {
+  const A2A_SALT = '1'; // distinct from the person SA (salt 0) -> distinct address
+  let signHash: SignHash;
+  let deployBody: Record<string, unknown>;
+  if (via === 'wallet') {
+    const addr = await connectWallet();
+    signHash = (h) => personalSign(addr, h);
+    deployBody = { initMethod: 'eoa', owner: addr, salt: A2A_SALT };
+  } else {
+    const pk = loadPasskey();
+    if (!pk) return { ok: false, error: 'no passkey on this device' };
+    signHash = passkeySignHash;
+    deployBody = {
+      initMethod: 'passkey',
+      credentialIdDigest: pk.credentialIdDigest,
+      pubKeyX: pk.pubKeyX.toString(),
+      pubKeyY: pk.pubKeyY.toString(),
+      salt: A2A_SALT,
+    };
+  }
+
+  onStep?.('Deploying your agent service…');
+  const dep = await deployAgent(deployBody, signHash);
+  if (!dep.ok) return { ok: false, error: `agent deploy failed: ${dep.error}` };
+  const a2aAgent = dep.agent;
+  if (a2aAgent.toLowerCase() === personAgent.toLowerCase()) {
+    return { ok: false, error: 'agent service collided with the person agent (salt)' };
+  }
+
+  const relationships = CONTRACTS.agentRelationship;
+  const relationshipType = RELATIONSHIP_TYPE.OPERATES_ON_BEHALF_OF as RelationshipType;
+
+  onStep?.('Linking it to operate on your behalf…');
+  const propose = buildProposeEdgeCall({ relationships, subject: a2aAgent, object: personAgent, relationshipType });
+  const p = await executeCall(a2aAgent, signHash, buildExecuteCallData(propose)); // a2a = subject (proposer)
+  if (!p.ok) return { ok: false, error: `propose edge failed: ${p.error}` };
+
+  onStep?.('Confirming the link…');
+  const edgeId = computeEdgeId(a2aAgent, personAgent, relationshipType);
+  const confirm = buildConfirmEdgeCall({ relationships, edgeId });
+  await executeCall(personAgent, signHash, buildExecuteCallData(confirm)); // person = object (confirmer); best-effort
+
+  return { ok: true, result: { a2aAgent, edgeId } };
 }
 
 export interface BasicProfile {

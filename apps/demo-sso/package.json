@@ -13,6 +13,7 @@
   "dependencies": {
     "@agenticprimitives/agent-account": "workspace:*",
     "@agenticprimitives/agent-naming": "workspace:*",
+    "@agenticprimitives/agent-relationships": "workspace:*",
     "@agenticprimitives/connect": "workspace:*",
     "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/identity-directory": "workspace:*",

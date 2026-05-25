@@ -8,6 +8,7 @@ import {
   bootstrapWithPasskey,
   passkeySignHash,
   claimName,
+  provisionA2aAgent,
   fetchProfile,
   fetchSensitive,
   type BasicProfile,
@@ -35,6 +36,7 @@ export function App() {
   const [stepUpMsg, setStepUpMsg] = useState<string | null>(null);
   const [desiredName, setDesiredName] = useState('');
   const [googleNotice, setGoogleNotice] = useState<string | null>(null);
+  const [service, setService] = useState<{ step?: string; error?: string; a2aAgent?: string } | null>(null);
 
   const openSession = useCallback(async (token: string, via: string, fresh: boolean) => {
     setSession({ token, via, fresh });
@@ -155,12 +157,23 @@ export function App() {
     else setStepUpMsg(r.reason);
   }
 
+  async function onProvisionService() {
+    if (!session || !profile || session.via === 'Google') return;
+    const personAddr = profile.agent.split(':').pop() as Address;
+    setService({ step: 'Starting…' });
+    const res = await provisionA2aAgent(session.via as 'wallet' | 'passkey', personAddr, (step) =>
+      setService((s) => ({ ...s, step })),
+    );
+    setService(res.ok ? { a2aAgent: res.result.a2aAgent } : { error: res.error });
+  }
+
   function signOut() {
     setSession(null);
     setProfile(null);
     setSensitive(null);
     setStepUpMsg(null);
     setBootstrap(null);
+    setService(null);
     setError(null);
   }
 
@@ -309,6 +322,34 @@ export function App() {
               </>
             )}
           </div>
+
+          {session.via !== 'Google' && (
+            <div className="panel">
+              <h2>Your agent services</h2>
+              {service?.a2aAgent ? (
+                <p className="ok">
+                  ✓ Agent service live: <code>{service.a2aAgent}</code>
+                  <br />
+                  It <strong>operates on behalf of</strong> your workspace — an on-chain
+                  <code> OPERATES_ON_BEHALF_OF</code> edge (it proposed; your workspace confirmed).
+                </p>
+              ) : service?.step ? (
+                <p className="ok">⏳ {service.step}</p>
+              ) : (
+                <>
+                  <p className="muted">
+                    Provision a second Smart Agent (an A2A service agent) that acts on your behalf, linked
+                    on-chain via an <code>OPERATES_ON_BEHALF_OF</code> relationship. Signed by your same
+                    credential.
+                  </p>
+                  <button onClick={onProvisionService}>Provision an agent service</button>
+                  {service?.error && (
+                    <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {service.error}</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
 

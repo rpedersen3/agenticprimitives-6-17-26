@@ -132,6 +132,9 @@ importers:
       '@agenticprimitives/agent-naming':
         specifier: workspace:*
         version: link:../../packages/agent-naming
+      '@agenticprimitives/agent-relationships':
+        specifier: workspace:*
+        version: link:../../packages/agent-relationships
       '@agenticprimitives/connect':
         specifier: workspace:*
         version: link:../../packages/connect
