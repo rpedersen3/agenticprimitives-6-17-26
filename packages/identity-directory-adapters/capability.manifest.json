@@ -1,0 +1,74 @@
+{
+  "name": "@agenticprimitives/identity-directory-adapters",
+  "kind": "adapter",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/223-identity-directory.md",
+  "summary": "Port impls for identity-directory: NamingPort (wraps agent-naming), OnChainReadPort (viem readContract), IndexerPort (in-memory). The composition layer allowed to import agent-naming.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": ["@agenticprimitives/types", "@agenticprimitives/identity-directory", "@agenticprimitives/agent-naming"],
+  "allowedImports": ["@agenticprimitives/types", "@agenticprimitives/identity-directory", "@agenticprimitives/agent-naming", "viem"],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/connect-auth",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/account-custody",
+    "@agenticprimitives/audit",
+    "@agenticprimitives/ontology"
+  ],
+  "publicExports": [
+    "toCanonicalAgentId",
+    "addressOf",
+    "EIP155_NAMESPACE",
+    "makeNamingPort",
+    "NamingReads",
+    "makeOnChainReadPort",
+    "viemExists",
+    "OnChainReaders",
+    "createInMemoryIndexer",
+    "IndexerEntry"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "Delegation",
+      "reason": "Delegation primitive belongs in delegation; adapters only read.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "Caveat",
+      "reason": "Belongs in delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "evaluatePolicy",
+      "reason": "Belongs in tool-policy.",
+      "owningPackage": "@agenticprimitives/tool-policy"
+    },
+    {
+      "term": "withDelegation",
+      "reason": "Belongs in mcp-runtime.",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    },
+    {
+      "term": "SessionManager",
+      "reason": "Belongs in delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    }
+  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

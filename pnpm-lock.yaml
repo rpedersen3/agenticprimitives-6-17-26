@@ -457,6 +457,25 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
 
+  packages/identity-directory-adapters:
+    dependencies:
+      '@agenticprimitives/agent-naming':
+        specifier: workspace:*
+        version: link:../agent-naming
+      '@agenticprimitives/identity-directory':
+        specifier: workspace:*
+        version: link:../identity-directory
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      viem:
+        specifier: ^2.21.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+    devDependencies:
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
   packages/key-custody:
     dependencies:
       '@agenticprimitives/audit':

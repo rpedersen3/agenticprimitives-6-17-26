@@ -138,7 +138,8 @@ consult.
   `email_verified`; spec 200) ✅. **Phase 1 complete.**
 - **Phase 2:** `identity-directory` core (ports + Evidence/Assurance + query API:
   indexer-proposes / on-chain-confirms; spec 223) ✅ + `identity-directory-adapters`
-  (Naming/OnChainRead/Indexer impls) — adapters next.
+  (NamingPort wraps agent-naming + eip155 lift; OnChainReadPort viem `exists` +
+  app-wired `confirmsCredential`; in-memory IndexerPort) ✅. **Phase 2 complete.**
 - **Phase 3:** `connect` broker + asymmetric token/JWKS + entry flows + convergence.
 - **Phase 4:** `apps/demo-sso` (2 relying sites, one-enroll SSO, GitHub OIDC,
   step-up demo); HCS-11 alignment pass on spec 217.
