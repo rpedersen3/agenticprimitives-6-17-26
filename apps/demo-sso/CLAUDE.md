@@ -47,16 +47,19 @@ POST /authorize  { credential, aud, redirectUri? } → { status:'issued', code }
 POST /token      { code, aud } → { agentSession }   (single-use code exchange; CN-1/9)
 ```
 
-The signing key lives ONLY server-side (`BROKER_PRIVATE_JWK` secret); the browser
-sees only the JWKS. Run it:
+The signing key lives ONLY server-side (`BROKER_PRIVATE_JWK`); the browser sees
+only the JWKS. **Local dev (no Cloudflare project needed):**
 
 ```bash
-node scripts/gen-broker-key.mjs                       # → kid + private JWK
-wrangler kv namespace create AUTH_CODES               # provision the code store
+cp .dev.vars.example .dev.vars                        # then fill it in
+node scripts/gen-broker-key.mjs                       # → BROKER_PRIVATE_JWK + kid for .dev.vars
 pnpm --filter @agenticprimitives-demo/sso build
-wrangler pages secret put BROKER_PRIVATE_JWK          # paste the private JWK
-wrangler pages dev dist                               # serves /jwks /authorize /token
+wrangler pages dev dist --kv AUTH_CODES               # :8788 — local KV; serves /jwks /authorize /token /oidc/*
 ```
+
+`wrangler pages secret put` only works AFTER the project exists (deploy path) —
+for local use `.dev.vars`. Full local-vs-deploy steps + the Google console config:
+**`OIDC-SETUP.md`**.
 
 ## What it demonstrates
 

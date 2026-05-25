@@ -7,31 +7,45 @@ smart-agent keeps it in `apps/web/.env` / `google-oauth.ts`, never the client.)
 
 ## 1. Where the values go (demo-sso Pages env)
 
-Set these on the Pages project (the Connect origin). `*_SECRET` MUST be a secret;
-the others can be plain env vars but secrets are fine too:
+All values are read by `functions/_lib/server-broker.ts` →
+`functions/oidc/google/{start,callback}.ts` via `context.env.*` (the demo-sso
+analogue of smart-agent's `apps/web/src/lib/auth/google-oauth.ts` reading
+`process.env.GOOGLE_*`). There are **two** setup paths — local and deploy.
+
+### A. Local dev (start here) — `.dev.vars`, NO Cloudflare project needed
+
+`wrangler pages secret put` targets a **deployed Pages project**, so it fails
+with *"Project does not exist"* before you've created one. For local dev you do
+NOT use it — put the values in a gitignored `.dev.vars` at the app root (copy
+`.dev.vars.example`):
 
 ```bash
-wrangler pages secret put GOOGLE_CLIENT_ID        # paste the Client ID
-wrangler pages secret put GOOGLE_CLIENT_SECRET    # paste the Client secret  (server-only!)
-wrangler pages secret put GOOGLE_REDIRECT_URI     # paste the exact callback URL (below)
+cp .dev.vars.example .dev.vars
+node scripts/gen-broker-key.mjs   # paste BROKER_PRIVATE_JWK + BROKER_KID into .dev.vars
+# fill in GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI
+
+pnpm --filter @agenticprimitives-demo/sso build
+wrangler pages dev dist --kv AUTH_CODES    # :8788 — --kv gives a LOCAL KV (no remote namespace)
 ```
 
-Read by `functions/_lib/server-broker.ts` → `functions/oidc/google/{start,callback}.ts`
-via `context.env.GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI`
-(the demo-sso analogue of smart-agent's `apps/web/src/lib/auth/google-oauth.ts`
-reading `process.env.GOOGLE_*`).
+`--kv AUTH_CODES` provisions a local-only KV for the binding (the `wrangler.toml`
+`id` is only used on deploy). `.dev.vars` is loaded automatically.
 
-Also required (already in `wrangler.toml`): the `AUTH_CODES` KV namespace — it
-stores the transient OIDC `state`/PKCE context AND the single-use auth codes.
+### B. Deploy — create the project FIRST, then secrets + a real KV
 
-For local dev (`wrangler pages dev dist`) put the same values in a gitignored
-`.dev.vars` file at the app root:
-
+```bash
+wrangler pages project create demo-sso              # or the first `wrangler pages deploy dist` creates it
+wrangler kv namespace create AUTH_CODES             # paste the id into wrangler.toml
+wrangler pages secret put GOOGLE_CLIENT_ID          # now the project exists → these work
+wrangler pages secret put GOOGLE_CLIENT_SECRET      # (server-only!)
+wrangler pages secret put GOOGLE_REDIRECT_URI       # the exact prod callback URL (below)
+wrangler pages secret put BROKER_PRIVATE_JWK
+wrangler pages secret put BROKER_KID
+wrangler pages deploy dist
 ```
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://localhost:8788/oidc/google/callback
-```
+
+(`*_SECRET` / `BROKER_PRIVATE_JWK` MUST be secrets; the rest can be plain Pages
+env vars, but secrets are fine.)
 
 ## 2. Google Cloud Console
 

@@ -20,8 +20,10 @@ pages_build_output_dir = "dist"
 # Single-use auth-code store (CN-9). Provision once:
 #   wrangler kv namespace create AUTH_CODES
 #   wrangler kv namespace create AUTH_CODES --preview   # for `wrangler pages dev`
-# then paste the ids below.
-[[kv_namespaces]]
-binding = "AUTH_CODES"
-id = "REPLACE_WITH_AUTH_CODES_KV_ID"
-preview_id = "REPLACE_WITH_AUTH_CODES_PREVIEW_KV_ID"
+# then UNCOMMENT the block below + paste the ids. (Left commented so local dev
+# uses `wrangler pages dev dist --kv AUTH_CODES`, a local KV — no remote namespace
+# and no placeholder-id error. UNCOMMENT before `wrangler pages deploy`.)
+# [[kv_namespaces]]
+# binding = "AUTH_CODES"
+# id = "REPLACE_WITH_AUTH_CODES_KV_ID"
+# preview_id = "REPLACE_WITH_AUTH_CODES_PREVIEW_KV_ID"
