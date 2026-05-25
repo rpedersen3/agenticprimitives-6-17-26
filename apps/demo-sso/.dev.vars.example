@@ -1,0 +1,17 @@
+# demo-sso — server broker local dev config.
+# Copy to .dev.vars (gitignored) and fill in real values.
+# NEVER put real secrets in THIS file — it is tracked. See OIDC-SETUP.md.
+
+# Broker signing key — ES256 (ECDSA P-256) private JWK + its kid.
+# Generate with:  node scripts/gen-broker-key.mjs
+BROKER_PRIVATE_JWK={"kty":"EC","crv":"P-256","d":"...","x":"...","y":"..."}
+BROKER_KID=broker-xxxxxxxx
+
+# Exact-match relying-site redirect URIs (CN-1), comma-separated. Optional.
+REDIRECT_URI_ALLOWLIST=http://localhost:8788/
+
+# Google OAuth 2.0 (server-side). Create at Google Cloud Console -> Credentials.
+# The client secret MUST stay server-side; the redirect URI must match the console.
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:8788/oidc/google/callback
