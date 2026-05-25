@@ -7,10 +7,10 @@ actual design in specs and package docs; this file is only a routing map.
 > [`package-consumer-map.md`](./package-consumer-map.md) — the "I need to do X →
 > import this package" table + the layered story.
 >
-> **Pre-1.0 rename watch** (proposed, not yet landed — keep importing the current
-> name): `connect-auth` (`identity-auth`), `account-custody` (`custody`),
-> `agent-profile` (`agent-identity`). These remove the login-vs-profile and
-> account-custody-vs-key-custody collisions.
+> **Renamed (commit `7861f4b`)** to remove the login-vs-profile and
+> account-custody-vs-key-custody collisions — update old imports:
+> `connect-auth` (was `identity-auth`), `account-custody` (was `custody`),
+> `agent-profile` (was `agent-identity`).
 
 | Task                                                       | Start Here                                    | Notes                                             |
 | ---------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------- |
