@@ -5,7 +5,6 @@ import {
   maxAssurance,
   compareAssurance,
   type DirectoryPorts,
-  type CredentialFacet,
   type EvidenceLink,
 } from '../../src/index.js';
 
@@ -18,8 +17,8 @@ function ports(over: Partial<DirectoryPorts> = {}): DirectoryPorts {
   return {
     naming: { forward: vi.fn(async () => null), reverse: vi.fn(async () => null), ...over.naming },
     onChain: {
-      resolveAgent: vi.fn(async () => null),
-      credentialsOf: vi.fn(async () => [] as CredentialFacet[]),
+      exists: vi.fn(async () => false),
+      confirmsCredential: vi.fn(async () => false),
       ...over.onChain,
     },
     indexer: {
@@ -42,8 +41,8 @@ describe('resolveByName', () => {
   it('null forward is terminal — returns 0 agents and never touches other ports (ADR-0013)', async () => {
     const p = ports({
       onChain: {
-        resolveAgent: vi.fn(async () => { throw new Error('must not be called'); }),
-        credentialsOf: vi.fn(async () => { throw new Error('must not be called'); }),
+        exists: vi.fn(async () => { throw new Error('must not be called'); }),
+        confirmsCredential: vi.fn(async () => { throw new Error('must not be called'); }),
       },
       indexer: {
         agentsByCredential: vi.fn(async () => { throw new Error('must not be called'); }),
@@ -53,7 +52,7 @@ describe('resolveByName', () => {
     const dir = createDirectory(p);
     const r = await dir.resolveByName('nope.agent');
     expect(r.agents).toHaveLength(0);
-    expect(p.onChain.resolveAgent).not.toHaveBeenCalled();
+    expect(p.onChain.exists).not.toHaveBeenCalled();
     expect(p.indexer.agentsByCredential).not.toHaveBeenCalled();
   });
 });
@@ -66,8 +65,8 @@ describe('resolveByCredential — indexer proposes, on-chain confirms', () => {
         agentsByOidcSubject: async () => [],
       },
       onChain: {
-        resolveAgent: async () => null,
-        credentialsOf: async (id) => (id === AGENT_A ? [{ principal: CRED }] : []),
+        exists: async () => true,
+        confirmsCredential: async (id, principal) => id === AGENT_A && principal.id === CRED.id,
       },
     });
     const dir = createDirectory(p);
@@ -89,9 +88,9 @@ describe('resolveByCredential — indexer proposes, on-chain confirms', () => {
         agentsByOidcSubject: async () => [],
       },
       onChain: {
-        resolveAgent: async () => null,
+        exists: async () => true,
         // only AGENT_A still has the credential; AGENT_B revoked it
-        credentialsOf: async (id) => (id === AGENT_A ? [{ principal: CRED }] : []),
+        confirmsCredential: async (id) => id === AGENT_A,
       },
     });
     const dir = createDirectory(p);
@@ -102,7 +101,7 @@ describe('resolveByCredential — indexer proposes, on-chain confirms', () => {
   it('no confirmation → empty (the authoritative result is terminal)', async () => {
     const p = ports({
       indexer: { agentsByCredential: async () => [{ agent: AGENT_A, assurance: 'asserted', ref: 'x' }], agentsByOidcSubject: async () => [] },
-      onChain: { resolveAgent: async () => null, credentialsOf: async () => [] },
+      onChain: { exists: async () => true, confirmsCredential: async () => false },
     });
     const dir = createDirectory(p);
     expect((await dir.resolveByCredential(CRED)).agents).toHaveLength(0);
@@ -114,7 +113,7 @@ describe('resolveByOidcSubject', () => {
     const oidc: CredentialPrincipal = { kind: 'oidc', id: 'https://accounts.google.com#42', assurance: 'asserted' };
     const p = ports({
       indexer: { agentsByCredential: async () => [], agentsByOidcSubject: async () => [{ agent: AGENT_A, assurance: 'asserted', ref: 'idx' }] },
-      onChain: { resolveAgent: async () => null, credentialsOf: async () => [{ principal: oidc }] },
+      onChain: { exists: async () => true, confirmsCredential: async (_id, principal) => principal.kind === oidc.kind && principal.id === oidc.id },
     });
     const dir = createDirectory(p);
     const r = await dir.resolveByOidcSubject('https://accounts.google.com', '42');
@@ -129,15 +128,15 @@ describe('agent(id)', () => {
     expect(await dir.agent(AGENT_A)).toBeNull();
   });
 
-  it('composes credentials + reverse name into a view', async () => {
+  it('composes existence + reverse name into a view', async () => {
     const p = ports({
-      onChain: { resolveAgent: async () => ({ id: AGENT_A }), credentialsOf: async () => [{ principal: CRED }] },
+      onChain: { exists: async () => true, confirmsCredential: async () => false },
       naming: { forward: async () => null, reverse: async () => 'alice.agent' },
     });
     const dir = createDirectory(p);
     const view = await dir.agent(AGENT_A);
     expect(view?.facets.name).toBe('alice.agent');
-    expect(view?.facets.credentials).toHaveLength(1);
+    expect(view?.id).toBe(AGENT_A);
   });
 });
 

@@ -27,12 +27,6 @@ import {
   maxAssurance,
 } from './types';
 
-function samePrincipal(a: CredentialPrincipal, b: CredentialPrincipal): boolean {
-  // Exact match on kind + id. Callers/adapters normalize the id (e.g. lowercase
-  // eip155 addresses) before querying — the directory does not re-normalize.
-  return a.kind === b.kind && a.id === b.id;
-}
-
 function oidcPrincipal(iss: string, sub: string): CredentialPrincipal {
   return { kind: 'oidc', id: `${iss}#${sub}`, assurance: 'asserted' };
 }
@@ -66,8 +60,8 @@ export function createDirectory(ports: DirectoryPorts, opts: DirectoryOpts = {})
   async function confirmCandidates(links: EvidenceLink[], principal: CredentialPrincipal): Promise<AgentWithEvidence[]> {
     const out: AgentWithEvidence[] = [];
     for (const link of links) {
-      const current = await ports.onChain.credentialsOf(link.agent);
-      if (!current.some((c) => samePrincipal(c.principal, principal))) continue; // not currently a custodian → drop
+      // Authoritative membership CHECK (isCustodian/isTrustee), not enumeration.
+      if (!(await ports.onChain.confirmsCredential(link.agent, principal))) continue; // not currently a custodian → drop
       const evidence: Evidence[] = [
         {
           source: 'indexer',
@@ -118,17 +112,17 @@ export function createDirectory(ports: DirectoryPorts, opts: DirectoryOpts = {})
     },
 
     async agent(id: CanonicalAgentId): Promise<AgentView | null> {
-      const record = await ports.onChain.resolveAgent(id);
-      if (!record) return null;
-      // Composition (NOT fallback): credentials + name are different facets of
-      // the SAME agent, each from its declared port.
-      const credentials = await ports.onChain.credentialsOf(id);
+      if (!(await ports.onChain.exists(id))) return null;
+      // Composition (NOT fallback): existence + reverse name are different facets
+      // of the SAME agent, each from its declared port. (Credential enumeration is
+      // not an on-chain primitive — confirmation is per-credential via the membership
+      // check; a full credential list, if ever needed, is an indexer concern.)
       const name = await ports.naming.reverse(id);
       const evidence: Evidence[] = [
-        { source: 'onchain', assurance: 'onchain-read', observedAt: nowIso(), ref: `resolveAgent:${id}` },
+        { source: 'onchain', assurance: 'onchain-read', observedAt: nowIso(), ref: `exists:${id}` },
       ];
       if (name) evidence.push({ source: 'naming', assurance: 'onchain-read', observedAt: nowIso(), ref: name });
-      return { id, facets: { credentials, name: name ?? undefined }, evidence };
+      return { id, facets: { name: name ?? undefined }, evidence };
     },
   };
 }

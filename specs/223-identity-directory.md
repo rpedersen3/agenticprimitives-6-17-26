@@ -83,8 +83,11 @@ the directory core never imports it.
 
 ```ts
 interface OnChainReadPort {            // readContract only — NEVER getLogs
-  resolveAgent(id: CanonicalAgentId): Promise<AgentRecord | null>;
-  credentialsOf(id: CanonicalAgentId): Promise<CredentialFacet[]>;
+  exists(id: CanonicalAgentId): Promise<boolean>;
+  // Authoritative membership CHECK. The custody/account contracts expose
+  // isCustodian / isTrustee, NOT credential enumeration — so confirmation is a
+  // per-credential check, not a `credentialsOf` list (implemented 2026-05-25).
+  confirmsCredential(id: CanonicalAgentId, principal: CredentialPrincipal): Promise<boolean>;
 }
 interface NamingPort {                 // wraps agent-naming
   forward(name: string): Promise<CanonicalAgentId | null>;

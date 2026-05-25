@@ -28,16 +28,6 @@ export interface Evidence {
   blockNumber?: bigint;
 }
 
-/** Minimal on-chain agent record (adapters fill what they read). */
-export interface AgentRecord {
-  id: CanonicalAgentId;
-}
-
-/** A credential facet currently recorded for an agent (from OnChainReadPort). */
-export interface CredentialFacet {
-  principal: CredentialPrincipal;
-}
-
 /** An agent in a Resolution, with its provenance + the effective assurance. */
 export interface AgentWithEvidence {
   id: CanonicalAgentId;
@@ -51,11 +41,10 @@ export interface Resolution {
   agents: AgentWithEvidence[];
 }
 
-/** A full view of one agent's facets + provenance (from `agent(id)`). */
+/** A view of one agent + provenance (from `agent(id)`). */
 export interface AgentView {
   id: CanonicalAgentId;
   facets: {
-    credentials: CredentialFacet[];
     name?: string;
   };
   evidence: Evidence[];
@@ -81,11 +70,19 @@ export interface EvidenceLink {
 // calls resolveByOidcSubject(iss, sub) with the already-verified subject. The
 // directory only resolves; it does not authenticate credentials.
 
-/** Authoritative on-chain reads. `readContract` only — NEVER `eth_getLogs`. */
+/**
+ * Authoritative on-chain reads. `readContract` only — NEVER `eth_getLogs`.
+ *
+ * Shaped around what the custody/account contracts actually expose: membership
+ * CHECKS (`isCustodian`/`isTrustee`), not credential enumeration. So confirmation
+ * is `confirmsCredential` (a check), not a `credentialsOf` (a list) — the on-chain
+ * surface has no "list this agent's credentials" getter.
+ */
 export interface OnChainReadPort {
-  resolveAgent(id: CanonicalAgentId): Promise<AgentRecord | null>;
-  /** The agent's CURRENT credential facet set (the authority for confirmation). */
-  credentialsOf(id: CanonicalAgentId): Promise<CredentialFacet[]>;
+  /** Does this agent exist as a deployed account on this chain? */
+  exists(id: CanonicalAgentId): Promise<boolean>;
+  /** Authoritative: is `principal` CURRENTLY a control credential of `id`? */
+  confirmsCredential(id: CanonicalAgentId, principal: CredentialPrincipal): Promise<boolean>;
 }
 
 /** Wraps `agent-naming`. The adapter lifts `Address → CanonicalAgentId` by binding a chainId. */

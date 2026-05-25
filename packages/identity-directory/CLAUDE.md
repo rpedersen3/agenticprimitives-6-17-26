@@ -9,9 +9,11 @@ consumer (the broker's step-up; spec 224 §8). It accelerates discovery, not tru
 
 ## What this package owns
 - The **domain model**: `Evidence` (provenance + `Assurance` + `blockNumber`),
-  `AgentWithEvidence`, `Resolution`, `AgentView`, `EvidenceLink`, `CredentialFacet`.
-- The **ports**: `NamingPort`, `OnChainReadPort`, `IndexerPort` (interfaces only —
-  implemented in [`identity-directory-adapters`](../identity-directory-adapters)).
+  `AgentWithEvidence`, `Resolution`, `AgentView`, `EvidenceLink`.
+- The **ports**: `NamingPort`, `OnChainReadPort` (`exists` + `confirmsCredential`
+  — a membership CHECK, since the custody ABI exposes `isCustodian`/`isTrustee`,
+  not credential enumeration), `IndexerPort` (interfaces only — implemented in
+  [`identity-directory-adapters`](../identity-directory-adapters)).
 - The **query API** (`createDirectory(ports, opts)` → `IdentityDirectory`):
   `resolveByName` / `resolveByCredential` / `resolveByOidcSubject` / `agent`.
 - The **assurance ordering** (`ASSURANCE_ORDER`, `compareAssurance`, `maxAssurance`).
@@ -40,10 +42,9 @@ NOT delegation verification. See [`docs/architecture/vocabulary-map.md`](../../d
 3. `src/types.ts` (domain + ports) then `src/directory.ts` (the resolution logic).
 
 ## Stable public exports
-- Types: `Evidence`, `EvidenceSource`, `AgentRecord`, `CredentialFacet`,
-  `AgentWithEvidence`, `Resolution`, `AgentView`, `EvidenceLink`; ports
-  `OnChainReadPort` / `NamingPort` / `IndexerPort`; `DirectoryPorts`,
-  `DirectoryOpts`, `IdentityDirectory`.
+- Types: `Evidence`, `EvidenceSource`, `AgentWithEvidence`, `Resolution`,
+  `AgentView`, `EvidenceLink`; ports `OnChainReadPort` / `NamingPort` /
+  `IndexerPort`; `DirectoryPorts`, `DirectoryOpts`, `IdentityDirectory`.
 - Values: `createDirectory`, `ASSURANCE_ORDER`, `compareAssurance`, `maxAssurance`.
 
 ## Allowed imports

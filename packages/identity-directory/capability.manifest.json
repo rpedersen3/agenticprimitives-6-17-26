@@ -28,8 +28,6 @@
   "publicExports": [
     "EvidenceSource",
     "Evidence",
-    "AgentRecord",
-    "CredentialFacet",
     "AgentWithEvidence",
     "Resolution",
     "AgentView",

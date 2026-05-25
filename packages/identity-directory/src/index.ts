@@ -11,8 +11,6 @@
 export type {
   EvidenceSource,
   Evidence,
-  AgentRecord,
-  CredentialFacet,
   AgentWithEvidence,
   Resolution,
   AgentView,
