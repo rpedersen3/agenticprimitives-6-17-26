@@ -1,0 +1,96 @@
+{
+  "name": "@agenticprimitives/connect",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/224-agentic-connect.md",
+  "summary": "Agentic Connect SSO broker (spec 224 / ADR-0014): asymmetric AgentSession mint/verify + JWKS; entry-flow convergence + issuance (assurance floor, non-EVM gate); code-exchange redirect security.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": ["@agenticprimitives/types", "@agenticprimitives/connect-auth", "@agenticprimitives/identity-directory"],
+  "allowedImports": ["@agenticprimitives/types", "@agenticprimitives/connect-auth", "@agenticprimitives/identity-directory"],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/identity-directory-adapters",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/account-custody",
+    "@agenticprimitives/audit",
+    "@agenticprimitives/ontology"
+  ],
+  "publicExports": [
+    "generateBrokerKeypair",
+    "mintAgentSession",
+    "verifyAgentSession",
+    "exportPublicJwk",
+    "publishJwks",
+    "importJwks",
+    "BrokerAlg",
+    "BrokerSigner",
+    "VerifyKey",
+    "VerifyResult",
+    "VerifyOpts",
+    "MintAgentSessionInput",
+    "convergence",
+    "isCustodiedNamespace",
+    "SESSION_ISSUANCE_FLOOR",
+    "canIssueSession",
+    "selectFromResolution",
+    "requiresStepUp",
+    "CUSTODY_CLASS_ACTIONS",
+    "issueForResolution",
+    "Convergence",
+    "IssueDecision",
+    "CustodyClassAction",
+    "IssueForResolutionInput",
+    "IssueOutcome",
+    "validateRedirectUri",
+    "newAuthCode",
+    "createInMemoryAuthCodeStore",
+    "AuthCodeValue",
+    "AuthCodeStore"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "Delegation",
+      "reason": "Delegation primitive belongs in delegation; the broker issues sessions, not delegations. The 'delegation-issue' custody-class action LABEL (spec 224 §8) is a legitimate reference (the broker classifies it as step-up-requiring); the forbiddenImports boundary still prevents using the delegation API.",
+      "owningPackage": "@agenticprimitives/delegation",
+      "allowInPaths": ["src/broker.ts"]
+    },
+    {
+      "term": "Caveat",
+      "reason": "Belongs in delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "evaluatePolicy",
+      "reason": "Belongs in tool-policy.",
+      "owningPackage": "@agenticprimitives/tool-policy"
+    },
+    {
+      "term": "withDelegation",
+      "reason": "Belongs in mcp-runtime.",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    },
+    {
+      "term": "buildCaip10Address",
+      "reason": "Runtime CAIP-10 builder belongs in agent-profile; the broker consumes CanonicalAgentId.",
+      "owningPackage": "@agenticprimitives/agent-profile"
+    }
+  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

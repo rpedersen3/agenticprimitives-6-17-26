@@ -135,15 +135,15 @@ model an edge that doesn't exist.
 
 Four new packages (specs [223](../specs/223-identity-directory.md) /
 [224](../specs/224-agentic-connect.md) / [225](../specs/225-ontology.md);
-ADRs 0014–0018). `ontology` + `identity-directory` (core) + `identity-directory-adapters`
-are **built**; `connect` is **not yet built**. Edges still point up toward the
-leaves; no back-edges. `ontology` is a second vocabulary root alongside `types`:
+ADRs 0014–0018). All four are now **built** (the package side of the SSO wave is
+complete; `apps/demo-sso` is the remaining surface). Edges still point up toward
+the leaves; no back-edges. `ontology` is a second vocabulary root alongside `types`:
 
 ```
 ontology                     → (no internal deps)   ✅ BUILT  (vocabulary root; spec 225)
 identity-directory           → types, audit, ontology          ✅ BUILT  (read-model core; spec 223)
 identity-directory-adapters  → types, identity-directory, agent-naming, viem   ✅ BUILT  (ports' impls; spec 223)
-connect                      → types, connect-auth, identity-directory          (SSO broker; spec 224)
+connect                      → types, connect-auth, identity-directory          ✅ BUILT  (SSO broker; spec 224)
 ```
 
 Updated packages: `types` (+ `CanonicalAgentId` CAIP-10, `CredentialPrincipal`,

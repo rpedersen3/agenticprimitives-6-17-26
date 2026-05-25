@@ -140,7 +140,10 @@ consult.
   indexer-proposes / on-chain-confirms; spec 223) ✅ + `identity-directory-adapters`
   (NamingPort wraps agent-naming + eip155 lift; OnChainReadPort viem `exists` +
   app-wired `confirmsCredential`; in-memory IndexerPort) ✅. **Phase 2 complete.**
-- **Phase 3:** `connect` broker + asymmetric token/JWKS + entry flows + convergence.
+- **Phase 3:** `connect` broker — asymmetric AgentSession token + JWKS (alg-pinned,
+  no-owner; CN-4), convergence + issuance (assurance floor + non-EVM gate +
+  disambiguation binding; CN-2/5/6/8), code-exchange redirect security (CN-1/9),
+  step-up classification. ✅ **Phase 3 complete** (package side of the wave done).
 - **Phase 4:** `apps/demo-sso` (2 relying sites, one-enroll SSO, GitHub OIDC,
   step-up demo); HCS-11 alignment pass on spec 217.
 
