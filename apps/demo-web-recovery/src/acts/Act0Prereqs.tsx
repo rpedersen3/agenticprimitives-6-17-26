@@ -1,30 +1,31 @@
 import { loadSeats, claimSeat, type SeatClaim } from '../lib/seats';
 import { recoverySeats, type SeatId } from '../recovery-config';
-import { registerPasskeyForSeat, savePasskeyForSeat } from '../lib/passkey';
 import { config } from '../config';
 import { useState, useEffect } from 'react';
-import { keccak256, encodeAbiParameters, type Address } from 'viem';
+import { useAccount, useWalletClient } from 'wagmi';
+import { enrollCredential, directDeploy, seatBoundToEoa, type EnrollChoice } from '../lib/enroll';
+import { claimPsaName, claimPsaNameViaEoa } from '../lib/claim-psa-name';
+import { setCachedName } from '../lib/name-cache';
+import { EnrollmentChoice } from '../components/EnrollmentChoice';
+import { SmartAgentInfo } from '../components/SmartAgentInfo';
 
 /**
- * Act 0 — Prereqs.
+ * Act 0 — Prereqs. Alice + Bob (Sam's recovery trustees) each enroll a
+ * credential — a passkey OR a wallet (SIWE/EOA) — and get a canonical
+ * Smart Agent deployed (self-trustee bootstrap, mode=1). Their enrolled
+ * identity (PIA or EOA) co-signs Sam's credential recovery in Act 4.
  *
- * Two of the three seats (Alice + Bob) must be claimed before Sam can
- * onboard with them as trustees. This act lets the user claim Alice
- * and Bob locally (passkey enrolment + Person.PSA address derivation
- * via the factory's CREATE2 view; no on-chain deploy needed at this
- * stage — Alice's + Bob's PSAs only need to exist on chain when
- * they're asked to actually sign in Act 4, and even then the recovery
- * ceremony validates against Sam's account's custodian set, not
- * against deployed PSAs).
- *
- * For the demo we deploy Alice's + Bob's PSAs eagerly here so the
- * recovery story has real on-chain authorities — same shape as
- * demo-web-pro's seat-claim flow (mode=1, self-trustee bootstrap).
+ * Wallet path: connect the EOA for the seat you're claiming, enroll,
+ * then switch MetaMask accounts before claiming the other seat (Alice
+ * and Bob must bind different EOAs).
  */
 export function Act0Prereqs({ onComplete }: { onComplete: () => void }) {
   const [claimed, setClaimed] = useState(loadSeats());
   const [busy, setBusy] = useState<SeatId | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [choice, setChoice] = useState<EnrollChoice>('passkey');
+  const { address: walletAddress } = useAccount();
+  const { data: walletClient } = useWalletClient();
 
   useEffect(() => {
     const onUpdate = () => setClaimed(loadSeats());
@@ -32,68 +33,72 @@ export function Act0Prereqs({ onComplete }: { onComplete: () => void }) {
     return () => window.removeEventListener('seats:update', onUpdate);
   }, []);
 
-  const aliceClaimed = !!claimed['alice'];
-  const bobClaimed = !!claimed['bob'];
-  const ready = aliceClaimed && bobClaimed;
+  const ready = !!claimed['alice'] && !!claimed['bob'];
 
   const handleClaim = async (seatId: SeatId) => {
     setBusy(seatId);
     setError(null);
     try {
+      if (!config.factoryAddress || !config.rpcUrl || !config.chainId || !config.demoA2aUrl) {
+        setError('Deployment config missing — set VITE_FACTORY_ADDRESS / VITE_RPC_URL / VITE_CHAIN_ID / VITE_DEMO_A2A_URL.');
+        return;
+      }
       const seat = recoverySeats.find((s) => s.id === seatId)!;
-      const passkey = await registerPasskeyForSeat(seatId, seat.name);
-      // Persist the passkey credential locally so signing in Act 4 can
-      // find it. registerPasskeyForSeat only creates the WebAuthn
-      // credential; the local mirror has to be saved explicitly.
-      savePasskeyForSeat(seatId, passkey);
-      if (!config.factoryAddress || !config.rpcUrl || !config.chainId || !config.entryPoint || !config.demoA2aUrl) {
-        setError('Deployment config missing — set VITE_FACTORY_ADDRESS / VITE_RPC_URL / VITE_CHAIN_ID / VITE_ENTRY_POINT / VITE_DEMO_A2A_URL.');
-        return;
+      // Distinct-wallet guard: each seat needs its OWN EOA, else two
+      // seats deploy to the same CREATE2 address.
+      if (choice === 'siwe') {
+        if (!walletAddress) {
+          setError('Connect a wallet account for this seat first.');
+          return;
+        }
+        const clash = seatBoundToEoa(walletAddress as `0x${string}`, seatId);
+        if (clash) {
+          setError(
+            `This wallet (${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}) is already ${clash}'s. ` +
+              `Click "Use different account", switch MetaMask to a fresh account for ${seat.name}, then retry.`,
+          );
+          return;
+        }
       }
-      const pia = passkeyIdentity(passkey.pubKeyX, passkey.pubKeyY);
-
-      // Deploy the Person Smart Agent ON CHAIN now. Mode=1 with
-      // self-trustee bootstrap (mirrors demo-web-pro's pattern). Sam's
-      // recovery in Act 4 dispatches a userOp FROM Alice's or Bob's
-      // PSA — that PSA has to exist when the ERC-4337 EntryPoint
-      // validates the op (otherwise AA20 "account not deployed").
-      const { ensureCsrfToken, csrfHeaders } = await import('../lib/csrf');
-      await ensureCsrfToken();
-      const baseTrimmed = config.demoA2aUrl.replace(/\/$/, '');
-      const res = await fetch(`${baseTrimmed}/session/direct-deploy`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-        body: JSON.stringify({
-          mode: 1,
-          custodians: [],
-          trustees: [pia],
-          initialPasskeyCredentialIdDigest: passkey.credentialIdDigest,
-          initialPasskeyX: passkey.pubKeyX.toString(),
-          initialPasskeyY: passkey.pubKeyY.toString(),
-          timelockOverrides: [0, 0, 0, 0, 1, 0, 0],
-          salt: '0',
-        }),
+      const cred = await enrollCredential({
+        seatId,
+        name: seat.name,
+        choice,
+        eoa: walletAddress as `0x${string}` | undefined,
       });
-      const body = (await res.json()) as Record<string, unknown>;
-      if (!res.ok || body.ok !== true) {
-        setError(typeof body.error === 'string' ? body.error : `deploy HTTP ${res.status}`);
-        return;
-      }
-      const personAgent = body.deployedAddress as Address;
+      // Self-trustee bootstrap: the seat's own identity is its trustee.
+      const personAgent = await directDeploy({
+        credential: cred,
+        trustees: [cred.identity],
+        timelockOverrides: [0, 0, 0, 0, 1, 0, 0],
+      });
       const claim: SeatClaim = {
         seatId,
         personAgent,
-        authMethods: [{
-          kind: 'passkey',
-          credentialIdDigest: passkey.credentialIdDigest,
-          pubKeyX: passkey.pubKeyX,
-          pubKeyY: passkey.pubKeyY,
-          pia,
-        }],
+        authMethods: [cred.authMethod],
         claimedAt: new Date().toISOString(),
       };
       claimSeat(claim);
+
+      // Best-effort: claim <seatId>.demo.agent for this trustee's Smart
+      // Agent + set it primary. AWAITED for the EOA path because the
+      // batch must be signed by THIS seat's wallet account before the
+      // user switches MetaMask to the next seat. Failure is non-fatal —
+      // the seat stays enrolled; the card just shows the address.
+      try {
+        if (cred.passkey) {
+          const r = await claimPsaName({ baseLabel: seatId, personAgent, passkey: cred.passkey });
+          if (r.ok) setCachedName(personAgent, r.name);
+        } else if (walletClient && cred.authMethod.kind === 'siwe') {
+          const r = await claimPsaNameViaEoa({
+            baseLabel: seatId,
+            personAgent,
+            walletClient,
+            account: cred.identity,
+          });
+          if (r.ok) setCachedName(personAgent, r.name);
+        }
+      } catch { /* best-effort name claim */ }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -106,28 +111,44 @@ export function Act0Prereqs({ onComplete }: { onComplete: () => void }) {
       <h2>Act 0 · Recovery trustees</h2>
       <p className="act-intro">
         Before Sam can onboard, his recovery trustees — Alice + Bob — need their own
-        canonical Smart Agents. Each one enrolls a passkey credential on this device;
-        the credential is a control facet of that trustee's Smart Agent. We deploy
-        their Smart Agents now so they can co-sign Sam's credential recovery in Act 4.
+        canonical Smart Agents. Each enrolls a credential — a passkey OR a wallet —
+        which becomes a control facet of that trustee's Smart Agent. We deploy their
+        Smart Agents now so they can co-sign Sam's credential recovery in Act 4.
       </p>
+      <EnrollmentChoice choice={choice} onChoice={setChoice} idPrefix="trustee" />
+      {choice === 'siwe' && (
+        <p className="act-intro" style={{ fontSize: 13, opacity: 0.8 }}>
+          Connect Alice's account → enroll Alice; then <em>Use different account</em>,
+          switch to Bob's account → enroll Bob.
+        </p>
+      )}
       <div className="seat-grid">
         {recoverySeats
           .filter((s) => s.id !== 'sam')
           .map((s) => {
-            const isClaimed = !!claimed[s.id];
+            const claim = claimed[s.id];
+            const method = claim?.authMethods[0];
+            const credLabel = method
+              ? method.kind === 'passkey'
+                ? 'passkey'
+                : `wallet ${method.eoa.slice(0, 6)}…${method.eoa.slice(-4)}`
+              : '';
             return (
-              <div key={s.id} className={`seat-card${isClaimed ? ' claimed' : ''}`}>
+              <div key={s.id} className={`seat-card${claim ? ' claimed' : ''}`}>
                 <div className="seat-name">{s.name}</div>
                 <div className="seat-blurb">{s.blurb}</div>
-                {isClaimed ? (
-                  <div className="seat-status">✓ enrolled</div>
+                {claim ? (
+                  <div className="seat-status">
+                    <div>✓ enrolled</div>
+                    <SmartAgentInfo address={claim.personAgent} credLabel={credLabel} />
+                  </div>
                 ) : (
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => handleClaim(s.id)}
-                  >
-                    {busy === s.id ? 'Enrolling…' : `Enroll ${s.name}'s passkey`}
+                  <button type="button" disabled={busy !== null} onClick={() => handleClaim(s.id)}>
+                    {busy === s.id
+                      ? 'Enrolling…'
+                      : choice === 'siwe'
+                        ? `Enroll ${s.name}'s wallet`
+                        : `Enroll ${s.name}'s passkey`}
                   </button>
                 )}
               </div>
@@ -142,9 +163,4 @@ export function Act0Prereqs({ onComplete }: { onComplete: () => void }) {
       </div>
     </section>
   );
-}
-
-function passkeyIdentity(x: bigint, y: bigint): Address {
-  const h = keccak256(encodeAbiParameters([{ type: 'uint256' }, { type: 'uint256' }], [x, y]));
-  return ('0x' + h.slice(-40)) as Address;
 }

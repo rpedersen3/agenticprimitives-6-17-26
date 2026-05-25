@@ -22,7 +22,9 @@ import { config } from '../config';
 // is fine only for local anvil; in prod the env var is always set.
 const publicClient = createPublicClient({
   chain: baseSepolia,
-  transport: http(config.rpcUrl),
+  // JSON-RPC batching collapses same-tick parallel reads into one POST
+  // (same principle as demo-web-pro) — fewer upstream calls, no 429s.
+  transport: http(config.rpcUrl, { batch: true }),
 });
 
 export interface AgentAccountInitParams {

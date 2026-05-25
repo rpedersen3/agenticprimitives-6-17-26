@@ -8,6 +8,9 @@ import { Act5Verify } from './acts/Act5Verify';
 import { config } from './config';
 import { loadSeats } from './lib/seats';
 import { loadRecoveryState } from './lib/recovery-state';
+import { useNamingClaimListener, useAgentNamingClient } from './lib/use-agent-naming';
+import { getCachedName, setCachedName } from './lib/name-cache';
+import type { Address } from 'viem';
 
 type ActId = 'act0' | 'act1' | 'act2' | 'act3' | 'act4' | 'act5';
 
@@ -30,6 +33,34 @@ const STEPS: Step[] = [
 export function App() {
   const [activeAct, setActiveAct] = useState<ActId>(() => detectStartingAct());
   const [progress, setProgress] = useState<Set<ActId>>(() => detectProgress());
+
+  // Refresh cached NameDisplay reads the moment a claim propagates.
+  useNamingClaimListener();
+  const namingClient = useAgentNamingClient();
+
+  // Boot prime: for every enrolled seat's SA not already cached, do ONE
+  // `reverseResolveString` (no log walk) so names render without each
+  // NameDisplay firing its own read.
+  useEffect(() => {
+    if (!namingClient) return;
+    const addrs: Address[] = [];
+    for (const claim of Object.values(loadSeats())) {
+      if (claim?.personAgent && !getCachedName(claim.personAgent)) {
+        addrs.push(claim.personAgent);
+      }
+    }
+    let cancelled = false;
+    void (async () => {
+      for (const addr of addrs) {
+        if (cancelled) return;
+        try {
+          const name = await namingClient.reverseResolve(addr);
+          if (!cancelled && name) setCachedName(addr, name);
+        } catch { /* single miss doesn't block the others */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [namingClient]);
 
   useEffect(() => {
     const onUpdate = () => {
@@ -196,7 +227,7 @@ function detectStartingAct(): ActId {
   const recovery = loadRecoveryState();
   if (recovery.recoveredAt) return 'act5';
   if (recovery.applyTx) return 'act5';
-  if (recovery.replacementCredentialIdDigest) return 'act4';
+  if (recovery.replacementCredential) return 'act4';
   if (recovery.declaredLostAt) return 'act3';
   if (seats['sam']) return 'act2';
   if (seats['alice'] && seats['bob']) return 'act1';
@@ -227,7 +258,7 @@ function detectProgress(): Set<ActId> {
   if (seats['alice'] && seats['bob']) out.add('act0');
   if (seats['sam']) out.add('act1');
   if (recovery.declaredLostAt) out.add('act2');
-  if (recovery.replacementCredentialIdDigest) out.add('act3');
+  if (recovery.replacementCredential) out.add('act3');
   if (recovery.applyTx) out.add('act4');
   if (recovery.recoveredAt) out.add('act5');
   return out;

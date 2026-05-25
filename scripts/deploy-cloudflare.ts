@@ -180,6 +180,12 @@ const contractVars: Record<string, string> = {
 if (d.custodyPolicy)   contractVars.CUSTODY_POLICY    = d.custodyPolicy;
 if (d.quorumEnforcer)       contractVars.QUORUM_ENFORCER        = d.quorumEnforcer;
 if (d.approvedHashRegistry) contractVars.APPROVED_HASH_REGISTRY = d.approvedHashRegistry;
+// Naming service (spec 215). Both Workers resolve SA → `.agent` name via
+// a single reverseResolveString view call (no log walk / no fallback —
+// ADR-0012 / ADR-0013): demo-mcp labels read-tool responses; demo-a2a
+// exposes /name/reverse. Optional — endpoints degrade to no-name/503.
+if (d.agentNameRegistry)          contractVars.AGENT_NAME_REGISTRY           = d.agentNameRegistry;
+if (d.agentNameUniversalResolver) contractVars.AGENT_NAME_UNIVERSAL_RESOLVER = d.agentNameUniversalResolver;
 
 // 3. Deploy demo-mcp Worker (no external deps — deploy first so we can pass
 //    its URL into demo-a2a as MCP_URL)
@@ -277,7 +283,20 @@ console.log(`  → ${STATE_PATH}`);
 
 // 6. Build demo-web + ensure Pages project + bind DEMO_A2A_URL secret
 step(6, 'Building demo-web + provisioning Pages project…');
-run('pnpm --filter @agenticprimitives-demo/web build');
+// demo-web reads naming addresses + chainId at build time (Vite inlines
+// them). The browser routes reverse-resolve reads through the same-origin
+// `/a2a/rpc` Pages proxy, so no RPC key ships in the bundle.
+const webBuildEnv: Record<string, string> = {
+  ...process.env as Record<string, string>,
+  VITE_CHAIN_ID: String(d.chainId),
+};
+if (d.agentNameRegistry)          webBuildEnv.VITE_AGENT_NAME_REGISTRY           = d.agentNameRegistry;
+if (d.agentNameUniversalResolver) webBuildEnv.VITE_AGENT_NAME_UNIVERSAL_RESOLVER = d.agentNameUniversalResolver;
+execSync('pnpm --filter @agenticprimitives-demo/web build', {
+  cwd: REPO_ROOT,
+  stdio: 'inherit',
+  env: webBuildEnv,
+});
 
 // Ensure the Pages project exists. `wrangler pages project create` errors
 // loudly if it already exists; we treat that as success.

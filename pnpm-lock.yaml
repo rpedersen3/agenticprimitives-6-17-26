@@ -40,6 +40,9 @@ importers:
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../../packages/agent-account
+      '@agenticprimitives/agent-naming':
+        specifier: workspace:*
+        version: link:../../packages/agent-naming
       '@agenticprimitives/audit':
         specifier: workspace:*
         version: link:../../packages/audit
@@ -80,6 +83,9 @@ importers:
 
   apps/demo-mcp:
     dependencies:
+      '@agenticprimitives/agent-naming':
+        specifier: workspace:*
+        version: link:../../packages/agent-naming
       '@agenticprimitives/audit':
         specifier: workspace:*
         version: link:../../packages/audit
@@ -123,6 +129,9 @@ importers:
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../../packages/agent-account
+      '@agenticprimitives/agent-naming':
+        specifier: workspace:*
+        version: link:../../packages/agent-naming
       '@agenticprimitives/delegation':
         specifier: workspace:*
         version: link:../../packages/delegation
@@ -227,6 +236,9 @@ importers:
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../../packages/agent-account
+      '@agenticprimitives/agent-naming':
+        specifier: workspace:*
+        version: link:../../packages/agent-naming
       '@agenticprimitives/custody':
         specifier: workspace:*
         version: link:../../packages/custody

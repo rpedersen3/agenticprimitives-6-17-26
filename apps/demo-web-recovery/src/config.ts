@@ -30,14 +30,20 @@ export interface DeploymentConfig {
   valueEnforcer?: `0x${string}`;
   allowedTargetsEnforcer?: `0x${string}`;
   allowedMethodsEnforcer?: `0x${string}`;
+  // Naming service (spec 215 / 220). Same single-call `reverseResolveString`
+  // + cache-first display principles as demo-web-pro; no log-walk fallback
+  // (ADR-0013). `permissionlessSubregistry` lets the demo claim Sam a
+  // forced-unique `<label>.demo.agent` name on onboarding.
+  agentNameRegistry?: `0x${string}`;
+  agentNameResolver?: `0x${string}`;
+  agentNameUniversalResolver?: `0x${string}`;
+  permissionlessSubregistry?: `0x${string}`;
   /**
-   * Optional explicit RPC URL — when set, the front-end uses it for ALL
-   * chain reads instead of viem's default public node. Critical for
-   * staying in sync with the worker (demo-a2a) which submits via this
-   * same RPC: if the two ends use different nodes, read-after-write
-   * propagation lag silently returns stale state (e.g. `getScheduledChange`
-   * returns the all-zero default record for a just-scheduled change,
-   * which Acts 3/4 then mis-sign as eta=0).
+   * Browser RPC URL — used for ALL chain reads. Derived (see below) to
+   * prefer the demo-a2a Worker's `/rpc` passthrough so (a) the upstream
+   * Alchemy API key never ships in the browser bundle, and (b) reads hit
+   * the SAME node the worker submits through, avoiding the read-after-write
+   * lag that otherwise makes Acts 3/4 mis-sign `getScheduledChange` as eta=0.
    */
   rpcUrl?: string;
   demoA2aUrl?: string;
@@ -69,7 +75,22 @@ export const config: DeploymentConfig = {
   valueEnforcer:            parseAddr(import.meta.env.VITE_VALUE_ENFORCER),
   allowedTargetsEnforcer:   parseAddr(import.meta.env.VITE_ALLOWED_TARGETS_ENFORCER),
   allowedMethodsEnforcer:   parseAddr(import.meta.env.VITE_ALLOWED_METHODS_ENFORCER),
-  rpcUrl:               import.meta.env.VITE_RPC_URL || undefined,
+  agentNameRegistry:          parseAddr(import.meta.env.VITE_AGENT_NAME_REGISTRY),
+  agentNameResolver:          parseAddr(import.meta.env.VITE_AGENT_NAME_RESOLVER),
+  agentNameUniversalResolver: parseAddr(import.meta.env.VITE_AGENT_NAME_UNIVERSAL_RESOLVER),
+  permissionlessSubregistry:  parseAddr(import.meta.env.VITE_PERMISSIONLESS_SUBREGISTRY),
+  // Prefer an explicit browser override, then the worker /rpc passthrough,
+  // then a non-Alchemy generic URL, then the public node. Mirrors
+  // demo-web-pro so the Alchemy key never lands in the bundle.
+  rpcUrl: (() => {
+    const browserOverride = import.meta.env.VITE_BROWSER_RPC_URL as string | undefined;
+    if (browserOverride) return browserOverride;
+    const a2a = import.meta.env.VITE_DEMO_A2A_URL as string | undefined;
+    if (a2a) return `${a2a.replace(/\/$/, '')}/rpc`;
+    const generic = import.meta.env.VITE_RPC_URL as string | undefined;
+    if (generic && !/alchemy\.com/i.test(generic)) return generic;
+    return 'https://sepolia.base.org';
+  })(),
   demoA2aUrl:           import.meta.env.VITE_DEMO_A2A_URL || undefined,
   demoMcpUrl:           import.meta.env.VITE_DEMO_MCP_URL || undefined,
 };

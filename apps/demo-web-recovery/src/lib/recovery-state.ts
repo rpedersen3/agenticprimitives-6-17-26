@@ -1,27 +1,39 @@
 /**
- * Recovery-specific localStorage state — Sam's lost-passkey marker,
- * replacement passkey reference, the in-flight RecoverAccount changeId.
+ * Recovery-specific localStorage state — Sam's lost-credential marker,
+ * replacement-credential reference, the in-flight RecoverAccount changeId.
  *
- * Seat state (Alice/Bob/Sam credential enrolment) lives in seats.ts +
- * passkey.ts. This file owns just the recovery flow's bookkeeping.
+ * A "credential" is passkey OR EOA (SIWE) — the recovery demo works with
+ * either kind. Seat enrolment (Alice/Bob/Sam) lives in seats.ts +
+ * passkey.ts; this file owns just the recovery flow's bookkeeping.
  */
 
 import type { Address, Hex } from 'viem';
 
 const STORAGE_KEY = 'agenticprimitives:demo-web-recovery:flow-state';
 
+/** A control credential that can be lost + replaced. */
+export type RecoveryCredential =
+  | {
+      kind: 'passkey';
+      credentialIdDigest: Hex;
+      /** Passkey identity address (PIA). */
+      pia: Address;
+      pubKeyX: string; // bigint-as-decimal
+      pubKeyY: string;
+    }
+  | {
+      kind: 'eoa';
+      /** The EOA owner address. */
+      address: Address;
+    };
+
 export interface RecoveryFlowState {
-  /** keccak256(credentialId) of Sam's ORIGINAL passkey (the lost one). */
-  lostCredentialIdDigest?: Hex;
-  /** ISO timestamp Sam declared his original passkey lost. */
+  /** Sam's ORIGINAL credential (the lost one). */
+  lostCredential?: RecoveryCredential;
+  /** ISO timestamp Sam declared his original credential lost. */
   declaredLostAt?: string;
-  /** keccak256(credentialId) of Sam's REPLACEMENT passkey. */
-  replacementCredentialIdDigest?: Hex;
-  /** Replacement passkey's PIA — derived once at registration time. */
-  replacementPia?: Address;
-  /** Replacement passkey's P-256 pubkey. */
-  replacementPubKeyX?: string;        // bigint-as-decimal
-  replacementPubKeyY?: string;
+  /** Sam's REPLACEMENT credential. */
+  replacementCredential?: RecoveryCredential;
   /** Recovery schedule txHash (Act 4 schedule). */
   scheduleTx?: Hex;
   /** Recovery apply txHash (Act 4 apply). */
@@ -30,6 +42,18 @@ export interface RecoveryFlowState {
   recoveryChangeId?: string;          // bigint-as-decimal
   /** ISO timestamp the recovery applied (Sam regained access). */
   recoveredAt?: string;
+}
+
+/** Short label for a credential, for UI. */
+export function credentialLabel(cred: RecoveryCredential | undefined): string {
+  if (!cred) return '(none)';
+  if (cred.kind === 'eoa') return `wallet ${cred.address.slice(0, 6)}…${cred.address.slice(-4)}`;
+  return `passkey ${cred.pia.slice(0, 6)}…${cred.pia.slice(-4)}`;
+}
+
+/** The on-chain identity a credential resolves to (PIA or EOA). */
+export function credentialIdentity(cred: RecoveryCredential): Address {
+  return cred.kind === 'eoa' ? cred.address : cred.pia;
 }
 
 export function loadRecoveryState(): RecoveryFlowState {

@@ -13,6 +13,7 @@ import {
   authorizeAgentWithPasskey,
 } from './authorize-flow';
 import { readProfile } from './read-profile-flow';
+import { NameDisplay } from './NameDisplay';
 import { deploySmartAccount, deploySmartAccountWithPasskey } from './deploy-flow';
 import {
   registerPasskey,
@@ -392,7 +393,9 @@ export function App() {
         <h3>Step 1 — Sign in {isPasskey ? '(passkey via SIWE-1271/6492)' : '(EOA via SIWE)'}</h3>
         <p>
           {state.smartAccountAddress
-            ? <span className="ok">✓ Signed in. Smart account: <code>{state.smartAccountAddress}</code></span>
+            ? <span className="ok">✓ Signed in. Smart account:{' '}
+                <strong><NameDisplay address={state.smartAccountAddress as `0x${string}`} /></strong>{' '}
+                <code>{state.smartAccountAddress}</code></span>
             : <span className="muted">Not signed in.</span>}
         </p>
         <button

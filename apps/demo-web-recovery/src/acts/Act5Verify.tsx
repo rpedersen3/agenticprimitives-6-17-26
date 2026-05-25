@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { loadSeats } from '../lib/seats';
-import { loadRecoveryState, clearRecoveryState } from '../lib/recovery-state';
+import { loadRecoveryState, clearRecoveryState, credentialIdentity } from '../lib/recovery-state';
 import { readIsCustodian } from '../lib/chain-reads';
 import { releaseSeat } from '../lib/seats';
+import { NameDisplay } from '../components/NameDisplay';
 import type { Address } from 'viem';
 
 /**
@@ -19,10 +20,10 @@ export function Act5Verify() {
   const seats = loadSeats();
   const recovery = loadRecoveryState();
   const sam = seats['sam'];
-  const oldPia = sam?.authMethods.find((m) => m.kind === 'passkey')?.kind === 'passkey'
-    ? (sam.authMethods.find((m) => m.kind === 'passkey') as { kind: 'passkey'; pia: Address }).pia
-    : null;
-  const newPia = recovery.replacementPia ?? null;
+  // Old / new on-chain identities come from the recorded credentials
+  // (passkey PIA or EOA), so verification works for either kind.
+  const oldPia = recovery.lostCredential ? credentialIdentity(recovery.lostCredential) : null;
+  const newPia = recovery.replacementCredential ? credentialIdentity(recovery.replacementCredential) : null;
 
   const [newOk, setNewOk] = useState<boolean | null>(null);
   const [oldOk, setOldOk] = useState<boolean | null>(null);
@@ -83,7 +84,10 @@ export function Act5Verify() {
         longer recognized. Sam's canonical Smart Agent address is unchanged.
       </p>
       <ul className="trustee-list">
-        <li>Canonical Smart Agent: <code>{sam.personAgent}</code> (unchanged)</li>
+        <li>
+          Canonical Smart Agent: <strong><NameDisplay address={sam.personAgent} /></strong>{' '}
+          <code>{sam.personAgent}</code> (name + address both unchanged)
+        </li>
         <li>New credential PIA <code>{newPia}</code>: <strong>{verdictNew}</strong></li>
         <li>Old credential PIA <code>{oldPia}</code>: <strong>{verdictOld}</strong></li>
         <li>Recovery applied at: {recovery.recoveredAt ?? '(not yet)'}</li>
