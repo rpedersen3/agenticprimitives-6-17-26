@@ -2,7 +2,7 @@
 // → PII, all against the live broker + the deployed demo-a2a worker (via /a2a).
 import { buildMessage } from '@agenticprimitives/connect-auth/siwe';
 import { buildSubregistryRegisterCall, buildSetPrimaryNameCall } from '@agenticprimitives/agent-naming';
-import { buildExecuteCallData } from '@agenticprimitives/agent-account';
+import { buildExecuteCallData, buildExecuteBatchCallData } from '@agenticprimitives/agent-account';
 import {
   buildProposeEdgeCall,
   buildConfirmEdgeCall,
@@ -113,65 +113,80 @@ export async function bootstrapWithWallet(
 }
 
 /** Execute a call FROM a deployed agent: build userOp -> sign hash -> submit (via /a2a).
- *  Build ONCE, sign ONCE (a single passkey/wallet prompt, fired right after build so the
- *  user gesture is still fresh), then resubmit the SAME signed UserOp up to `submitAttempts`
- *  times to ride out post-deploy RPC lag (the bundler may not yet see a just-deployed
- *  account at simulation; a rejected op never enters the mempool, so resubmit is safe). The
- *  build is also retried a couple times PRE-signature (no credential involved) if it fails. */
+ *
+ *  The hard part is the nonce. A just-deployed SA consumed nonce 0 in its deploy op, so its
+ *  first post-deploy op needs nonce 1 — but the relayer's `getNonce` read can lag and return
+ *  0, producing `AA25 invalid account nonce` (the wrong nonce is baked into the signature, so
+ *  resubmitting the same op can't fix it). `minNonce` gates this: we poll the BUILD (no
+ *  signing — no credential prompt) until the relayer's view reaches the expected nonce, THEN
+ *  sign ONCE and submit. So we never sign a stale-nonce op, and the passkey/wallet is prompted
+ *  exactly once. If a submit still fails (residual simulation lag, or an unexpected AA25), we
+ *  rebuild+resign on the next loop with a fresh nonce. */
 async function executeCall(
   sender: Address,
   signHash: SignHash,
   callData: Hex,
-  submitAttempts = 1,
+  opts: { minNonce?: bigint; attempts?: number } = {},
 ): Promise<{ ok: true; txHash?: Hex } | { ok: false; error: string }> {
+  const { minNonce, attempts = 4 } = opts;
   await ensureCsrfToken();
+  let lastErr = 'execute failed';
 
-  // Build (retry pre-signature for account-visibility lag — no credential prompt here).
-  let built: { userOpHash: Hex; userOp: Record<string, unknown> } | undefined;
-  let buildErr = 'build-call failed';
-  for (let i = 0; i < 3 && !built; i++) {
-    if (i > 0) await new Promise((r) => setTimeout(r, 2000));
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 2500));
+
+    // Build (no signing yet → no credential prompt on this step).
     const buildRes = await fetch('/a2a/account/build-call-userop', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify({ sender, callData }),
     });
-    const b = (await buildRes.json()) as { ok?: boolean; userOpHash?: Hex; userOp?: Record<string, unknown>; error?: string };
-    if (buildRes.ok && b.ok && b.userOpHash && b.userOp) built = { userOpHash: b.userOpHash, userOp: b.userOp };
-    else buildErr = b.error ?? `build-call failed (HTTP ${buildRes.status})`;
-  }
-  if (!built) return { ok: false, error: buildErr };
+    const b = (await buildRes.json()) as {
+      ok?: boolean;
+      userOpHash?: Hex;
+      userOp?: (Record<string, unknown> & { nonce?: string });
+      error?: string;
+      detail?: string;
+    };
+    if (!buildRes.ok || !b.ok || !b.userOpHash || !b.userOp) {
+      lastErr = [b.error, b.detail].filter(Boolean).join(' — ') || `build-call failed (HTTP ${buildRes.status})`;
+      continue;
+    }
 
-  // Sign ONCE — fires the passkey/wallet prompt promptly, in the gesture chain.
-  const signature = await signHash(built.userOpHash);
+    // Nonce gate: don't sign until the relayer's nonce view reflects the deploy.
+    if (minNonce !== undefined && BigInt(b.userOp.nonce ?? '0') < minNonce) {
+      lastErr = `relayer nonce ${b.userOp.nonce} < ${minNonce} — deploy not yet propagated`;
+      continue; // rebuild next loop; still no prompt
+    }
 
-  // Submit (resubmit the same signed op to ride out simulation lag — no re-prompt).
-  let submitErr = 'submit-call failed';
-  for (let i = 0; i < submitAttempts; i++) {
-    if (i > 0) await new Promise((r) => setTimeout(r, 2500));
+    // Sign ONCE for this (correct-nonce) op, then submit.
+    const signature = await signHash(b.userOpHash);
     const submitRes = await fetch('/a2a/account/submit-call-userop', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', ...csrfHeaders() },
-      body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
+      body: JSON.stringify({ userOp: { ...b.userOp, signature } }),
     });
     const submitted = (await submitRes.json()) as { ok?: boolean; transactionHash?: Hex; error?: string; detail?: string };
     if (submitRes.ok && submitted.ok) return { ok: true, txHash: submitted.transactionHash };
-    submitErr =
+    lastErr =
       [submitted.error, submitted.detail].filter(Boolean).join(' — ') || `submit-call failed (HTTP ${submitRes.status})`;
   }
-  return { ok: false, error: submitErr };
+  return { ok: false, error: lastErr };
 }
 
 /** Claim a forced-unique `<base>[N].demo.agent` for the agent + set it as primary.
- *  Two gasless execute UserOps signed by the EOA custodian. Best-effort: a failed
- *  setPrimaryName still returns ok (the name is owned; reverse can be re-set later). */
+ *  register + setPrimaryName are BATCHED into one execute UserOp (one nonce, one signature):
+ *  they must land together, and the batch avoids an inter-userOp race where the second op
+ *  sees a stale view of the first's state. `minNonce` rides out the post-deploy nonce lag
+ *  (pass the nonce the SA must be at after its deploy, e.g. 1n right after a fresh deploy). */
 export async function claimName(
   agent: Address,
   signHash: SignHash,
   base: string,
   onStep?: (s: string) => void,
+  minNonce?: bigint,
 ): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
   onStep?.('Finding a free name…');
   const nameRes = await fetch(`/connect/name?base=${encodeURIComponent(base)}`);
@@ -186,12 +201,10 @@ export async function claimName(
     label: picked.label,
     newOwner: agent,
   });
-  const reg = await executeCall(agent, signHash, buildExecuteCallData(register), 4); // ride out post-deploy lag
-  if (!reg.ok) return { ok: false, error: `name register failed: ${reg.error}` };
-
-  onStep?.('Setting it as your primary name…');
   const setPrimary = buildSetPrimaryNameCall({ registry: CONTRACTS.agentNameRegistry, node: picked.node });
-  await executeCall(agent, signHash, buildExecuteCallData(setPrimary)); // best-effort
+  const batch = buildExecuteBatchCallData([register, setPrimary]);
+  const res = await executeCall(agent, signHash, batch, { minNonce, attempts: 10 });
+  if (!res.ok) return { ok: false, error: `name claim failed: ${res.error}` };
   return { ok: true, name: picked.name };
 }
 
@@ -369,13 +382,14 @@ export async function provisionA2aAgent(
 
   onStep?.('Linking it to operate on your behalf…');
   const propose = buildProposeEdgeCall({ relationships, subject: a2aAgent, object: personAgent, relationshipType });
-  const p = await executeCall(a2aAgent, signHash, buildExecuteCallData(propose)); // a2a = subject (proposer)
+  // a2a = subject (proposer); freshly deployed (nonce 0 consumed) → first op is nonce 1.
+  const p = await executeCall(a2aAgent, signHash, buildExecuteCallData(propose), { minNonce: 1n, attempts: 10 });
   if (!p.ok) return { ok: false, error: `propose edge failed: ${p.error}` };
 
   onStep?.('Confirming the link…');
   const edgeId = computeEdgeId(a2aAgent, personAgent, relationshipType);
   const confirm = buildConfirmEdgeCall({ relationships, edgeId });
-  await executeCall(personAgent, signHash, buildExecuteCallData(confirm)); // person = object (confirmer); best-effort
+  await executeCall(personAgent, signHash, buildExecuteCallData(confirm), { attempts: 4 }); // person = object (confirmer); best-effort
 
   return { ok: true, result: { a2aAgent, edgeId } };
 }
@@ -474,7 +488,8 @@ export async function signupWithName(
     const pk = await registerPasskey(`${base}.demo.agent`); // FRESH passkey for this workspace
     const dep = await bootstrapWithPasskey(pk, onStep); // deploy passkey-direct
     if (!dep.ok) return { ok: false, error: dep.error };
-    const claim = await claimName(dep.agent, passkeySignHash, base, onStep);
+    // Fresh deploy consumed nonce 0 → the claim op must be nonce ≥ 1 (gate out the lag).
+    const claim = await claimName(dep.agent, passkeySignHash, base, onStep, 1n);
     if (!claim.ok) return { ok: false, error: claim.error };
     onStep?.('Signing you in…');
     const login = await passkeyLogin(false);
@@ -487,6 +502,7 @@ export async function signupWithName(
   const first = await siweLogin(); // connects wallet + signs
   let agent: Address;
   let address: Address;
+  let minNonce: bigint | undefined; // set only on a fresh deploy (nonce 0 just consumed)
   if (first.status === 'issued') {
     agent = first.agent;
     address = first.address;
@@ -495,11 +511,12 @@ export async function signupWithName(
     const dep = await bootstrapWithWallet(address, onStep);
     if (!dep.ok) return { ok: false, error: dep.error };
     agent = dep.agent;
+    minNonce = 1n;
   } else {
     return { ok: false, error: first.reason ?? `sign-in ${first.status}` };
   }
   const signHash: SignHash = (h) => personalSign(address, h);
-  const claim = await claimName(agent, signHash, base, onStep);
+  const claim = await claimName(agent, signHash, base, onStep, minNonce);
   if (!claim.ok) return { ok: false, error: claim.error };
   onStep?.('Signing you in…');
   const login = await siweLogin();
