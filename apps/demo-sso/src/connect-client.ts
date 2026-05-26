@@ -362,6 +362,48 @@ export async function provisionA2aAgent(
   return { ok: true, result: { a2aAgent, edgeId } };
 }
 
+/** Step a Google (login-grade) session UP to custody-grade for the SAME bound agent.
+ *  The target agent is the googleToken's sub (server-enforced) — so a Google login can
+ *  only ever step up into its one bound workspace; the credential must be a custodian of it. */
+export async function stepUpToAgent(
+  via: 'wallet' | 'passkey',
+  googleToken: string,
+): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
+  if (via === 'wallet') {
+    const address = await connectWallet();
+    const nonce = await getNonce();
+    const message = buildMessage({
+      domain: window.location.host,
+      address,
+      uri: window.location.origin,
+      chainId: CHAIN_ID,
+      nonce,
+      statement: 'Confirm custody of your Agentic Connect workspace.',
+    });
+    const signature = await personalSign(address, message);
+    const r = await fetch('/connect/stepup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ googleToken, kind: 'siwe-eoa', aud: AUD, message, signature }),
+    });
+    const b = (await r.json()) as { status?: string; token?: string; error?: string };
+    if (r.ok && b.status === 'issued' && b.token) return { ok: true, token: b.token };
+    return { ok: false, error: b.error ?? `step-up failed (HTTP ${r.status})` };
+  }
+  const pk = loadPasskey();
+  if (!pk) return { ok: false, error: 'no passkey on this device' };
+  const { challenge } = (await (await fetch('/connect/passkey-challenge')).json()) as { challenge: Hex };
+  const signature = await signWithPasskey(challenge);
+  const r = await fetch('/connect/stepup', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ googleToken, kind: 'passkey', aud: AUD, credentialIdDigest: pk.credentialIdDigest, challenge, signature }),
+  });
+  const b = (await r.json()) as { status?: string; token?: string; error?: string };
+  if (r.ok && b.status === 'issued' && b.token) return { ok: true, token: b.token };
+  return { ok: false, error: b.error ?? `step-up failed (HTTP ${r.status})` };
+}
+
 export interface BasicProfile {
   agent: string;
   name: string | null;

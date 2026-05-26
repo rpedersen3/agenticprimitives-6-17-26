@@ -7,6 +7,7 @@ import {
   passkeyLogin,
   bootstrapWithPasskey,
   passkeySignHash,
+  stepUpToAgent,
   claimName,
   provisionA2aAgent,
   fetchProfile,
@@ -173,29 +174,22 @@ export function App() {
     else setStepUpMsg(r.reason);
   }
 
-  // Step up a login-grade session to custody-grade IN PLACE: sign in with the
-  // wallet/passkey (resolves to the SAME agent — the EOA's deterministic SA is the
-  // one Google was linked to), then re-fetch the sensitive PII. (UX W-4 / ADR-0017.)
+  // Step a Google (login-grade) session UP to custody-grade for the SAME bound agent
+  // (server enforces target = googleToken.sub). The credential must be a custodian of
+  // that agent — so a Google login flows into exactly ONE workspace (ADR-0017).
   async function stepUp(via: 'wallet' | 'passkey') {
+    if (!session) return;
     setStepUpMsg(`Confirming with your ${via === 'wallet' ? 'wallet' : 'device'}…`);
     try {
-      const out = via === 'wallet' ? await siweLogin() : await passkeyLogin();
-      if (out.status !== 'issued') {
-        setStepUpMsg(
-          out.status === 'bootstrap'
-            ? `That ${via} has no agent yet — connect it first to create one.`
-            : `Step-up ${out.status}${'reason' in out && out.reason ? `: ${out.reason}` : ''}.`,
-        );
+      const out = await stepUpToAgent(via, session.token);
+      if (!out.ok) {
+        setStepUpMsg(out.error);
         return;
       }
-      await openSession(out.token, via, false); // session is now custody-grade
-      const r = await fetchSensitive(out.token);
-      if (r.ok) {
-        setSensitive({ email: r.email, phone: r.phone });
-        setStepUpMsg(null);
-      } else {
-        setStepUpMsg(r.reason);
-      }
+      await openSession(out.token, via, false); // custody-grade for the SAME agent
+      setStepUpMsg(null);
+      const r = await fetchSensitive(out.token); // auto-reveal now that we're custody-grade
+      if (r.ok) setSensitive({ email: r.email, phone: r.phone });
     } catch (e) {
       setStepUpMsg(e instanceof Error ? e.message : 'step-up failed');
     }
@@ -312,8 +306,28 @@ export function App() {
         </div>
       )}
 
-      {/* ── Signed in: the agent card + PII ──────────────────────── */}
-      {session && (
+      {/* ── Signed in via Google (login-grade): MANDATORY step-up to the bound agent ── */}
+      {session && session.via === 'Google' && (
+        <div className="panel broker">
+          <h2>Confirm it's you to continue</h2>
+          <p className="muted">
+            Signed in with Google — this <strong>identifies your workspace</strong>, but a Google login is
+            login-grade. To use it you must confirm with your <strong>passkey or wallet</strong> (a
+            custody-grade credential of this same workspace).
+          </p>
+          <button onClick={() => stepUp('passkey')}>Continue with passkey</button>{' '}
+          <button onClick={() => stepUp('wallet')}>Continue with wallet</button>{' '}
+          <button onClick={signOut}>Disconnect</button>
+          {stepUpMsg && <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {stepUpMsg}</p>}
+          <p className="muted" style={{ marginTop: '0.5rem' }}>
+            If your passkey/wallet isn't part of this workspace yet, it'll say so — sign in with it directly,
+            then add the other credential.
+          </p>
+        </div>
+      )}
+
+      {/* ── Signed in with a custody credential: the full workspace ── */}
+      {session && session.via !== 'Google' && (
         <>
           <div className="panel broker">
             <h2>
@@ -342,51 +356,22 @@ export function App() {
               <p className="muted">Loading your profile…</p>
             )}
             <button onClick={signOut}>Sign out</button>
-            {session.via !== 'Google' && (
-              <p style={{ marginTop: '0.5rem' }}>
-                <button onClick={() => startGoogleSignIn(AUD, window.location.origin + '/', session.token)}>
-                  Link Google to this workspace
-                </button>{' '}
-                <span className="muted">— adds Google as a quick login (custody-authorized, P0-C).</span>
-              </p>
-            )}
+            <p style={{ marginTop: '0.5rem' }}>
+              <button onClick={() => startGoogleSignIn(AUD, window.location.origin + '/', session.token)}>
+                Link Google to this workspace
+              </button>{' '}
+              <span className="muted">— adds Google as a quick login (custody-authorized, P0-C).</span>
+            </p>
             <p className="muted" style={{ marginTop: '0.5rem' }}>
               Your workspace stays safe. Sign back in anytime with the same credential — it resolves to this
               same agent.
             </p>
           </div>
 
-          {/* Arrived via Google (login-grade) → proactively offer the custody step-up
-              as the immediate next step (not buried in the PII reveal). One click → wallet. */}
-          {session.via === 'Google' && (
-            <div className="panel broker">
-              <h2>One more step — unlock full access</h2>
-              <p className="muted">
-                You're signed in with Google (<strong>standard access</strong> — your basic profile). To view
-                sensitive details, provision an agent service, or take custody actions, confirm with your
-                wallet or passkey. It resolves to <strong>this same workspace</strong> (Google is linked to it).
-              </p>
-              <button onClick={() => stepUp('wallet')}>Continue with wallet</button>{' '}
-              <button onClick={() => stepUp('passkey')}>Continue with passkey</button>
-              {stepUpMsg && <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {stepUpMsg}</p>}
-            </div>
-          )}
-
           <div className="panel">
             <h2>Your contact details</h2>
             {sensitive ? (
               <pre>{JSON.stringify(sensitive, null, 2)}</pre>
-            ) : session.via === 'Google' ? (
-              <>
-                <p className="muted" style={{ filter: 'blur(4px)', userSelect: 'none' }}>
-                  ▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒ · +1 ▒▒▒ ▒▒▒ ▒▒▒▒
-                </p>
-                <p className="muted">
-                  Protected — confirm with your <strong>wallet or passkey above</strong> ("unlock full
-                  access") to reveal these. A Google (login-grade) session can't view sensitive details
-                  on its own (ADR-0017 / CN-2).
-                </p>
-              </>
             ) : (
               <>
                 <p className="muted" style={{ filter: 'blur(4px)', userSelect: 'none' }}>
