@@ -351,7 +351,7 @@ export function App() {
                 placeholder="e.g. alice"
                 style={{ marginRight: '0.25rem' }}
               />
-              <code>{(desiredName || 'agent')}.demo.agent</code>
+              <code>{desiredName ? `${desiredName}.demo.agent` : 'your-name.demo.agent'}</code>
             </p>
             {desiredName && signupAvail === 'checking' && <p className="muted">Checking availability…</p>}
             {desiredName && signupAvail === 'available' && (
