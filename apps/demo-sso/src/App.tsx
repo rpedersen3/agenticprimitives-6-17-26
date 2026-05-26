@@ -161,6 +161,13 @@ export function App() {
   async function onRevealSensitive() {
     if (!session) return;
     setStepUpMsg(null);
+    // Login-grade (Google): the canonical agent is custody-controlled by a wallet/passkey,
+    // so fire the wallet step-up IMMEDIATELY on this click (a gesture is required for the
+    // wallet to prompt — so we can't auto-fire on render, but this is one click → MetaMask).
+    if (session.via === 'Google') {
+      await stepUp('wallet');
+      return;
+    }
     const r = await fetchSensitive(session.token);
     if (r.ok) setSensitive({ email: r.email, phone: r.phone });
     else setStepUpMsg(r.reason);
@@ -358,19 +365,19 @@ export function App() {
                 <p className="muted" style={{ filter: 'blur(4px)', userSelect: 'none' }}>
                   ▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒ · +1 ▒▒▒ ▒▒▒ ▒▒▒▒
                 </p>
-                {session.via !== 'Google' ? (
-                  <button onClick={onRevealSensitive}>Confirm to view contact details</button>
-                ) : (
-                  <>
-                    <p className="muted" style={{ marginTop: '0.25rem' }}>
-                      You're signed in with Google (standard access). Confirm with a custody-grade credential
-                      to reveal these — it resolves to this same workspace:
-                    </p>
-                    <button onClick={() => stepUp('wallet')}>Confirm with wallet</button>{' '}
-                    <button onClick={() => stepUp('passkey')}>Confirm with passkey</button>
-                  </>
+                <button onClick={onRevealSensitive}>Confirm to view contact details</button>
+                {session.via === 'Google' && (
+                  <p className="muted" style={{ marginTop: '0.25rem' }}>
+                    You're signed in with Google (standard access) — confirming will prompt your{' '}
+                    <strong>wallet</strong> to sign (one approval) and unlock these for this same workspace.
+                  </p>
                 )}
                 {stepUpMsg && <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {stepUpMsg}</p>}
+                {session.via === 'Google' && stepUpMsg && (
+                  <p style={{ marginTop: '0.25rem' }}>
+                    <button onClick={() => stepUp('passkey')}>Use a passkey instead</button>
+                  </p>
+                )}
                 <p className="muted">
                   Sensitive details require a <strong>custody-grade</strong> session (wallet/passkey). A
                   Google (login-grade) session steps up in place (ADR-0017 / CN-2).
