@@ -39,6 +39,11 @@ export function App() {
   const [desiredName, setDesiredName] = useState('');
   const [connectName, setConnectName] = useState('');
   const [connectErr, setConnectErr] = useState<string | null>(null);
+  const [nameInfo, setNameInfo] = useState<{
+    status: 'idle' | 'checking' | 'none' | 'found';
+    hasEoa?: boolean;
+    hasPasskey?: boolean;
+  }>({ status: 'idle' });
   const [googleNotice, setGoogleNotice] = useState<string | null>(null);
   const [service, setService] = useState<{ step?: string; error?: string; a2aAgent?: string } | null>(null);
 
@@ -87,6 +92,27 @@ export function App() {
       }
     })();
   }, [openSession]);
+
+  // As the user types an agent name, check on-chain: does it exist, and which custody
+  // credentials does it have? → only offer passkey / wallet that actually exist on it.
+  useEffect(() => {
+    const name = connectName.trim();
+    if (!name) {
+      setNameInfo({ status: 'idle' });
+      return;
+    }
+    setNameInfo({ status: 'checking' });
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/connect/name-info?name=${encodeURIComponent(name)}`);
+        const b = (await r.json()) as { exists?: boolean; hasEoa?: boolean; hasPasskey?: boolean };
+        setNameInfo(b.exists ? { status: 'found', hasEoa: b.hasEoa, hasPasskey: b.hasPasskey } : { status: 'none' });
+      } catch {
+        setNameInfo({ status: 'idle' });
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [connectName]);
 
   async function onConnectWallet() {
     setError(null);
@@ -266,14 +292,33 @@ export function App() {
                 style={{ minWidth: '14rem' }}
               />
             </p>
-            <p>
-              <button disabled={busy || !connectName.trim()} onClick={() => onConnectName('passkey')}>
-                Connect with passkey
-              </button>{' '}
-              <button disabled={busy || !connectName.trim()} onClick={() => onConnectName('wallet')}>
-                Connect with wallet
-              </button>
-            </p>
+            {nameInfo.status === 'checking' && <p className="muted">Checking…</p>}
+            {nameInfo.status === 'none' && (
+              <p className="muted">No workspace with that name yet — new here? Sign up below. ↓</p>
+            )}
+            {nameInfo.status === 'found' && (
+              <p>
+                {nameInfo.hasPasskey && (
+                  <button disabled={busy} onClick={() => onConnectName('passkey')}>
+                    Continue with passkey
+                  </button>
+                )}{' '}
+                {nameInfo.hasEoa && (
+                  <button disabled={busy} onClick={() => onConnectName('wallet')}>
+                    Continue with wallet
+                  </button>
+                )}
+                {!nameInfo.hasPasskey && !nameInfo.hasEoa && (
+                  <span className="muted">This workspace has no custody credential on-chain yet.</span>
+                )}
+                {' '}
+                <span className="muted">
+                  ({[nameInfo.hasPasskey && 'passkey', nameInfo.hasEoa && 'wallet'].filter(Boolean).join(' + ') ||
+                    'none'}{' '}
+                  on this workspace)
+                </span>
+              </p>
+            )}
             {connectErr && <p className="err">⛔ {connectErr}</p>}
           </div>
 

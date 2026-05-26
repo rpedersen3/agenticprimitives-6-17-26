@@ -256,6 +256,30 @@ export class AgentAccountClient {
     }
   }
 
+  /** On-chain count of EOA custodians (0 if not deployed). Lets a caller tell whether
+   *  an account has wallet/EOA custody. */
+  async custodianCount(account: Address): Promise<bigint> {
+    if (!(await this.isDeployed(account))) return 0n;
+    try {
+      const acct = getContract({ address: account, abi: agentAccountAbi, client: this.publicClient });
+      return (await acct.read.custodianCount()) as bigint;
+    } catch {
+      return 0n;
+    }
+  }
+
+  /** On-chain count of registered passkeys (0 if not deployed). Lets a caller tell
+   *  whether an account has passkey custody. */
+  async passkeyCount(account: Address): Promise<bigint> {
+    if (!(await this.isDeployed(account))) return 0n;
+    try {
+      const acct = getContract({ address: account, abi: agentAccountAbi, client: this.publicClient });
+      return (await acct.read.passkeyCount()) as bigint;
+    } catch {
+      return 0n;
+    }
+  }
+
   async isDeployed(account: Address): Promise<boolean> {
     const code = await this.publicClient.getCode({ address: account });
     return code !== undefined && code !== '0x' && code.length > 2;
