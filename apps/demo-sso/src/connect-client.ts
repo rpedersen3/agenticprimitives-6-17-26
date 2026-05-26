@@ -463,6 +463,33 @@ export async function addPasskeyCredential(
   return { ok: true, credentialIdDigest: pk.credentialIdDigest };
 }
 
+/** Central-auth enrollment (spec 229 §5): add a RELYING SITE's PROVIDED local passkey
+ *  (PUBLIC key only) as a custodian of `name`'s agent, signed by THIS origin's primary
+ *  passkey. The site's private key never leaves the site's device — we only register its
+ *  (x, y). This is how a new origin gets its own per-site signer without reusing the
+ *  central credential. Fails closed: addPasskey only validates if the primary passkey is
+ *  already a custodian of the agent. */
+export async function enrollSitePasskey(
+  name: string,
+  enroll: { credentialIdDigest: Hex; x: bigint; y: bigint },
+  onStep?: (s: string) => void,
+): Promise<{ ok: true; agent: Address; name: string } | { ok: false; error: string }> {
+  onStep?.('Resolving your agent…');
+  const r = await fetch(`/connect/name-info?name=${encodeURIComponent(name)}`);
+  const info = (await r.json()) as { exists?: boolean; name?: string; agent?: Address };
+  if (!info.exists || !info.agent) return { ok: false, error: `no agent named ${name}` };
+  const inner = encodeFunctionData({
+    abi: ADD_PASSKEY_ABI,
+    functionName: 'addPasskey',
+    args: [enroll.credentialIdDigest, enroll.x, enroll.y],
+  });
+  const callData = buildExecuteCallData({ to: info.agent, value: 0n, data: inner });
+  onStep?.('Approve with your passkey…');
+  const res = await executeCall(info.agent, passkeySignHash, callData, { attempts: 6 });
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, agent: info.agent, name: info.name ?? name };
+}
+
 /** Step a Google (login-grade) session UP to custody-grade for the SAME bound agent.
  *  The target agent is the googleToken's sub (server-enforced) — so a Google login can
  *  only ever step up into its one bound workspace; the credential must be a custodian of it. */

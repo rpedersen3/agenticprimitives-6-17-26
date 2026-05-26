@@ -25,6 +25,11 @@ export type SignHash = (hash: Hex) => Promise<Hex>;
 export const AUD = 'demo-org';
 const CHAIN_ID = 84532;
 
+/** The person's central auth (spec 229). For now a single configured origin (demo-sso);
+ *  later, the per-person `<handle>.agentictrust.io` subdomain resolved from the name. */
+export const CENTRAL_AUTH_ORIGIN =
+  (import.meta.env?.VITE_CENTRAL_AUTH_ORIGIN as string | undefined) ?? 'https://agenticprimitives-demo-sso.pages.dev';
+
 export type SiweOutcome =
   | { status: 'issued'; token: string; address: Address; agent: Address }
   | { status: 'bootstrap'; address: Address }
@@ -405,6 +410,26 @@ export async function createOrg(
   await executeCall(orgAgent, signHash, buildExecuteCallData(confirm), { minNonce: 2n, attempts: 6 });
 
   return { ok: true, result: { orgAgent, orgName: claim.name, edgeId } };
+}
+
+/** First-visit enrollment (spec 229 §3): register a LOCAL passkey for THIS origin, then
+ *  return the central-auth URL that will add its PUBLIC key to `name`'s agent as a custodian
+ *  (signed there by the person's primary passkey). The local private key never leaves this
+ *  device's authenticator. After it returns, this origin's passkey is a real on-chain
+ *  custodian, so connectWithName('passkey') works directly. */
+export async function startSiteEnrollment(name: string): Promise<{ url: string; state: string }> {
+  const pk = await registerPasskey(name); // local passkey on THIS origin, stored
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const state = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  const u = new URL('/', CENTRAL_AUTH_ORIGIN);
+  u.searchParams.set('aud', AUD);
+  u.searchParams.set('redirect_uri', window.location.origin + '/');
+  u.searchParams.set('state', state);
+  u.searchParams.set('name', name);
+  u.searchParams.set('enroll_digest', pk.credentialIdDigest);
+  u.searchParams.set('enroll_x', pk.pubKeyX.toString());
+  u.searchParams.set('enroll_y', pk.pubKeyY.toString());
+  return { url: u.toString(), state };
 }
 
 /** Connect to the agent that OWNS `name`, proving control with a custody credential.

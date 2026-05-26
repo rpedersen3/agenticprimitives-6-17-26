@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
-import { connectWithName, signupWithName, createOrg } from './connect-client';
+import { connectWithName, signupWithName, createOrg, startSiteEnrollment } from './connect-client';
 import { hasWallet } from './lib/wallet';
+import { loadPasskey } from './lib/passkey';
+
+const ENROLL_KEY = 'agenticprimitives:demo-org:enroll';
 
 const SESSION_KEY = 'agenticprimitives:demo-org:session';
 const orgsKey = (addr: string) => `agenticprimitives:demo-org:orgs:${addr.toLowerCase()}`;
@@ -119,6 +122,59 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Central-auth enrollment return (spec 229): ?enrolled=1 → our local passkey is now an
+  // on-chain custodian; sign in with it directly (retry for post-add RPC lag). ?enroll_error
+  // → surface it. Runs once on mount.
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const enrolled = u.searchParams.get('enrolled');
+    const enrollErr = u.searchParams.get('enroll_error');
+    const retName = u.searchParams.get('name');
+    const retState = u.searchParams.get('state');
+    if (!enrolled && !enrollErr) return;
+    for (const k of ['enrolled', 'enroll_error', 'name', 'state']) u.searchParams.delete(k);
+    window.history.replaceState({}, '', u.toString());
+
+    let stored: { state?: string; name?: string } = {};
+    try {
+      stored = JSON.parse(sessionStorage.getItem(ENROLL_KEY) ?? '{}') as { state?: string; name?: string };
+    } catch {
+      /* ignore */
+    }
+    sessionStorage.removeItem(ENROLL_KEY);
+
+    if (enrollErr) {
+      setError(`Enrollment was not completed (${enrollErr}).`);
+      return;
+    }
+    if (stored.state && retState && stored.state !== retState) {
+      setError('Enrollment state mismatch — please try again.');
+      return;
+    }
+    const name = retName ?? stored.name ?? '';
+    if (!name) {
+      setError('Enrollment returned without a name.');
+      return;
+    }
+    void (async () => {
+      setFlow({ title: 'Finishing setup…', phase: 'running', steps: ['Signing in with your new passkey…'] });
+      let lastErr = '';
+      for (let i = 0; i < 5; i++) {
+        if (i > 0) await new Promise((r) => setTimeout(r, 2500));
+        const out = await connectWithName(name, 'passkey');
+        if (out.ok) {
+          setFlow(null);
+          openSession(out.token, 'passkey', out.name ?? name, true);
+          return;
+        }
+        lastErr = out.error;
+      }
+      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: lastErr || 'sign-in after enrollment failed' });
+    })();
+    // run once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function signOut() {
     setSession(null);
     setMenuOpen(false);
@@ -214,6 +270,21 @@ export function App() {
       setConnectErr(e instanceof Error ? e.message : 'connect failed');
     } finally {
       setBusy(false);
+    }
+  }
+
+  // First-visit: register a local passkey for this origin + redirect to the central auth,
+  // where the person's primary passkey approves adding it as a custodian (spec 229 §3).
+  async function onAddSite(name: string) {
+    setConnectErr(null);
+    setBusy(true);
+    try {
+      const { url, state } = await startSiteEnrollment(name);
+      sessionStorage.setItem(ENROLL_KEY, JSON.stringify({ state, name }));
+      window.location.href = url; // → central auth; returns with ?enrolled=1
+    } catch (e) {
+      setBusy(false);
+      setConnectErr(e instanceof Error ? e.message : 'could not start enrollment');
     }
   }
 
@@ -334,7 +405,7 @@ export function App() {
                   ✓ Found <code>{nameInfo.name}</code>
                 </p>
                 <p>
-                  {nameInfo.hasPasskey && (
+                  {nameInfo.hasPasskey && loadPasskey() && (
                     <button disabled={busy} onClick={() => onConnectName('passkey')}>
                       Continue with passkey
                     </button>
@@ -343,13 +414,17 @@ export function App() {
                     <button disabled={busy} onClick={() => onConnectName('wallet')}>
                       Continue with wallet
                     </button>
+                  )}{' '}
+                  {nameInfo.hasPasskey && (
+                    <button disabled={busy} onClick={() => onAddSite(nameInfo.name!)}>
+                      Set up this site (passkey) →
+                    </button>
                   )}
                 </p>
-                {nameInfo.hasPasskey && !nameInfo.hasEoa && (
+                {nameInfo.hasPasskey && !loadPasskey() && (
                   <p className="muted">
-                    This agent is secured by a passkey. If it was created on another site, your passkey won’t be on
-                    this one yet — connecting here will need a per-site key (coming via central auth). For now, use a
-                    wallet-secured agent or sign up below.
+                    First time using <code>{nameInfo.name}</code> on this site? <strong>Set up this site</strong> —
+                    you’ll approve once with your passkey at your home Connect, then use Windows Hello / Face ID here.
                   </p>
                 )}
               </>

@@ -8,10 +8,12 @@ import {
   provisionA2aAgent,
   addWalletCredential,
   addPasskeyCredential,
+  enrollSitePasskey,
   fetchProfile,
   fetchSensitive,
   type BasicProfile,
 } from './connect-client';
+import type { Hex } from '@agenticprimitives/types';
 import { hasWallet } from './lib/wallet';
 import { startGoogleSignIn, exchangeCode } from './server-client';
 
@@ -24,12 +26,51 @@ interface Session {
 const SESSION_KEY = 'agenticprimitives:demo-sso:session';
 
 /** True iff we should try to restore a persisted session on load — i.e. one is stored
- *  AND we're not mid Google-redirect (which mints its own session from ?code). */
+ *  AND we're not mid Google-redirect (?code) or central-auth enrollment (?enroll_digest). */
 function shouldRestore(): boolean {
   try {
     const u = new URL(window.location.href);
-    if (u.searchParams.has('code') || u.searchParams.has('connect_status')) return false;
+    if (u.searchParams.has('code') || u.searchParams.has('connect_status') || u.searchParams.has('enroll_digest')) {
+      return false;
+    }
     return !!localStorage.getItem(SESSION_KEY);
+  } catch {
+    return false;
+  }
+}
+
+// ── Central-auth enrollment (spec 229 §5) ───────────────────────────
+// A relying site redirects here to add ITS local passkey (public key only) as a
+// custodian of the named agent, approved by the person's primary passkey on THIS origin.
+interface EnrollReq {
+  aud: string;
+  redirectUri: string;
+  state: string;
+  name: string;
+  digest: Hex;
+  x: string;
+  y: string;
+}
+/** Relying sites permitted to initiate enrollment (demo gate — spec 229 §8). */
+const ALLOWED_RELYING_ORIGINS = ['https://agenticprimitives-demo-org.pages.dev'];
+function parseEnrollReq(): EnrollReq | null {
+  try {
+    const p = new URL(window.location.href).searchParams;
+    const digest = p.get('enroll_digest');
+    const x = p.get('enroll_x');
+    const y = p.get('enroll_y');
+    const redirectUri = p.get('redirect_uri');
+    const aud = p.get('aud');
+    const name = p.get('name');
+    if (!digest || !x || !y || !redirectUri || !aud || !name) return null;
+    return { aud, redirectUri, state: p.get('state') ?? '', name, digest: digest as Hex, x, y };
+  } catch {
+    return null;
+  }
+}
+function relyingAllowed(redirectUri: string): boolean {
+  try {
+    return ALLOWED_RELYING_ORIGINS.includes(new URL(redirectUri).origin);
   } catch {
     return false;
   }
@@ -62,6 +103,11 @@ export function App() {
   const [googleNotice, setGoogleNotice] = useState<string | null>(null);
   const [service, setService] = useState<{ step?: string; error?: string; a2aAgent?: string } | null>(null);
   const [addCred, setAddCred] = useState<{ step?: string; error?: string; done?: string } | null>(null);
+  // Central-auth enrollment request (when a relying site redirects here).
+  const [enrollReq] = useState<EnrollReq | null>(parseEnrollReq);
+  const [enrollFlow, setEnrollFlow] = useState<{ phase: 'idle' | 'running' | 'error'; msg?: string; error?: string }>({
+    phase: 'idle',
+  });
 
   const openSession = useCallback(async (token: string, via: string, fresh: boolean) => {
     setSession({ token, via, fresh });
@@ -326,6 +372,83 @@ export function App() {
     setSignupAvail('idle');
     setNameInfo({ status: 'idle' });
     setConnectErr(null);
+  }
+
+  // Approve adding the relying site's local passkey to the named agent, signed by the
+  // primary passkey on THIS origin, then redirect back to the relying site (spec 229 §5).
+  async function approveEnroll() {
+    if (!enrollReq) return;
+    setEnrollFlow({ phase: 'running', msg: 'Starting…' });
+    try {
+      const out = await enrollSitePasskey(
+        enrollReq.name,
+        { credentialIdDigest: enrollReq.digest, x: BigInt(enrollReq.x), y: BigInt(enrollReq.y) },
+        (s) => setEnrollFlow({ phase: 'running', msg: s }),
+      );
+      if (!out.ok) {
+        setEnrollFlow({ phase: 'error', error: out.error });
+        return;
+      }
+      const url = new URL(enrollReq.redirectUri);
+      url.searchParams.set('enrolled', '1');
+      url.searchParams.set('state', enrollReq.state);
+      url.searchParams.set('name', out.name);
+      window.location.href = url.toString();
+    } catch (e) {
+      setEnrollFlow({ phase: 'error', error: e instanceof Error ? e.message : 'enrollment failed' });
+    }
+  }
+  function denyEnroll() {
+    if (!enrollReq) return;
+    const url = new URL(enrollReq.redirectUri);
+    url.searchParams.set('enroll_error', 'denied');
+    url.searchParams.set('state', enrollReq.state);
+    window.location.href = url.toString();
+  }
+
+  // ── Central-auth enrollment consent (renders INSTEAD of the normal app) ──
+  if (enrollReq) {
+    const host = (() => {
+      try {
+        return new URL(enrollReq.redirectUri).host;
+      } catch {
+        return enrollReq.aud;
+      }
+    })();
+    const allowed = relyingAllowed(enrollReq.redirectUri);
+    return (
+      <div>
+        <h1>Agentic Connect</h1>
+        <div className="panel broker">
+          <h2>Add a sign-in key?</h2>
+          {!allowed ? (
+            <>
+              <p className="err">⛔ <strong>{host}</strong> is not an approved site. Enrollment refused.</p>
+              <p className="muted">Only start this from a site you trust.</p>
+            </>
+          ) : (
+            <>
+              <p>
+                <strong>{host}</strong> wants to add a new passkey to <code>{enrollReq.name}</code>.
+              </p>
+              <p className="muted">
+                Approving registers a <em>{host}</em>-local passkey as a custody credential of{' '}
+                {enrollReq.name} — it lets {host} act as you on this agent. Approve with your{' '}
+                <strong>primary passkey</strong> only if you started this on {host}.
+              </p>
+              {enrollFlow.phase === 'running' && <p className="ok">⏳ {enrollFlow.msg}</p>}
+              {enrollFlow.phase === 'error' && <p className="err">⛔ {enrollFlow.error}</p>}
+              {enrollFlow.phase !== 'running' && (
+                <p>
+                  <button onClick={approveEnroll}>Approve with passkey</button>{' '}
+                  <button onClick={denyEnroll}>Cancel</button>
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
