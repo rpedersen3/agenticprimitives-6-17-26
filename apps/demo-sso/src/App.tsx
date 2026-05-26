@@ -6,6 +6,8 @@ import {
   stepUpToAgent,
   connectWithName,
   provisionA2aAgent,
+  addWalletCredential,
+  addPasskeyCredential,
   fetchProfile,
   fetchSensitive,
   type BasicProfile,
@@ -42,6 +44,7 @@ export function App() {
   }>({ status: 'idle' });
   const [googleNotice, setGoogleNotice] = useState<string | null>(null);
   const [service, setService] = useState<{ step?: string; error?: string; a2aAgent?: string } | null>(null);
+  const [addCred, setAddCred] = useState<{ step?: string; error?: string; done?: string } | null>(null);
 
   const openSession = useCallback(async (token: string, via: string, fresh: boolean) => {
     setSession({ token, via, fresh });
@@ -230,12 +233,34 @@ export function App() {
     setService(res.ok ? { a2aAgent: res.result.a2aAgent } : { error: res.error });
   }
 
+  // Add the COMPLEMENTARY custody credential to this agent: wallet→add passkey,
+  // passkey→add wallet. The existing credential signs the on-chain addCustodian/
+  // addPasskey; the SA address is unchanged (ADR-0011).
+  async function onAddCredential() {
+    if (!session || !profile || session.via === 'Google') return;
+    const personAddr = profile.agent.split(':').pop() as Address;
+    setAddCred({ step: 'Starting…' });
+    try {
+      const onStep = (s: string) => setAddCred({ step: s });
+      if (session.via === 'passkey') {
+        const r = await addWalletCredential(personAddr, onStep);
+        setAddCred(r.ok ? { done: `Wallet ${r.added.slice(0, 6)}…${r.added.slice(-4)} added` } : { error: r.error });
+      } else {
+        const r = await addPasskeyCredential(personAddr, onStep);
+        setAddCred(r.ok ? { done: 'Passkey added' } : { error: r.error });
+      }
+    } catch (e) {
+      setAddCred({ error: e instanceof Error ? e.message : 'add credential failed' });
+    }
+  }
+
   function signOut() {
     setSession(null);
     setProfile(null);
     setSensitive(null);
     setStepUpMsg(null);
     setService(null);
+    setAddCred(null);
     setError(null);
     // Reset the connect/signup screen so a just-used name doesn't linger as stale.
     setDesiredName('');
@@ -460,6 +485,36 @@ export function App() {
                   <button onClick={onProvisionService}>Provision an agent service</button>
                   {service?.error && (
                     <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {service.error}</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {session.via !== 'Google' && (
+            <div className="panel">
+              <h2>Add a sign-in method</h2>
+              {addCred?.done ? (
+                <p className="ok">
+                  ✓ {addCred.done}. You can now sign in to{' '}
+                  <code>{profile?.name ?? 'this workspace'}</code> with{' '}
+                  {session.via === 'passkey' ? 'that wallet' : 'this passkey'} too — same agent, same
+                  contact details.
+                </p>
+              ) : addCred?.step ? (
+                <p className="ok">⏳ {addCred.step}</p>
+              ) : (
+                <>
+                  <p className="muted">
+                    This workspace is secured by your <strong>{session.via}</strong>. Add the other so you
+                    can sign in either way. Your agent address never changes — the new credential is added
+                    as a second on-chain custodian, signed by your current one.
+                  </p>
+                  <button onClick={onAddCredential}>
+                    {session.via === 'passkey' ? 'Add a wallet (SIWE)' : 'Add a passkey'}
+                  </button>
+                  {addCred?.error && (
+                    <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {addCred.error}</p>
                   )}
                 </>
               )}

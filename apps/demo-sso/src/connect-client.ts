@@ -11,6 +11,7 @@ import {
   type RelationshipType,
 } from '@agenticprimitives/agent-relationships';
 import type { Address, Hex } from '@agenticprimitives/types';
+import { encodeFunctionData } from 'viem';
 import { connectWallet, personalSign } from './lib/wallet';
 import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from './lib/passkey';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
@@ -392,6 +393,74 @@ export async function provisionA2aAgent(
   await executeCall(personAgent, signHash, buildExecuteCallData(confirm), { attempts: 4 }); // person = object (confirmer); best-effort
 
   return { ok: true, result: { a2aAgent, edgeId } };
+}
+
+// ── Add a second custody credential to an existing agent (the unification) ──
+//
+// The canonical SA address never changes; credentials are facets that can be added.
+// `addCustodian` / `addPasskey` are `onlySelf` on AgentAccount, so the EXISTING
+// credential signs an `execute(self, addX(...))` UserOp. After this the agent is
+// reachable by NAME via either credential (connectWithName verifies isCustodian),
+// and name-info reports both. (ADR-0011: credentials rotate, identity persists.)
+
+const ADD_CUSTODIAN_ABI = [
+  { type: 'function', name: 'addCustodian', stateMutability: 'nonpayable', inputs: [{ name: 'owner', type: 'address' }], outputs: [] },
+] as const;
+const ADD_PASSKEY_ABI = [
+  {
+    type: 'function',
+    name: 'addPasskey',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'credentialIdDigest', type: 'bytes32' },
+      { name: 'x', type: 'uint256' },
+      { name: 'y', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+] as const;
+
+/** Add a WALLET (EOA) custodian to an agent currently controlled by a PASSKEY.
+ *  Connects the wallet to add + proves control of it (personal_sign), then the
+ *  EXISTING passkey signs `execute(self, addCustodian(newEoa))`. */
+export async function addWalletCredential(
+  personAgent: Address,
+  onStep?: (s: string) => void,
+): Promise<{ ok: true; added: Address } | { ok: false; error: string }> {
+  onStep?.('Connecting the wallet to add…');
+  const addr = await connectWallet();
+  onStep?.('Confirm with the wallet you’re adding…');
+  await personalSign(addr, `Add this wallet as a custodian of ${personAgent} on Agentic Connect.`);
+
+  const inner = encodeFunctionData({ abi: ADD_CUSTODIAN_ABI, functionName: 'addCustodian', args: [addr] });
+  const callData = buildExecuteCallData({ to: personAgent, value: 0n, data: inner });
+  onStep?.(`Adding ${addr.slice(0, 6)}…${addr.slice(-4)} — confirm with your passkey…`);
+  const res = await executeCall(personAgent, passkeySignHash, callData, { attempts: 5 });
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, added: addr };
+}
+
+/** Add a PASSKEY custodian to an agent currently controlled by a WALLET.
+ *  Registers a fresh passkey on this device, then the EXISTING wallet signs
+ *  `execute(self, addPasskey(digest, x, y))`. */
+export async function addPasskeyCredential(
+  personAgent: Address,
+  onStep?: (s: string) => void,
+): Promise<{ ok: true; credentialIdDigest: Hex } | { ok: false; error: string }> {
+  onStep?.('Creating the passkey to add…');
+  const pk = await registerPasskey(`${personAgent.slice(0, 8)}… passkey`); // fresh passkey, stored on this device
+
+  const inner = encodeFunctionData({
+    abi: ADD_PASSKEY_ABI,
+    functionName: 'addPasskey',
+    args: [pk.credentialIdDigest, pk.pubKeyX, pk.pubKeyY],
+  });
+  const callData = buildExecuteCallData({ to: personAgent, value: 0n, data: inner });
+  onStep?.('Adding the passkey — confirm with your wallet…');
+  const addr = await connectWallet(); // the EXISTING wallet custodian signs the add
+  const res = await executeCall(personAgent, (h) => personalSign(addr, h), callData, { attempts: 5 });
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, credentialIdDigest: pk.credentialIdDigest };
 }
 
 /** Step a Google (login-grade) session UP to custody-grade for the SAME bound agent.
