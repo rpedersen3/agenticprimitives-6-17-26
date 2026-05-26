@@ -113,52 +113,54 @@ export async function bootstrapWithWallet(
 }
 
 /** Execute a call FROM a deployed agent: build userOp -> sign hash -> submit (via /a2a).
- *  `attempts` retries the build+submit cycle to ride out post-deploy RPC lag (the bundler
- *  may not yet see a just-deployed account at simulation). The signature is reused while
- *  the userOpHash is unchanged across attempts, so a passkey is prompted only once. */
+ *  Build ONCE, sign ONCE (a single passkey/wallet prompt, fired right after build so the
+ *  user gesture is still fresh), then resubmit the SAME signed UserOp up to `submitAttempts`
+ *  times to ride out post-deploy RPC lag (the bundler may not yet see a just-deployed
+ *  account at simulation; a rejected op never enters the mempool, so resubmit is safe). The
+ *  build is also retried a couple times PRE-signature (no credential involved) if it fails. */
 async function executeCall(
   sender: Address,
   signHash: SignHash,
   callData: Hex,
-  attempts = 1,
+  submitAttempts = 1,
 ): Promise<{ ok: true; txHash?: Hex } | { ok: false; error: string }> {
   await ensureCsrfToken();
-  let lastErr = 'execute failed';
-  let cachedHash: Hex | undefined;
-  let cachedSig: Hex | undefined;
-  for (let i = 0; i < attempts; i++) {
-    if (i > 0) await new Promise((r) => setTimeout(r, 2500));
+
+  // Build (retry pre-signature for account-visibility lag — no credential prompt here).
+  let built: { userOpHash: Hex; userOp: Record<string, unknown> } | undefined;
+  let buildErr = 'build-call failed';
+  for (let i = 0; i < 3 && !built; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 2000));
     const buildRes = await fetch('/a2a/account/build-call-userop', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify({ sender, callData }),
     });
-    const built = (await buildRes.json()) as {
-      ok?: boolean;
-      userOpHash?: Hex;
-      userOp?: Record<string, unknown>;
-      error?: string;
-    };
-    if (!buildRes.ok || !built.ok || !built.userOpHash || !built.userOp) {
-      lastErr = built.error ?? `build-call failed (HTTP ${buildRes.status})`;
-      continue;
-    }
-    if (built.userOpHash !== cachedHash) {
-      cachedSig = await signHash(built.userOpHash); // hash changed (or first try) → (re)sign
-      cachedHash = built.userOpHash;
-    }
+    const b = (await buildRes.json()) as { ok?: boolean; userOpHash?: Hex; userOp?: Record<string, unknown>; error?: string };
+    if (buildRes.ok && b.ok && b.userOpHash && b.userOp) built = { userOpHash: b.userOpHash, userOp: b.userOp };
+    else buildErr = b.error ?? `build-call failed (HTTP ${buildRes.status})`;
+  }
+  if (!built) return { ok: false, error: buildErr };
+
+  // Sign ONCE — fires the passkey/wallet prompt promptly, in the gesture chain.
+  const signature = await signHash(built.userOpHash);
+
+  // Submit (resubmit the same signed op to ride out simulation lag — no re-prompt).
+  let submitErr = 'submit-call failed';
+  for (let i = 0; i < submitAttempts; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 2500));
     const submitRes = await fetch('/a2a/account/submit-call-userop', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', ...csrfHeaders() },
-      body: JSON.stringify({ userOp: { ...built.userOp, signature: cachedSig } }),
+      body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
     });
     const submitted = (await submitRes.json()) as { ok?: boolean; transactionHash?: Hex; error?: string };
     if (submitRes.ok && submitted.ok) return { ok: true, txHash: submitted.transactionHash };
-    lastErr = submitted.error ?? `submit-call failed (HTTP ${submitRes.status})`;
+    submitErr = submitted.error ?? `submit-call failed (HTTP ${submitRes.status})`;
   }
-  return { ok: false, error: lastErr };
+  return { ok: false, error: submitErr };
 }
 
 /** Claim a forced-unique `<base>[N].demo.agent` for the agent + set it as primary.
@@ -471,8 +473,6 @@ export async function signupWithName(
     const pk = await registerPasskey(`${base}.demo.agent`); // FRESH passkey for this workspace
     const dep = await bootstrapWithPasskey(pk, onStep); // deploy passkey-direct
     if (!dep.ok) return { ok: false, error: dep.error };
-    onStep?.('Waiting for the network to settle…'); // let the just-deployed SA propagate
-    await new Promise((r) => setTimeout(r, 4000));
     const claim = await claimName(dep.agent, passkeySignHash, base, onStep);
     if (!claim.ok) return { ok: false, error: claim.error };
     onStep?.('Signing you in…');
@@ -486,7 +486,6 @@ export async function signupWithName(
   const first = await siweLogin(); // connects wallet + signs
   let agent: Address;
   let address: Address;
-  let justDeployed = false;
   if (first.status === 'issued') {
     agent = first.agent;
     address = first.address;
@@ -495,13 +494,8 @@ export async function signupWithName(
     const dep = await bootstrapWithWallet(address, onStep);
     if (!dep.ok) return { ok: false, error: dep.error };
     agent = dep.agent;
-    justDeployed = true;
   } else {
     return { ok: false, error: first.reason ?? `sign-in ${first.status}` };
-  }
-  if (justDeployed) {
-    onStep?.('Waiting for the network to settle…');
-    await new Promise((r) => setTimeout(r, 4000));
   }
   const signHash: SignHash = (h) => personalSign(address, h);
   const claim = await claimName(agent, signHash, base, onStep);
