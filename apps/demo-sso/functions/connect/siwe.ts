@@ -86,7 +86,7 @@ export const onRequestPost = async ({ request, env }: FnContext): Promise<Respon
       signer,
     );
     await recordCredentialFacet(env.AUTH_CODES, principal, sub); // future resolves + reverse-name
-    return json({ status: 'issued', token });
+    return json({ status: 'issued', token, agent: sa });
   }
 
   // No SA yet for this EOA → bootstrap (deploy a fresh person SA).

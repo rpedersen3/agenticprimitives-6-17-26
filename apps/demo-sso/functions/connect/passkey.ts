@@ -81,5 +81,5 @@ export const onRequestPost = async ({ request, env }: FnContext): Promise<Respon
     signer,
   );
   await recordCredentialFacet(env.AUTH_CODES, principal, sub);
-  return json({ status: 'issued', token });
+  return json({ status: 'issued', token, agent: sa });
 };

@@ -23,7 +23,7 @@ export const AUD = 'demo-sso';
 const CHAIN_ID = 84532;
 
 export type SiweOutcome =
-  | { status: 'issued'; token: string; address: Address }
+  | { status: 'issued'; token: string; address: Address; agent: Address }
   | { status: 'bootstrap'; address: Address }
   | { status: 'disambiguate' | 'rejected'; address?: Address; reason?: string };
 
@@ -51,8 +51,10 @@ export async function siweLogin(): Promise<SiweOutcome> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ message, signature, aud: AUD }),
   });
-  const body = (await r.json()) as { status: string; token?: string; address?: string; reason?: string };
-  if (body.status === 'issued' && body.token) return { status: 'issued', token: body.token, address };
+  const body = (await r.json()) as { status: string; token?: string; agent?: string; reason?: string };
+  if (body.status === 'issued' && body.token) {
+    return { status: 'issued', token: body.token, address, agent: (body.agent ?? address) as Address };
+  }
   if (body.status === 'bootstrap') return { status: 'bootstrap', address };
   return { status: (body.status as 'disambiguate' | 'rejected') ?? 'rejected', address, reason: body.reason };
 }
@@ -440,6 +442,51 @@ export async function connectWithName(
   const b = (await r.json()) as { status?: string; token?: string; name?: string; error?: string };
   if (r.ok && b.status === 'issued' && b.token) return { ok: true, token: b.token, name: b.name };
   return { ok: false, error: b.error ?? `connect failed (HTTP ${r.status})` };
+}
+
+/** Sign up: create a workspace named `<base>.demo.agent` with a custody credential,
+ *  and CLAIM the name for THAT credential's agent (so connect-by-name later offers the
+ *  right credential). Passkey → a FRESH passkey (a new workspace); wallet → the EOA's
+ *  agent. The claim runs whether the agent is freshly deployed or reconnected. */
+export async function signupWithName(
+  base: string,
+  via: 'wallet' | 'passkey',
+  onStep?: (s: string) => void,
+): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
+  if (via === 'passkey') {
+    onStep?.('Creating your passkey…');
+    const pk = await registerPasskey(`${base}.demo.agent`); // FRESH passkey for this workspace
+    const dep = await bootstrapWithPasskey(pk, onStep); // deploy passkey-direct
+    if (!dep.ok) return { ok: false, error: dep.error };
+    onStep?.(`Claiming ${base}.demo.agent…`);
+    await claimName(dep.agent, passkeySignHash, base, onStep);
+    const login = await passkeyLogin(false);
+    return login.status === 'issued'
+      ? { ok: true, token: login.token }
+      : { ok: false, error: `created, but sign-in returned ${login.status}` };
+  }
+  // wallet: the EOA's deterministic agent (reconnect if it exists, else bootstrap).
+  const first = await siweLogin(); // connects wallet + signs
+  let agent: Address;
+  let address: Address;
+  if (first.status === 'issued') {
+    agent = first.agent;
+    address = first.address;
+  } else if (first.status === 'bootstrap') {
+    address = first.address;
+    const dep = await bootstrapWithWallet(address, onStep);
+    if (!dep.ok) return { ok: false, error: dep.error };
+    agent = dep.agent;
+  } else {
+    return { ok: false, error: first.reason ?? `sign-in ${first.status}` };
+  }
+  const signHash: SignHash = (h) => personalSign(address, h);
+  onStep?.(`Claiming ${base}.demo.agent…`);
+  await claimName(agent, signHash, base, onStep);
+  const login = await siweLogin();
+  return login.status === 'issued'
+    ? { ok: true, token: login.token }
+    : { ok: false, error: `created, but sign-in returned ${login.status}` };
 }
 
 export interface BasicProfile {

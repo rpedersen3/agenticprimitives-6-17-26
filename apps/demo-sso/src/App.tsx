@@ -1,22 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Address, Hex } from '@agenticprimitives/types';
+import type { Address } from '@agenticprimitives/types';
 import {
   AUD,
-  siweLogin,
-  bootstrapWithWallet,
-  passkeyLogin,
-  bootstrapWithPasskey,
-  passkeySignHash,
+  signupWithName,
   stepUpToAgent,
   connectWithName,
-  claimName,
   provisionA2aAgent,
   fetchProfile,
   fetchSensitive,
   type BasicProfile,
-  type DemoPasskey,
 } from './connect-client';
-import { hasWallet, personalSign } from './lib/wallet';
+import { hasWallet } from './lib/wallet';
 import { startGoogleSignIn, exchangeCode } from './server-client';
 
 interface Session {
@@ -24,14 +18,11 @@ interface Session {
   via: string; // 'wallet' | 'Google'
   fresh: boolean; // true = just created (welcome) vs reconnected (welcome back)
 }
-type BootstrapState =
-  | { kind: 'wallet'; address: Address; step?: string; error?: string }
-  | { kind: 'passkey'; passkey: DemoPasskey; step?: string; error?: string };
-
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<BasicProfile | null>(null);
-  const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
+  const [signupAvail, setSignupAvail] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [signupMsg, setSignupMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sensitive, setSensitive] = useState<{ email: string; phone: string } | null>(null);
@@ -114,43 +105,25 @@ export function App() {
     return () => clearTimeout(t);
   }, [connectName]);
 
-  async function onConnectWallet() {
-    setError(null);
-    setBusy(true);
-    try {
-      const out = await siweLogin();
-      if (out.status === 'issued') {
-        await openSession(out.token, 'wallet', false);
-      } else if (out.status === 'bootstrap') {
-        setBootstrap({ kind: 'wallet', address: out.address });
-      } else {
-        setError(out.reason ?? `Could not sign you in (${out.status}).`);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'wallet connect failed');
-    } finally {
-      setBusy(false);
+  // Signup name availability: block signing up with an EXISTING agent name.
+  useEffect(() => {
+    const name = desiredName.trim();
+    if (!name) {
+      setSignupAvail('idle');
+      return;
     }
-  }
-
-  async function onConnectPasskey() {
-    setError(null);
-    setBusy(true);
-    try {
-      const out = await passkeyLogin();
-      if (out.status === 'issued') {
-        await openSession(out.token, 'passkey', false);
-      } else if (out.status === 'bootstrap') {
-        setBootstrap({ kind: 'passkey', passkey: out.passkey });
-      } else {
-        setError(out.reason ?? `Could not sign you in (${out.status}).`);
+    setSignupAvail('checking');
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/connect/name-info?name=${encodeURIComponent(name)}`);
+        const b = (await r.json()) as { exists?: boolean };
+        setSignupAvail(b.exists ? 'taken' : 'available');
+      } catch {
+        setSignupAvail('idle');
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'passkey connect failed');
-    } finally {
-      setBusy(false);
-    }
-  }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [desiredName]);
 
   // Connect by agent-service name: resolve name → agent → prove with a custody
   // credential (the name is the identity; any custodian credential gets you in).
@@ -169,39 +142,24 @@ export function App() {
     }
   }
 
-  async function onCreateWorkspace() {
-    const bs = bootstrap;
-    if (!bs) return;
-    const setStep = (step: string) => setBootstrap((b) => (b ? { ...b, step } : b));
-    const fail = (error: string) => setBootstrap((b) => (b ? { ...b, step: undefined, error } : b));
-    setBootstrap({ ...bs, error: undefined, step: 'Starting…' });
-
-    let agent: Address;
-    let signHash: (h: Hex) => Promise<Hex>;
-    if (bs.kind === 'wallet') {
-      const res = await bootstrapWithWallet(bs.address, setStep);
-      if (!res.ok) return fail(res.error);
-      agent = res.agent;
-      signHash = (h) => personalSign(bs.address, h);
-    } else {
-      const res = await bootstrapWithPasskey(bs.passkey, setStep);
-      if (!res.ok) return fail(res.error);
-      agent = res.agent;
-      signHash = passkeySignHash;
-    }
-    // Claim a forced-unique <name>.demo.agent (best-effort; non-fatal).
-    await claimName(agent, signHash, desiredName || 'agent', setStep);
-    setStep('Finishing up…');
+  // Sign up: create a NEW workspace with the chosen name + a fresh custody credential.
+  // Blocked unless the name is available (not an existing agent name).
+  async function onSignup(via: 'wallet' | 'passkey') {
+    const base = desiredName.trim();
+    if (!base || signupAvail !== 'available') return;
+    setError(null);
+    setBusy(true);
+    setSignupMsg('Starting…');
     try {
-      const out = bs.kind === 'wallet' ? await siweLogin() : await passkeyLogin(false);
-      if (out.status === 'issued') {
-        setBootstrap(null);
-        await openSession(out.token, bs.kind, true);
-      } else {
-        fail(`created, but sign-in returned ${out.status}`);
-      }
+      const out = await signupWithName(base, via, setSignupMsg);
+      setSignupMsg(null);
+      if (out.ok) await openSession(out.token, via, true);
+      else setError(out.error);
     } catch (e) {
-      fail(e instanceof Error ? e.message : 'sign-in failed');
+      setSignupMsg(null);
+      setError(e instanceof Error ? e.message : 'signup failed');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -256,7 +214,6 @@ export function App() {
     setProfile(null);
     setSensitive(null);
     setStepUpMsg(null);
-    setBootstrap(null);
     setService(null);
     setError(null);
   }
@@ -272,7 +229,7 @@ export function App() {
       {error && <p className="err">⛔ {error}</p>}
 
       {/* ── Not signed in: connect ───────────────────────────────── */}
-      {!session && !bootstrap && (
+      {!session && (
         <>
           {googleNotice && (
             <div className="panel broker">
@@ -336,17 +293,26 @@ export function App() {
                 placeholder="e.g. alice"
                 style={{ marginRight: '0.25rem' }}
               />
-              <code>{(desiredName || 'agent')}.demo.agent</code>{' '}
-              <span className="muted">(a number is appended if taken)</span>
+              <code>{(desiredName || 'agent')}.demo.agent</code>
             </p>
+            {desiredName && signupAvail === 'checking' && <p className="muted">Checking availability…</p>}
+            {desiredName && signupAvail === 'available' && (
+              <p className="ok" style={{ margin: '0 0 0.5rem' }}>✓ {desiredName}.demo.agent is available</p>
+            )}
+            {desiredName && signupAvail === 'taken' && (
+              <p className="err" style={{ margin: '0 0 0.5rem' }}>
+                ⛔ {desiredName}.demo.agent is taken — choose another (or connect with it above).
+              </p>
+            )}
             <p>
-              <button disabled={busy} onClick={onConnectPasskey}>
+              <button disabled={busy || signupAvail !== 'available'} onClick={() => onSignup('passkey')}>
                 {busy ? 'Working…' : 'Sign up with passkey'}
               </button>{' '}
-              <button disabled={busy} onClick={onConnectWallet}>
+              <button disabled={busy || signupAvail !== 'available'} onClick={() => onSignup('wallet')}>
                 Sign up with wallet
               </button>
             </p>
+            {signupMsg && <p className="ok">⏳ {signupMsg}</p>}
             {!hasWallet() && (
               <p className="muted">
                 <em>No browser wallet detected</em> — sign up with a passkey (your device).
@@ -358,56 +324,6 @@ export function App() {
             </p>
           </div>
         </>
-      )}
-
-      {/* ── Bootstrap: create the workspace ──────────────────────── */}
-      {bootstrap && (
-        <div className="panel broker">
-          <h2>Create your workspace</h2>
-          {!bootstrap.step && !bootstrap.error && (
-            <>
-              <p className="muted">
-                No workspace yet for your{' '}
-                {bootstrap.kind === 'wallet' ? (
-                  <>wallet <code>{bootstrap.address}</code></>
-                ) : (
-                  <>passkey</>
-                )}
-                . We'll deploy your personal Smart Agent on Base Sepolia (gas sponsored — you won't pay),
-                link this credential to it, and claim a <code>.demo.agent</code> name.
-              </p>
-              <p>
-                <label className="muted">
-                  Pick a name:{' '}
-                  <input
-                    value={desiredName}
-                    onChange={(e) => setDesiredName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                    placeholder="e.g. alice"
-                    style={{ marginRight: '0.25rem' }}
-                  />
-                  <code>{(desiredName || 'agent')}.demo.agent</code>{' '}
-                  <span className="muted">(a number is appended if taken)</span>
-                </label>
-              </p>
-              <button onClick={onCreateWorkspace}>Create my workspace</button>{' '}
-              <button onClick={signOut}>Cancel</button>
-            </>
-          )}
-          {bootstrap.step && (
-            <>
-              <p className="ok">⏳ {bootstrap.step}</p>
-              <p className="muted">This usually takes 15–30 seconds. Confirm any wallet prompt.</p>
-            </>
-          )}
-          {bootstrap.error && (
-            <>
-              <p className="err">⛔ {bootstrap.error}</p>
-              <p className="muted">Nothing was charged. You can try again.</p>
-              <button onClick={onCreateWorkspace}>Try again</button>{' '}
-              <button onClick={signOut}>Cancel</button>
-            </>
-          )}
-        </div>
       )}
 
       {/* ── Signed in via Google (login-grade): MANDATORY step-up to the bound agent ── */}
