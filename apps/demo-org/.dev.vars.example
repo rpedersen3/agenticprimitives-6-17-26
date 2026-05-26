@@ -1,0 +1,11 @@
+# demo-org — server broker local dev config.
+# Copy to .dev.vars (gitignored) and fill in real values.
+# NEVER put real secrets in THIS file — it is tracked.
+
+# Broker signing key — ES256 (ECDSA P-256) private JWK + its kid.
+# Generate with:  node scripts/gen-broker-key.mjs
+BROKER_PRIVATE_JWK={"kty":"EC","crv":"P-256","d":"...","x":"...","y":"..."}
+BROKER_KID=broker-xxxxxxxx
+
+# The deployed demo-a2a relayer (gasless deploy + execute). Same one demo-sso uses.
+DEMO_A2A_URL=https://demo-a2a-production.richardpedersen3.workers.dev

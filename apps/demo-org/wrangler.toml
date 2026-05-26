@@ -1,0 +1,24 @@
+# Cloudflare Pages config for demo-org (an SSO relying site; spec 229).
+#
+# Local dev:
+#   pnpm --filter @agenticprimitives-demo/org dev          # Vite (proxies /a2a → demo-a2a)
+#   pnpm --filter @agenticprimitives-demo/org build
+#   wrangler pages dev dist                                 # serves the Function broker too
+# Deploy:
+#   wrangler pages deploy dist
+#
+# Secrets (set via `wrangler pages secret put <NAME>`):
+#   BROKER_PRIVATE_JWK     — ES256 (P-256) private JWK (JSON). Generate:
+#                            node scripts/gen-broker-key.mjs
+#   BROKER_KID             — e.g. "broker-1"
+#   DEMO_A2A_URL           — the deployed demo-a2a relayer origin
+
+name = "agenticprimitives-demo-org"
+compatibility_date = "2026-05-25"
+pages_build_output_dir = "dist"
+
+# Single-use nonce / passkey-challenge store. Own namespace (demo_org_AUTH_CODES).
+# (For LOCAL `wrangler pages dev`, use `--kv AUTH_CODES` for a local KV instead.)
+[[kv_namespaces]]
+binding = "AUTH_CODES"
+id = "d9426133d5d64f469fd7efdd7c6dda29"
