@@ -105,15 +105,8 @@ export async function bootstrapWithWallet(
     };
   }
   const agent = submitted.deployedAddress;
-  onStep?.('Linking your wallet…');
-  const enrollRes = await fetch('/connect/enroll', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind: 'siwe-eoa', id: address, agent }),
-  });
-  if (!enrollRes.ok) {
-    return { ok: false, error: ((await enrollRes.json()) as { error?: string }).error ?? 'enroll failed' };
-  }
+  // No separate enroll step: /connect/siwe derives the SA + records the facet on
+  // the reconnect (with a post-deploy poll for RPC lag), so this is just the deploy.
   return { ok: true, agent };
 }
 
@@ -206,7 +199,14 @@ export async function passkeyLogin(registerIfMissing = true): Promise<PasskeyOut
   const r = await fetch('/connect/passkey', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ credentialIdDigest: passkey.credentialIdDigest, challenge, signature, aud: AUD }),
+    body: JSON.stringify({
+      credentialIdDigest: passkey.credentialIdDigest,
+      pubKeyX: passkey.pubKeyX.toString(),
+      pubKeyY: passkey.pubKeyY.toString(),
+      challenge,
+      signature,
+      aud: AUD,
+    }),
   });
   const body = (await r.json()) as { status: string; token?: string };
   if (body.status === 'issued' && body.token) return { status: 'issued', token: body.token, passkey };
@@ -259,13 +259,8 @@ export async function bootstrapWithPasskey(
     };
   }
   const agent = submitted.deployedAddress;
-  onStep?.('Linking your passkey…');
-  const enrollRes = await fetch('/connect/enroll', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind: 'passkey', id: passkey.credentialIdDigest, agent }),
-  });
-  if (!enrollRes.ok) return { ok: false, error: ((await enrollRes.json()) as { error?: string }).error ?? 'enroll failed' };
+  // No separate enroll step: /connect/passkey derives the SA + records the facet on
+  // the reconnect (with a post-deploy poll for RPC lag), so this is just the deploy.
   return { ok: true, agent };
 }
 

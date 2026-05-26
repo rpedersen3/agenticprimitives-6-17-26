@@ -17,6 +17,16 @@ import { getServer, json, type FnContext } from '../_lib/server-broker';
 import { recordCredentialFacet } from '../../src/lib/kv-indexer';
 import { CHAIN_ID, CONTRACTS, DEFAULT_RPC_URL } from '../../src/lib/chain';
 
+/** Poll isDeployed a few times to ride out Base Sepolia's post-deploy RPC lag
+ *  (returns immediately when already deployed — no cost for the reconnect case). */
+async function isDeployedSoon(accounts: AgentAccountClient, sa: Address): Promise<boolean> {
+  for (let i = 0; i < 6; i++) {
+    if (await accounts.isDeployed(sa)) return true;
+    if (i < 5) await new Promise((r) => setTimeout(r, 2500));
+  }
+  return false;
+}
+
 export const onRequestPost = async ({ request, env }: FnContext): Promise<Response> => {
   const body = (await request.json().catch(() => null)) as
     | { message?: string; signature?: string; aud?: string }
@@ -67,7 +77,7 @@ export const onRequestPost = async ({ request, env }: FnContext): Promise<Respon
     return json({ error: 'SA address derivation failed', detail: String(e) }, 502);
   }
 
-  if ((await accounts.isDeployed(sa)) && (await accounts.isCustodian(sa, eoa))) {
+  if ((await isDeployedSoon(accounts, sa)) && (await accounts.isCustodian(sa, eoa))) {
     // Reconnect: the canonical SA already exists on-chain.
     const sub = toCanonicalAgentId(CHAIN_ID, sa);
     const { signer } = await getServer(env);
