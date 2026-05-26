@@ -33,6 +33,13 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
     entryPoint: CONTRACTS.entryPoint,
     factory: CONTRACTS.agentAccountFactory,
   });
-  const [eoaCount, pkCount] = await Promise.all([accounts.custodianCount(agent), accounts.passkeyCount(agent)]);
+  // custodianCount() = external (EOA/SIWE/contract) custodians + registered passkeys
+  // (each passkey is a first-class custodian on-chain). So the EOA-only count is the
+  // difference; a passkey-direct account has custodianCount == passkeyCount and 0 EOAs.
+  const [custodianCount, pkCount] = await Promise.all([
+    accounts.custodianCount(agent),
+    accounts.passkeyCount(agent),
+  ]);
+  const eoaCount = custodianCount - pkCount;
   return json({ exists: true, name, agent, hasEoa: eoaCount > 0n, hasPasskey: pkCount > 0n });
 };

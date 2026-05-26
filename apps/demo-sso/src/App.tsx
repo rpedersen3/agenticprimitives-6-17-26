@@ -316,7 +316,13 @@ export function App() {
             <p>
               <input
                 value={desiredName}
-                onChange={(e) => setDesiredName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                onChange={(e) =>
+                  // Strip a pasted ".demo.agent" suffix, then keep just the label chars —
+                  // so "alicev50.demo.agent" normalizes to the base "alicev50".
+                  setDesiredName(
+                    e.target.value.toLowerCase().replace(/\.demo\.agent$/, '').replace(/[^a-z0-9-]/g, ''),
+                  )
+                }
                 placeholder="e.g. alice"
                 style={{ marginRight: '0.25rem' }}
               />
