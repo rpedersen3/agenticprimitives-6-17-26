@@ -92,9 +92,17 @@ export async function bootstrapWithWallet(
     headers: { 'content-type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
   });
-  const submitted = (await submitRes.json()) as { ok?: boolean; deployedAddress?: Address; error?: string };
+  const submitted = (await submitRes.json()) as {
+    ok?: boolean;
+    deployedAddress?: Address;
+    error?: string;
+    detail?: string;
+  };
   if (!submitRes.ok || !submitted.ok || !submitted.deployedAddress) {
-    return { ok: false, error: submitted.error ?? `deploy submit failed (HTTP ${submitRes.status})` };
+    return {
+      ok: false,
+      error: [submitted.error, submitted.detail].filter(Boolean).join(' — ') || `deploy submit failed (HTTP ${submitRes.status})`,
+    };
   }
   const agent = submitted.deployedAddress;
   onStep?.('Linking your wallet…');
@@ -238,9 +246,17 @@ export async function bootstrapWithPasskey(
     headers: { 'content-type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
   });
-  const submitted = (await submitRes.json()) as { ok?: boolean; deployedAddress?: Address; error?: string };
+  const submitted = (await submitRes.json()) as {
+    ok?: boolean;
+    deployedAddress?: Address;
+    error?: string;
+    detail?: string;
+  };
   if (!submitRes.ok || !submitted.ok || !submitted.deployedAddress) {
-    return { ok: false, error: submitted.error ?? `deploy submit failed (HTTP ${submitRes.status})` };
+    return {
+      ok: false,
+      error: [submitted.error, submitted.detail].filter(Boolean).join(' — ') || `deploy submit failed (HTTP ${submitRes.status})`,
+    };
   }
   const agent = submitted.deployedAddress;
   onStep?.('Linking your passkey…');
@@ -279,9 +295,17 @@ async function deployAgent(
     headers: { 'content-type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
   });
-  const submitted = (await submitRes.json()) as { ok?: boolean; deployedAddress?: Address; error?: string };
+  const submitted = (await submitRes.json()) as {
+    ok?: boolean;
+    deployedAddress?: Address;
+    error?: string;
+    detail?: string;
+  };
   if (!submitRes.ok || !submitted.ok || !submitted.deployedAddress) {
-    return { ok: false, error: submitted.error ?? `deploy submit failed (HTTP ${submitRes.status})` };
+    return {
+      ok: false,
+      error: [submitted.error, submitted.detail].filter(Boolean).join(' — ') || `deploy submit failed (HTTP ${submitRes.status})`,
+    };
   }
   return { ok: true, agent: submitted.deployedAddress };
 }
