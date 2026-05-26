@@ -9,10 +9,9 @@
 // NOTE: the OIDC subject is keyed on (iss, sub) — never email (CN-3). The agent
 // is RESOLVED via the directory; it is not derived from the email.
 import { completeLogin, oidcFacetId } from '@agenticprimitives/connect-auth/google';
-import { newAuthCode, validateRedirectUri, importJwks, verifyAgentSession } from '@agenticprimitives/connect';
+import { newAuthCode, validateRedirectUri, importJwks, verifyAgentSession, mintAgentSession } from '@agenticprimitives/connect';
 import type { CredentialPrincipal } from '@agenticprimitives/types';
-import { issueForOidcSubject } from '../../../src/lib/broker-core';
-import { recordOidcFacet } from '../../../src/lib/kv-indexer';
+import { recordOidcFacet, readOidcFacet } from '../../../src/lib/kv-indexer';
 import { getServer, json, type FnContext } from '../../_lib/server-broker';
 
 export const onRequestGet = async ({ request, env }: FnContext): Promise<Response> => {
@@ -57,7 +56,7 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
     role: 'login-grade',
   };
 
-  const { signer, directory, jwks } = await getServer(env);
+  const { signer, jwks } = await getServer(env);
   const iss = new URL(request.url).origin; // the Connect origin = this serving origin
 
   // ── LINK this Google subject to an EXISTING agent (P0-C) ────────────
@@ -81,34 +80,34 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
     return back('linked', { email: result.principal.email ?? '' });
   }
 
-  // OIDC resolves by the verified (iss, sub) — resolveByOidcSubject, not by
-  // credential — so the directory's OIDC-subject path (catch-all / indexer) is hit.
-  const outcome = await issueForOidcSubject(
-    directory,
-    signer,
-    principal,
-    result.principal.iss,
-    result.principal.sub,
-    stash.aud,
-    iss,
-  );
-  if (outcome.status !== 'issued') {
-    // 0 → bootstrap (no agent linked to this Google subject yet); many → disambiguate.
-    // Redirect BACK to the app with a status (never dead-end on a JSON page) so the UI
-    // can explain "create a workspace with a wallet/passkey, then link Google".
+  // OIDC LOGIN: resolve the (iss,sub)->agent facet DIRECTLY from the indexer (it was
+  // recorded at link-time, P0-C). OIDC has no on-chain presence, so it does NOT go
+  // through the directory's on-chain confirmCandidates (which would drop it, P0-B) —
+  // it resolves at `asserted` and issues a LOGIN-GRADE session (ADR-0017 / spec 227 §5).
+  const agent = await readOidcFacet(env.AUTH_CODES, result.principal.iss, result.principal.sub);
+  if (!agent) {
+    // No agent linked to this Google subject yet → bootstrap. Redirect BACK to the app
+    // with a status (never dead-end on a JSON page) so the UI can explain "create a
+    // workspace with a wallet/passkey, then link Google".
     if (stash.rpRedirect) {
       const dest = new URL(stash.rpRedirect);
-      dest.searchParams.set('connect_status', outcome.status);
+      dest.searchParams.set('connect_status', 'bootstrap');
       dest.searchParams.set('via', 'google');
       if (result.principal.email) dest.searchParams.set('email', result.principal.email);
       return new Response(null, { status: 302, headers: { location: dest.toString() } });
     }
-    return json({ status: outcome.status, oidcSubject: principal.id, email: result.principal.email });
+    return json({ status: 'bootstrap', oidcSubject: principal.id, email: result.principal.email });
   }
+
+  // Linked → mint a LOGIN-GRADE session for the agent (assurance 'asserted').
+  const token = await mintAgentSession(
+    { sub: agent, principal, assurance: 'asserted', aud: stash.aud, iss, ttlSeconds: 600 },
+    signer,
+  );
 
   // §4a / CN-9: stash under a single-use code; deliver the CODE, not the token.
   const authCode = newAuthCode();
-  await env.AUTH_CODES.put(`code:${authCode}`, JSON.stringify({ token: outcome.token, aud: stash.aud }), { expirationTtl: 120 });
+  await env.AUTH_CODES.put(`code:${authCode}`, JSON.stringify({ token, aud: stash.aud }), { expirationTtl: 120 });
 
   if (stash.rpRedirect) {
     const allow = (env.REDIRECT_URI_ALLOWLIST ?? '').split(',').map((s) => s.trim()).filter(Boolean);

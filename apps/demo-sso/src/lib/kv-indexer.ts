@@ -33,6 +33,15 @@ export function createKvIndexer(kv: KvLike): IndexerPort {
   };
 }
 
+/** Read the (iss,sub)->agent OIDC facet directly (login-grade resolution). OIDC has
+ *  no on-chain presence, so it resolves from the indexer at `asserted`, NOT through
+ *  the directory's on-chain confirmCandidates (which would drop it). spec 227 §5. */
+export async function readOidcFacet(kv: KvLike, iss: string, sub: string): Promise<CanonicalAgentId | null> {
+  const raw = await kv.get(oidcKey(iss, sub));
+  if (!raw) return null;
+  return (JSON.parse(raw) as EvidenceLink).agent;
+}
+
 /** Record an (iss,sub)->agent login facet (login-grade). Broker-authorized only (P0-C). */
 export async function recordOidcFacet(
   kv: KvLike,
