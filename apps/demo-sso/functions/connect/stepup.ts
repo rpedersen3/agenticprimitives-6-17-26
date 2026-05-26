@@ -82,7 +82,7 @@ export const onRequestPost = async ({ request, env }: FnContext): Promise<Respon
   }
 
   const token = await mintAgentSession(
-    { sub: agentId, principal, assurance: 'onchain-confirmed', aud: body.aud, iss, ttlSeconds: 600 },
+    { sub: agentId, principal, assurance: 'onchain-confirmed', aud: body.aud, iss, ttlSeconds: 3600 },
     signer,
   );
   return json({ status: 'issued', token });

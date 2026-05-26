@@ -101,7 +101,7 @@ export const onRequestGet = async ({ request, env }: FnContext): Promise<Respons
 
   // Linked → mint a LOGIN-GRADE session for the agent (assurance 'asserted').
   const token = await mintAgentSession(
-    { sub: agent, principal, assurance: 'asserted', aud: stash.aud, iss, ttlSeconds: 600 },
+    { sub: agent, principal, assurance: 'asserted', aud: stash.aud, iss, ttlSeconds: 3600 },
     signer,
   );
 

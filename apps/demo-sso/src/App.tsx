@@ -20,8 +20,24 @@ interface Session {
   via: string; // 'wallet' | 'Google'
   fresh: boolean; // true = just created (welcome) vs reconnected (welcome back)
 }
+
+const SESSION_KEY = 'agenticprimitives:demo-sso:session';
+
+/** True iff we should try to restore a persisted session on load — i.e. one is stored
+ *  AND we're not mid Google-redirect (which mints its own session from ?code). */
+function shouldRestore(): boolean {
+  try {
+    const u = new URL(window.location.href);
+    if (u.searchParams.has('code') || u.searchParams.has('connect_status')) return false;
+    return !!localStorage.getItem(SESSION_KEY);
+  } catch {
+    return false;
+  }
+}
+
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [restoring, setRestoring] = useState<boolean>(shouldRestore);
   const [profile, setProfile] = useState<BasicProfile | null>(null);
   const [signupAvail, setSignupAvail] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   // Live signup progress, rendered as a modal checklist.
@@ -39,6 +55,7 @@ export function App() {
   const [connectErr, setConnectErr] = useState<string | null>(null);
   const [nameInfo, setNameInfo] = useState<{
     status: 'idle' | 'checking' | 'none' | 'found';
+    name?: string;
     hasEoa?: boolean;
     hasPasskey?: boolean;
   }>({ status: 'idle' });
@@ -48,8 +65,40 @@ export function App() {
 
   const openSession = useCallback(async (token: string, via: string, fresh: boolean) => {
     setSession({ token, via, fresh });
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ token, via })); // survive page refresh
+    } catch {
+      /* storage blocked (private mode) — session just won't persist */
+    }
     setProfile(await fetchProfile(token));
   }, []);
+
+  // Restore a persisted session on load (within the token's lifetime), unless we're
+  // mid Google-redirect (?code / connect_status) — that path mints its own session.
+  useEffect(() => {
+    if (!restoring) return;
+    void (async () => {
+      try {
+        const raw = localStorage.getItem(SESSION_KEY);
+        if (!raw) return;
+        const stored = JSON.parse(raw) as { token?: string; via?: string };
+        if (!stored.token || !stored.via) {
+          localStorage.removeItem(SESSION_KEY);
+          return;
+        }
+        // Validate against the broker: an expired/invalid token yields no profile → drop it.
+        const p = await fetchProfile(stored.token);
+        if (!p) {
+          localStorage.removeItem(SESSION_KEY);
+          return;
+        }
+        setSession({ token: stored.token, via: stored.via, fresh: false });
+        setProfile(p);
+      } finally {
+        setRestoring(false);
+      }
+    })();
+  }, [restoring]);
 
   // Real Google OIDC return: ?code → exchange → token (login-grade session).
   useEffect(() => {
@@ -104,8 +153,12 @@ export function App() {
     const t = setTimeout(async () => {
       try {
         const r = await fetch(`/connect/name-info?name=${encodeURIComponent(name)}`);
-        const b = (await r.json()) as { exists?: boolean; hasEoa?: boolean; hasPasskey?: boolean };
-        setNameInfo(b.exists ? { status: 'found', hasEoa: b.hasEoa, hasPasskey: b.hasPasskey } : { status: 'none' });
+        const b = (await r.json()) as { exists?: boolean; name?: string; hasEoa?: boolean; hasPasskey?: boolean };
+        setNameInfo(
+          b.exists
+            ? { status: 'found', name: b.name, hasEoa: b.hasEoa, hasPasskey: b.hasPasskey }
+            : { status: 'none' },
+        );
       } catch {
         setNameInfo({ status: 'idle' });
       }
@@ -262,6 +315,11 @@ export function App() {
     setService(null);
     setAddCred(null);
     setError(null);
+    try {
+      localStorage.removeItem(SESSION_KEY);
+    } catch {
+      /* ignore */
+    }
     // Reset the connect/signup screen so a just-used name doesn't linger as stale.
     setDesiredName('');
     setConnectName('');
@@ -280,8 +338,10 @@ export function App() {
 
       {error && <p className="err">⛔ {error}</p>}
 
+      {restoring && !session && <p className="muted">Restoring your session…</p>}
+
       {/* ── Not signed in: connect ───────────────────────────────── */}
-      {!session && (
+      {!session && !restoring && (
         <>
           {googleNotice && (
             <div className="panel broker">
@@ -306,27 +366,32 @@ export function App() {
               <p className="muted">No workspace with that name yet — new here? Sign up below. ↓</p>
             )}
             {nameInfo.status === 'found' && (
-              <p>
-                {nameInfo.hasPasskey && (
-                  <button disabled={busy} onClick={() => onConnectName('passkey')}>
-                    Continue with passkey
-                  </button>
-                )}{' '}
-                {nameInfo.hasEoa && (
-                  <button disabled={busy} onClick={() => onConnectName('wallet')}>
-                    Continue with wallet
-                  </button>
-                )}
-                {!nameInfo.hasPasskey && !nameInfo.hasEoa && (
-                  <span className="muted">This workspace has no custody credential on-chain yet.</span>
-                )}
-                {' '}
-                <span className="muted">
-                  ({[nameInfo.hasPasskey && 'passkey', nameInfo.hasEoa && 'wallet'].filter(Boolean).join(' + ') ||
-                    'none'}{' '}
-                  on this workspace)
-                </span>
-              </p>
+              <>
+                <p className="ok" style={{ margin: '0 0 0.5rem' }}>
+                  ✓ Found <code>{nameInfo.name}</code>
+                </p>
+                <p>
+                  {nameInfo.hasPasskey && (
+                    <button disabled={busy} onClick={() => onConnectName('passkey')}>
+                      Continue with passkey
+                    </button>
+                  )}{' '}
+                  {nameInfo.hasEoa && (
+                    <button disabled={busy} onClick={() => onConnectName('wallet')}>
+                      Continue with wallet
+                    </button>
+                  )}
+                  {!nameInfo.hasPasskey && !nameInfo.hasEoa && (
+                    <span className="muted">This workspace has no custody credential on-chain yet.</span>
+                  )}
+                  {' '}
+                  <span className="muted">
+                    ({[nameInfo.hasPasskey && 'passkey', nameInfo.hasEoa && 'wallet'].filter(Boolean).join(' + ') ||
+                      'none'}{' '}
+                    on this workspace)
+                  </span>
+                </p>
+              </>
             )}
             {connectErr && <p className="err">⛔ {connectErr}</p>}
           </div>

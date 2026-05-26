@@ -88,7 +88,7 @@ export const onRequestPost = async ({ request, env }: FnContext): Promise<Respon
   const sub = toCanonicalAgentId(CHAIN_ID, agent);
   const { signer } = await getServer(env);
   const token = await mintAgentSession(
-    { sub, principal, assurance: 'onchain-confirmed', aud: body.aud, iss, ttlSeconds: 600 },
+    { sub, principal, assurance: 'onchain-confirmed', aud: body.aud, iss, ttlSeconds: 3600 },
     signer,
   );
   await recordCredentialFacet(env.AUTH_CODES, principal, sub);
