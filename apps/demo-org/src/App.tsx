@@ -5,6 +5,15 @@ import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
 
 const ENROLL_KEY = 'agenticprimitives:demo-org:enroll';
+const LOCAL_PASSKEY_NAME = 'agenticprimitives:demo-org:passkey-name';
+/** The agent name THIS origin's local passkey is bound to (null if none / unknown). */
+function localPasskeyAgent(): string | null {
+  try {
+    return loadPasskey() ? localStorage.getItem(LOCAL_PASSKEY_NAME) : null;
+  } catch {
+    return null;
+  }
+}
 
 const SESSION_KEY = 'agenticprimitives:demo-org:session';
 const orgsKey = (addr: string) => `agenticprimitives:demo-org:orgs:${addr.toLowerCase()}`;
@@ -98,6 +107,9 @@ export function App() {
     setSession({ token, via, name, address: addr, fresh });
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({ token, via, name }));
+      // Remember which agent THIS origin's local passkey is bound to, so we only
+      // offer "Continue with passkey" for that agent (not for one set up elsewhere).
+      if (via === 'passkey') localStorage.setItem(LOCAL_PASSKEY_NAME, name);
     } catch {
       /* storage blocked — session just won't persist */
     }
@@ -405,7 +417,7 @@ export function App() {
                   ✓ Found <code>{nameInfo.name}</code>
                 </p>
                 <p>
-                  {nameInfo.hasPasskey && loadPasskey() && (
+                  {nameInfo.hasPasskey && localPasskeyAgent() === nameInfo.name && (
                     <button disabled={busy} onClick={() => onConnectName('passkey')}>
                       Continue with passkey
                     </button>
@@ -415,13 +427,13 @@ export function App() {
                       Continue with wallet
                     </button>
                   )}{' '}
-                  {nameInfo.hasPasskey && (
+                  {nameInfo.hasPasskey && localPasskeyAgent() !== nameInfo.name && (
                     <button disabled={busy} onClick={() => onAddSite(nameInfo.name!)}>
                       Set up this site (passkey) →
                     </button>
                   )}
                 </p>
-                {nameInfo.hasPasskey && !loadPasskey() && (
+                {nameInfo.hasPasskey && localPasskeyAgent() !== nameInfo.name && (
                   <p className="muted">
                     First time using <code>{nameInfo.name}</code> on this site? <strong>Set up this site</strong> —
                     you’ll approve once with your passkey at your home Connect, then use Windows Hello / Face ID here.
