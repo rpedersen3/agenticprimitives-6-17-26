@@ -2,12 +2,13 @@
 
 ## What this app is
 
-The **Agentic Connect SSO demo** (spec 224 / ADR-0014). One story end-to-end:
+The **Agentic Connect** demo (spec 224 + spec 227 / ADR-0014). Primary story:
 
-> Enroll one credential at the Connect origin, sign in across two relying sites
-> (one-enroll SSO). The `AgentSession` is asymmetric + JWKS-verified, its subject
-> is a CAIP-10 `CanonicalAgentId`, and it has no `owner`. Custody-class actions
-> require step-up to a custody-grade credential.
+> Passkey, wallet, or Google at the Connect origin → resolve or bootstrap a person
+> Smart Agent on Base Sepolia → `AgentSession` (CAIP-10 `sub`, no `owner`) → person
+> MCP PII at `/me/*` → optional A2A service agent via `/a2a/*`.
+
+**Flow diagrams:** [`docs/passkey-sso-flow.md`](docs/passkey-sso-flow.md).
 
 It is the **capstone integration demo** for the SSO wave — it wires the real
 packages together: `connect` (token + convergence + issuance) +
@@ -18,20 +19,25 @@ packages together: `connect` (token + convergence + issuance) +
 
 ```
 apps/demo-sso/
+├── docs/
+│   ├── README.md
+│   └── passkey-sso-flow.md   ← interaction diagrams (passkey → A2A → PII)
 ├── index.html
-├── vite.config.ts        ← dev server on :5373 (demo-web 5173, demo-web-pro 5273)
-├── wrangler.toml         ← Pages config (KV binding for the auth-code store)
-├── scripts/gen-broker-key.mjs   ← generate the ES256 broker key (a Pages secret)
-├── functions/            ← the SERVER broker (Pages Functions; key from env)
-│   ├── _lib/server-broker.ts    ← signer-from-env + directory + helpers
-│   ├── jwks.ts                  ← GET  /jwks
-│   ├── authorize.ts             ← POST /authorize  (→ single-use code; CN-1/9)
-│   └── token.ts                 ← POST /token      (code → AgentSession)
+├── vite.config.ts             ← dev server on :5373
+├── wrangler.toml              ← Pages + KV (AUTH_CODES)
+├── scripts/gen-broker-key.mjs
+├── functions/                 ← server broker (production shape)
+│   ├── _lib/server-broker.ts
+│   ├── connect/               ← passkey, siwe, enroll, nonce
+│   ├── me/[[path]].ts         ← person MCP (profile + sensitive PII)
+│   ├── a2a/[[path]].ts        ← proxy → demo-a2a
+│   ├── oidc/google/
+│   ├── jwks.ts, authorize.ts, token.ts
 └── src/
-    ├── main.tsx
-    ├── lib/broker-core.ts       ← shared directory + issuance/verify (signer injected)
-    ├── broker.ts                ← in-browser demo broker (key in-page) over broker-core
-    └── App.tsx                  ← Connect origin + 2 relying-site panels + step-up gate
+    ├── App.tsx                ← Connect UI (passkey/wallet/Google, PII, A2A)
+    ├── connect-client.ts      ← browser orchestration
+    ├── server-client.ts       ← Google OIDC code exchange
+    └── lib/                   ← passkey, pii, real-directory, chain
 ```
 
 Two broker variants share `src/lib/broker-core.ts`: the **in-browser** broker
@@ -42,9 +48,12 @@ production-correct shape). Same directory + issuance/verification logic.
 ## Server broker (Pages Functions)
 
 ```
-GET  /jwks       → the broker's public JWKS (relying sites verify with this)
-POST /authorize  { credential, aud, redirectUri? } → { status:'issued', code } | bootstrap | disambiguate | rejected
-POST /token      { code, aud } → { agentSession }   (single-use code exchange; CN-1/9)
+GET  /jwks
+GET  /connect/passkey-challenge | POST /connect/passkey | POST /connect/siwe | POST /connect/enroll
+GET  /me/profile | GET /me/sensitive     ← person MCP (AgentSession-gated PII)
+/a2a/*                                   ← proxy to DEMO_A2A_URL
+POST /authorize | POST /token            ← OIDC / relying-site code exchange
+/oidc/google/start | /oidc/google/callback
 ```
 
 The signing key lives ONLY server-side (`BROKER_PRIVATE_JWK`); the browser sees

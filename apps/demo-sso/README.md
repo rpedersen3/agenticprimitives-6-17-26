@@ -1,38 +1,36 @@
 # @agenticprimitives-demo/sso
 
-The **Agentic Connect SSO demo** — enroll one credential at the Connect origin,
-sign in across two relying sites (one-enroll SSO), with a step-up gate for
-custody-class actions. The capstone integration demo for the SSO wave
-([spec 224](../../specs/224-agentic-connect.md) / [ADR-0014](../../docs/architecture/decisions/0014-connect-is-an-sso-broker.md)).
+**Agentic Connect** — passkey, wallet (SIWE), or Google sign-in at one Connect origin; deploy a person Smart Agent on Base Sepolia; read PII gated by `AgentSession`; optionally provision an A2A service agent.
+
+Capstone for [spec 224](../../specs/224-agentic-connect.md) + [spec 227](../../specs/227-real-connect-experience.md) ([ADR-0014](../../docs/architecture/decisions/0014-connect-is-an-sso-broker.md)).
 
 ```bash
-pnpm --filter @agenticprimitives-demo/sso dev   # http://localhost:5373
+pnpm --filter @agenticprimitives-demo/sso dev   # http://localhost:5373 (UI only)
 ```
+
+For passkey, `/me` PII, and `/a2a` deploy: `wrangler pages dev dist` — see [docs/passkey-sso-flow.md](./docs/passkey-sso-flow.md) and [OIDC-SETUP.md](./OIDC-SETUP.md).
+
+## Documentation
+
+| Doc | Description |
+| --- | --- |
+| [docs/passkey-sso-flow.md](./docs/passkey-sso-flow.md) | Interaction diagrams: passkey → bootstrap → A2A → person MCP PII |
+| [docs/README.md](./docs/README.md) | Doc index |
+| [CLAUDE.md](./CLAUDE.md) | Layout, endpoints, secrets |
+| [OIDC-SETUP.md](./OIDC-SETUP.md) | Google OIDC + wrangler |
 
 ## What you'll see
 
-1. The **Connect origin** starts a broker (asymmetric signing key, ES256; JWKS published).
-2. **Sign in once** — Alice passkey, Alice GitHub (OIDC), or Bob passkey.
-3. **Both relying sites** (Shop, Forum) receive an `aud`-bound `AgentSession` with
-   the **same `sub`** (the canonical agent) — verified against the JWKS.
-4. **Attempt a custody-class action** (rotate credential): allowed for a passkey
-   (custody-grade) session, **blocked → step-up** for a GitHub OIDC (login-grade) one.
+1. **Connect** — sign in with passkey, wallet, or Google.
+2. **Bootstrap** (first visit) — deploy person SA via demo-a2a, enroll credential, optional `.demo.agent` name.
+3. **Agent card** — `GET /me/profile` with a verified `AgentSession` (`sub` = CAIP-10, no `owner`).
+4. **PII** — sensitive fields blurred until reveal; custody-grade session required (`/me/sensitive`).
+5. **A2A** (optional) — second Smart Agent + `OPERATES_ON_BEHALF_OF` edge to your workspace.
 
-## How it's wired
+## Packages wired
 
-`src/broker.ts` composes the real packages:
-
-- [`@agenticprimitives/connect`](../../packages/connect) — `generateBrokerKeypair`,
-  `issueForResolution` (convergence + issuance gates), `verifyAgentSession`,
-  `publishJwks`/`importJwks`, `requiresStepUp`.
-- [`@agenticprimitives/identity-directory`](../../packages/identity-directory) —
-  `createDirectory` (indexer proposes, on-chain confirms).
-- [`@agenticprimitives/identity-directory-adapters`](../../packages/identity-directory-adapters) —
-  `makeNamingPort` / `makeOnChainReadPort` / `createInMemoryIndexer`.
-
-## Demo simplifications
-
-The broker key is generated in-browser and credential verification is simulated
-(see `src/broker.ts` + `CLAUDE.md`) — production puts the key in a server-side
-Pages Function/Worker and uses connect-auth's real ceremonies + on-chain reads.
-The focus here is the SSO flow, package integration, and the security gates.
+- [`@agenticprimitives/connect`](../../packages/connect) — `AgentSession`, JWKS, `issueForResolution`, verify
+- [`@agenticprimitives/identity-directory`](../../packages/identity-directory) — resolve (indexer proposes, on-chain confirms)
+- [`@agenticprimitives/connect-auth`](../../packages/connect-auth) — SIWE, passkey, Google OIDC
+- [`@agenticprimitives/agent-account`](../../packages/agent-account) — deploy + `isValidSignature`
+- Proxied [`demo-a2a`](../demo-a2a/) — UserOp build/submit on Base Sepolia
