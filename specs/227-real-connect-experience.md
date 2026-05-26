@@ -277,6 +277,12 @@ for envelopes), the bootstrap-owner signer (KMS), the broker `BROKER_PRIVATE_JWK
 
 ## 9. Phase plan (each phase is independently demoable)
 
+> **Status (2026-05-25): all phases A–E BUILT + DEPLOYED** at
+> https://agenticprimitives-demo-sso.pages.dev. Server-side + resolution verified
+> live; the interactive on-chain *writes* (bootstrap deploy, name-claim, A2A edge)
+> are code-complete and need an in-browser wallet/WebAuthn pass + a
+> `pnpm deploy:cloudflare` to add the demo-sso origin to demo-a2a `ALLOWED_ORIGINS`.
+
 - **A — Real resolution.** Parameterize `CHAIN` from `CHAIN_ID=84532` (drop the
   hardcoded `8453`, **F2/P1-D**). Swap demo-sso's fakes (incl. the Google catch-all)
   for live NamingPort + real OnChainReadPort + persistent IndexerPort. Seed 1–2
