@@ -156,9 +156,10 @@ async function executeCall(
       headers: { 'content-type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
     });
-    const submitted = (await submitRes.json()) as { ok?: boolean; transactionHash?: Hex; error?: string };
+    const submitted = (await submitRes.json()) as { ok?: boolean; transactionHash?: Hex; error?: string; detail?: string };
     if (submitRes.ok && submitted.ok) return { ok: true, txHash: submitted.transactionHash };
-    submitErr = submitted.error ?? `submit-call failed (HTTP ${submitRes.status})`;
+    submitErr =
+      [submitted.error, submitted.detail].filter(Boolean).join(' — ') || `submit-call failed (HTTP ${submitRes.status})`;
   }
   return { ok: false, error: submitErr };
 }
