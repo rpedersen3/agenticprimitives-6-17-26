@@ -1,16 +1,21 @@
 // POST /connect/siwe { message, signature, aud } → resolve the EOA to its
 // canonical agent and issue an AgentSession, or signal bootstrap.
 //
-// SIWE is verified IN THIS FUNCTION (connect-auth ECDSA path) — no demo-a2a
-// round-trip needed for login. The nonce is single-use (KV), the domain must be
-// this Connect origin, and the recovered EOA becomes a `siwe-eoa` credential
-// (custody-grade — an EOA custodian). Resolution + on-chain `isCustodian` confirm
-// (real-directory) decide issued-vs-bootstrap. The session is custody-grade only
-// when the on-chain custody check passes.
+// SIWE is verified IN THIS FUNCTION (connect-auth ECDSA path). The EOA → SA
+// mapping is DETERMINISTIC (factory CREATE2 of `{ mode:0, custodians:[eoa],
+// salt:0 }` — the same spec demo-a2a's eoa deploy uses), so resolution is: derive
+// the SA, then confirm on-chain (`isDeployed` + `isCustodian`). If it already
+// exists (possibly created via another demo) → RECONNECT (issue a custody-grade
+// session + record the facet). If not → bootstrap. This is one mechanism (derive +
+// on-chain confirm), and it fixes the AA25 "re-deploy an existing SA" failure.
 import { verify as verifySiwe, parseMessage } from '@agenticprimitives/connect-auth/siwe';
-import type { CredentialPrincipal, Hex } from '@agenticprimitives/types';
+import { mintAgentSession } from '@agenticprimitives/connect';
+import { AgentAccountClient } from '@agenticprimitives/agent-account';
+import { toCanonicalAgentId } from '@agenticprimitives/identity-directory-adapters';
+import type { Address, CredentialPrincipal, Hex } from '@agenticprimitives/types';
 import { getServer, json, type FnContext } from '../_lib/server-broker';
-import { issueForRelyingSite } from '../../src/lib/broker-core';
+import { recordCredentialFacet } from '../../src/lib/kv-indexer';
+import { CHAIN_ID, CONTRACTS, DEFAULT_RPC_URL } from '../../src/lib/chain';
 
 export const onRequestPost = async ({ request, env }: FnContext): Promise<Response> => {
   const body = (await request.json().catch(() => null)) as
@@ -39,19 +44,41 @@ export const onRequestPost = async ({ request, env }: FnContext): Promise<Respon
   });
   if (!v.ok) return json({ error: `SIWE verify failed: ${v.reason}` }, 401);
 
+  const eoa = v.address;
   const principal: CredentialPrincipal = {
     kind: 'siwe-eoa',
-    id: v.address,
+    id: eoa,
     assurance: 'onchain-confirmed',
     role: 'custody-grade',
   };
-  const { signer, directory } = await getServer(env);
-  const outcome = await issueForRelyingSite(directory, signer, principal, body.aud, iss);
-  if (outcome.status === 'issued') return json({ status: 'issued', token: outcome.token });
-  // 0 agents -> bootstrap (deploy a person SA); many -> disambiguate.
-  return json({
-    status: outcome.status,
-    address: v.address,
-    reason: outcome.status === 'rejected' ? outcome.reason : undefined,
+
+  // Derive the deterministic SA for this EOA (mode 0, salt 0, custodian = eoa) and
+  // confirm on-chain. Already deployed + custodian → reconnect; else → bootstrap.
+  const accounts = new AgentAccountClient({
+    rpcUrl: env.RPC_URL ?? DEFAULT_RPC_URL,
+    chainId: CHAIN_ID,
+    entryPoint: CONTRACTS.entryPoint,
+    factory: CONTRACTS.agentAccountFactory,
   });
+  let sa: Address;
+  try {
+    sa = await accounts.getAddressForAgentAccount({ mode: 0, custodians: [eoa], salt: 0n });
+  } catch (e) {
+    return json({ error: 'SA address derivation failed', detail: String(e) }, 502);
+  }
+
+  if ((await accounts.isDeployed(sa)) && (await accounts.isCustodian(sa, eoa))) {
+    // Reconnect: the canonical SA already exists on-chain.
+    const sub = toCanonicalAgentId(CHAIN_ID, sa);
+    const { signer } = await getServer(env);
+    const token = await mintAgentSession(
+      { sub, principal, assurance: 'onchain-confirmed', aud: body.aud, iss, ttlSeconds: 600 },
+      signer,
+    );
+    await recordCredentialFacet(env.AUTH_CODES, principal, sub); // future resolves + reverse-name
+    return json({ status: 'issued', token });
+  }
+
+  // No SA yet for this EOA → bootstrap (deploy a fresh person SA).
+  return json({ status: 'bootstrap', address: eoa });
 };
