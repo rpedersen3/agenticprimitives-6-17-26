@@ -458,14 +458,15 @@ export async function signupWithName(
     const pk = await registerPasskey(`${base}.demo.agent`); // FRESH passkey for this workspace
     const dep = await bootstrapWithPasskey(pk, onStep); // deploy passkey-direct
     if (!dep.ok) return { ok: false, error: dep.error };
-    onStep?.(`Claiming ${base}.demo.agent…`);
     await claimName(dep.agent, passkeySignHash, base, onStep);
+    onStep?.('Signing you in…');
     const login = await passkeyLogin(false);
     return login.status === 'issued'
       ? { ok: true, token: login.token }
       : { ok: false, error: `created, but sign-in returned ${login.status}` };
   }
   // wallet: the EOA's deterministic agent (reconnect if it exists, else bootstrap).
+  onStep?.('Connecting your wallet…');
   const first = await siweLogin(); // connects wallet + signs
   let agent: Address;
   let address: Address;
@@ -481,8 +482,8 @@ export async function signupWithName(
     return { ok: false, error: first.reason ?? `sign-in ${first.status}` };
   }
   const signHash: SignHash = (h) => personalSign(address, h);
-  onStep?.(`Claiming ${base}.demo.agent…`);
   await claimName(agent, signHash, base, onStep);
+  onStep?.('Signing you in…');
   const login = await siweLogin();
   return login.status === 'issued'
     ? { ok: true, token: login.token }

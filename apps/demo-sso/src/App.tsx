@@ -22,7 +22,12 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<BasicProfile | null>(null);
   const [signupAvail, setSignupAvail] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
-  const [signupMsg, setSignupMsg] = useState<string | null>(null);
+  // Live signup progress, rendered as a modal checklist.
+  const [signup, setSignup] = useState<
+    | { phase: 'running' | 'done'; steps: string[] }
+    | { phase: 'error'; steps: string[]; error: string }
+    | null
+  >(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sensitive, setSensitive] = useState<{ email: string; phone: string } | null>(null);
@@ -149,15 +154,31 @@ export function App() {
     if (!base || signupAvail !== 'available') return;
     setError(null);
     setBusy(true);
-    setSignupMsg('Starting…');
+    const steps: string[] = [];
+    setSignup({ phase: 'running', steps: [] });
+    const onStep = (s: string) => {
+      steps.push(s);
+      setSignup({ phase: 'running', steps: [...steps] });
+    };
     try {
-      const out = await signupWithName(base, via, setSignupMsg);
-      setSignupMsg(null);
-      if (out.ok) await openSession(out.token, via, true);
-      else setError(out.error);
+      const out = await signupWithName(base, via, onStep);
+      if (!out.ok) {
+        setSignup({ phase: 'error', steps: [...steps], error: out.error });
+        return;
+      }
+      // Show the finished checklist for a beat, then drop into the home page.
+      setSignup({ phase: 'done', steps: [...steps] });
+      await new Promise((r) => setTimeout(r, 900));
+      await openSession(out.token, via, true);
+      // Clear connect/signup inputs so no stale name lingers if the user signs out.
+      setDesiredName('');
+      setConnectName('');
+      setSignupAvail('idle');
+      setNameInfo({ status: 'idle' });
+      setConnectErr(null);
+      setSignup(null);
     } catch (e) {
-      setSignupMsg(null);
-      setError(e instanceof Error ? e.message : 'signup failed');
+      setSignup({ phase: 'error', steps: [...steps], error: e instanceof Error ? e.message : 'signup failed' });
     } finally {
       setBusy(false);
     }
@@ -216,6 +237,12 @@ export function App() {
     setStepUpMsg(null);
     setService(null);
     setError(null);
+    // Reset the connect/signup screen so a just-used name doesn't linger as stale.
+    setDesiredName('');
+    setConnectName('');
+    setSignupAvail('idle');
+    setNameInfo({ status: 'idle' });
+    setConnectErr(null);
   }
 
   return (
@@ -312,7 +339,6 @@ export function App() {
                 Sign up with wallet
               </button>
             </p>
-            {signupMsg && <p className="ok">⏳ {signupMsg}</p>}
             {!hasWallet() && (
               <p className="muted">
                 <em>No browser wallet detected</em> — sign up with a passkey (your device).
@@ -440,6 +466,45 @@ export function App() {
         Real on Base Sepolia (chain 84532): identity resolves on-chain, the workspace is a deployed
         ERC-4337 Smart Agent, and PII is gated by the verified <code>AgentSession</code> (spec 227).
       </p>
+
+      {/* ── Signup progress modal ──────────────────────────────────── */}
+      {signup && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <h2>
+              {signup.phase === 'done'
+                ? '✓ Workspace ready'
+                : signup.phase === 'error'
+                  ? '⛔ Couldn’t finish'
+                  : 'Creating your workspace…'}
+            </h2>
+            <ol className="steps">
+              {signup.steps.map((s, i) => {
+                const isLast = i === signup.steps.length - 1;
+                const done = signup.phase === 'done' || !isLast;
+                const current = signup.phase === 'running' && isLast;
+                return (
+                  <li key={i} className={done ? 'done' : current ? 'current' : 'pending'}>
+                    {current ? <span className="spinner" /> : <span>{done ? '✓' : '•'}</span>}
+                    {s}
+                  </li>
+                );
+              })}
+            </ol>
+            {signup.phase === 'running' && (
+              <p className="muted">This takes ~15–30s. Confirm any device or wallet prompt that appears.</p>
+            )}
+            {signup.phase === 'done' && <p className="ok">Signing you in…</p>}
+            {signup.phase === 'error' && (
+              <>
+                <p className="err">{signup.error}</p>
+                <p className="muted">Nothing was charged. You can try again.</p>
+                <button onClick={() => setSignup(null)}>Close</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
