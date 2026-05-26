@@ -112,40 +112,53 @@ export async function bootstrapWithWallet(
   return { ok: true, agent };
 }
 
-/** Execute a call FROM a deployed agent: build userOp -> sign hash -> submit (via /a2a). */
+/** Execute a call FROM a deployed agent: build userOp -> sign hash -> submit (via /a2a).
+ *  `attempts` retries the build+submit cycle to ride out post-deploy RPC lag (the bundler
+ *  may not yet see a just-deployed account at simulation). The signature is reused while
+ *  the userOpHash is unchanged across attempts, so a passkey is prompted only once. */
 async function executeCall(
   sender: Address,
   signHash: SignHash,
   callData: Hex,
+  attempts = 1,
 ): Promise<{ ok: true; txHash?: Hex } | { ok: false; error: string }> {
   await ensureCsrfToken();
-  const buildRes = await fetch('/a2a/account/build-call-userop', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', ...csrfHeaders() },
-    body: JSON.stringify({ sender, callData }),
-  });
-  const built = (await buildRes.json()) as {
-    ok?: boolean;
-    userOpHash?: Hex;
-    userOp?: Record<string, unknown>;
-    error?: string;
-  };
-  if (!buildRes.ok || !built.ok || !built.userOpHash || !built.userOp) {
-    return { ok: false, error: built.error ?? `build-call failed (HTTP ${buildRes.status})` };
+  let lastErr = 'execute failed';
+  let cachedHash: Hex | undefined;
+  let cachedSig: Hex | undefined;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 2500));
+    const buildRes = await fetch('/a2a/account/build-call-userop', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify({ sender, callData }),
+    });
+    const built = (await buildRes.json()) as {
+      ok?: boolean;
+      userOpHash?: Hex;
+      userOp?: Record<string, unknown>;
+      error?: string;
+    };
+    if (!buildRes.ok || !built.ok || !built.userOpHash || !built.userOp) {
+      lastErr = built.error ?? `build-call failed (HTTP ${buildRes.status})`;
+      continue;
+    }
+    if (built.userOpHash !== cachedHash) {
+      cachedSig = await signHash(built.userOpHash); // hash changed (or first try) → (re)sign
+      cachedHash = built.userOpHash;
+    }
+    const submitRes = await fetch('/a2a/account/submit-call-userop', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify({ userOp: { ...built.userOp, signature: cachedSig } }),
+    });
+    const submitted = (await submitRes.json()) as { ok?: boolean; transactionHash?: Hex; error?: string };
+    if (submitRes.ok && submitted.ok) return { ok: true, txHash: submitted.transactionHash };
+    lastErr = submitted.error ?? `submit-call failed (HTTP ${submitRes.status})`;
   }
-  const signature = await signHash(built.userOpHash);
-  const submitRes = await fetch('/a2a/account/submit-call-userop', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', ...csrfHeaders() },
-    body: JSON.stringify({ userOp: { ...built.userOp, signature } }),
-  });
-  const submitted = (await submitRes.json()) as { ok?: boolean; transactionHash?: Hex; error?: string };
-  if (!submitRes.ok || !submitted.ok) {
-    return { ok: false, error: submitted.error ?? `submit-call failed (HTTP ${submitRes.status})` };
-  }
-  return { ok: true, txHash: submitted.transactionHash };
+  return { ok: false, error: lastErr };
 }
 
 /** Claim a forced-unique `<base>[N].demo.agent` for the agent + set it as primary.
@@ -170,7 +183,7 @@ export async function claimName(
     label: picked.label,
     newOwner: agent,
   });
-  const reg = await executeCall(agent, signHash, buildExecuteCallData(register));
+  const reg = await executeCall(agent, signHash, buildExecuteCallData(register), 4); // ride out post-deploy lag
   if (!reg.ok) return { ok: false, error: `name register failed: ${reg.error}` };
 
   onStep?.('Setting it as your primary name…');
@@ -458,7 +471,10 @@ export async function signupWithName(
     const pk = await registerPasskey(`${base}.demo.agent`); // FRESH passkey for this workspace
     const dep = await bootstrapWithPasskey(pk, onStep); // deploy passkey-direct
     if (!dep.ok) return { ok: false, error: dep.error };
-    await claimName(dep.agent, passkeySignHash, base, onStep);
+    onStep?.('Waiting for the network to settle…'); // let the just-deployed SA propagate
+    await new Promise((r) => setTimeout(r, 4000));
+    const claim = await claimName(dep.agent, passkeySignHash, base, onStep);
+    if (!claim.ok) return { ok: false, error: claim.error };
     onStep?.('Signing you in…');
     const login = await passkeyLogin(false);
     return login.status === 'issued'
@@ -470,6 +486,7 @@ export async function signupWithName(
   const first = await siweLogin(); // connects wallet + signs
   let agent: Address;
   let address: Address;
+  let justDeployed = false;
   if (first.status === 'issued') {
     agent = first.agent;
     address = first.address;
@@ -478,11 +495,17 @@ export async function signupWithName(
     const dep = await bootstrapWithWallet(address, onStep);
     if (!dep.ok) return { ok: false, error: dep.error };
     agent = dep.agent;
+    justDeployed = true;
   } else {
     return { ok: false, error: first.reason ?? `sign-in ${first.status}` };
   }
+  if (justDeployed) {
+    onStep?.('Waiting for the network to settle…');
+    await new Promise((r) => setTimeout(r, 4000));
+  }
   const signHash: SignHash = (h) => personalSign(address, h);
-  await claimName(agent, signHash, base, onStep);
+  const claim = await claimName(agent, signHash, base, onStep);
+  if (!claim.ok) return { ok: false, error: claim.error };
   onStep?.('Signing you in…');
   const login = await siweLogin();
   return login.status === 'issued'
