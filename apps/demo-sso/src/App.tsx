@@ -356,31 +356,46 @@ export function App() {
             </p>
           </div>
 
+          {/* Arrived via Google (login-grade) → proactively offer the custody step-up
+              as the immediate next step (not buried in the PII reveal). One click → wallet. */}
+          {session.via === 'Google' && (
+            <div className="panel broker">
+              <h2>One more step — unlock full access</h2>
+              <p className="muted">
+                You're signed in with Google (<strong>standard access</strong> — your basic profile). To view
+                sensitive details, provision an agent service, or take custody actions, confirm with your
+                wallet or passkey. It resolves to <strong>this same workspace</strong> (Google is linked to it).
+              </p>
+              <button onClick={() => stepUp('wallet')}>Continue with wallet</button>{' '}
+              <button onClick={() => stepUp('passkey')}>Continue with passkey</button>
+              {stepUpMsg && <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {stepUpMsg}</p>}
+            </div>
+          )}
+
           <div className="panel">
             <h2>Your contact details</h2>
             {sensitive ? (
               <pre>{JSON.stringify(sensitive, null, 2)}</pre>
+            ) : session.via === 'Google' ? (
+              <>
+                <p className="muted" style={{ filter: 'blur(4px)', userSelect: 'none' }}>
+                  ▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒ · +1 ▒▒▒ ▒▒▒ ▒▒▒▒
+                </p>
+                <p className="muted">
+                  Protected — confirm with your <strong>wallet or passkey above</strong> ("unlock full
+                  access") to reveal these. A Google (login-grade) session can't view sensitive details
+                  on its own (ADR-0017 / CN-2).
+                </p>
+              </>
             ) : (
               <>
                 <p className="muted" style={{ filter: 'blur(4px)', userSelect: 'none' }}>
                   ▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒ · +1 ▒▒▒ ▒▒▒ ▒▒▒▒
                 </p>
                 <button onClick={onRevealSensitive}>Confirm to view contact details</button>
-                {session.via === 'Google' && (
-                  <p className="muted" style={{ marginTop: '0.25rem' }}>
-                    You're signed in with Google (standard access) — confirming will prompt your{' '}
-                    <strong>wallet</strong> to sign (one approval) and unlock these for this same workspace.
-                  </p>
-                )}
                 {stepUpMsg && <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {stepUpMsg}</p>}
-                {session.via === 'Google' && stepUpMsg && (
-                  <p style={{ marginTop: '0.25rem' }}>
-                    <button onClick={() => stepUp('passkey')}>Use a passkey instead</button>
-                  </p>
-                )}
                 <p className="muted">
-                  Sensitive details require a <strong>custody-grade</strong> session (wallet/passkey). A
-                  Google (login-grade) session steps up in place (ADR-0017 / CN-2).
+                  Custody-grade session — your contact details unlock directly.
                 </p>
               </>
             )}
