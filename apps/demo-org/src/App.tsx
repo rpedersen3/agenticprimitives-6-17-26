@@ -452,7 +452,20 @@ export function App() {
             )}
             {desiredName && signupAvail === 'taken' && (
               <p className="err" style={{ margin: '0 0 0.5rem' }}>
-                ⛔ {desiredName}.demo.agent is taken — choose another (or connect with it above).
+                ⛔ {desiredName}.demo.agent already exists.{' '}
+                <button
+                  style={{ marginLeft: '0.25rem' }}
+                  onClick={() => {
+                    setConnectName(desiredName);
+                    setDesiredName('');
+                    setSignupAvail('idle');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                >
+                  Connect to {desiredName}.demo.agent instead →
+                </button>
+                <br />
+                <span className="muted">That sends you to the “Connect” box above to sign in with it.</span>
               </p>
             )}
             <p>
