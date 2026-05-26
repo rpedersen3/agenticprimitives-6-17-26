@@ -166,6 +166,34 @@ export function App() {
     else setStepUpMsg(r.reason);
   }
 
+  // Step up a login-grade session to custody-grade IN PLACE: sign in with the
+  // wallet/passkey (resolves to the SAME agent — the EOA's deterministic SA is the
+  // one Google was linked to), then re-fetch the sensitive PII. (UX W-4 / ADR-0017.)
+  async function stepUp(via: 'wallet' | 'passkey') {
+    setStepUpMsg(`Confirming with your ${via === 'wallet' ? 'wallet' : 'device'}…`);
+    try {
+      const out = via === 'wallet' ? await siweLogin() : await passkeyLogin();
+      if (out.status !== 'issued') {
+        setStepUpMsg(
+          out.status === 'bootstrap'
+            ? `That ${via} has no agent yet — connect it first to create one.`
+            : `Step-up ${out.status}${'reason' in out && out.reason ? `: ${out.reason}` : ''}.`,
+        );
+        return;
+      }
+      await openSession(out.token, via, false); // session is now custody-grade
+      const r = await fetchSensitive(out.token);
+      if (r.ok) {
+        setSensitive({ email: r.email, phone: r.phone });
+        setStepUpMsg(null);
+      } else {
+        setStepUpMsg(r.reason);
+      }
+    } catch (e) {
+      setStepUpMsg(e instanceof Error ? e.message : 'step-up failed');
+    }
+  }
+
   async function onProvisionService() {
     if (!session || !profile || session.via === 'Google') return;
     const personAddr = profile.agent.split(':').pop() as Address;
@@ -330,11 +358,22 @@ export function App() {
                 <p className="muted" style={{ filter: 'blur(4px)', userSelect: 'none' }}>
                   ▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒ · +1 ▒▒▒ ▒▒▒ ▒▒▒▒
                 </p>
-                <button onClick={onRevealSensitive}>Confirm to view contact details</button>
+                {session.via !== 'Google' ? (
+                  <button onClick={onRevealSensitive}>Confirm to view contact details</button>
+                ) : (
+                  <>
+                    <p className="muted" style={{ marginTop: '0.25rem' }}>
+                      You're signed in with Google (standard access). Confirm with a custody-grade credential
+                      to reveal these — it resolves to this same workspace:
+                    </p>
+                    <button onClick={() => stepUp('wallet')}>Confirm with wallet</button>{' '}
+                    <button onClick={() => stepUp('passkey')}>Confirm with passkey</button>
+                  </>
+                )}
                 {stepUpMsg && <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {stepUpMsg}</p>}
                 <p className="muted">
-                  Sensitive details are protected — they require a <strong>custody-grade</strong> session
-                  (wallet/passkey). A Google (login-grade) session is asked to step up (ADR-0017 / CN-2).
+                  Sensitive details require a <strong>custody-grade</strong> session (wallet/passkey). A
+                  Google (login-grade) session steps up in place (ADR-0017 / CN-2).
                 </p>
               </>
             )}
