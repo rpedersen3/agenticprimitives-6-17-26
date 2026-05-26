@@ -144,9 +144,8 @@ Central-auth obligations (fail-closed):
    central-auth origin) — **custody-grade** (ADR-0017). A login-grade session is
    insufficient to enroll a custodian.
 3. **Consent**, naming the requesting `aud`/origin and showing the enroll key
-   fingerprint: *"Add a new sign-in key for **demo-org** to rpedersen.agent? This
-   key will be able to act as you on this agent."* (See §8 — a per-site passkey is
-   a **full custodian**; that authority MUST be disclosed.)
+   fingerprint: *"Add a new sign-in key for **demo-org** to rpedersen.agent?"* —
+   scoped per §5.1 (a **site** credential, not a root one).
 4. On approval, submit `execute(self, addPasskey(enroll_digest, enroll_x,
    enroll_y))` signed by the primary credential, via the hardened nonce-gated
    path (reuse `addPasskeyCredential` / `executeCall`). Idempotent if already a
@@ -157,6 +156,63 @@ Central-auth obligations (fail-closed):
 `POST /token { code, aud }` → `{ agentSession }` (existing; single-use, aud-checked).
 `GET /jwks` verifies it (existing). `state`/PKCE/nonce + single-use code reuse the
 existing CN-1/CN-9 handling.
+
+### 5.1 Credential roles & scopes — the central key AUTHORIZES, it is not REUSED
+
+The central ANS passkey does **not** "become" the passkey for every relying site.
+WebAuthn credentials are RP-scoped (bound to one `rpId`), so each site's passkey is
+necessarily a **separate** P-256 credential created at that site's `rpId`. The
+central credential's job is to be the **root / bootstrap authority** that
+*authorizes adding* a new site-local credential to the same person Smart Agent. The
+private key never leaves the authenticator (Windows Hello / iCloud Keychain / etc.);
+only the public `(x, y)` + a credential-id hash are registered on the agent.
+
+```
+rpedersen.agent  →  Person Smart Agent (ERC-4337)
+  ├─ central ANS passkey      rpId: auth.agentictrust.io   role: ROOT
+  │     canAddCredentials · canRecover · canRotate          (bootstrap/recovery)
+  ├─ demo-org site passkey    rpId: demo-org.example        role: SITE
+  │     local signer for demo-org · (canCreateOrg if approved) · canAddCredentials=false
+  ├─ demo-sso site passkey    rpId: demo-sso.example        role: SITE
+  └─ optional EOA / SIWE                                    role: RECOVERY / fallback
+```
+
+**Target on-chain credential record** (one per WebAuthn signer):
+
+```
+WebAuthnSigner {
+  rpIdHash: bytes32          // sha256(rpId) — binds the credential to its origin
+  credentialIdHash: bytes32
+  publicKeyX, publicKeyY: bytes32
+  role: ROOT | SITE | RECOVERY
+  scope?: string             // "demo-org", "org-create", …
+  canAddCredentials: bool    // ROOT: true; SITE: false by default
+  canCreateOrg, canGovernOrg: bool
+  addedByCredentialIdHash: bytes32   // provenance — which credential authorized this one
+  createdAt, revokedAt: uint64
+}
+```
+
+So a SITE key is **narrow** — it signs for its site (and may create/govern orgs if
+approved) but **cannot add further credentials or recover the agent**. Only ROOT
+can. This prevents any single relying-site passkey from becoming a full master key.
+
+**Current-contract reality (demo limitation):** today's `AgentAccount.addPasskey`
+adds a credential as a **full custodian** — there is no `role`/`scope`/capability
+field on-chain yet. The role-scoped model above is the **target**; realizing it
+needs a contracts enhancement (per-credential roles, or relying sites receiving a
+**scoped delegation / session key** instead of a custodian — see §8.1). Until then
+the demo discloses that an added site key is full-authority.
+
+### 5.2 WebAuthn algorithm + on-chain verification (ES256 / P-256)
+
+Custody credentials MUST be **ES256 / P-256** so the agent can verify them on-chain.
+Registration requests it explicitly: `pubKeyCredParams: [{ type: 'public-key',
+alg: -7 }]` (ES256). An authenticator returning RSA/EdDSA is unusable for custody
+(the P-256 verifier can't check it). On-chain, verification uses the **P-256
+precompile**: EIP-7951 `P256VERIFY` at `0x100` (which supersedes the RIP-7212-style
+precompile some rollups already expose); off precompile chains, a pure-Solidity
+P-256 verifier is the fallback (already budgeted in `buildCallUserOp` gas).
 
 ## 6. Relying-site (`demo-org`) auth, both paths — one mechanism each
 
@@ -188,12 +244,16 @@ triggers enrollment, never a silent fallback to a weaker check (ADR-0013).
 
 ## 8. Security considerations
 
-1. **A per-site passkey is a FULL custodian** (can sign any `execute`, add/remove
-   custodians). Enrolling a site grants its local key full agent authority. For
-   this demo that is acceptable and disclosed in the consent (§5.3). **Future
-   hardening (out of scope, flag for ADR/spec):** relying sites should receive a
-   **scoped delegation / session key**, not full custody — the central auth would
-   mint a caveated delegation instead of `addPasskey`.
+1. **Site keys must be ROLE-SCOPED, not root** (§5.1). The target model gives a
+   site credential narrow authority (sign for its site; create/govern orgs if
+   approved) and reserves `canAddCredentials`/`canRecover` for the ROOT (central)
+   credential — so no relying-site passkey becomes a master key. **Current-contract
+   reality:** `addPasskey` adds a *full* custodian (no on-chain role field), so the
+   demo currently grants full authority to an enrolled site key and discloses it in
+   consent. Hardening (flag for a contracts spec): per-credential roles/scopes on
+   `AgentAccount`, OR mint the site a **scoped delegation / session key** instead of
+   a custodian. The central key only ever *authorizes* the add — it is never reused
+   directly by a relying site (WebAuthn RP-scoping makes that impossible anyway).
 2. **Enrollment requires custody-grade auth at the central auth + explicit
    consent.** A malicious relying site cannot enroll its own key silently: the
    person must authenticate with their primary credential and approve, seeing the
