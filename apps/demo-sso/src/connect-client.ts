@@ -404,6 +404,44 @@ export async function stepUpToAgent(
   return { ok: false, error: b.error ?? `step-up failed (HTTP ${r.status})` };
 }
 
+/** Connect to the agent that OWNS `name`, proving control with a custody credential.
+ *  Name-first: the agent-service name is the identity; the server resolves name→agent
+ *  on-chain and verifies the credential is a custodian of it. */
+export async function connectWithName(
+  name: string,
+  via: 'wallet' | 'passkey',
+): Promise<{ ok: true; token: string; name?: string } | { ok: false; error: string }> {
+  let proof: Record<string, unknown>;
+  if (via === 'wallet') {
+    const address = await connectWallet();
+    const nonce = await getNonce();
+    const message = buildMessage({
+      domain: window.location.host,
+      address,
+      uri: window.location.origin,
+      chainId: CHAIN_ID,
+      nonce,
+      statement: `Connect to ${name} on Agentic Connect.`,
+    });
+    const signature = await personalSign(address, message);
+    proof = { kind: 'siwe-eoa', message, signature };
+  } else {
+    const pk = loadPasskey();
+    if (!pk) return { ok: false, error: 'No passkey on this device — sign up first, or connect with your wallet.' };
+    const { challenge } = (await (await fetch('/connect/passkey-challenge')).json()) as { challenge: Hex };
+    const signature = await signWithPasskey(challenge);
+    proof = { kind: 'passkey', credentialIdDigest: pk.credentialIdDigest, challenge, signature };
+  }
+  const r = await fetch('/connect/with-name', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, aud: AUD, ...proof }),
+  });
+  const b = (await r.json()) as { status?: string; token?: string; name?: string; error?: string };
+  if (r.ok && b.status === 'issued' && b.token) return { ok: true, token: b.token, name: b.name };
+  return { ok: false, error: b.error ?? `connect failed (HTTP ${r.status})` };
+}
+
 export interface BasicProfile {
   agent: string;
   name: string | null;

@@ -8,6 +8,7 @@ import {
   bootstrapWithPasskey,
   passkeySignHash,
   stepUpToAgent,
+  connectWithName,
   claimName,
   provisionA2aAgent,
   fetchProfile,
@@ -36,6 +37,8 @@ export function App() {
   const [sensitive, setSensitive] = useState<{ email: string; phone: string } | null>(null);
   const [stepUpMsg, setStepUpMsg] = useState<string | null>(null);
   const [desiredName, setDesiredName] = useState('');
+  const [connectName, setConnectName] = useState('');
+  const [connectErr, setConnectErr] = useState<string | null>(null);
   const [googleNotice, setGoogleNotice] = useState<string | null>(null);
   const [service, setService] = useState<{ step?: string; error?: string; a2aAgent?: string } | null>(null);
 
@@ -118,6 +121,23 @@ export function App() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'passkey connect failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Connect by agent-service name: resolve name → agent → prove with a custody
+  // credential (the name is the identity; any custodian credential gets you in).
+  async function onConnectName(via: 'wallet' | 'passkey') {
+    if (!connectName.trim()) return;
+    setConnectErr(null);
+    setBusy(true);
+    try {
+      const out = await connectWithName(connectName.trim(), via);
+      if (out.ok) await openSession(out.token, via, false);
+      else setConnectErr(out.error);
+    } catch (e) {
+      setConnectErr(e instanceof Error ? e.message : 'connect failed');
     } finally {
       setBusy(false);
     }
@@ -227,33 +247,72 @@ export function App() {
 
       {/* ── Not signed in: connect ───────────────────────────────── */}
       {!session && !bootstrap && (
-        <div className="panel broker">
-          <h2>Connect</h2>
-          <p className="muted">Choose how to sign in. First time? We'll create your workspace.</p>
-          {googleNotice && <p className="ok">ℹ️ {googleNotice}</p>}
-          <p>
-            <button disabled={busy} onClick={onConnectPasskey}>
-              {busy ? 'Working…' : 'Use a passkey'}
-            </button>{' '}
-            <button disabled={busy} onClick={onConnectWallet}>
-              Connect wallet
-            </button>{' '}
-            <button disabled={busy} onClick={() => startGoogleSignIn(AUD, window.location.origin + '/')}>
-              Continue with Google
-            </button>
-          </p>
-          {!hasWallet() && (
-            <p className="muted">
-              <em>No browser wallet detected</em> — use a passkey (your device) or continue with Google.
-            </p>
+        <>
+          {googleNotice && (
+            <div className="panel broker">
+              <p className="ok" style={{ margin: 0 }}>ℹ️ {googleNotice}</p>
+            </div>
           )}
-          <p className="muted">
-            <strong>Passkey</strong> or <strong>wallet</strong> are custody-grade — they create/secure your
-            workspace and unlock sensitive details. <strong>Google</strong> is login-grade: it reads your
-            basic profile, but you'll add a passkey/wallet to your workspace for anything sensitive
-            (ADR-0017).
-          </p>
-        </div>
+
+          {/* Returning: connect with your agent-service name */}
+          <div className="panel broker">
+            <h2>Connect with your agent name</h2>
+            <p className="muted">Already have a workspace? Enter its name, then confirm with the credential you set up.</p>
+            <p>
+              <input
+                value={connectName}
+                onChange={(e) => setConnectName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+                placeholder="bob.demo.agent"
+                style={{ minWidth: '14rem' }}
+              />
+            </p>
+            <p>
+              <button disabled={busy || !connectName.trim()} onClick={() => onConnectName('passkey')}>
+                Connect with passkey
+              </button>{' '}
+              <button disabled={busy || !connectName.trim()} onClick={() => onConnectName('wallet')}>
+                Connect with wallet
+              </button>
+            </p>
+            {connectErr && <p className="err">⛔ {connectErr}</p>}
+          </div>
+
+          {/* New: sign up — pick a unique agent name + a custody credential */}
+          <div className="panel broker">
+            <h2>New here? Sign up</h2>
+            <p className="muted">
+              Pick your agent name, then create it with a passkey or wallet (custody-grade — it secures the
+              workspace and unlocks sensitive details).
+            </p>
+            <p>
+              <input
+                value={desiredName}
+                onChange={(e) => setDesiredName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                placeholder="e.g. alice"
+                style={{ marginRight: '0.25rem' }}
+              />
+              <code>{(desiredName || 'agent')}.demo.agent</code>{' '}
+              <span className="muted">(a number is appended if taken)</span>
+            </p>
+            <p>
+              <button disabled={busy} onClick={onConnectPasskey}>
+                {busy ? 'Working…' : 'Sign up with passkey'}
+              </button>{' '}
+              <button disabled={busy} onClick={onConnectWallet}>
+                Sign up with wallet
+              </button>
+            </p>
+            {!hasWallet() && (
+              <p className="muted">
+                <em>No browser wallet detected</em> — sign up with a passkey (your device).
+              </p>
+            )}
+            <p className="muted">
+              Or <button disabled={busy} onClick={() => startGoogleSignIn(AUD, window.location.origin + '/')}>continue with Google</button>{' '}
+              — login-grade; it identifies a workspace but you confirm with a passkey/wallet to use it (ADR-0017).
+            </p>
+          </div>
+        </>
       )}
 
       {/* ── Bootstrap: create the workspace ──────────────────────── */}
