@@ -44,6 +44,8 @@ const PAGES_PROJECT_RECOVERY = process.env.PAGES_PROJECT_RECOVERY ?? 'agenticpri
 const DEMO_WEB_RECOVERY_URL = process.env.DEMO_WEB_RECOVERY_URL ?? `https://${PAGES_PROJECT_RECOVERY}.pages.dev`;
 const PAGES_PROJECT_SSO = process.env.PAGES_PROJECT_SSO ?? 'agenticprimitives-demo-sso';
 const DEMO_SSO_URL = process.env.DEMO_SSO_URL ?? `https://${PAGES_PROJECT_SSO}.pages.dev`;
+const PAGES_PROJECT_ORG = process.env.PAGES_PROJECT_ORG ?? 'agenticprimitives-demo-org';
+const DEMO_ORG_URL = process.env.DEMO_ORG_URL ?? `https://${PAGES_PROJECT_ORG}.pages.dev`;
 
 const DEPLOYMENTS_PATH = join(REPO_ROOT, 'apps', 'contracts', `deployments-${NETWORK}.json`);
 const STATE_PATH = join(REPO_ROOT, 'cloudflare-urls.json');
@@ -210,8 +212,9 @@ const a2aVars: Record<string, string> = {
   ...contractVars,
   MCP_URL: demoMcpUrl,
   // Every Pages project that calls demo-a2a needs CSRF/origin clearance
-  // (demo-web, demo-web-pro, demo-web-recovery, and demo-sso — spec 227).
-  ALLOWED_ORIGINS: `${DEMO_WEB_URL},${DEMO_WEB_PRO_URL},${DEMO_WEB_RECOVERY_URL},${DEMO_SSO_URL}`,
+  // (demo-web, demo-web-pro, demo-web-recovery, demo-sso — spec 227 — and
+  // demo-org, the relying-site app — spec 229).
+  ALLOWED_ORIGINS: `${DEMO_WEB_URL},${DEMO_WEB_PRO_URL},${DEMO_WEB_RECOVERY_URL},${DEMO_SSO_URL},${DEMO_ORG_URL}`,
 };
 const a2aBackend = process.env.A2A_KMS_BACKEND;
 if (a2aBackend === 'gcp-kms') {
