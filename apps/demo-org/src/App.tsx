@@ -12,7 +12,6 @@ import {
   readPersonData,
   type OrgTokenPayload,
 } from './connect-client';
-import { openCentralAuthPopup, preferRedirect } from './lib/central-auth';
 import type { DelegationWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
@@ -474,10 +473,10 @@ export function App() {
   // home ceremony), falling back to a full-page redirect when the popup is blocked or on
   // mobile. Used for a brand-new signup (central creates the account) AND "set up this site"
   // for an existing agent (central adds this site's key). Spec 229 §3 + popup UX design.
-  // Hand off to the person's secure home. demo-org creates NOTHING locally (zero prompts here);
-  // the secure-home window is the single auth surface where the device prompts happen, each
-  // framed with a promise + receipt. We stay on a calm "continue in your secure home" screen
-  // while it's open (no local prompts firing over it), then receive the result + sign in.
+  // Hand off to the person's secure home via a FULL-PAGE REDIRECT (standard OIDC, like Google /
+  // Auth0 / Okta) — one clean surface, no popup-over-page. demo-org creates nothing locally; the
+  // secure home runs the guided ceremony full-screen, then redirects back here with the code (the
+  // `?code` handler signs you in). Cleaner + more premium than a popup window.
   async function beginSiteSetup(name: string) {
     setError(null);
     setConnectErr(null);
@@ -492,40 +491,10 @@ export function App() {
       setFlow({ title: "Couldn't start sign-in", phase: 'error', steps: [], error: e instanceof Error ? e.message : 'failed to start' });
       return;
     }
-
-    const stash = JSON.stringify({ state, name, authOrigin, codeVerifier, nonce });
-
-    // Mobile / narrow viewport → full-page redirect (a popup would open as a tab).
-    if (preferRedirect()) {
-      sessionStorage.setItem(ENROLL_KEY, stash);
-      setFlow({ title: 'Continue in your secure home', phase: 'running', steps: ['Taking you to your secure home…'] });
-      await new Promise((r) => setTimeout(r, 600));
-      window.location.href = url;
-      return;
-    }
-
-    // Desktop → popup-first. Calm handoff screen while the secure-home window is open.
-    setFlow({ title: 'Continue in your secure home', phase: 'running', steps: ['Approve in the secure-home window…'] });
-    const result = await openCentralAuthPopup(url, state, authOrigin, (msg) =>
-      setFlow({ title: 'Continue in your secure home', phase: 'running', steps: [msg] }),
-    );
-    if (result.status === 'blocked') {
-      sessionStorage.setItem(ENROLL_KEY, stash);
-      setFlow({ title: 'Continue in your secure home', phase: 'running', steps: ['Taking you to your secure home…'] });
-      await new Promise((r) => setTimeout(r, 900));
-      window.location.href = url;
-      return;
-    }
-    if (result.status === 'cancelled') {
-      setFlow(null);
-      setConnectErr('Sign-in was cancelled. You can try again.');
-      return;
-    }
-    if (result.status === 'error') {
-      setFlow({ title: "Couldn't finish", phase: 'error', steps: [], error: result.error });
-      return;
-    }
-    await completeAuth(authOrigin, result.code, codeVerifier, nonce, name, true);
+    sessionStorage.setItem(ENROLL_KEY, JSON.stringify({ state, name, authOrigin, codeVerifier, nonce }));
+    setFlow({ title: 'Taking you to your secure home', phase: 'running', steps: ['Opening your secure home…'] });
+    await new Promise((r) => setTimeout(r, 350));
+    window.location.href = url;
   }
 
   /** Existing agent, first time on this site → set up a site key via the central auth. */
@@ -611,35 +580,12 @@ export function App() {
     const base = orgName.trim();
     if (!base || orgAvail !== 'available') return;
     const { url, state, authOrigin, codeVerifier, nonce } = await startOrgCreation(session.name, base);
-    setFlow({ title: 'Creating your organization', phase: 'running', steps: ['Approve in the secure-home window…'] });
-    const stash = JSON.stringify({ state, addr: session.address, authOrigin, codeVerifier, nonce });
-
-    // Mobile / narrow viewport → full-page redirect.
-    if (preferRedirect()) {
-      sessionStorage.setItem(ORG_KEY, stash);
-      await new Promise((r) => setTimeout(r, 600));
-      window.location.href = url;
-      return;
-    }
-    const result = await openCentralAuthPopup(url, state, authOrigin, (msg) =>
-      setFlow({ title: 'Creating your organization…', phase: 'running', steps: [msg] }),
-    );
-    if (result.status === 'blocked') {
-      sessionStorage.setItem(ORG_KEY, stash);
-      setFlow({ title: 'Creating your organization…', phase: 'running', steps: ['Your browser blocked the popup — taking you to your secure home…'] });
-      await new Promise((r) => setTimeout(r, 900));
-      window.location.href = url;
-      return;
-    }
-    if (result.status === 'cancelled') {
-      setFlow(null);
-      return;
-    }
-    if (result.status === 'error') {
-      setFlow({ title: "Couldn't finish", phase: 'error', steps: [], error: result.error });
-      return;
-    }
-    await completeOrg(authOrigin, result.code, codeVerifier, session.address);
+    // Full-page redirect to your secure home (standard OIDC) — the org ceremony runs there, then
+    // redirects back with the code (the `?code` handler / completeOrg finishes it). No popup.
+    sessionStorage.setItem(ORG_KEY, JSON.stringify({ state, addr: session.address, authOrigin, codeVerifier, nonce }));
+    setFlow({ title: 'Taking you to your secure home', phase: 'running', steps: ['Opening your secure home…'] });
+    await new Promise((r) => setTimeout(r, 350));
+    window.location.href = url;
   }
 
   // Read the PERSON's gated PII via the delegation we already hold (person → this site's
