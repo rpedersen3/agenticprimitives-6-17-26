@@ -10,8 +10,12 @@
 //
 //   2. Legacy code-exchange — the demo-sso self-login (Google / simulated /authorize) sends
 //      { code, aud } and gets { agentSession }.
-import { verifyPkceS256 } from '@agenticprimitives/connect';
-import { jsonCors, preflight, type FnContext } from './_lib/server-broker';
+import { verifyPkceS256, mintIdToken } from '@agenticprimitives/connect';
+import { toCanonicalAgentId } from '@agenticprimitives/identity-directory-adapters';
+import { getServer, jsonCors, preflight, type FnContext } from './_lib/server-broker';
+import { verifyDelegation, type IncomingDelegation } from './_lib/verify-delegation';
+import { getClient, clientAllowsRedirect } from '../src/lib/oidc-clients';
+import { CHAIN_ID } from '../src/lib/chain';
 
 const ID_TOKEN_TTL = 3600;
 
@@ -22,12 +26,37 @@ interface TokenBody {
   client_id?: string;
   redirect_uri?: string;
   aud?: string;
+  // Silent re-auth (ADR-0019): a held, live delegation → an id_token, no passkey ceremony.
+  delegation?: IncomingDelegation;
+  agent_name?: string;
 }
 
 export const onRequestOptions = ({ request }: FnContext): Response => preflight(request);
 
 export const onRequestPost = async ({ request, env }: FnContext): Promise<Response> => {
   const body = (await request.json().catch(() => ({}))) as TokenBody;
+
+  // ── Delegation grant — silent re-auth (spec 230 / ADR-0019) ──
+  // A relying site that already HOLDS a live, in-window delegation gets a fresh id_token with NO
+  // popup/passkey: the OP verifies the delegation (ERC-1271 against the delegator + window) and
+  // mints sub = delegator. This is the returning-sign-in path (0 prompts).
+  if ((body.grant_type === 'delegation' || (body.delegation && !body.code)) && body.client_id) {
+    const client = getClient(body.client_id);
+    if (!client) return jsonCors({ error: `unknown client_id "${body.client_id}"` }, request, 400);
+    if (body.redirect_uri && !clientAllowsRedirect(client, body.redirect_uri)) {
+      return jsonCors({ error: 'redirect_uri not allowed for client' }, request, 400);
+    }
+    if (!body.delegation) return jsonCors({ error: 'delegation required' }, request, 400);
+    const v = await verifyDelegation(env, body.delegation);
+    if (!v.ok) return jsonCors({ error: `delegation invalid: ${v.reason}` }, request, 400);
+    const iss = new URL(request.url).origin;
+    const { signer } = await getServer(env);
+    const idToken = await mintIdToken(
+      { iss, sub: toCanonicalAgentId(CHAIN_ID, body.delegation.delegator), aud: body.client_id, agentName: body.agent_name, ttlSeconds: ID_TOKEN_TTL },
+      signer,
+    );
+    return jsonCors({ id_token: idToken, token_type: 'Bearer', expires_in: ID_TOKEN_TTL, delegation: body.delegation }, request);
+  }
 
   // ── OIDC authorization_code grant (spec 230) ──
   if (body.grant_type === 'authorization_code' || body.code_verifier) {

@@ -658,6 +658,7 @@ export async function signupWithName(
   base: string,
   via: 'wallet' | 'passkey',
   onStep?: (s: string) => void,
+  signIn = true,
 ): Promise<{ ok: true; token: string; name: string } | { ok: false; error: string }> {
   if (via === 'passkey') {
     onStep?.('Creating your passkey…');
@@ -667,6 +668,9 @@ export async function signupWithName(
     // Fresh deploy consumed nonce 0 → the claim op must be nonce ≥ 1 (gate out the lag).
     const claim = await claimName(dep.agent, passkeySignHash, base, onStep, 1n);
     if (!claim.ok) return { ok: false, error: claim.error };
+    // The OIDC enrollment ceremony signs the person in via the grant + id_token, so it skips
+    // this extra passkeyLogin (its token would be unused) — saving one device prompt.
+    if (!signIn) return { ok: true, token: '', name: claim.name };
     onStep?.('Signing you in…');
     const login = await passkeyLogin(false);
     return login.status === 'issued'

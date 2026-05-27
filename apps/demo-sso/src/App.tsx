@@ -495,7 +495,7 @@ export function App() {
       let resolvedName = enrollReq.name;
       if (!enrollExists) {
         const base = enrollReq.name.replace(/\.demo\.agent$/, '');
-        const created = await signupWithName(base, 'passkey', onStep);
+        const created = await signupWithName(base, 'passkey', onStep, false); // grant signs in (skip extra prompt)
         if (!created.ok) {
           setEnrollFlow({ phase: 'error', error: created.error });
           return;

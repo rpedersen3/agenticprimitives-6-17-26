@@ -419,6 +419,27 @@ export interface TokenResult {
   org?: OrgTokenPayload;
 }
 
+/** Returning sign-in with NO popup/passkey (spec 230 / ADR-0019 runtime auth): present the
+ *  held delegation to /token; the OP verifies it (ERC-1271 + window) and mints a fresh id_token.
+ *  Returns the verified session, or null to fall back to the full enrollment ceremony. */
+export async function silentReauth(name: string, delegation: DelegationWire): Promise<{ idToken: string; name: string } | null> {
+  try {
+    const authOrigin = await resolveAuthOrigin(name);
+    const r = await fetch(new URL('/token', authOrigin).toString(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ grant_type: 'delegation', delegation, client_id: CLIENT_ID, redirect_uri: redirectUri(), agent_name: name }),
+    });
+    if (!r.ok) return null;
+    const b = (await r.json().catch(() => ({}))) as { id_token?: string };
+    if (!b.id_token) return null;
+    const claims = await verifyIdToken(authOrigin, b.id_token, ''); // no nonce in a silent re-auth
+    return { idToken: b.id_token, name: claims.agent_name ?? name };
+  } catch {
+    return null; // any failure → caller falls back to the popup ceremony
+  }
+}
+
 /** Exchange the authorization code at /token (PKCE) → { id_token, delegation, org? } (§4.3). */
 export async function exchangeCode(authOrigin: string, code: string, codeVerifier: string): Promise<TokenResult> {
   const r = await fetch(new URL('/token', authOrigin).toString(), {

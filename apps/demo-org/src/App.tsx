@@ -7,6 +7,7 @@ import {
   startSiteEnrollment,
   exchangeCode,
   verifyIdToken,
+  silentReauth,
   readOrgData,
   readPersonData,
   type OrgTokenPayload,
@@ -348,7 +349,21 @@ export function App() {
     if (!connectName.trim()) return;
     setConnectErr(null);
     if (via === 'passkey') {
-      await beginSiteSetup(connectName.trim());
+      const name = connectName.trim();
+      // Returning sign-in: if we already hold a live delegation, re-auth SILENTLY (no popup,
+      // no device prompt) — present it to the OP for a fresh id_token (ADR-0019). Only fall back
+      // to the full popup ceremony if we have none, or it's stale/expired.
+      const del = loadDelegation(name);
+      if (del) {
+        setBusy(true);
+        const out = await silentReauth(name, del).catch(() => null);
+        setBusy(false);
+        if (out) {
+          openSession(out.idToken, 'passkey', out.name, false);
+          return;
+        }
+      }
+      await beginSiteSetup(name);
       return;
     }
     setBusy(true);
