@@ -1,8 +1,8 @@
 # Spec 230 — Agentic Connect as a person-scoped OpenID Provider (OIDC)
 
-Status: draft · 2026-05-27 · supersedes the custom relying-site enrollment transport
-in spec 229 §5 (the protocol/authority model is unchanged; only the transport becomes
-standard OIDC).
+Status: IMPLEMENTED + deployed live 2026-05-27 (P1–P4, §9) · supersedes the custom
+relying-site enrollment transport in spec 229 §5 (the protocol/authority model is
+unchanged; only the transport becomes standard OIDC).
 
 ## 1. Purpose
 
@@ -196,15 +196,23 @@ postMessage / base64 redirect param) is **replaced** by the OIDC code+PKCE flow:
 
 ## 9. Phase plan (each independently demoable)
 
-- **P1 — OIDC core surface.** `/.well-known/openid-configuration`; rewrite `/authorize`
-  to the standard GET code+PKCE shape; `id_token` claims (§5); `/token` response shape
-  (§4.3) incl. the `delegation` sidecar. Keep the engine in `@agenticprimitives/connect`.
-- **P2 — Client registry.** `client_id` config + per-client redirect/scope/template gates.
-- **P3 — Converge demo-org.** Replace the popup enrollment + org-creation transport
-  with the code+PKCE flow; delete the `AC_*` contract; delegation/org payload ride
-  `/token`. Update demo-org `connect-client` + `central-auth` + `App`.
-- **P4 — Security gates as tests.** Encode the §8 checklist as regression tests
-  (reject: bad redirect, missing PKCE, replayed code, wrong `iss`, implicit response_type).
+**Status: P1–P4 DONE + deployed live 2026-05-27** (demo-sso `master`, demo-org `main`).
+The authorization endpoint is the SPA at the origin root (the consent + ROOT-passkey
+ceremony renders there), so `authorization_endpoint` = `${iss}/` (§4.1). Verified live:
+discovery routes (the `functions/.well-known/` dotfile path works on Pages), `/token` +
+`/jwks` CORS preflight reflect the registered client origin, `id_token` verifies against JWKS.
+
+- **P1 — OIDC core surface. DONE** (`7c4daf4` connect `mintIdToken`/`verifyIdToken`/
+  `verifyPkceS256`; `ecc20f6` discovery doc; `ea7ea65` `/oidc/grant` + `/token` shape incl.
+  the `delegation` sidecar). `id_token` claims per §5; engine in `@agenticprimitives/connect`.
+- **P2 — Client registry. DONE** (`ecc20f6` `src/lib/oidc-clients.ts`): `client_id` →
+  exact redirect_uris / scopes / delegation_templates; gated server-side at grant + the CORS allowlist.
+- **P3 — Converge demo-org. DONE** (`ea7ea65`): one code+PKCE flow for sign-in + org-create;
+  `id_token` IS the session; delegation/org ride `/token`. DELETED the `AC_*` contract,
+  `connectWithDelegation`, and `functions/connect/with-delegation.ts`.
+- **P4 — Security gates. DONE** (`7c4daf4` connect tests): PKCE match/mismatch + `id_token`
+  alg-pin / iss / aud / nonce / exp rejections (6 tests). The endpoint gates (exact redirect
+  allowlist, single-use code, client/template, PKCE binding) are enforced in `/oidc/grant` + `/token`.
 
 ## 10. Open questions
 

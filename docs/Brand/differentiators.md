@@ -1,5 +1,10 @@
 # Agentic Primitives Differentiators
 
+Related brand docs:
+
+- [Agentic Connect Brand Positioning](./agentic-connect-positioning.md) — passkey
+  SSO, OIDC for "who is this," and delegation for "what may this app do."
+
 ## The Fundamental Move
 
 Most web3 products still speak in the language of:
