@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
 import { connectWithName, signupWithName, createOrg, startSiteEnrollment, type RootCred } from './connect-client';
+import { openCentralAuthPopup, preferRedirect, type RootKeyMsg } from './lib/central-auth';
 import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
 
@@ -168,8 +169,11 @@ export function App() {
       setError(`Enrollment was not completed (${enrollErr}).`);
       return;
     }
-    if (stored.state && retState && stored.state !== retState) {
-      setError('Enrollment state mismatch — please try again.');
+    // Fail-closed (audit F5): a return MUST carry a state that matches the one we stashed —
+    // a forged return URL (no/wrong state) can't drive us into a fake "success" or inject a
+    // bogus recovery key.
+    if (!stored.state || !retState || stored.state !== retState) {
+      setError('We couldn’t verify that setup response. Please start setup again.');
       return;
     }
     const name = retName ?? stored.name ?? '';
@@ -177,28 +181,8 @@ export function App() {
       setError('Enrollment returned without a name.');
       return;
     }
-    if (rd && rx && ry) {
-      try {
-        localStorage.setItem(rootCredKey(name), JSON.stringify({ credentialIdDigest: rd, x: rx, y: ry }));
-      } catch {
-        /* ignore */
-      }
-    }
-    void (async () => {
-      setFlow({ title: 'Finishing setup…', phase: 'running', steps: ['Signing in with your new passkey…'] });
-      let lastErr = '';
-      for (let i = 0; i < 5; i++) {
-        if (i > 0) await new Promise((r) => setTimeout(r, 2500));
-        const out = await connectWithName(name, 'passkey');
-        if (out.ok) {
-          setFlow(null);
-          openSession(out.token, 'passkey', out.name ?? name, true);
-          return;
-        }
-        lastErr = out.error;
-      }
-      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: lastErr || 'sign-in after enrollment failed' });
-    })();
+    const root = rd && rx && ry ? { credentialIdDigest: rd, x: rx, y: ry } : undefined;
+    void finishEnrollment(name, root);
     // run once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -301,28 +285,44 @@ export function App() {
     }
   }
 
-  // Begin cross-origin setup: register a LOCAL passkey for this origin, frame what's
-  // happening + where we're going, then redirect to the central auth (spec 229 §3).
-  // Used for BOTH a brand-new signup (name doesn't exist → central creates it) and
-  // "set up this site" for an existing agent (central adds this site's key).
+  // After the central auth confirms enrollment, this origin's local passkey is an on-chain
+  // custodian → sign in with it (retry for post-add RPC lag), caching the ROOT recovery key.
+  async function finishEnrollment(name: string, root?: RootKeyMsg) {
+    if (root && root.credentialIdDigest && root.x && root.y) {
+      try {
+        localStorage.setItem(rootCredKey(name), JSON.stringify(root));
+      } catch {
+        /* ignore */
+      }
+    }
+    setFlow({ title: 'Finishing setup…', phase: 'running', steps: ['Signing you in with your new passkey…'] });
+    let lastErr = '';
+    for (let i = 0; i < 5; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 2500));
+      const out = await connectWithName(name, 'passkey');
+      if (out.ok) {
+        setFlow(null);
+        openSession(out.token, 'passkey', out.name ?? name, true);
+        return;
+      }
+      lastErr = out.error;
+    }
+    setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: lastErr || 'sign-in after enrollment failed' });
+  }
+
+  // Begin cross-origin setup: register a LOCAL passkey for this origin (Windows Hello), then
+  // hand off to the central auth — in a POPUP (keeps you here; first-party context for the
+  // home ceremony), falling back to a full-page redirect when the popup is blocked or on
+  // mobile. Used for a brand-new signup (central creates the account) AND "set up this site"
+  // for an existing agent (central adds this site's key). Spec 229 §3 + popup UX design.
   async function beginSiteSetup(name: string) {
     setError(null);
     setConnectErr(null);
-    setFlow({
-      title: 'Setting up your account',
-      phase: 'running',
-      steps: ['Creating your sign-in key on this device…'],
-    });
+    setFlow({ title: 'Setting up your account', phase: 'running', steps: ['Creating your sign-in key on this device…'] });
+    let url: string;
+    let state: string;
     try {
-      const { url, state } = await startSiteEnrollment(name); // fires Windows Hello here
-      sessionStorage.setItem(ENROLL_KEY, JSON.stringify({ state, name }));
-      setFlow({
-        title: 'Setting up your account',
-        phase: 'running',
-        steps: ['Creating your sign-in key on this device…', 'Taking you to your secure home to finish…'],
-      });
-      await new Promise((r) => setTimeout(r, 700)); // let the handoff message register
-      window.location.href = url; // → central auth; returns with ?enrolled=1
+      ({ url, state } = await startSiteEnrollment(name)); // fires Windows Hello here
     } catch (e) {
       setFlow({
         title: 'Couldn’t start setup',
@@ -330,7 +330,53 @@ export function App() {
         steps: [],
         error: e instanceof Error ? e.message : 'could not create a sign-in key on this device',
       });
+      return;
     }
+
+    // Mobile / narrow viewport → full-page redirect (a popup would open as a tab).
+    if (preferRedirect()) {
+      sessionStorage.setItem(ENROLL_KEY, JSON.stringify({ state, name }));
+      setFlow({
+        title: 'Setting up your account',
+        phase: 'running',
+        steps: ['Created your sign-in key', 'Taking you to your secure home to finish…'],
+      });
+      await new Promise((r) => setTimeout(r, 700));
+      window.location.href = url;
+      return;
+    }
+
+    // Desktop → popup-first.
+    setFlow({
+      title: 'Setting up your account',
+      phase: 'running',
+      steps: ['Created your sign-in key', 'Opening your secure home…'],
+    });
+    const result = await openCentralAuthPopup(url, state, (msg) =>
+      setFlow({ title: 'Setting up your account', phase: 'running', steps: ['Created your sign-in key', msg] }),
+    );
+    if (result.status === 'blocked') {
+      // Popup blocked → fall back to a redirect (carry state via sessionStorage).
+      sessionStorage.setItem(ENROLL_KEY, JSON.stringify({ state, name }));
+      setFlow({
+        title: 'Setting up your account',
+        phase: 'running',
+        steps: ['Created your sign-in key', 'Your browser blocked the popup — taking you to your secure home…'],
+      });
+      await new Promise((r) => setTimeout(r, 1100));
+      window.location.href = url;
+      return;
+    }
+    if (result.status === 'cancelled') {
+      setFlow(null);
+      setConnectErr('Setup was cancelled. You can try again.');
+      return;
+    }
+    if (result.status === 'error') {
+      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: result.error });
+      return;
+    }
+    await finishEnrollment(result.name || name, result.root);
   }
 
   /** Existing agent, first time on this site → set up a site key via the central auth. */

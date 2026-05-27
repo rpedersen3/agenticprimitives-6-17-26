@@ -88,8 +88,9 @@ export async function registerPasskey(label: string): Promise<DemoPasskey> {
       challenge,
       rp: { id: window.location.hostname, name: 'Agentic Connect' },
       user: { id: userId, name: label, displayName: label },
-      pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256 / P-256
-      authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256 / P-256 ONLY (custody needs it; F9)
+      // userVerification REQUIRED: the ROOT/primary passkey is custody-grade (security audit F9).
+      authenticatorSelection: { residentKey: 'preferred', userVerification: 'required' },
       attestation: 'none',
       timeout: 60_000,
     },
@@ -118,7 +119,7 @@ export async function signWithPasskey(digest: Hex): Promise<Hex> {
     publicKey: {
       challenge: hexToBytes(digest) as BufferSource,
       allowCredentials: [{ id: credentialIdBytes as BufferSource, type: 'public-key' }],
-      userVerification: 'preferred',
+      userVerification: 'required', // custody-grade signing — demand verification (F9)
       timeout: 60_000,
     },
   })) as PublicKeyCredential | null;

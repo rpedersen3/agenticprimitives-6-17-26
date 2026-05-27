@@ -397,10 +397,28 @@ export function App() {
   //    passkey on THIS origin + deploy the agent + claim the name — THEN add the site's
   //    public key as a custodian.
   //  · EXISTING agent: just add the site's public key, signed by the primary passkey here.
+  // Popup mode: opened by a relying site via window.open(?mode=popup). We post the result
+  // back to the opener instead of redirecting, then self-close.
+  const popupMode =
+    !!enrollReq && !!window.opener && new URL(window.location.href).searchParams.get('mode') === 'popup';
+  // Post to the opener ONLY at the validated relying origin (audit F3 — exact targetOrigin,
+  // never '*'); refuse if the redirect_uri isn't an allowed relying origin.
+  function postToOpener(msg: Record<string, unknown>) {
+    if (!enrollReq || !window.opener || !relyingAllowed(enrollReq.redirectUri)) return;
+    try {
+      window.opener.postMessage(msg, new URL(enrollReq.redirectUri).origin);
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function approveEnroll() {
     if (!enrollReq) return;
     const enrollKey = { credentialIdDigest: enrollReq.digest, x: BigInt(enrollReq.x), y: BigInt(enrollReq.y) };
-    const onStep = (s: string) => setEnrollFlow({ phase: 'running', msg: s });
+    const onStep = (s: string) => {
+      setEnrollFlow({ phase: 'running', msg: s });
+      if (popupMode) postToOpener({ type: 'AC_PROGRESS', msg: s });
+    };
     setEnrollFlow({ phase: 'running', msg: 'Starting…' });
     try {
       let resolvedName = enrollReq.name;
@@ -420,18 +438,27 @@ export function App() {
         setEnrollFlow({ phase: 'error', error: out.error });
         return;
       }
-      const url = new URL(enrollReq.redirectUri);
-      url.searchParams.set('enrolled', '1');
-      url.searchParams.set('state', enrollReq.state);
-      url.searchParams.set('name', out.name);
       // Return our ROOT passkey's PUBLIC key so the relying site can add it as a recovery
       // custodian to orgs the person creates there — the org stays reachable from home, not
       // siloed to a site key (spec 229 §7). Public-only; the private key never leaves here.
       const root = loadPasskey();
-      if (root) {
-        url.searchParams.set('root_digest', root.credentialIdDigest);
-        url.searchParams.set('root_x', root.pubKeyX.toString());
-        url.searchParams.set('root_y', root.pubKeyY.toString());
+      const rootMsg = root
+        ? { credentialIdDigest: root.credentialIdDigest, x: root.pubKeyX.toString(), y: root.pubKeyY.toString() }
+        : undefined;
+
+      if (popupMode) {
+        postToOpener({ type: 'AC_SUCCESS', state: enrollReq.state, name: out.name, root: rootMsg });
+        window.close();
+        return;
+      }
+      const url = new URL(enrollReq.redirectUri);
+      url.searchParams.set('enrolled', '1');
+      url.searchParams.set('state', enrollReq.state);
+      url.searchParams.set('name', out.name);
+      if (rootMsg) {
+        url.searchParams.set('root_digest', rootMsg.credentialIdDigest);
+        url.searchParams.set('root_x', rootMsg.x);
+        url.searchParams.set('root_y', rootMsg.y);
       }
       window.location.href = url.toString();
     } catch (e) {
@@ -440,6 +467,11 @@ export function App() {
   }
   function denyEnroll() {
     if (!enrollReq) return;
+    if (popupMode) {
+      postToOpener({ type: 'AC_CANCEL', state: enrollReq.state });
+      window.close();
+      return;
+    }
     const url = new URL(enrollReq.redirectUri);
     url.searchParams.set('enroll_error', 'denied');
     url.searchParams.set('state', enrollReq.state);
@@ -483,6 +515,10 @@ export function App() {
               </p>
               <p style={{ fontSize: '1.2rem', margin: '0.3rem 0' }}>
                 <code>{enrollReq.name}</code>
+              </p>
+              {/* Fingerprint of the EXACT key being signed — consent binds to the signed bytes (audit F2). */}
+              <p className="muted" style={{ margin: '0 0 0.4rem' }}>
+                Key being added: <code>{enrollReq.digest.slice(0, 10)}…{enrollReq.digest.slice(-6)}</code>
               </p>
 
               {isNew ? (

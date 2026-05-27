@@ -282,6 +282,25 @@ triggers enrollment, never a silent fallback to a weaker check (ADR-0013).
    (custody-grade, signed by any remaining custodian). The "must leave at least
    one signer" invariant holds.
 
+### 8.x Security-audit status (2026-05-26)
+
+A security review of the cross-origin enrollment (redirect + the popup variant) produced 11 findings. Status:
+
+**Hardened in the demo (done):**
+- **Popup channel origin trust (F3):** the ceremony runs in a popup; demo-org accepts a result ONLY from the exact popup window (`event.source`) at the exact `CENTRAL_AUTH_ORIGIN` (`event.origin`); demo-sso posts back ONLY to the validated relying origin (never `'*'`). See `apps/demo-org/src/lib/central-auth.ts` + `postToOpener` in demo-sso.
+- **Fail-closed `state` (F5):** a redirect/popup result with absent or mismatched `state` is rejected (no more `&&` short-circuit) — forged returns can't fake success or inject a recovery key.
+- **Consent binds to the signed key (F2):** the consent shows the fingerprint of the exact `(digest,x,y)` being added.
+- **userVerification REQUIRED + ES256-only (F9):** custody passkeys demand biometric/PIN, not mere presence.
+- **Clickjacking (F8):** `frame-ancestors 'none'` / `X-Frame-Options: DENY` via `_headers` on both apps.
+- **Storage hygiene (F11):** demo-org's passkey storage key namespaced to its own app.
+
+**Must-fix BEFORE production / non-demo (NOT a demo blocker, but gating real identities):**
+- **F4 — site keys are FULL custodians.** `addPasskey` has no on-chain role/scope, so an enrolled relying-site key has ROOT-equivalent authority; a single relying-site compromise = full canonical-identity takeover. Fix = per-credential roles on `AgentAccount` (ROOT-only `canAddCredentials`/`canRecover`) OR issue relying sites a **scoped delegation / session key** instead of a custodian. This is §8.1; gate for **ADR-0019**.
+- **F1 — enrollment authority is enforced client-side only.** The `addPasskey` goes through demo-a2a, which doesn't gate enrollment; `ALLOWED_RELYING_ORIGINS` lives in the browser bundle. Fix = a server endpoint (demo-sso) that validates `aud`/`redirect_uri` server-side and is the only thing that can trigger the enrollment, with the allowlist in server env.
+- **F2-strong — bind consent into the signed challenge.** Beyond showing the fingerprint, the WebAuthn assertion should commit to `keccak(aud,name,agent,enroll_key,state)`, not just the opaque userOp hash.
+- **F6 — verify the ROOT pubkey on-chain** (`hasPasskey(agent,digest)`) before caching/using it as an org recovery custodian (today mitigated by F5 + the origin-validated popup channel, but add the positive check).
+- **F7 — enroll by agent ADDRESS, not name** (thread the address `signupWithName` returns into the enroll step; resolve-by-address is doctrine).
+
 ## 9. Implementation requirements
 
 - **Central auth (extend `apps/demo-sso`):** add `GET /authorize` enrollment per

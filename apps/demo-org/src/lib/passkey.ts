@@ -8,7 +8,7 @@ import { parseAttestationObject, buildWebAuthnAssertion } from '@agenticprimitiv
 import { encodeWebAuthnSignature } from '@agenticprimitives/agent-account';
 import type { Hex } from '@agenticprimitives/types';
 
-const STORAGE_KEY = 'agenticprimitives:demo-sso:passkey';
+const STORAGE_KEY = 'agenticprimitives:demo-org:passkey';
 
 export interface DemoPasskey {
   credentialIdDigest: Hex; // keccak256(credentialId)
@@ -86,10 +86,12 @@ export async function registerPasskey(label: string): Promise<DemoPasskey> {
   const credential = (await navigator.credentials.create({
     publicKey: {
       challenge,
-      rp: { id: window.location.hostname, name: 'Agentic Connect' },
+      rp: { id: window.location.hostname, name: 'Agentic Org' },
       user: { id: userId, name: label, displayName: label },
-      pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256 / P-256
-      authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256 / P-256 ONLY (custody needs it; F9)
+      // userVerification REQUIRED: an enrolled key becomes a custody credential, so demand
+      // biometric/PIN, not mere presence (security audit F9).
+      authenticatorSelection: { residentKey: 'preferred', userVerification: 'required' },
       attestation: 'none',
       timeout: 60_000,
     },
@@ -118,7 +120,7 @@ export async function signWithPasskey(digest: Hex): Promise<Hex> {
     publicKey: {
       challenge: hexToBytes(digest) as BufferSource,
       allowCredentials: [{ id: credentialIdBytes as BufferSource, type: 'public-key' }],
-      userVerification: 'preferred',
+      userVerification: 'required', // custody-grade signing — demand verification (F9)
       timeout: 60_000,
     },
   })) as PublicKeyCredential | null;
