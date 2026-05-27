@@ -570,6 +570,7 @@ export function App() {
               <p className="err" style={{ margin: '0 0 0.5rem' }}>
                 ⛔ {desiredName}.demo.agent already exists.{' '}
                 <button
+                  className="ghost"
                   style={{ marginLeft: '0.25rem' }}
                   onClick={() => {
                     setConnectName(desiredName);
@@ -697,7 +698,7 @@ export function App() {
               <>
                 <p className="err">{flow.error}</p>
                 <p className="muted">Nothing was charged. You can try again.</p>
-                <button onClick={() => setFlow(null)}>Close</button>
+                <button className="ghost" onClick={() => setFlow(null)}>Close</button>
               </>
             )}
           </div>

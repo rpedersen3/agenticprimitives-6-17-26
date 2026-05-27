@@ -562,7 +562,7 @@ export function App() {
                   <button onClick={approveEnroll}>
                     {isNew ? 'Create my account & approve' : 'Approve with your device'}
                   </button>{' '}
-                  <button onClick={denyEnroll}>Cancel{isNew ? ' — go back' : ''}</button>
+                  <button className="ghost" onClick={denyEnroll}>Cancel{isNew ? ' — go back' : ''}</button>
                 </p>
               )}
             </>
@@ -869,7 +869,7 @@ export function App() {
               <>
                 <p className="err">{signup.error}</p>
                 <p className="muted">Nothing was charged. You can try again.</p>
-                <button onClick={() => setSignup(null)}>Close</button>
+                <button className="ghost" onClick={() => setSignup(null)}>Close</button>
               </>
             )}
           </div>
