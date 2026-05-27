@@ -237,10 +237,23 @@ triggers enrollment, never a silent fallback to a weaker check (ADR-0013).
 - **Connect** = §3/§6 (name-first; no Google; no SIWE required).
 - **Create organization:** type an org name → `/connect/name-info` uniqueness
   gate → deploy a **simple (mode-0) AgentAccount custodied by the connected local
-  passkey** (salt from credential + `org` scope + entropy — **never the name**,
-  ADR-0010) → claim the org name (batched register + setPrimary, nonce-gated) →
-  **person `HAS_GOVERNANCE_OVER` org** edge (propose from person SA, confirm from
-  org SA). Progress modal; then a "My organizations" list.
+  (site) passkey** (salt from credential + `org` scope + entropy — **never the
+  name**, ADR-0010) → claim the org name (batched register + setPrimary,
+  nonce-gated) → **add the person's central/ROOT passkey as a second (recovery)
+  custodian** so the org is controllable + recoverable from home, not siloed to
+  the site key → **person `HAS_GOVERNANCE_OVER` org** edge (propose from person SA,
+  confirm from org SA). Progress modal; then a "My organizations" list.
+
+  **Org custody = site signer + root recovery.** The site passkey handles
+  day-to-day org signing; the ROOT credential is a recovery/home custodian. The
+  ROOT's PUBLIC key is captured during P2 enrollment (returned on the
+  `?enrolled=1` redirect as `root_digest/x/y` — public only) and cached, so adding
+  it needs **no extra redirect** at org-creation (the site passkey, the org's first
+  custodian, signs the `addPasskey`). If no root was captured (the agent was created
+  fresh on this site, so the site key IS the only credential), the org is
+  site-key-only — surfaced in the UI. The `HAS_GOVERNANCE_OVER` edge is governance
+  *metadata*, not custody (an agent can't be a custodian of another — the hard rule);
+  control comes from the shared credential set.
 
 ## 8. Security considerations
 

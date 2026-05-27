@@ -14,6 +14,7 @@ import {
   type RelationshipType,
 } from '@agenticprimitives/agent-relationships';
 import type { Address, Hex } from '@agenticprimitives/types';
+import { encodeFunctionData } from 'viem';
 import { connectWallet, personalSign } from './lib/wallet';
 import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from './lib/passkey';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
@@ -338,10 +339,34 @@ async function deployAgent(
 
 // ── Create a named Organization Smart Agent (spec 229 §7) ───────────
 
+const ADD_PASSKEY_ABI = [
+  {
+    type: 'function',
+    name: 'addPasskey',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'credentialIdDigest', type: 'bytes32' },
+      { name: 'x', type: 'uint256' },
+      { name: 'y', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+] as const;
+
+/** The person's ROOT/central recovery passkey (public key only), captured during P2
+ *  enrollment. Added as a second custodian of a new org so the org is recoverable +
+ *  controllable from the central auth, not siloed to this site's key (spec 229 §7). */
+export interface RootCred {
+  credentialIdDigest: Hex;
+  x: bigint;
+  y: bigint;
+}
+
 export interface CreateOrgResult {
   orgAgent: Address;
   orgName: string;
   edgeId: Hex;
+  rootRecovery: boolean; // true if the central/root credential was added as a custodian
 }
 
 /** A distinct, name-independent salt for the org SA: credential scope + entropy,
@@ -361,6 +386,7 @@ export async function createOrg(
   personAgent: Address,
   orgBase: string,
   onStep?: (s: string) => void,
+  rootCred?: RootCred,
 ): Promise<{ ok: true; result: CreateOrgResult } | { ok: false; error: string }> {
   const salt = orgSalt();
   let signHash: SignHash;
@@ -393,6 +419,29 @@ export async function createOrg(
   // Fresh deploy consumed nonce 0 → the claim batch is nonce 1.
   const claim = await claimName(orgAgent, signHash, orgBase, onStep, 1n);
   if (!claim.ok) return { ok: false, error: claim.error };
+  let orgNonce = 2n; // next op on the org after claim
+
+  // Recovery/root coverage: add the person's central/ROOT passkey (public key only) as a
+  // SECOND custodian, so the org is controllable + recoverable from the central auth — not
+  // siloed to this site's key. Signed by the site key (the org's current custodian).
+  let rootRecovery = false;
+  if (rootCred && rootCred.x !== 0n && rootCred.y !== 0n) {
+    onStep?.('Adding your home recovery key…');
+    const addRoot = encodeFunctionData({
+      abi: ADD_PASSKEY_ABI,
+      functionName: 'addPasskey',
+      args: [rootCred.credentialIdDigest, rootCred.x, rootCred.y],
+    });
+    const callData = buildExecuteCallData({ to: orgAgent, value: 0n, data: addRoot });
+    const ar = await executeCall(orgAgent, signHash, callData, { minNonce: orgNonce, attempts: 8 });
+    if (ar.ok) {
+      rootRecovery = true;
+      orgNonce += 1n;
+    } else {
+      // Non-fatal: the org still exists + is named, just site-key-only. Surface in the result.
+      onStep?.('(recovery key step skipped — org is site-key only)');
+    }
+  }
 
   const relationships = CONTRACTS.agentRelationship;
   const relationshipType = RELATIONSHIP_TYPE.HAS_GOVERNANCE_OVER as RelationshipType;
@@ -406,10 +455,10 @@ export async function createOrg(
   onStep?.('Confirming the link…');
   const edgeId = computeEdgeId(personAgent, orgAgent, relationshipType);
   const confirm = buildConfirmEdgeCall({ relationships, edgeId });
-  // org = object (confirmer); org's 3rd op (deploy 0, claim 1, confirm 2). Best-effort.
-  await executeCall(orgAgent, signHash, buildExecuteCallData(confirm), { minNonce: 2n, attempts: 6 });
+  // org = object (confirmer); next org op. Best-effort.
+  await executeCall(orgAgent, signHash, buildExecuteCallData(confirm), { minNonce: orgNonce, attempts: 6 });
 
-  return { ok: true, result: { orgAgent, orgName: claim.name, edgeId } };
+  return { ok: true, result: { orgAgent, orgName: claim.name, edgeId, rootRecovery } };
 }
 
 /** First-visit enrollment (spec 229 §3): register a LOCAL passkey for THIS origin, then

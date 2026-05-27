@@ -15,6 +15,7 @@ import {
 } from './connect-client';
 import type { Hex } from '@agenticprimitives/types';
 import { hasWallet } from './lib/wallet';
+import { loadPasskey } from './lib/passkey';
 import { startGoogleSignIn, exchangeCode } from './server-client';
 
 interface Session {
@@ -393,6 +394,15 @@ export function App() {
       url.searchParams.set('enrolled', '1');
       url.searchParams.set('state', enrollReq.state);
       url.searchParams.set('name', out.name);
+      // Return our ROOT passkey's PUBLIC key so the relying site can add it as a recovery
+      // custodian to orgs the person creates there — the org stays reachable from home, not
+      // siloed to a site key (spec 229 §7). Public-only; the private key never leaves here.
+      const root = loadPasskey();
+      if (root) {
+        url.searchParams.set('root_digest', root.credentialIdDigest);
+        url.searchParams.set('root_x', root.pubKeyX.toString());
+        url.searchParams.set('root_y', root.pubKeyY.toString());
+      }
       window.location.href = url.toString();
     } catch (e) {
       setEnrollFlow({ phase: 'error', error: e instanceof Error ? e.message : 'enrollment failed' });

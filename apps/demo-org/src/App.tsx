@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
-import { connectWithName, signupWithName, createOrg, startSiteEnrollment } from './connect-client';
+import { connectWithName, signupWithName, createOrg, startSiteEnrollment, type RootCred } from './connect-client';
 import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
 
 const ENROLL_KEY = 'agenticprimitives:demo-org:enroll';
 const LOCAL_PASSKEY_NAME = 'agenticprimitives:demo-org:passkey-name';
+/** Cached central/ROOT recovery passkey (public key) per agent name — captured on the P2
+ *  enrollment return, used to add a recovery custodian to orgs the agent creates here. */
+const rootCredKey = (name: string) => `agenticprimitives:demo-org:root:${name.toLowerCase()}`;
 /** The agent name THIS origin's local passkey is bound to (null if none / unknown). */
 function localPasskeyAgent(): string | null {
   try {
@@ -29,6 +32,7 @@ interface Session {
 interface Org {
   orgAgent: string;
   orgName: string;
+  recovery?: boolean; // true if the central/root key was added as a recovery custodian
 }
 
 /** Decode a JWS payload segment (base64url JSON). */
@@ -143,8 +147,13 @@ export function App() {
     const enrollErr = u.searchParams.get('enroll_error');
     const retName = u.searchParams.get('name');
     const retState = u.searchParams.get('state');
+    // The central auth returns its ROOT passkey's PUBLIC key so we can add it as a recovery
+    // custodian when this agent creates orgs here (spec 229 §7). Public-only; safe to carry.
+    const rd = u.searchParams.get('root_digest');
+    const rx = u.searchParams.get('root_x');
+    const ry = u.searchParams.get('root_y');
     if (!enrolled && !enrollErr) return;
-    for (const k of ['enrolled', 'enroll_error', 'name', 'state']) u.searchParams.delete(k);
+    for (const k of ['enrolled', 'enroll_error', 'name', 'state', 'root_digest', 'root_x', 'root_y']) u.searchParams.delete(k);
     window.history.replaceState({}, '', u.toString());
 
     let stored: { state?: string; name?: string } = {};
@@ -167,6 +176,13 @@ export function App() {
     if (!name) {
       setError('Enrollment returned without a name.');
       return;
+    }
+    if (rd && rx && ry) {
+      try {
+        localStorage.setItem(rootCredKey(name), JSON.stringify({ credentialIdDigest: rd, x: rx, y: ry }));
+      } catch {
+        /* ignore */
+      }
     }
     void (async () => {
       setFlow({ title: 'Finishing setup…', phase: 'running', steps: ['Signing in with your new passkey…'] });
@@ -337,14 +353,26 @@ export function App() {
       setFlow({ title: 'Creating your organization…', phase: 'running', steps: [...steps] });
     };
     setFlow({ title: 'Creating your organization…', phase: 'running', steps: [] });
+    // Add the central/ROOT recovery key (if we captured one for this agent at enrollment),
+    // so the org is recoverable + governable from home, not siloed to this site's key.
+    let rootCred: RootCred | undefined;
     try {
-      const out = await createOrg(via, session.address, base, onStep);
+      const raw = localStorage.getItem(rootCredKey(session.name));
+      if (raw) {
+        const r = JSON.parse(raw) as { credentialIdDigest: string; x: string; y: string };
+        rootCred = { credentialIdDigest: r.credentialIdDigest as `0x${string}`, x: BigInt(r.x), y: BigInt(r.y) };
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      const out = await createOrg(via, session.address, base, onStep, rootCred);
       if (!out.ok) {
         setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [...steps], error: out.error });
         return;
       }
       setFlow({ title: '✓ Organization created', phase: 'done', steps: [...steps] });
-      const next = [{ orgAgent: out.result.orgAgent, orgName: out.result.orgName }, ...orgs];
+      const next = [{ orgAgent: out.result.orgAgent, orgName: out.result.orgName, recovery: out.result.rootRecovery }, ...orgs];
       setOrgs(next);
       try {
         localStorage.setItem(orgsKey(session.address), JSON.stringify(next));
@@ -545,7 +573,16 @@ export function App() {
                 {orgs.map((o) => (
                   <li key={o.orgAgent}>
                     <strong>{o.orgName}</strong> — <code>{short(o.orgAgent)}</code>{' '}
-                    <span className="badge">you govern</span>
+                    <span className="badge">you govern</span>{' '}
+                    {o.recovery ? (
+                      <span className="badge" title="Custodied by this site's passkey + your central/home recovery key">
+                        🔑 home recovery
+                      </span>
+                    ) : (
+                      <span className="badge" title="Custodied only by this site's passkey">
+                        site-key only
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
