@@ -115,6 +115,9 @@ for local use `.dev.vars`. Full local-vs-deploy steps + the Google console confi
   the subject is always the canonical agent id.
 - **OIDC = login facet, not custody** (ADR-0017): a login-grade session
   authorizes no custody-class action without step-up.
+- **Relying site = scoped delegate, not custodian** (ADR-0019 + [`docs/central-auth.md`](docs/central-auth.md)):
+  cross-origin enrollment issues a caveated ERC-7710 delegation, NEVER a custodian
+  slot on the person SA. (Demo still uses the `addPasskey` path pending spec-229 P6.)
 
 ## Running
 

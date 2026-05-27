@@ -29,12 +29,20 @@ batched `claimName`). No Google, no PII/`/me`, no directory.
 
 ## Auth model
 
-- **Return visit:** name → local passkey/SIWE → `/connect/with-name` verifies
-  `isCustodian` on-chain → `aud='demo-org'` AgentSession. Session persists
-  (localStorage + JWT `exp`); restored synchronously on load.
-- **Sign up here:** new agent (local passkey or wallet) + claim name.
-- **Cross-origin passkey** (a demo-sso agent on this origin) needs P2
-  central-auth enrollment — NOT built yet (use a wallet-secured agent for now).
+**Target ([ADR-0019](../../docs/architecture/decisions/0019-relying-site-authority-is-a-scoped-delegation.md)):**
+a relying-site key is a **scoped ERC-7710 delegate** of the person SA, NOT a
+custodian. Runtime auth = "holds a live, unrevoked, in-window delegation" → a
+**scoped (login-grade) session**; on-behalf actions redeem the delegation. This is
+the spec-229 **P6** build (server enrollment-grant endpoint + issue/verify/redeem).
+
+**Currently implemented (pre-P6 — being retired):** enrollment uses
+`addPasskey` (the site key becomes a custodian) and `/connect/with-name` verifies
+`isCustodian` → session. The full-authority grant is disclosed in consent until P6.
+
+- **Cross-origin enrollment:** popup-first (`src/lib/central-auth.ts`) with redirect
+  fallback; origin/source/state validated (audit F3/F5).
+- **Sign up here:** passkey signup is homed at the central auth; wallet signup local.
+- Session persists (localStorage + JWT `exp`), restored synchronously.
 
 ## Org creation
 

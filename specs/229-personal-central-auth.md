@@ -157,52 +157,62 @@ Central-auth obligations (fail-closed):
 `GET /jwks` verifies it (existing). `state`/PKCE/nonce + single-use code reuse the
 existing CN-1/CN-9 handling.
 
-### 5.1 Credential roles & scopes — the central key AUTHORIZES, it is not REUSED
+### 5.1 A relying-site key is a SCOPED DELEGATE, not a custodian (ADR-0019)
 
-The central ANS passkey does **not** "become" the passkey for every relying site.
-WebAuthn credentials are RP-scoped (bound to one `rpId`), so each site's passkey is
-necessarily a **separate** P-256 credential created at that site's `rpId`. The
-central credential's job is to be the **root / bootstrap authority** that
-*authorizes adding* a new site-local credential to the same person Smart Agent. The
-private key never leaves the authenticator (Windows Hello / iCloud Keychain / etc.);
-only the public `(x, y)` + a credential-id hash are registered on the agent.
+The central ANS passkey does **not** "become" the passkey for every relying site,
+and a relying-site key is **never a custodian** of the person's canonical Smart
+Agent. WebAuthn credentials are RP-scoped, so each site's key is a separate P-256
+credential created at that site's `rpId`. What the enrollment grants the site key is
+a **caveated ERC-7710 delegation** from the person SA — least-privilege, revocable,
+scoped — signed by the person's ROOT/primary credential at the central auth. The
+ROOT credential remains the SA's **only custodian**.
 
 ```
 rpedersen.agent  →  Person Smart Agent (ERC-4337)
-  ├─ central ANS passkey      rpId: auth.agentictrust.io   role: ROOT
-  │     canAddCredentials · canRecover · canRotate          (bootstrap/recovery)
-  ├─ demo-org site passkey    rpId: demo-org.example        role: SITE
-  │     local signer for demo-org · (canCreateOrg if approved) · canAddCredentials=false
-  ├─ demo-sso site passkey    rpId: demo-sso.example        role: SITE
-  └─ optional EOA / SIWE                                    role: RECOVERY / fallback
+  ├─ ROOT passkey   rpId: auth.agentictrust.io   the ONLY custodian (custody-grade;
+  │                                               add/remove creds, recover, rotate)
+  └─ optional EOA / SIWE                          recovery / fallback custodian
+        │
+        └─(issues caveated delegations to)─▶ relying-site keys (delegates, NOT custodians)
+              demo-org site key   rpId: demo-org.example   delegation: targets={factory,
+                                                            naming, relationship}, time-boxed
+              demo-sso site key   rpId: demo-sso.example   delegation: scoped to demo-sso
 ```
 
-**Target on-chain credential record** (one per WebAuthn signer):
+**The delegation** (ERC-7710, the deployed `DelegationManager` + caveat enforcers):
 
 ```
-WebAuthnSigner {
-  rpIdHash: bytes32          // sha256(rpId) — binds the credential to its origin
-  credentialIdHash: bytes32
-  publicKeyX, publicKeyY: bytes32
-  role: ROOT | SITE | RECOVERY
-  scope?: string             // "demo-org", "org-create", …
-  canAddCredentials: bool    // ROOT: true; SITE: false by default
-  canCreateOrg, canGovernOrg: bool
-  addedByCredentialIdHash: bytes32   // provenance — which credential authorized this one
-  createdAt, revokedAt: uint64
+Delegation {
+  delegator: personAgent           // the canonical SA
+  delegate:  siteKeyAddress         // the relying site's local key (PIA / session key)
+  caveats:   [ TimestampEnforcer(validUntil), AllowedTargetsEnforcer([factory, naming,
+               relationship]), AllowedMethodsEnforcer([create/register selectors]),
+               ValueEnforcer(0) ]   // least-privilege; tune per relying site
+  signature: ERC-1271 over hashDelegation, produced by the ROOT passkey
 }
 ```
 
-So a SITE key is **narrow** — it signs for its site (and may create/govern orgs if
-approved) but **cannot add further credentials or recover the agent**. Only ROOT
-can. This prevents any single relying-site passkey from becoming a full master key.
+The ROOT passkey signs the EIP-712 `hashDelegation` digest with the **same WebAuthn
+path that signs UserOps** (`signWithPasskey`); the SA's `isValidSignature` validates
+it at redemption. Only the public key + the signed delegation travel; no private key
+leaves the authenticator. This needs **no new contract code** — `DelegationManager`
+(`0xaEb6…89f2`) + `TimestampEnforcer`/`AllowedTargetsEnforcer`/`AllowedMethodsEnforcer`/
+`ValueEnforcer` are deployed; the off-chain SDK is `packages/delegation`.
 
-**Current-contract reality (demo limitation):** today's `AgentAccount.addPasskey`
-adds a credential as a **full custodian** — there is no `role`/`scope`/capability
-field on-chain yet. The role-scoped model above is the **target**; realizing it
-needs a contracts enhancement (per-credential roles, or relying sites receiving a
-**scoped delegation / session key** instead of a custodian — see §8.1). Until then
-the demo discloses that an added site key is full-authority.
+**Blast radius:** a compromised relying site can only exercise its own caveated
+delegation until revoked (`revokeDelegationByOwner`) — it cannot add credentials,
+recover, or take over the identity. (Contrast: a custodian could do all of that —
+the takeover risk that motivated ADR-0019.)
+
+### 5.2 WebAuthn algorithm + on-chain verification (ES256 / P-256)
+
+Custody (ROOT) credentials AND delegation signatures verified on-chain MUST be
+**ES256 / P-256**. Registration requests it explicitly: `pubKeyCredParams: [{ type:
+'public-key', alg: -7 }]` (ES256), with `userVerification: 'required'`. An
+authenticator returning RSA/EdDSA is unusable (the P-256 verifier can't check it).
+On-chain verification uses the **P-256 precompile**: EIP-7951 `P256VERIFY` at
+`0x100` (superseding the RIP-7212-style precompile some rollups expose); off
+precompile chains, a pure-Solidity P-256 verifier is the fallback (budgeted in gas).
 
 ### 5.2 WebAuthn algorithm + on-chain verification (ES256 / P-256)
 
@@ -214,18 +224,26 @@ precompile**: EIP-7951 `P256VERIFY` at `0x100` (which supersedes the RIP-7212-st
 precompile some rollups already expose); off precompile chains, a pure-Solidity
 P-256 verifier is the fallback (already budgeted in `buildCallUserOp` gas).
 
-## 6. Relying-site (`demo-org`) auth, both paths — one mechanism each
+## 6. Relying-site (`demo-org`) auth — delegation-holding, not custody (ADR-0019)
 
-- **Has a local passkey for this agent (return):** challenge → local passkey
-  assert → `POST /connect/with-name` (relying site's own broker) → verify
-  `isCustodian` on-chain → custody-grade `AgentSession` (`aud=demo-org`). The
-  central auth is **not** contacted.
-- **No local passkey (first visit):** §5 enrollment, then store the local passkey.
-- **Session persistence:** the localStorage + TTL pattern from demo-sso (own
-  origin). "Already connected → come right in." `signOut` clears it.
+- **Has a local key + delegation for this agent (return):** challenge → local key
+  assert → `POST /connect/with-name` (relying site's own broker) verifies the key
+  asserts AND that a **live, unrevoked, in-window delegation** exists from the agent
+  to that key (`hashDelegation` validated by the SA's `isValidSignature`;
+  `DelegationManager.isRevoked` false; caveats evaluated) → issues a **scoped
+  (login-grade, NOT custody-grade) `AgentSession`** (`aud=demo-org`). It is NOT an
+  `isCustodian` check — the site key is a delegate, not a custodian.
+- **Acting on the person's behalf** (e.g. create an org): the site key **redeems**
+  the delegation via `DelegationManager.redeemDelegation(...)` (gasless UserOp) to
+  execute the caveated calls. Caveats enforce on-chain; no session grade exceeds them.
+- **No local delegation (first visit):** §5 enrollment (central auth issues the
+  delegation), then store it locally.
+- **Session persistence:** the localStorage + TTL pattern (own origin). `signOut`
+  clears it. Custody-class actions (credential rotation, recovery) are **never**
+  available to a relying-site session — they require the ROOT credential (ADR-0017).
 
-There is exactly ONE auth path per state; "no local passkey" is an answer that
-triggers enrollment, never a silent fallback to a weaker check (ADR-0013).
+One mechanism per state; "no delegation" triggers enrollment, never a silent
+fallback to a weaker check (ADR-0013).
 
 ## 7. `demo-org` as the first relying site (deliverable)
 
@@ -278,9 +296,9 @@ triggers enrollment, never a silent fallback to a weaker check (ADR-0013).
 5. **Bootstrap-only dependency.** A compromised/offline central auth cannot lock a
    user out of already-enrolled sites (runtime auth is on-chain), and cannot act
    as the user without their primary credential.
-6. **Revocation:** removing a site = `removePasskey` of that site's custodian
-   (custody-grade, signed by any remaining custodian). The "must leave at least
-   one signer" invariant holds.
+6. **Revocation:** under ADR-0019, removing a site = `revokeDelegationByOwner` of
+   that site's delegation (delegator or delegate may revoke) — lighter than a
+   custody op, and it does not touch the custodian set.
 
 ### 8.x Security-audit status (2026-05-26)
 
@@ -294,12 +312,31 @@ A security review of the cross-origin enrollment (redirect + the popup variant) 
 - **Clickjacking (F8):** `frame-ancestors 'none'` / `X-Frame-Options: DENY` via `_headers` on both apps.
 - **Storage hygiene (F11):** demo-org's passkey storage key namespaced to its own app.
 
-**Must-fix BEFORE production / non-demo (NOT a demo blocker, but gating real identities):**
-- **F4 — site keys are FULL custodians.** `addPasskey` has no on-chain role/scope, so an enrolled relying-site key has ROOT-equivalent authority; a single relying-site compromise = full canonical-identity takeover. Fix = per-credential roles on `AgentAccount` (ROOT-only `canAddCredentials`/`canRecover`) OR issue relying sites a **scoped delegation / session key** instead of a custodian. This is §8.1; gate for **ADR-0019**.
-- **F1 — enrollment authority is enforced client-side only.** The `addPasskey` goes through demo-a2a, which doesn't gate enrollment; `ALLOWED_RELYING_ORIGINS` lives in the browser bundle. Fix = a server endpoint (demo-sso) that validates `aud`/`redirect_uri` server-side and is the only thing that can trigger the enrollment, with the allowlist in server env.
-- **F2-strong — bind consent into the signed challenge.** Beyond showing the fingerprint, the WebAuthn assertion should commit to `keccak(aud,name,agent,enroll_key,state)`, not just the opaque userOp hash.
-- **F6 — verify the ROOT pubkey on-chain** (`hasPasskey(agent,digest)`) before caching/using it as an org recovery custodian (today mitigated by F5 + the origin-validated popup channel, but add the positive check).
-- **F7 — enroll by agent ADDRESS, not name** (thread the address `signupWithName` returns into the enroll step; resolve-by-address is doctrine).
+**DECIDED — the best-architecture fix (ADR-0019, accepted 2026-05-26; in implementation):**
+- **F4 (the spine) → scoped delegation, not a custodian.** A relying-site key is a
+  **delegate** of the person SA via a caveated ERC-7710 delegation (no new
+  contracts — the `DelegationManager` + enforcers are deployed), NOT a custodian.
+  Runtime auth becomes "holds a live delegation" (§6), the session is scoped/
+  login-grade, and a compromised site can only exercise its caveats until revoked.
+  Per-credential custody roles were **explicitly rejected** (would put authority-
+  scoping in the custody core — spec-213 firewall). The `addPasskey`-as-full-custodian
+  path is retired for relying-site enrollment (it remains for true ROOT credential
+  rotation / self-recovery, ADR-0011).
+- **F1 → server-minted enrollment authority.** A demo-sso **server** endpoint
+  validates `aud`/`redirect_uri` against a **server-env** allowlist + requires a
+  custody-grade session, and mints the single-use authorization the delegation-issue
+  step must present (`{aud, agent, delegate, caveatHash, redirect_uri, state}`).
+  Client allowlists become advisory. In the delegation-native flow there is no
+  privileged on-chain userOp through demo-a2a to gate — the grant is a signed
+  delegation struct.
+- **F2-strong / F6 / F7 fold in:** the WebAuthn approval commits to the server
+  authorization (not an opaque hash); the org-recovery key is verified on-chain
+  (`hasPasskey`) before use; enrollment threads the agent **ADDRESS**, not the name.
+
+**Implementation status:** ADR-0019 + this spec rewrite are landed; the demo-sso/
+demo-org delegation rewrite (issue → verify → redeem) + the server grant endpoint are
+the next build. The demo currently still uses the `addPasskey`-custodian path and
+discloses the full-authority grant in consent until the delegation rewrite ships.
 
 ## 9. Implementation requirements
 
@@ -332,17 +369,28 @@ A security review of the cross-origin enrollment (redirect + the popup variant) 
 
 ## 11. Open questions
 
-1. **ADR-0019?** The personal-central-auth + per-site-enrollment pattern is new
-   doctrine; likely warrants an ADR once P2 validates it. Write after P2.
-2. **Scoped delegation vs full custodian** for relying sites (§8.1) — defer, but
-   decide before any non-demo use.
+1. ~~ADR-0019?~~ **RESOLVED** — [ADR-0019](../docs/architecture/decisions/0019-relying-site-authority-is-a-scoped-delegation.md)
+   accepted 2026-05-26.
+2. ~~Scoped delegation vs full custodian?~~ **RESOLVED — scoped delegation** (ADR-0019).
 3. **Issuer facet shape** (ANS text record key vs profile field) — decide in P4.
-4. **Multiple devices per site:** each device on the same site enrolls its own
-   passkey (another custodian). Fine; just accrues custodians. Confirm UX.
+4. **Multiple devices per site:** each device on the same site gets its own
+   delegation to its own local key. Fine; just accrues delegations (each revocable).
+5. **Caveat tuning per relying site** — the target/method/time caveats a relying
+   site needs (e.g. demo-org needs factory + naming + relationship targets to create
+   orgs). Decide the default caveat set in the P6 build.
 
-## 12. Out of scope
+## 12. Phase plan addendum (ADR-0019 delegation rewrite)
+
+- **P6 — Relying-site auth becomes a scoped delegation (ADR-0019).** demo-sso server
+  enrollment-grant endpoint (F1); enrollment issues a caveated delegation (ROOT
+  passkey signs `hashDelegation`) instead of `addPasskey`; demo-org runtime auth =
+  delegation-holding → scoped session (§6); on-behalf actions redeem via
+  `DelegationManager.redeemDelegation`; regression test (relying-site delegate
+  `isCustodian == false`; server rejects non-allowlisted `aud`/`redirect_uri`).
+  Retires the `addPasskey`-custodian path for relying-site enrollment.
+
+## 13. Out of scope
 
 - Wallet/SIWE and Google paths on demo-org (name + passkey only here).
 - Multi-custodian / threshold / CustodyPolicy orgs (simple mode-0 org only).
-- Scoped delegations for relying sites (§8.1).
 - The real `agentictrust.io` domain + wildcard Worker (P5).

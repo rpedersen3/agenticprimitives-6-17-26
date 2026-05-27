@@ -45,22 +45,24 @@ rpedersen.agent  →  Person Smart Agent (ERC-4337)
 4. **Return visits:** "Continue as rpedersen.agent" → the **site-local** passkey
    (not the central one) → custody verified directly on-chain. No redirect.
 
-## Custody roles (target)
+## Authority model ([ADR-0019](../../../docs/architecture/decisions/0019-relying-site-authority-is-a-scoped-delegation.md))
 
-| role | rpId | can add credentials | can recover | purpose |
-| --- | --- | --- | --- | --- |
-| ROOT | central auth | ✅ | ✅ | bootstrap / recovery / authorize site keys |
-| SITE | each relying site | ❌ | ❌ | local signer; create/govern orgs if approved |
-| RECOVERY | EOA/SIWE | ❌ | ✅ | fallback |
+| principal | rpId | what it is | authority |
+| --- | --- | --- | --- |
+| ROOT passkey | central auth | the **only custodian** | full: add/remove creds, recover, rotate, issue delegations |
+| relying-site key | each relying site | a **scoped delegate** (NOT a custodian) | only its caveated ERC-7710 delegation (targets/methods/time/value); revocable |
+| RECOVERY EOA/SIWE | — | fallback custodian | recovery |
 
-A SITE key is **narrow** — it cannot add further credentials or recover the
-agent; only ROOT can. This stops any single relying-site passkey from becoming a
-master key.
+A relying-site key is a **delegate, not a credential**: it acts *for* the person
+within caveats, never *as* the person. Runtime auth = "holds a live, unrevoked,
+in-window delegation," not `isCustodian`. A compromised relying site can only
+exercise its caveats until revoked (`revokeDelegationByOwner`) — it can't add
+credentials, recover, or take over the identity. Per-credential custody roles were
+**rejected** (they'd put authority-scoping in the custody core — spec-213 firewall).
 
-> **Current-contract caveat:** `AgentAccount.addPasskey` adds a *full* custodian
-> today (no on-chain `role`/`scope` field), so an enrolled site key is currently
-> full-authority and the UI discloses that. Per-credential roles (or scoped
-> delegations for site keys) are the planned hardening — see spec 229 §5.1 / §8.1.
+> **Implementation status:** ADR-0019 is accepted; the demo currently still uses the
+> `addPasskey`-as-custodian path (and discloses the full-authority grant in consent)
+> until the spec-229 **P6** delegation rewrite ships.
 
 ## Algorithm
 

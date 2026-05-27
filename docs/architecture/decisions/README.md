@@ -24,6 +24,7 @@ The drift mode this prevents: an agent doesn't know *why* a boundary is where it
 - [`0016-canonical-agent-id-is-the-sso-subject.md`](./0016-canonical-agent-id-is-the-sso-subject.md) — `CanonicalAgentId` (CAIP-10) is the SSO subject; `AgentSession` has no `owner`.
 - [`0017-oidc-social-is-a-login-facet-not-custody.md`](./0017-oidc-social-is-a-login-facet-not-custody.md) — OIDC / social login is a control facet, not custody authority; custody-class actions require step-up.
 - [`0018-agenticprimitives-wide-formal-ontology.md`](./0018-agenticprimitives-wide-formal-ontology.md) — a monorepo-wide formal ontology (RDFS/OWL/SHACL) in its own package; pairs with the on-chain ontology (ADR-0009).
+- [`0019-relying-site-authority-is-a-scoped-delegation.md`](./0019-relying-site-authority-is-a-scoped-delegation.md) — a relying site is a scoped ERC-7710 delegate of the person SA, never a custodian; runtime auth = holding a live caveated delegation, not `isCustodian` (closes the spec-229 full-custodian takeover risk).
 
 ## Status discipline
 
