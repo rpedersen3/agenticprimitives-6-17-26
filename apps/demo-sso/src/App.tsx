@@ -486,7 +486,10 @@ export function App() {
     setEnrollFlow({ phase: 'running', msg: 'Starting…' });
     try {
       let resolvedName = enrollReq.name;
+      let personAgent: Address | undefined;
       if (!enrollExists) {
+        // New user: signup returns the KNOWN agent address (from the deploy) — use it directly.
+        // Resolving the just-claimed name on-chain here would race RPC lag ("could not resolve").
         const base = enrollReq.name.replace(/\.demo\.agent$/, '');
         const created = await signupWithName(base, 'passkey', onStep, false); // grant signs in (skip extra prompt)
         if (!created.ok) {
@@ -494,16 +497,20 @@ export function App() {
           return;
         }
         resolvedName = created.name;
+        personAgent = created.agent;
+      } else {
+        // Existing agent: the name is long-claimed, so name resolution is safe (no lag).
+        onStep('Authorizing the site…');
+        const info = (await (await fetch(`/connect/name-info?name=${encodeURIComponent(resolvedName)}`)).json()) as {
+          agent?: Address;
+        };
+        personAgent = info.agent;
       }
-      onStep('Authorizing the site…');
-      const info = (await (await fetch(`/connect/name-info?name=${encodeURIComponent(resolvedName)}`)).json()) as {
-        agent?: Address;
-      };
-      if (!info.agent) {
+      if (!personAgent) {
         setEnrollFlow({ phase: 'error', error: `could not resolve ${resolvedName}` });
         return;
       }
-      const delegation = await issueSiteDelegation(info.agent, enrollReq.delegate, passkeySignHash);
+      const delegation = await issueSiteDelegation(personAgent, enrollReq.delegate, passkeySignHash);
       const code = await submitGrant(resolvedName, toWire(delegation));
       deliverCode(code);
     } catch (e) {

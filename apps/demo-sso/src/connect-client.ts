@@ -703,7 +703,7 @@ export async function signupWithName(
   via: 'wallet' | 'passkey',
   onStep?: (s: string) => void,
   signIn = true,
-): Promise<{ ok: true; token: string; name: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; token: string; name: string; agent: Address } | { ok: false; error: string }> {
   if (via === 'passkey') {
     onStep?.('Creating your passkey…');
     const pk = await registerPasskey(`${base}.demo.agent`); // FRESH passkey for this workspace
@@ -715,12 +715,14 @@ export async function signupWithName(
     const dep = await bootstrapWithPasskey(pk, onStep, claim.callData);
     if (!dep.ok) return { ok: false, error: dep.error };
     // The OIDC enrollment ceremony signs the person in via the grant + id_token, so it skips
-    // this extra passkeyLogin (its token would be unused) — saving one device prompt.
-    if (!signIn) return { ok: true, token: '', name: claim.name };
+    // this extra passkeyLogin (its token would be unused) — saving one device prompt. We return
+    // the KNOWN agent address (from the deploy) so callers needn't re-resolve by name — the
+    // just-claimed name lags on-chain for a moment (RPC), and `sa` is already authoritative.
+    if (!signIn) return { ok: true, token: '', name: claim.name, agent: sa };
     onStep?.('Signing you in…');
     const login = await passkeyLogin(false);
     return login.status === 'issued'
-      ? { ok: true, token: login.token, name: claim.name }
+      ? { ok: true, token: login.token, name: claim.name, agent: sa }
       : { ok: false, error: `created, but sign-in returned ${login.status}` };
   }
   // wallet: the EOA's deterministic agent (reconnect if it exists, else bootstrap).
@@ -747,7 +749,7 @@ export async function signupWithName(
   onStep?.('Signing you in…');
   const login = await siweLogin();
   return login.status === 'issued'
-    ? { ok: true, token: login.token, name: claim.name }
+    ? { ok: true, token: login.token, name: claim.name, agent }
     : { ok: false, error: `created, but sign-in returned ${login.status}` };
 }
 
