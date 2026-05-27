@@ -234,7 +234,7 @@ export function App() {
 
   // Shared progress modal (sign-up + create-org)
   const [flow, setFlow] = useState<
-    | { title: string; phase: 'running' | 'done'; steps: string[] }
+    | { title: string; phase: 'running' | 'done'; steps: string[]; note?: string }
     | { title: string; phase: 'error'; steps: string[]; error: string }
     | null
   >(null);
@@ -448,7 +448,12 @@ export function App() {
   // id_token against the OP's JWKS (iss/aud/nonce/exp), store the delegation sidecar, and open
   // the session FROM the id_token (the id_token IS the proof-of-who — no separate session mint).
   async function completeAuth(authOrigin: string, code: string, codeVerifier: string, nonce: string, fallbackName: string, fresh: boolean) {
-    setFlow({ title: 'Finishing sign-in…', phase: 'running', steps: ['Verifying your identity…'] });
+    setFlow({
+      title: 'Finishing your connection',
+      phase: 'running',
+      steps: ['Checking the secure home response', 'Opening Agentic Org'],
+      note: 'No extra device confirmation is needed here.',
+    });
     try {
       const tok = await exchangeCode(authOrigin, code, codeVerifier);
       const claims = await verifyIdToken(authOrigin, tok.idToken, nonce);
@@ -461,8 +466,15 @@ export function App() {
           /* ignore */
         }
       }
-      setFlow(null);
+      setFlow({
+        title: 'Agentic Org is connected',
+        phase: 'done',
+        steps: [`Signed in as ${name}`, 'Permission saved for this app'],
+        note: 'You can revoke this app later from your secure home.',
+      });
+      await new Promise((r) => setTimeout(r, fresh ? 950 : 650));
       openSession(tok.idToken, 'passkey', name, fresh);
+      setFlow(null);
     } catch (e) {
       setFlow({ title: "Couldn't finish", phase: 'error', steps: [], error: e instanceof Error ? e.message : 'sign-in failed' });
     }
@@ -492,8 +504,13 @@ export function App() {
       return;
     }
     sessionStorage.setItem(ENROLL_KEY, JSON.stringify({ state, name, authOrigin, codeVerifier, nonce }));
-    setFlow({ title: 'Taking you to your secure home', phase: 'running', steps: ['Opening your secure home…'] });
-    await new Promise((r) => setTimeout(r, 350));
+    setFlow({
+      title: 'Opening your secure home',
+      phase: 'running',
+      steps: ['Agentic Org is asking to connect', 'Your secure home will ask you to confirm with your device'],
+      note: 'You will come right back here after you approve the app.',
+    });
+    await new Promise((r) => setTimeout(r, 850));
     window.location.href = url;
   }
 
@@ -583,8 +600,13 @@ export function App() {
     // Full-page redirect to your secure home (standard OIDC) — the org ceremony runs there, then
     // redirects back with the code (the `?code` handler / completeOrg finishes it). No popup.
     sessionStorage.setItem(ORG_KEY, JSON.stringify({ state, addr: session.address, authOrigin, codeVerifier, nonce }));
-    setFlow({ title: 'Taking you to your secure home', phase: 'running', steps: ['Opening your secure home…'] });
-    await new Promise((r) => setTimeout(r, 350));
+    setFlow({
+      title: 'Opening your secure home',
+      phase: 'running',
+      steps: ['Agentic Org is asking to create an organization', 'Your secure home will ask you to confirm with your device'],
+      note: 'You will return here with the organization connected to this app.',
+    });
+    await new Promise((r) => setTimeout(r, 850));
     window.location.href = url;
   }
 
@@ -1229,7 +1251,7 @@ export function App() {
                   </ol>
                 )}
                 <p className="muted" style={{ fontSize: '.875rem', marginBottom: 0 }}>
-                  Your device may ask you to confirm. This usually takes a few seconds.
+                  {flow.note ?? 'Your device may ask you to confirm. This usually takes a few seconds.'}
                 </p>
               </>
             )}
@@ -1254,6 +1276,23 @@ export function App() {
                       Organization — you govern
                     </span>
                   </div>
+                )}
+                {flow.title.includes('connected') && (
+                  <div className="reward-row" aria-label="What was approved">
+                    <span className="reward-chip">
+                      <span className="reward-chip-icon" aria-hidden="true">✓</span>
+                      Connected app — approved
+                    </span>
+                    <span className="reward-chip primary">
+                      <span className="reward-chip-icon" aria-hidden="true">✓</span>
+                      Revoke anytime
+                    </span>
+                  </div>
+                )}
+                {flow.note && (
+                  <p className="muted" style={{ fontSize: '.875rem', marginBottom: '.625rem' }}>
+                    {flow.note}
+                  </p>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '.5rem 0' }}>
                   <span className="spinner spinner-lg" aria-label="Finishing…" />

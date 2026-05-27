@@ -192,6 +192,7 @@ export function App() {
   // behind each, a receipt after — never two WebAuthn prompts back-to-back.
   const [ceremony, setCeremony] = useState<{
     step: 'consent' | 'busy' | 'key-ready' | 'agent-ready' | 'connected';
+    busyStep?: number;
     busyMsg?: string;
     passkey?: DemoPasskey;
     agent?: Address;
@@ -550,7 +551,7 @@ export function App() {
   // NEW USER · Step 1 — create the secure-home key (one prompt).
   async function onCreateKey() {
     if (!enrollReq) return;
-    setCeremony({ step: 'busy', busyMsg: 'Creating your sign-in key…' });
+    setCeremony({ step: 'busy', busyStep: 1, busyMsg: 'Creating your sign-in key…' });
     try {
       const passkey = await createSecureHomePasskey(enrollReq.name);
       setCeremony({ step: 'key-ready', passkey });
@@ -563,7 +564,7 @@ export function App() {
   async function onSetupAgent() {
     if (!enrollReq || !ceremony.passkey) return;
     const passkey = ceremony.passkey;
-    setCeremony((c) => ({ ...c, step: 'busy', busyMsg: 'Setting up your Smart Agent on Base Sepolia…' }));
+    setCeremony((c) => ({ ...c, step: 'busy', busyStep: 2, busyMsg: 'Setting up your Smart Agent on Base Sepolia…' }));
     try {
       const base = enrollReq.name.replace(/\.demo\.agent$/, '');
       const res = await deployAndClaimAgent(passkey, base);
@@ -577,7 +578,8 @@ export function App() {
   // Final step (new + existing) — approve the app: issue the scoped grant + mint the OIDC code.
   async function onApproveApp() {
     if (!enrollReq) return;
-    setCeremony((c) => ({ ...c, step: 'busy', busyMsg: 'Connecting the app…' }));
+    const approvingStep = ceremony.agent ? 3 : 1;
+    setCeremony((c) => ({ ...c, step: 'busy', busyStep: approvingStep, busyMsg: 'Connecting the app…' }));
     if (popupMode) postToOpener({ type: 'AC_PROGRESS', msg: 'Connecting the app…' });
     try {
       let agent = ceremony.agent;
@@ -665,7 +667,6 @@ export function App() {
     const isNew = enrollExists === false; // name has no agent yet → create the home account
     const running = enrollFlow.phase === 'running';
     const orgName = enrollReq.orgBase ? `${enrollReq.orgBase.replace(/\.demo\.agent$/, '')}.demo.agent` : '';
-    const delegateShort = `${enrollReq.delegate.slice(0, 6)}…${enrollReq.delegate.slice(-4)}`;
 
     // Shared brand topbar — names the IdP + signposts arrival at "your secure home" (the
     // distinct identity from the relying app you came from).
@@ -843,7 +844,7 @@ export function App() {
             </details>
 
             <p style={{ fontSize: '.7rem', color: 'var(--c-g400)', margin: '.375rem 0 0', lineHeight: 1.5 }}>
-              Scoped, revocable access only — site account <code>{delegateShort}</code>.
+              Permission for this app only. You can revoke it later from your secure home.
             </p>
             <div className="privacy-footer">
               🔒 You're in control. You can revoke access anytime.
@@ -864,7 +865,7 @@ export function App() {
     // steps (key → agent → approve); existing agent = 1 step (approve). Never two prompts back-to-back.
     const totalSteps = isNew ? 3 : 1;
     const StepBadge = ({ n }: { n: number }) =>
-      totalSteps > 1 ? <div className="step-pill">Step {n} of {totalSteps}</div> : null;
+      <div className="step-pill">Step {n} of {totalSteps}</div>;
     const Receipt = ({ children }: { children: ReactNode }) => (
       <div className="receipt-chip"><span className="receipt-tick" aria-hidden="true">✓</span>{children}</div>
     );
@@ -887,6 +888,7 @@ export function App() {
         <div className="popup-root">
           <Topbar />
           <div className="popup-scroll">
+            <StepBadge n={ceremony.busyStep ?? 1} />
             <div className="popup-heading"><h1>Confirm with your device</h1></div>
             <div className="ceremony-card">
               <div className="ceremony-spinner-wrap"><span className="spinner spinner-lg" role="status" aria-label="Working" /></div>
@@ -913,13 +915,13 @@ export function App() {
             <div className="popup-heading"><h1>Set up your Smart Agent</h1></div>
             <Receipt>Sign-in key created on this device</Receipt>
             <p style={{ fontSize: '.875rem', color: 'var(--c-g500)', margin: '.5rem 0 0', lineHeight: 1.55 }}>
-              Next, we'll create <strong>{enrollReq.name}</strong> on Base Sepolia — your own Smart Agent,
-              owned by you. One quick confirmation.
+              Next, we'll set up <strong>{enrollReq.name}</strong> as your own Smart Agent.
+              One quick confirmation keeps it anchored to your secure home.
             </p>
             <div className="privacy-footer">🔒 You're in control. Your data stays private.</div>
           </div>
           <div className="popup-actions">
-            <button className="cta" onClick={onSetupAgent}>Set up my agent</button>
+            <button className="cta" onClick={onSetupAgent}>Set up my Smart Agent</button>
             <button className="cta ghost" onClick={denyEnroll}>Cancel</button>
           </div>
         </div>
@@ -946,11 +948,11 @@ export function App() {
               <div className="perm-card-title">This app can:</div>
               <ul className="perm-list">
                 <li><span className="perm-icon ok" aria-hidden="true">✓</span>Sign you in as <strong>{ceremony.name ?? enrollReq.name}</strong></li>
-                <li><span className="perm-icon ok" aria-hidden="true">✓</span>Create approved workspaces + read approved profile data</li>
+                <li><span className="perm-icon ok" aria-hidden="true">✓</span>Create approved workspaces and read approved profile data</li>
               </ul>
             </div>
             <CannotDetails />
-            <div className="privacy-footer">🔒 Scoped access only. Revoke anytime.</div>
+            <div className="privacy-footer">🔒 Permission for this app only. Revoke anytime.</div>
           </div>
           <div className="popup-actions">
             <button className="cta" onClick={onApproveApp}>Approve with your device</button>
@@ -988,7 +990,7 @@ export function App() {
           <div className="agent-grant-card">
             <div className="agent-grant-label">{isNew ? "You're about to get" : 'Signing in as'}</div>
             <div className="agent-grant-name">{enrollReq.name}</div>
-            {isNew && <div className="agent-grant-sub">Your own Personal Smart Agent on Base Sepolia</div>}
+            {isNew && <div className="agent-grant-sub">Your own Personal Smart Agent, secured by your device</div>}
           </div>
 
           <div className="entity-chip">
@@ -1010,14 +1012,14 @@ export function App() {
 
           {isNew && (
             <p style={{ fontSize: '.8rem', color: 'var(--c-g500)', margin: '.4rem 0 0', lineHeight: 1.55 }}>
-              Two quick confirmations create your agent; one more connects the app.
+              First you create a sign-in key, then your Smart Agent, then the app permission.
             </p>
           )}
-          <div className="privacy-footer">🔒 Scoped access only. Revoke anytime.</div>
+          <div className="privacy-footer">🔒 Permission for this app only. Revoke anytime.</div>
         </div>
         <div className="popup-actions">
           <button className="cta" onClick={isNew ? onCreateKey : onApproveApp}>
-            {isNew ? 'Create my Smart Agent' : 'Approve with your device'}
+            {isNew ? 'Create my sign-in key' : 'Approve with your device'}
           </button>
           <button className="cta ghost" onClick={denyEnroll}>{isNew ? 'Cancel' : 'Deny'}</button>
         </div>

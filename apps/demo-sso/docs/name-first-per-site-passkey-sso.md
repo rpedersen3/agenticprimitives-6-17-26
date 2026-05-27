@@ -1,30 +1,27 @@
-# Name-first per-site passkey SSO
+# Name-first secure-home passkey SSO
 
-This is the closest passkey-native SSO shape that still respects WebAuthn's
-origin rules.
+This is the current demo shape: the relying app starts by name, sends the user
+to their secure home, and receives a signed app permission plus an OIDC
+`id_token`.
 
-The key difference from normal SSO: the user does not carry one bearer account
-or one reusable passkey across every relying site. The portable identity is the
-Agent Naming Service name, such as `rpedersen.agent`, and the authority anchor is
-the person ERC-4337 Smart Agent. Passkeys are scoped credentials attached to that
-agent.
+The key difference from normal SSO: the central service is not the account. The
+portable identity is the Agent Naming Service name, such as `rpedersen.agent`,
+and the authority anchor is the person Smart Agent. The secure-home passkey
+confirms the person and approves what each app may do.
 
-The key difference from ordinary per-site passkeys: a new site's passkey is not a
-new account. It is a new P-256/WebAuthn signer authorized by the existing person
-Smart Agent.
+The key difference from ordinary passkeys: a new app connection is not a new
+account. It is a permission from the existing person Smart Agent to that app.
 
 ```text
 rpedersen.agent
-  -> Person Smart Agent / ERC-4337 account
-     -> central ANS passkey signer      rpId: auth.agent.example
-     -> demo-org site passkey signer    rpId: demo-org.example
-     -> demo-sso site passkey signer    rpId: demo-sso.example
-     -> optional SIWE / EOA signer
+  -> Person Smart Agent
+     -> secure-home passkey
+     -> Agentic Org app permission
+     -> optional wallet sign-in method
 ```
 
-The central ANS passkey does not directly become the passkey for every relying
-site. It is the root/bootstrap credential that can authorize adding a new
-site-local passkey to the same Smart Agent.
+The secure-home passkey does not become a passkey for every relying site. It
+confirms at the secure home and approves an app permission that can be revoked.
 
 ---
 
@@ -32,12 +29,11 @@ site-local passkey to the same Smart Agent.
 
 Use this language in UX and docs:
 
-> `rpedersen.agent` is the portable identity. The central ANS passkey is the
-> bootstrap/root credential. Each relying site can add its own local passkey to
-> the same Smart Agent after the central credential approves it.
+> `rpedersen.agent` is the portable identity. Your secure-home passkey protects
+> it. Each app receives only the permission you approve.
 
-Avoid telling users about credential IDs, RP IDs, P-256, or key hashes unless
-they open advanced settings.
+Avoid telling users about implementation details unless they open advanced
+settings.
 
 User-facing copy:
 
@@ -48,18 +44,18 @@ Connect to Smart Agent
 
 ✓ Found rpedersen.agent
 
-This is your first time using rpedersen.agent on Demo Org.
+This is your first time using rpedersen.agent on Agentic Org.
 
-[ Add this site to rpedersen.agent ]
+[ Continue with Agentic Connect ]
 [ Continue once with wallet ]
 ```
 
 After approval:
 
 ```text
-Passkey added
+App connected
 
-You can now use Windows Hello to continue as rpedersen.agent on Demo Org.
+Agentic Org can now sign you in and read approved profile data.
 ```
 
 Return visit:
@@ -75,8 +71,8 @@ Continue as rpedersen.agent
 | Common solution | Problem | This model |
 | --- | --- | --- |
 | Password/OIDC SSO | Central provider remains the account authority | Smart Agent is the account; Connect only helps authenticate facets |
-| One passkey per website | Easy UX, but each site creates a separate identity | Each site passkey binds back to the same `rpedersen.agent` Smart Agent |
-| One central WebAuthn passkey reused everywhere | Fights WebAuthn RP scoping | Central passkey authorizes site-local passkeys |
+| One passkey per website | Easy UX, but each site creates a separate identity | Each app connects back to the same `rpedersen.agent` Smart Agent |
+| One central WebAuthn passkey reused everywhere | Fights WebAuthn RP scoping | Secure-home passkey confirms at the secure home and approves app permissions |
 | Wallet-only connect | Cross-origin, but not passkey-native | Passkey-first, with SIWE only as fallback/bootstrap |
 
 This is passkey-driven, but it uses ERC-4337 to make the passkey model portable:
@@ -157,6 +153,12 @@ type WebAuthnSigner = {
 ---
 
 ## Phase 2 — First visit to a new relying site
+
+Current demo: the relying site sends the user to the secure home. The secure home
+confirms with the passkey and returns a revocable app permission plus an OIDC
+session. No relying-site passkey is created in this flow.
+
+### Deferred option — create a local relying-site passkey
 
 The user visits `demo-org.example` and enters `rpedersen`.
 
@@ -240,6 +242,12 @@ execution.
 
 ## Phase 3 — Return visit to that relying site
 
+Current demo: later visits use the saved app permission. If it is still valid,
+sign-in is silent. If it expired or was revoked, the user goes back to the secure
+home approval screen.
+
+### Deferred option — return with a site-local passkey
+
 Later visits do not need the central ANS passkey.
 
 ```mermaid
@@ -265,7 +273,12 @@ own passkey.
 
 ---
 
-## Phase 4 — Org creation from the site-local passkey
+## Phase 4 — Org creation
+
+Current demo: org creation is approved at the secure home. The relying app
+receives an org permission it can present to read approved org data.
+
+### Deferred option — org creation from the site-local passkey
 
 Once `demo-org.example` has a local passkey bound to `rpedersen.agent`, that
 passkey can sign the org creation flow.
@@ -331,7 +344,8 @@ In this shape:
 - The personal A2A endpoint can advertise how to connect, which credentials are
   acceptable, and where to request add-site authorization.
 - The root ANS passkey remains the high-power credential.
-- Site-local passkeys remain narrow, aud/scope-bound credentials.
+- App permissions remain narrow and revocable. Site-local passkeys are a
+  deferred option, not the current demo flow.
 
 This avoids turning a central IdP into the permanent authority. Connect helps
 authenticate and issue sessions; the Smart Agent owns the credential graph.
@@ -371,7 +385,7 @@ auth.agent.example
   canRotate = true
 ```
 
-Site credential:
+Deferred site credential:
 
 ```text
 demo-org.example
@@ -380,7 +394,8 @@ demo-org.example
   canAddCredentials = false by default
 ```
 
-Do not make every site-local passkey a root key.
+If we add site-local passkeys later, do not make every site-local passkey a root
+key.
 
 ---
 
@@ -389,13 +404,13 @@ Do not make every site-local passkey a root key.
 Correct:
 
 ```text
-central passkey authorizes adding site passkeys
+secure-home passkey approves app permissions
 ```
 
 Incorrect:
 
 ```text
-central passkey is directly used by all relying sites
+secure-home passkey is directly reused by relying sites
 ```
 
 The first model works with WebAuthn and ERC-4337. The second fights WebAuthn's

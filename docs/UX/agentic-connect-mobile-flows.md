@@ -200,41 +200,55 @@ credential. The user experiences it as "connected apps."
 
 ### B3. Set Up This Site
 
-This is the highest-risk UX moment because the user may see two device prompts:
-one for the site-local passkey, then one for the secure-home approval.
+This is the highest-risk UX moment because a new user may see three device
+confirmations at the secure home: one for the sign-in key, one for the Smart
+Agent setup, then one for the app permission.
 
-Frame it as a two-step setup.
+Frame it as a guided secure-home setup. The relying app should only explain the
+handoff.
 
 ```text
 ┌─────────────────────────────┐
 │ Connect this app            │
 │                             │
-│ Step 1 of 2                 │
-│ Create a passkey for this   │
-│ app on this device.         │
+│ Opening your secure home    │
 │                             │
-│ This lets you continue with │
-│ one tap next time.          │
+│ Agentic Org is asking to    │
+│ connect to rpedersen.agent. │
 │                             │
-│ [ Create app passkey ]      │
+│ You will confirm there, then│
+│ come right back here.       │
 └─────────────────────────────┘
 ```
 
-After OS prompt:
+At the secure home, every device prompt gets its own screen and receipt:
 
 ```text
 ┌─────────────────────────────┐
-│ Connect this app            │
+│ Step 1 of 3                 │
+│ rpedersen.agent             │
 │                             │
-│ Step 2 of 2                 │
-│ Approve this app from your  │
-│ secure home.                │
+│ Create your sign-in key.    │
 │                             │
-│ rpedersen.agent stays yours.│
-│ This app only gets the      │
-│ permission shown next.      │
+│ [ Create my sign-in key ]   │
+└─────────────────────────────┘
+
+┌─────────────────────────────┐
+│ Step 2 of 3                 │
+│ Set up your Smart Agent     │
 │                             │
-│ [ Review permission ]       │
+│ ✓ Sign-in key created       │
+│                             │
+│ [ Set up my Smart Agent ]   │
+└─────────────────────────────┘
+
+┌─────────────────────────────┐
+│ Step 3 of 3                 │
+│ Approve this app            │
+│                             │
+│ ✓ rpedersen.agent is live   │
+│                             │
+│ [ Approve with device ]     │
 └─────────────────────────────┘
 ```
 
@@ -301,7 +315,9 @@ with the actual permission:
 └─────────────────────────────┘
 ```
 
-Return visits should be one device prompt.
+Return visits should be silent when the app still has a valid permission. If the
+permission is gone or expired, send the user back to the secure-home approval
+screen.
 
 ---
 
@@ -545,12 +561,11 @@ require stronger approval.
 
 ```mermaid
 flowchart TD
-  A[Create rpedersen.agent] --> B[Set up secure home passkey]
-  B --> C[Smart Agent ready]
-  C --> D[Relying app asks to connect]
-  D --> E[Create app passkey]
-  E --> F[Approve app permission]
-  F --> G[Connected app session]
+  A[Enter rpedersen.agent in relying app] --> B[Open secure home]
+  B --> C[Create secure-home sign-in key]
+  C --> D[Set up Smart Agent]
+  D --> E[Approve app permission]
+  E --> G[Connected app session]
   G --> H{Sensitive data level}
   H --> I[Person PII step-up]
   H --> J[Org data permission]
@@ -566,8 +581,9 @@ flowchart TD
 
 1. **One reason per device prompt.** Always tell the user why Windows Hello / Face
    ID is about to appear.
-2. **Step indicators for multi-prompt flows.** Use `Step 1 of 2` and `Step 2 of
-   2` when setting up a new relying site.
+2. **Step indicators for multi-prompt flows.** Use `Step 1 of 3`, `Step 2 of
+   3`, and `Step 3 of 3` when a new user creates the sign-in key, Smart Agent,
+   and app permission.
 3. **Name the unlock method.** If a session is too weak, say: "Confirm with your
    passkey" instead of "step-up required."
 4. **Show denies clearly.** Each consent screen needs "This app cannot..." bullets.
