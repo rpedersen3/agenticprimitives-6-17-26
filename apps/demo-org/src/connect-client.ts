@@ -577,6 +577,24 @@ export async function readOrgData(
   return { ok: false, error: b.detail ?? b.error ?? `org data read failed (HTTP ${r.status})` };
 }
 
+/** Read the PERSON's gated PII via the delegation we already hold (person → this site's
+ *  delegate SA). requester = the delegate; demo-mcp get_pii returns data keyed by the person
+ *  (the delegator). Reuses the same delegation that signed you in — no new signature. */
+export async function readPersonData(
+  delegation: DelegationWire,
+): Promise<{ ok: true; record: unknown } | { ok: false; error: string }> {
+  await ensureCsrfToken();
+  const r = await fetch('/a2a/mcp/person/pii', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ delegation, requester: delegation.delegate }),
+  });
+  const b = (await r.json().catch(() => ({}))) as { ok?: boolean; record?: unknown; pii?: unknown; error?: string; detail?: string };
+  if (r.ok && b.ok) return { ok: true, record: b.record ?? b.pii };
+  return { ok: false, error: b.detail ?? b.error ?? `PII read failed (HTTP ${r.status})` };
+}
+
 /** Sign up: create a workspace named `<base>.demo.agent` with a custody credential,
  *  and CLAIM the name for THAT credential's agent. Passkey → a FRESH passkey (a new
  *  workspace); wallet → the EOA's deterministic agent. */

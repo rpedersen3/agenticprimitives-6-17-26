@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
-import { connectWithName, connectWithDelegation, signupWithName, createOrg, startSiteEnrollment, readOrgData } from './connect-client';
+import { connectWithName, connectWithDelegation, signupWithName, createOrg, startSiteEnrollment, readOrgData, readPersonData } from './connect-client';
 import { openCentralAuthPopup, preferRedirect } from './lib/central-auth';
 import type { DelegationWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
@@ -105,6 +105,8 @@ export function App() {
   const [orgAvail, setOrgAvail] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   // Per-org sensitive-data read state (via an org→person delegation).
   const [orgData, setOrgData] = useState<Record<string, { loading?: boolean; record?: unknown; error?: string }>>({});
+  // Person PII read state (via the person→delegate delegation we already hold).
+  const [personData, setPersonData] = useState<{ loading?: boolean; record?: unknown; error?: string } | null>(null);
 
   // Shared progress modal (sign-up + create-org)
   const [flow, setFlow] = useState<
@@ -491,6 +493,24 @@ export function App() {
     }
   }
 
+  // Read the PERSON's gated PII via the delegation we already hold (person → this site's
+  // delegate SA). No new signature — same delegation that signed you in.
+  async function onViewPersonData() {
+    if (!session) return;
+    const del = loadDelegation(session.name);
+    if (!del) {
+      setPersonData({ error: 'No delegation on this device — sign in via “Set up this site / Continue with passkey”.' });
+      return;
+    }
+    setPersonData({ loading: true });
+    try {
+      const out = await readPersonData(del);
+      setPersonData(out.ok ? { record: out.record } : { error: out.error });
+    } catch (e) {
+      setPersonData({ error: e instanceof Error ? e.message : 'read failed' });
+    }
+  }
+
   // Read an org's gated data via an org→person delegation (the org is custodied by this
   // site's passkey). Demonstrates reading org PII through the delegation model.
   async function onViewOrgData(orgAgent: string) {
@@ -658,6 +678,22 @@ export function App() {
             <p className="muted">
               Agent <code>{short(session.address)}</code> — signed in via {session.via}.
             </p>
+            {session.via === 'passkey' && (
+              <>
+                <button
+                  className="ghost"
+                  style={{ minHeight: '36px', padding: '0.3rem 0.8rem', fontSize: '0.85rem' }}
+                  disabled={personData?.loading}
+                  onClick={onViewPersonData}
+                >
+                  {personData?.loading ? 'Reading…' : 'View my contact data'}
+                </button>
+                {personData?.error && <p className="err" style={{ margin: '0.3rem 0 0' }}>⛔ {personData.error}</p>}
+                {personData && 'record' in personData && personData.record != null && (
+                  <pre style={{ marginTop: '0.4rem' }}>{JSON.stringify(personData.record, null, 2)}</pre>
+                )}
+              </>
+            )}
           </div>
 
           <div className="panel broker">
