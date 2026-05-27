@@ -14,7 +14,14 @@ import {
   type RelationshipType,
 } from '@agenticprimitives/agent-relationships';
 import type { Address, Hex } from '@agenticprimitives/types';
-import { fromWire, buildRedeemCallData, DELEGATION_MANAGER, type DelegationWire } from './lib/delegation';
+import {
+  type Delegation,
+  buildCaveat,
+  encodeTimestampTerms,
+  hashDelegation,
+  ROOT_AUTHORITY,
+} from '@agenticprimitives/delegation';
+import { fromWire, toWire, buildRedeemCallData, DELEGATION_MANAGER, type DelegationWire } from './lib/delegation';
 import { connectWallet, personalSign } from './lib/wallet';
 import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from './lib/passkey';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
@@ -532,6 +539,42 @@ export async function connectWithDelegation(
   const b = (await r.json()) as { status?: string; token?: string; name?: string; error?: string };
   if (r.ok && b.status === 'issued' && b.token) return { ok: true, token: b.token, name: b.name };
   return { ok: false, error: b.error ?? `connect failed (HTTP ${r.status})` };
+}
+
+/** Read the org's gated data via an ORG delegation (ADR-0019 / demo-mcp get_org_sensitive).
+ *  The org (custodied by THIS site's passkey) issues a short, timestamp-caveated delegation
+ *  `org → person`, signed by the site passkey (the org's 1-of-N custodian); demo-a2a mints
+ *  the delegation token + reads the org MCP, returning data keyed by the org (the delegator).
+ *  Single-custodian is fine — get_org_sensitive is T1 (no quorum required). */
+export async function readOrgData(
+  orgAgent: Address,
+  personAgent: Address,
+): Promise<{ ok: true; record: unknown; orgName?: string } | { ok: false; error: string }> {
+  const pk = loadPasskey();
+  if (!pk) return { ok: false, error: 'no site passkey on this device' };
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let salt = 0n;
+  for (const b of bytes) salt = (salt << 8n) | BigInt(b);
+  const d: Delegation = {
+    delegator: orgAgent,
+    delegate: personAgent,
+    authority: ROOT_AUTHORITY,
+    caveats: [buildCaveat(CONTRACTS.timestampEnforcer, encodeTimestampTerms(issuedAt, issuedAt + 3600))],
+    salt,
+    signature: '0x',
+  };
+  d.signature = await passkeySignHash(hashDelegation(d, CHAIN_ID, CONTRACTS.delegationManager)); // site passkey = org custodian
+  await ensureCsrfToken();
+  const r = await fetch('/a2a/mcp/org/sensitive', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ delegation: toWire(d), requester: personAgent }),
+  });
+  const b = (await r.json().catch(() => ({}))) as { ok?: boolean; record?: unknown; org_name?: string; error?: string; detail?: string };
+  if (r.ok && b.ok) return { ok: true, record: b.record, orgName: b.org_name };
+  return { ok: false, error: b.detail ?? b.error ?? `org data read failed (HTTP ${r.status})` };
 }
 
 /** Sign up: create a workspace named `<base>.demo.agent` with a custody credential,

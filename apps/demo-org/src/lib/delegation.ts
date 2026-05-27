@@ -18,6 +18,7 @@ export interface DelegationWire {
   signature: Hex;
 }
 export const fromWire = (w: DelegationWire): Delegation => ({ ...w, salt: BigInt(w.salt) });
+export const toWire = (d: Delegation): DelegationWire => ({ ...d, salt: d.salt.toString() });
 
 const DELEGATION_MANAGER_ABI = [
   {

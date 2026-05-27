@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
-import { connectWithName, connectWithDelegation, signupWithName, createOrg, startSiteEnrollment } from './connect-client';
+import { connectWithName, connectWithDelegation, signupWithName, createOrg, startSiteEnrollment, readOrgData } from './connect-client';
 import { openCentralAuthPopup, preferRedirect } from './lib/central-auth';
 import type { DelegationWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
@@ -103,6 +103,8 @@ export function App() {
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [orgName, setOrgName] = useState('');
   const [orgAvail, setOrgAvail] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  // Per-org sensitive-data read state (via an org→person delegation).
+  const [orgData, setOrgData] = useState<Record<string, { loading?: boolean; record?: unknown; error?: string }>>({});
 
   // Shared progress modal (sign-up + create-org)
   const [flow, setFlow] = useState<
@@ -489,6 +491,22 @@ export function App() {
     }
   }
 
+  // Read an org's gated data via an org→person delegation (the org is custodied by this
+  // site's passkey). Demonstrates reading org PII through the delegation model.
+  async function onViewOrgData(orgAgent: string) {
+    if (!session) return;
+    setOrgData((m) => ({ ...m, [orgAgent]: { loading: true } }));
+    try {
+      const out = await readOrgData(orgAgent as Address, session.address);
+      setOrgData((m) => ({
+        ...m,
+        [orgAgent]: out.ok ? { record: out.record } : { error: out.error },
+      }));
+    } catch (e) {
+      setOrgData((m) => ({ ...m, [orgAgent]: { error: e instanceof Error ? e.message : 'read failed' } }));
+    }
+  }
+
   const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
   return (
@@ -675,20 +693,35 @@ export function App() {
             <div className="panel">
               <h2>Your organizations</h2>
               <ul>
-                {orgs.map((o) => (
-                  <li key={o.orgAgent}>
-                    <strong>{o.orgName}</strong> — <code>{short(o.orgAgent)}</code>{' '}
-                    {o.governed ? (
-                      <span className="badge" title="person → HAS_GOVERNANCE_OVER → org recorded on-chain (via your delegation)">
-                        you govern (on-chain)
-                      </span>
-                    ) : (
-                      <span className="badge" title="Org created; governance edge not recorded">
-                        org created
-                      </span>
-                    )}
-                  </li>
-                ))}
+                {orgs.map((o) => {
+                  const data = orgData[o.orgAgent];
+                  return (
+                    <li key={o.orgAgent} style={{ marginBottom: '0.6rem' }}>
+                      <strong>{o.orgName}</strong> — <code>{short(o.orgAgent)}</code>{' '}
+                      {o.governed ? (
+                        <span className="badge" title="person → HAS_GOVERNANCE_OVER → org recorded on-chain (via your delegation)">
+                          you govern (on-chain)
+                        </span>
+                      ) : (
+                        <span className="badge" title="Org created; governance edge not recorded">
+                          org created
+                        </span>
+                      )}{' '}
+                      <button
+                        className="ghost"
+                        style={{ minHeight: '32px', padding: '0.25rem 0.7rem', fontSize: '0.8rem' }}
+                        disabled={data?.loading}
+                        onClick={() => onViewOrgData(o.orgAgent)}
+                      >
+                        {data?.loading ? 'Reading…' : 'View org data'}
+                      </button>
+                      {data?.error && <p className="err" style={{ margin: '0.3rem 0 0' }}>⛔ {data.error}</p>}
+                      {data && 'record' in data && data.record != null && (
+                        <pre style={{ marginTop: '0.4rem' }}>{JSON.stringify(data.record, null, 2)}</pre>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
