@@ -20,10 +20,26 @@ export type SignHash = (hash: Hex) => Promise<Hex>;
 export const AUD = 'demo-org';
 const CHAIN_ID = 84532;
 
-/** The person's central auth (spec 229). For now a single configured origin (demo-sso);
- *  later, the per-person `<handle>.agentictrust.io` subdomain resolved from the name. */
-export const CENTRAL_AUTH_ORIGIN =
+/** The configured PLATFORM Connect origin — the default home + the bootstrap/sign-up origin
+ *  (a name with no agent yet has nothing to resolve). Not exported: callers go through
+ *  `resolveAuthOrigin` so the per-person flip is a one-function change. */
+const PLATFORM_AUTH_ORIGIN =
   (import.meta.env?.VITE_CENTRAL_AUTH_ORIGIN as string | undefined) ?? 'https://agenticprimitives-demo-sso.pages.dev';
+
+/** Resolve where a name's central auth lives (spec 229 §4 / P4). One mechanism, no fallback
+ *  chain: the canonical source is the agent's on-chain `authOrigin` profile facet
+ *  (`getStringProperty(agent, keccak256("authOrigin"))`). An UNSET facet is an answer, not a
+ *  trigger — it resolves to `PLATFORM_AUTH_ORIGIN` (a constant default, not a second lookup).
+ *
+ *  Domain-deferred phase (P5 not done): `*.agentictrust.io` isn't live and every agent's
+ *  origin is the one platform origin, so the facet is NOT written and this returns the
+ *  platform origin without an on-chain read (writing/reading a uniform value would only burn
+ *  scarce paymaster gas). At the P5 flip, swap the body to read the facet — signature is
+ *  already async so no caller changes. `name` is accepted now so the seam is stable. */
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function resolveAuthOrigin(_name?: string): Promise<string> {
+  return PLATFORM_AUTH_ORIGIN;
+}
 
 export type SiweOutcome =
   | { status: 'issued'; token: string; address: Address; agent: Address }
@@ -339,17 +355,22 @@ async function deployAgent(
  *  never the person SA. We only build the central-auth URL: the person name to resolve, the org
  *  base, and THIS site's delegate SA (which receives the scoped org→site delegation). The caller
  *  opens the popup; the result carries `org` (address, name, edge, governed, org→site delegation). */
-export function startOrgCreation(personName: string, delegateSA: Address, orgBase: string): { url: string; state: string } {
+export async function startOrgCreation(
+  personName: string,
+  delegateSA: Address,
+  orgBase: string,
+): Promise<{ url: string; state: string; authOrigin: string }> {
   const stateBytes = crypto.getRandomValues(new Uint8Array(16));
   const state = Array.from(stateBytes, (b) => b.toString(16).padStart(2, '0')).join('');
-  const u = new URL('/', CENTRAL_AUTH_ORIGIN);
+  const authOrigin = await resolveAuthOrigin(personName); // person's central auth (spec 229 §4)
+  const u = new URL('/', authOrigin);
   u.searchParams.set('aud', AUD);
   u.searchParams.set('redirect_uri', window.location.origin + '/');
   u.searchParams.set('state', state);
   u.searchParams.set('name', personName); // the (existing) person to resolve + govern
   u.searchParams.set('delegate', delegateSA); // recipient of the scoped org→site delegation
   u.searchParams.set('org_base', orgBase);
-  return { url: u.toString(), state };
+  return { url: u.toString(), state, authOrigin };
 }
 
 
@@ -361,7 +382,7 @@ export function startOrgCreation(personName: string, delegateSA: Address, orgBas
 export async function startSiteEnrollment(
   name: string,
   onStep?: (s: string) => void,
-): Promise<{ ok: true; url: string; state: string; delegateSA: Address } | { ok: false; error: string }> {
+): Promise<{ ok: true; url: string; state: string; delegateSA: Address; authOrigin: string } | { ok: false; error: string }> {
   onStep?.('Creating your sign-in key on this device…');
   const pk = await registerPasskey(name); // local passkey on THIS origin, stored
   onStep?.('Setting up this site’s account…');
@@ -381,13 +402,14 @@ export async function startSiteEnrollment(
   if (!dep.ok) return { ok: false, error: `site account deploy failed: ${dep.error}` };
   const stateBytes = crypto.getRandomValues(new Uint8Array(16));
   const state = Array.from(stateBytes, (b) => b.toString(16).padStart(2, '0')).join('');
-  const u = new URL('/', CENTRAL_AUTH_ORIGIN);
+  const authOrigin = await resolveAuthOrigin(name); // person's central auth (spec 229 §4)
+  const u = new URL('/', authOrigin);
   u.searchParams.set('aud', AUD);
   u.searchParams.set('redirect_uri', window.location.origin + '/');
   u.searchParams.set('state', state);
   u.searchParams.set('name', name);
   u.searchParams.set('delegate', dep.agent);
-  return { ok: true, url: u.toString(), state, delegateSA: dep.agent };
+  return { ok: true, url: u.toString(), state, delegateSA: dep.agent, authOrigin };
 }
 
 /** Connect to the agent that OWNS `name`, proving control with a custody credential.

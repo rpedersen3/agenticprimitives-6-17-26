@@ -85,12 +85,26 @@ enforcers), deployed on Base Sepolia, with an off-chain SDK in
   and change demo-org runtime auth + the on-behalf action path (redeem the
   delegation) — see spec 229 §5–§6.
 
+## Amendment (2026-05-27) — central auth MAY be a per-person subdomain
+
+The central auth that issues these delegations is the person's own SSI-wallet origin
+(`<handle>.agentictrust.io`), where the ROOT passkey is registered
+(WebAuthn `rpId = that host`). Relying sites discover it from the name via the
+`authOrigin` facet (spec 229 §4) and redirect there. **This does not weaken this ADR.**
+The subdomain answers only *where the ROOT passkey lives* + *who issues* the delegation —
+it does NOT change *what a relying site may do*. A relying site remains a scoped delegate,
+never a custodian; a personal origin must never be used to justify a custody grant. See
+spec 229 §4 + P4/P5 (P5/domain deferred 2026-05-27).
+
 ## Explicitly not taken
 
 - **Per-credential custody roles** (`AgentAccount` `role`/`canAddCredentials` flags).
   Rejected: it keeps the relying site inside the custody perimeter, couples its
   blast radius to a new branch in the custody core, and violates the spec-213
   firewall by putting authority-scoping in the custody layer.
+- **A relying site becoming a custodian because it now talks to a per-person origin.**
+  Rejected for the reason in the amendment above: the origin is about credential *home*
+  and issuance, not delegate authority.
 
 ## Closure conditions
 

@@ -5,7 +5,6 @@
 //
 // Security (audit F3/F5): we resolve ONLY on a message from the exact popup window we
 // opened, at the exact central-auth origin, whose echoed `state` matches what we generated.
-import { CENTRAL_AUTH_ORIGIN } from '../connect-client';
 import type { DelegationWire } from './delegation';
 import type { Address, Hex } from '@agenticprimitives/types';
 
@@ -46,11 +45,14 @@ export function preferRedirect(): boolean {
 
 /** Open the central auth in a popup and resolve when it posts a result. `redirectUrl` is the
  *  URL the caller already built (with name + enroll public key + `state`); we append
- *  `mode=popup`. Resolves 'blocked' if the popup couldn't open (caller should fall back to a
- *  full-page redirect). */
+ *  `mode=popup`. `expectedOrigin` is the RESOLVED central-auth origin for this name (spec 229
+ *  §4) — messages are accepted ONLY from it (audit F3), so the check follows the per-person
+ *  origin, not a module constant. Resolves 'blocked' if the popup couldn't open (caller should
+ *  fall back to a full-page redirect). */
 export function openCentralAuthPopup(
   redirectUrl: string,
   expectedState: string,
+  expectedOrigin: string,
   onProgress?: (msg: string) => void,
 ): Promise<PopupResult> {
   const popupUrl = redirectUrl + (redirectUrl.includes('?') ? '&' : '?') + 'mode=popup';
@@ -72,7 +74,7 @@ export function openCentralAuthPopup(
     };
     const onMessage = (e: MessageEvent) => {
       // Fail-closed (audit F3): only the popup we opened, at the exact central-auth origin.
-      if (e.origin !== CENTRAL_AUTH_ORIGIN || e.source !== popup) return;
+      if (e.origin !== expectedOrigin || e.source !== popup) return;
       const m = e.data as AcMessage | null;
       if (!m || typeof m.type !== 'string') return;
       if (m.type === 'AC_PROGRESS') {

@@ -111,16 +111,31 @@ From `/home/barb/smart-agent` (`003-intent-marketplace-proposal`):
 ## 4. Issuer discovery (one mechanism — ADR-0013)
 
 A relying site must learn **where a name's central auth lives** to redirect there.
+The person's central auth is their own SSI-wallet origin (`<handle>.agentictrust.io`),
+where the ROOT passkey is registered (WebAuthn `rpId = that host`). The relying site
+discovers it from the name and redirects there.
 
-- **Now:** the central auth is a single configured origin (the deployed
-  `demo-sso`). Relying sites read it from build config (`CENTRAL_AUTH_ORIGIN`).
-- **Target:** the issuer is the person's subdomain, derived from the ANS label
-  (`rpedersen.agent` → `https://rpedersen.agentictrust.io`) **or** read from an
-  **on-chain issuer facet** (an ANS text record / profile field the agent
-  declares). Resolution is a single read — name → issuer; no fallback chain.
+**Canonical mechanism — the `authOrigin` facet.** A person agent declares its central
+auth as an on-chain **profile string property** on the `agentProfileResolver`:
+`getStringProperty(agent, AUTH_ORIGIN)` (predicate `keccak256("authOrigin")`), e.g.
+`"https://r-pedersen.agentictrust.io"`. Resolution is a single read — `name → agent →
+authOrigin` — **no fallback chain**. An UNSET facet is an *answer*, not a trigger to try a
+second mechanism: it resolves to the configured **platform default origin** (a pure
+constant). That keeps ADR-0013's "one mechanism" intact (a defined default for an unset
+optional field is not a second remote lookup).
 
-The migration `single configured origin → per-person subdomain` changes only this
-resolver + deployment topology; the protocol in §5 is unchanged.
+**Direction split (each operation = one mechanism):**
+- **Connect** (existing agent): resolve `authOrigin` for the agent → redirect there.
+- **Bootstrap / sign-up** (no agent yet, so no facet): there is nothing to resolve, so the
+  relying site uses the configured platform Connect origin. This is a *different operation*,
+  not a fallback within the connect read path.
+
+**Migration phasing (see P4/P5).** Until `*.agentictrust.io` is live, every agent's
+auth origin IS the one shared platform origin, so the facet is **not written** (a per-person
+write to a uniform value would only burn gas). Relying sites isolate resolution behind a
+single `resolveAuthOrigin(name)` seam that returns the platform origin today; at the P5
+domain flip the seam reads the facet and per-person facets are populated. The protocol in §5
+is unchanged across the migration; only this resolver + deployment topology change.
 
 ## 5. Enrollment protocol (central auth `/authorize` → `/token`)
 
@@ -367,10 +382,22 @@ discloses the full-authority grant in consent until the delegation rewrite ships
 - **P2 — Enrollment via central auth:** demo-sso `/authorize` enroll + consent;
   demo-org first-visit redirect → `addPasskey` → `code` → signed in.
 - **P3 — Org creation** (§7) on demo-org.
-- **P4 — Issuer from name / on-chain facet** (drop the hardcoded
-  `CENTRAL_AUTH_ORIGIN`).
-- **P5 (future) — `*.agentictrust.io`:** wildcard Worker, per-person subdomain RP,
-  per-person primary passkey. Deployment-topology only.
+- **P4 — Issuer discovery behind a resolver seam** (drop the hardcoded
+  `CENTRAL_AUTH_ORIGIN` scattered through relying-site code). Relying sites resolve via a
+  single `resolveAuthOrigin(name)` and thread the result through the enrollment/org URL
+  builders + the popup `postMessage` origin check (validation follows the *resolved* origin,
+  not a module constant). Canonical mechanism = the `authOrigin` profile facet (§4); during
+  the domain-deferred phase the seam returns the configured platform origin and the facet is
+  NOT written (uniform value → a write would only burn scarce paymaster gas). **Done
+  2026-05-27** (demo-org). No on-chain writes added.
+- **P5 (future, domain-gated) — `*.agentictrust.io`:** wildcard Worker/route, per-person
+  subdomain as the WebAuthn RP (`rpId = <handle>.agentictrust.io`), per-person ROOT passkey,
+  host→agent context in demo-sso, and **populate each person's `authOrigin` facet** so the
+  P4 seam reads per-person subdomains. The real domain is intentionally NOT provisioned yet
+  (user, 2026-05-27). Deployment-topology + facet population only — no protocol change.
+  ⚠️ The subdomain answers *where the ROOT passkey lives*, NOT *what a relying site may do*
+  (that stays a scoped delegation — ADR-0019). A personal origin must never be used to
+  justify making a relying site a custodian.
 
 ## 11. Open questions
 

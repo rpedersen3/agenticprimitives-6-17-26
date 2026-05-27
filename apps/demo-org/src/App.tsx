@@ -386,6 +386,7 @@ export function App() {
     setFlow({ title: 'Setting up your account', phase: 'running', steps: ['Creating your sign-in key on this device…'] });
     let url: string;
     let state: string;
+    let authOrigin: string;
     try {
       // Registers a local passkey + deploys this site's delegate SA (Windows Hello prompts).
       const started = await startSiteEnrollment(name, (s) =>
@@ -395,7 +396,7 @@ export function App() {
         setFlow({ title: 'Couldn’t start setup', phase: 'error', steps: [], error: started.error });
         return;
       }
-      ({ url, state } = started);
+      ({ url, state, authOrigin } = started);
     } catch (e) {
       setFlow({
         title: 'Couldn’t start setup',
@@ -425,7 +426,7 @@ export function App() {
       phase: 'running',
       steps: ['Created your sign-in key', 'Opening your secure home…'],
     });
-    const result = await openCentralAuthPopup(url, state, (msg) =>
+    const result = await openCentralAuthPopup(url, state, authOrigin, (msg) =>
       setFlow({ title: 'Setting up your account', phase: 'running', steps: ['Created your sign-in key', msg] }),
     );
     if (result.status === 'blocked') {
@@ -530,7 +531,7 @@ export function App() {
       });
       return;
     }
-    const { url, state } = startOrgCreation(session.name, del.delegate, base);
+    const { url, state, authOrigin } = await startOrgCreation(session.name, del.delegate, base);
     setFlow({ title: 'Creating your organization…', phase: 'running', steps: ['Opening your secure home…'] });
 
     // Mobile / narrow viewport → full-page redirect.
@@ -540,7 +541,7 @@ export function App() {
       window.location.href = url;
       return;
     }
-    const result = await openCentralAuthPopup(url, state, (msg) =>
+    const result = await openCentralAuthPopup(url, state, authOrigin, (msg) =>
       setFlow({ title: 'Creating your organization…', phase: 'running', steps: [msg] }),
     );
     if (result.status === 'blocked') {
