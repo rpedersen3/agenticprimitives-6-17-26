@@ -583,9 +583,9 @@ export function App() {
     // Truncate delegate address for display (audit F2 — consent binds to exact delegate)
     const delegateShort = `${enrollReq.delegate.slice(0, 6)}…${enrollReq.delegate.slice(-4)}`;
 
-    // Shared brand topbar
+    // Shared brand topbar (compact — 44px)
     const Topbar = () => (
-      <div className="popup-topbar">
+      <div className="popup-topbar" role="banner">
         <div className="popup-brand">
           <svg className="brand-shield" viewBox="0 0 30 34" fill="none" aria-hidden="true">
             <path d="M15 1L28 6.5V17C28 23.627 22.18 29.373 15 32C7.82 29.373 2 23.627 2 17V6.5L15 1Z"
@@ -601,17 +601,17 @@ export function App() {
     if (!allowed) {
       return (
         <div className="popup-root">
+          <Topbar />
           <div className="popup-scroll">
-            <Topbar />
             <div className="popup-heading">
-              <h1>This request can't be approved</h1>
+              <h1>Request blocked</h1>
             </div>
             <div className="blocked-card">
               <div className="blocked-icon">⛔</div>
-              <p style={{ fontWeight: 600, color: 'var(--c-g900)', marginBottom: '.4rem' }}>
-                {host} isn't a recognized site
+              <p style={{ fontWeight: 600, color: 'var(--c-g900)', marginBottom: '.35rem' }}>
+                {host} is not a recognized site
               </p>
-              <p style={{ fontSize: '.875rem', color: 'var(--c-g500)', margin: 0 }}>
+              <p style={{ fontSize: '.8375rem', color: 'var(--c-g500)', margin: 0 }}>
                 For your safety this request was blocked. Only start account setup from a site you trust.
               </p>
             </div>
@@ -627,8 +627,8 @@ export function App() {
     if (enrollExists === null) {
       return (
         <div className="popup-root">
+          <Topbar />
           <div className="popup-scroll">
-            <Topbar />
             <div className="popup-heading">
               <h1>One moment…</h1>
             </div>
@@ -636,7 +636,7 @@ export function App() {
               <div className="ceremony-spinner-wrap">
                 <span className="spinner spinner-lg" role="status" aria-label="Checking account" />
               </div>
-              <p style={{ color: 'var(--c-g500)', fontSize: '.9375rem', margin: 0 }}>
+              <p style={{ color: 'var(--c-g500)', fontSize: '.875rem', margin: 0 }}>
                 Checking your account…
               </p>
             </div>
@@ -652,17 +652,8 @@ export function App() {
     if (running) {
       return (
         <div className="popup-root">
+          <Topbar />
           <div className="popup-scroll">
-            <Topbar />
-            <div style={{ padding: '.25rem 0 .5rem' }}>
-              <div className="step-indicator">
-                <div className="step-dots">
-                  <div className="step-dot active" />
-                  <div className="step-dot" />
-                </div>
-                Step 1 of 2
-              </div>
-            </div>
             <div className="popup-heading">
               <h1>Confirm with your device</h1>
             </div>
@@ -670,20 +661,20 @@ export function App() {
               <div className="ceremony-spinner-wrap">
                 <span className="spinner spinner-lg" role="status" aria-label="Working" />
               </div>
-              <p style={{ fontWeight: 600, fontSize: '.9375rem', color: 'var(--c-g900)', marginBottom: '.4rem' }}>
+              <p style={{ fontWeight: 600, fontSize: '.9rem', color: 'var(--c-g900)', marginBottom: '.35rem' }}>
                 {enrollFlow.msg ?? 'Working…'}
               </p>
-              <p style={{ fontSize: '.875rem', color: 'var(--c-g500)', margin: 0 }}>
-                Respond to any device prompt that appears. This takes about 15–30 seconds.
+              <p style={{ fontSize: '.8375rem', color: 'var(--c-g500)', margin: 0 }}>
+                Your device may ask you to confirm. This usually takes a few seconds.
               </p>
             </div>
             <div style={{
-              display: 'flex', alignItems: 'center', gap: '.625rem',
+              display: 'flex', alignItems: 'center', gap: '.5rem',
               background: 'var(--c-primary-subtle)', border: '1px solid var(--c-primary-border)',
-              borderRadius: 'var(--r-lg)', padding: '.75rem 1rem', marginBottom: '1rem',
+              borderRadius: 'var(--r-md)', padding: '.625rem .875rem',
             }}>
-              <span style={{ fontSize: '1rem' }}>🔐</span>
-              <p style={{ margin: 0, fontSize: '.875rem', color: 'var(--c-g700)' }}>
+              <span style={{ fontSize: '.9rem' }} aria-hidden="true">🔐</span>
+              <p style={{ margin: 0, fontSize: '.8375rem', color: 'var(--c-g700)' }}>
                 Your Smart Agent stays yours.
               </p>
             </div>
@@ -699,8 +690,8 @@ export function App() {
     if (enrollFlow.phase === 'error') {
       return (
         <div className="popup-root">
+          <Topbar />
           <div className="popup-scroll">
-            <Topbar />
             <div className="popup-heading">
               <h1>Something went wrong</h1>
             </div>
@@ -708,19 +699,19 @@ export function App() {
               <p className="error-card-title">Approval failed</p>
               <p className="error-card-body">{enrollFlow.error}</p>
             </div>
-            <p style={{ fontSize: '.875rem', color: 'var(--c-g500)', marginBottom: '1rem' }}>
-              Nothing was changed. You can try again or go back.
+            <p style={{ fontSize: '.8375rem', color: 'var(--c-g500)', marginBottom: '.5rem' }}>
+              Nothing was changed. You can try again.
             </p>
-            <div className="popup-actions">
-              {enrollReq.orgBase
-                ? <button className="cta" onClick={approveCreateOrg}>Try again</button>
-                : <button className="cta" onClick={approveEnroll}>Try again</button>
-              }
-              <button className="cta ghost" onClick={denyEnroll}>Cancel</button>
-            </div>
             <div className="privacy-footer">
               🔒 You're in control. Your data stays private.
             </div>
+          </div>
+          <div className="popup-actions">
+            {enrollReq.orgBase
+              ? <button className="cta" onClick={approveCreateOrg}>Try again</button>
+              : <button className="cta" onClick={approveEnroll}>Try again</button>
+            }
+            <button className="cta ghost" onClick={denyEnroll}>Cancel</button>
           </div>
         </div>
       );
@@ -730,15 +721,15 @@ export function App() {
     if (enrollReq.orgBase) {
       return (
         <div className="popup-root">
+          <Topbar />
           <div className="popup-scroll">
-            <Topbar />
             <div className="popup-heading">
-              <h1>Allow org data<br />access?</h1>
+              <h1>Allow org data access?</h1>
             </div>
 
             {/* Entity chip — the org being created */}
             <div className="entity-chip">
-              <div className="entity-chip-icon">🏢</div>
+              <div className="entity-chip-icon" aria-hidden="true">🏢</div>
               <div className="entity-chip-meta">
                 <div className="entity-chip-name">{orgName}</div>
                 <div className="entity-chip-sub">{host}</div>
@@ -746,63 +737,46 @@ export function App() {
               <span className="entity-chip-badge">New org</span>
             </div>
 
-            {/* Can card */}
+            {/* Can card — 2 bullets max */}
             <div className="perm-card can">
               <div className="perm-card-title">This app can:</div>
               <ul className="perm-list">
                 <li>
-                  <span className="perm-icon ok">✓</span>
-                  View approved org records
+                  <span className="perm-icon ok" aria-hidden="true">✓</span>
+                  View approved org records for this session
                 </li>
                 <li>
-                  <span className="perm-icon ok">✓</span>
-                  Use org data for this session
-                </li>
-                <li>
-                  <span className="perm-icon ok">✓</span>
+                  <span className="perm-icon ok" aria-hidden="true">✓</span>
                   Create this organization under your identity
                 </li>
               </ul>
             </div>
 
-            {/* Cannot card */}
-            <div className="perm-card cannot">
-              <div className="perm-card-title">This app cannot:</div>
-              <ul className="perm-list">
-                <li>
-                  <span className="perm-icon no">✕</span>
-                  Change organization access
-                </li>
-                <li>
-                  <span className="perm-icon no">✕</span>
-                  Add members
-                </li>
-                <li>
-                  <span className="perm-icon no">✕</span>
-                  Move funds
-                </li>
-                <li>
-                  <span className="perm-icon no">✕</span>
-                  Act outside permission
-                </li>
-              </ul>
-            </div>
+            {/* Cannot — collapsed disclosure */}
+            <details className="cannot-disclosure">
+              <summary>What it cannot do</summary>
+              <div className="perm-card cannot">
+                <ul className="perm-list">
+                  <li><span className="perm-icon no" aria-hidden="true">✕</span>Change organization access</li>
+                  <li><span className="perm-icon no" aria-hidden="true">✕</span>Add members or move funds</li>
+                  <li><span className="perm-icon no" aria-hidden="true">✕</span>Act outside this permission</li>
+                </ul>
+              </div>
+            </details>
 
             {/* Delegate binding note (audit F2) */}
-            <p style={{ fontSize: '.78rem', color: 'var(--c-g400)', marginBottom: '1rem' }}>
-              Site account: <code>{delegateShort}</code> — scoped, revocable access only. No custodian rights.
+            <p style={{ fontSize: '.72rem', color: 'var(--c-g400)', margin: '.375rem 0 0' }}>
+              Scoped, revocable access only — site account <code>{delegateShort}</code>.
             </p>
-
-            <div className="popup-actions">
-              <button className="cta" onClick={approveCreateOrg}>
-                🔐 Create &amp; approve with your device
-              </button>
-              <button className="cta ghost" onClick={denyEnroll}>Deny</button>
-            </div>
-
             <div className="privacy-footer">
               🔒 You're in control. You can revoke access anytime.
             </div>
+          </div>
+          <div className="popup-actions">
+            <button className="cta" onClick={approveCreateOrg}>
+              Create &amp; approve with your device
+            </button>
+            <button className="cta ghost" onClick={denyEnroll}>Deny</button>
           </div>
         </div>
       );
@@ -811,395 +785,511 @@ export function App() {
     // ── Sign-in consent (default path) ───────────────────────────────────
     return (
       <div className="popup-root">
+        <Topbar />
         <div className="popup-scroll">
-          <Topbar />
           <div className="popup-heading">
             <h1>
-              Allow this app to<br />work with{' '}
-              <span className="accent-name">{enrollReq.name}?</span>
+              Allow{' '}
+              <span className="accent-name">{enrollReq.name}</span>{' '}
+              to connect here?
             </h1>
           </div>
 
           {/* Entity chip — the relying site requesting access */}
           <div className="entity-chip">
-            <div className="entity-chip-icon">🌐</div>
+            <div className="entity-chip-icon" aria-hidden="true">🌐</div>
             <div className="entity-chip-meta">
               <div className="entity-chip-name">{host}</div>
               <div className="entity-chip-sub">{delegateShort}</div>
             </div>
           </div>
 
-          {/* Can card */}
+          {/* Can card — 2 bullets max to save vertical space */}
           <div className="perm-card can">
             <div className="perm-card-title">This app can:</div>
             <ul className="perm-list">
               <li>
-                <span className="perm-icon ok">✓</span>
-                Sign you in as {enrollReq.name}
+                <span className="perm-icon ok" aria-hidden="true">✓</span>
+                Sign you in as <strong>{enrollReq.name}</strong>
               </li>
               <li>
-                <span className="perm-icon ok">✓</span>
-                Use approved profile data
-              </li>
-              <li>
-                <span className="perm-icon ok">✓</span>
-                Create approved workspaces
+                <span className="perm-icon ok" aria-hidden="true">✓</span>
+                Use approved profile data and create workspaces
               </li>
             </ul>
           </div>
 
-          {/* Cannot card */}
-          <div className="perm-card cannot">
-            <div className="perm-card-title">This app cannot:</div>
-            <ul className="perm-list">
-              <li>
-                <span className="perm-icon no">✕</span>
-                Change your passkeys
-              </li>
-              <li>
-                <span className="perm-icon no">✕</span>
-                Recover your Smart Agent
-              </li>
-              <li>
-                <span className="perm-icon no">✕</span>
-                Move funds without approval
-              </li>
-              <li>
-                <span className="perm-icon no">✕</span>
-                Act outside permission
-              </li>
-            </ul>
-          </div>
+          {/* Cannot — collapsed disclosure, saves ~100px */}
+          <details className="cannot-disclosure">
+            <summary>What it cannot do</summary>
+            <div className="perm-card cannot">
+              <ul className="perm-list">
+                <li><span className="perm-icon no" aria-hidden="true">✕</span>Change your passkeys or recover your Smart Agent</li>
+                <li><span className="perm-icon no" aria-hidden="true">✕</span>Move funds without your approval</li>
+                <li><span className="perm-icon no" aria-hidden="true">✕</span>Act outside this permission</li>
+              </ul>
+            </div>
+          </details>
 
-          {/* New-user note (shown only when this will also create the home account) */}
+          {/* New-user note (only when this will also create the home account) */}
           {isNew && (
             <div style={{
               background: 'var(--c-primary-subtle)',
               border: '1px solid var(--c-primary-border)',
-              borderRadius: 'var(--r-lg)',
-              padding: '.75rem 1rem',
-              marginBottom: '.875rem',
-              fontSize: '.875rem',
+              borderRadius: 'var(--r-md)',
+              padding: '.625rem .875rem',
+              marginTop: '.5rem',
+              fontSize: '.8375rem',
               color: 'var(--c-g700)',
             }}>
-              <strong>First time here:</strong> we'll create your secure home account for{' '}
-              <strong>{enrollReq.name}</strong> first. Takes about 30 seconds.
+              <strong>New here:</strong> we'll create your Smart Agent for{' '}
+              <strong>{enrollReq.name}</strong> first — one device confirmation.
             </div>
           )}
 
-          <div className="popup-actions">
-            <button className="cta" onClick={approveEnroll}>
-              🔐 Approve with device
-            </button>
-            <button className="cta ghost" onClick={denyEnroll}>Deny</button>
-          </div>
-
           <div className="privacy-footer">
-            🔒 You're in control. Your data stays private.
+            🔒 You're in control. You can revoke access anytime.
           </div>
+        </div>
+        <div className="popup-actions">
+          <button className="cta" onClick={approveEnroll}>
+            Approve with your device
+          </button>
+          <button className="cta ghost" onClick={denyEnroll}>Deny</button>
         </div>
       </div>
     );
   }
 
+  // ── Shield logo for standalone topbar ─────────────────────────────────
+  const ShieldLogo = ({ size = 28 }: { size?: number }) => (
+    <svg
+      className="brand-shield"
+      width={size}
+      height={size}
+      viewBox="0 0 40 40"
+      fill="none"
+      aria-hidden="true"
+      style={{ width: size, height: size }}
+    >
+      <rect width="40" height="40" rx="10" fill="#4f46e5" />
+      <path d="M20 8 L30 12 L30 22 C30 27.5 25.5 32 20 33.5 C14.5 32 10 27.5 10 22 L10 12 Z"
+        fill="white" fillOpacity="0.25" />
+      <path d="M20 11 L28 14.5 L28 22 C28 26.5 24.5 30.5 20 31.8 C15.5 30.5 12 26.5 12 22 L12 14.5 Z"
+        fill="white" fillOpacity="0.9" />
+      <path d="M17 21 L19.5 23.5 L23.5 18"
+        stroke="#4f46e5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+
+  const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+
   return (
-    <div className="app-shell">
-      <h1>Agentic Connect</h1>
-      <p className="muted">
-        Your portable workspace — created once, on Base Sepolia, and reachable from any app with any
-        sign-in. One canonical agent; your wallet, passkey, social, or agent name all return the same you.
-      </p>
+    <div id="app-root" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
 
-      {error && <p className="err">⛔ {error}</p>}
-
-      {restoring && !session && <p className="muted">Restoring your session…</p>}
-
-      {/* ── Not signed in: connect ───────────────────────────────── */}
-      {!session && !restoring && (
-        <>
-          {googleNotice && (
-            <div className="panel broker">
-              <p className="ok" style={{ margin: 0 }}>ℹ️ {googleNotice}</p>
-            </div>
+      {/* Standalone topbar */}
+      <header className="standalone-topbar">
+        <div className="standalone-topbar-inner">
+          <div className="standalone-brand">
+            <ShieldLogo size={28} />
+            {session && session.via !== 'Google' && profile?.name
+              ? profile.name
+              : 'Agentic Connect'}
+          </div>
+          {session && (
+            <button
+              className="ghost"
+              style={{ fontSize: '.8125rem', padding: '.375rem .75rem', minHeight: '36px' }}
+              onClick={signOut}
+            >
+              Sign out
+            </button>
           )}
+        </div>
+      </header>
 
-          {/* Returning: connect with your agent-service name */}
-          <div className="panel broker">
-            <h2>Connect with your agent name</h2>
-            <p className="muted">Already have a workspace? Enter its name, then confirm with the credential you set up.</p>
-            <p>
-              <input
-                value={connectName}
-                onChange={(e) => setConnectName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-                placeholder="bob.demo.agent"
-                style={{ minWidth: '14rem' }}
-              />
-            </p>
-            {nameInfo.status === 'checking' && <p className="muted">Checking…</p>}
-            {nameInfo.status === 'none' && (
-              <p className="muted">No workspace with that name yet — new here? Sign up below. ↓</p>
+      <div className="app-shell">
+
+        {error && (
+          <div role="alert" style={{
+            background: 'var(--c-danger-bg)', border: '1px solid var(--c-danger-border)',
+            borderRadius: 'var(--r-md)', padding: '.75rem 1rem', marginBottom: '1rem',
+            fontSize: '.875rem', color: 'var(--c-danger)',
+          }}>
+            {error}
+          </div>
+        )}
+
+        {restoring && !session && (
+          <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--c-g400)' }}>
+            <span className="spinner spinner-lg" aria-label="Restoring session" />
+          </div>
+        )}
+
+        {/* ── Not signed in ─────────────────────────────────────────── */}
+        {!session && !restoring && (
+          <>
+            <div className="standalone-hero">
+              <h1>Your secure home</h1>
+              <p>Your portable Smart Agent — created once, reachable from any app.</p>
+            </div>
+
+            {googleNotice && (
+              <div className="scard" style={{ borderColor: 'var(--c-primary-border)', marginBottom: '1rem' }}>
+                <p style={{ color: 'var(--c-g700)', margin: 0, fontSize: '.9rem' }}>{googleNotice}</p>
+              </div>
             )}
-            {nameInfo.status === 'found' && (
-              <>
-                <p className="ok" style={{ margin: '0 0 0.5rem' }}>
-                  ✓ Found <code>{nameInfo.name}</code>
-                </p>
-                <p>
-                  {nameInfo.hasPasskey && (
-                    <button disabled={busy} onClick={() => onConnectName('passkey')}>
+
+            <div className="standalone-grid">
+              {/* Connect card */}
+              <div className="scard accent">
+                <h2>Sign in</h2>
+                <p className="muted">Enter your agent name to sign in.</p>
+                <div style={{ marginBottom: '.625rem' }}>
+                  <input
+                    value={connectName}
+                    onChange={(e) => setConnectName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+                    placeholder="bob.demo.agent"
+                    aria-label="Agent name"
+                  />
+                </div>
+                {nameInfo.status === 'checking' && (
+                  <p className="muted" style={{ fontSize: '.8rem', margin: '0 0 .5rem' }}>
+                    <span className="spinner" aria-hidden="true" style={{ marginRight: '.3rem' }} />
+                    Checking…
+                  </p>
+                )}
+                {nameInfo.status === 'none' && (
+                  <p style={{ fontSize: '.8rem', color: 'var(--c-g500)', margin: '0 0 .5rem' }}>
+                    No agent with that name — sign up below.
+                  </p>
+                )}
+                {nameInfo.status === 'found' && (
+                  <p style={{ fontSize: '.8rem', color: 'var(--c-success)', fontWeight: 600, margin: '0 0 .5rem' }}>
+                    ✓ Found {nameInfo.name}
+                  </p>
+                )}
+                {connectErr && (
+                  <p role="alert" style={{ fontSize: '.8rem', color: 'var(--c-danger)', margin: '0 0 .5rem' }}>
+                    {connectErr}
+                  </p>
+                )}
+                <div className="standalone-actions">
+                  {nameInfo.status === 'found' && nameInfo.hasPasskey && (
+                    <button disabled={busy} onClick={() => onConnectName('passkey')} style={{ fontSize: '.85rem' }}>
                       Continue with passkey
                     </button>
-                  )}{' '}
-                  {nameInfo.hasEoa && (
-                    <button disabled={busy} onClick={() => onConnectName('wallet')}>
+                  )}
+                  {nameInfo.status === 'found' && nameInfo.hasEoa && (
+                    <button className="ghost" disabled={busy} onClick={() => onConnectName('wallet')} style={{ fontSize: '.85rem' }}>
                       Continue with wallet
                     </button>
                   )}
-                  {!nameInfo.hasPasskey && !nameInfo.hasEoa && (
-                    <span className="muted">This workspace has no custody credential on-chain yet.</span>
-                  )}
-                  {' '}
-                  <span className="muted">
-                    ({[nameInfo.hasPasskey && 'passkey', nameInfo.hasEoa && 'wallet'].filter(Boolean).join(' + ') ||
-                      'none'}{' '}
-                    on this workspace)
-                  </span>
-                </p>
-              </>
-            )}
-            {connectErr && <p className="err">⛔ {connectErr}</p>}
-          </div>
+                </div>
+              </div>
 
-          {/* New: sign up — pick a unique agent name + a custody credential */}
-          <div className="panel broker">
-            <h2>New here? Sign up</h2>
-            <p className="muted">
-              Pick your agent name, then create it with a passkey or wallet (custody-grade — it secures the
-              workspace and unlocks sensitive details).
-            </p>
-            <p>
-              <input
-                value={desiredName}
-                onChange={(e) =>
-                  // Strip a pasted ".demo.agent" suffix, then keep just the label chars —
-                  // so "alicev50.demo.agent" normalizes to the base "alicev50".
-                  setDesiredName(
-                    e.target.value.toLowerCase().replace(/\.demo\.agent$/, '').replace(/[^a-z0-9-]/g, ''),
-                  )
-                }
-                placeholder="e.g. alice"
-                style={{ marginRight: '0.25rem' }}
-              />
-              <code>{desiredName ? `${desiredName}.demo.agent` : 'your-name.demo.agent'}</code>
-            </p>
-            {desiredName && signupAvail === 'checking' && <p className="muted">Checking availability…</p>}
-            {desiredName && signupAvail === 'available' && (
-              <p className="ok" style={{ margin: '0 0 0.5rem' }}>✓ {desiredName}.demo.agent is available</p>
-            )}
-            {desiredName && signupAvail === 'taken' && (
-              <p className="err" style={{ margin: '0 0 0.5rem' }}>
-                ⛔ {desiredName}.demo.agent is taken — choose another (or connect with it above).
-              </p>
-            )}
-            <p>
-              <button disabled={busy || signupAvail !== 'available'} onClick={() => onSignup('passkey')}>
-                {busy ? 'Working…' : 'Sign up with passkey'}
-              </button>{' '}
-              <button disabled={busy || signupAvail !== 'available'} onClick={() => onSignup('wallet')}>
-                Sign up with wallet
-              </button>
-            </p>
-            {!hasWallet() && (
-              <p className="muted">
-                <em>No browser wallet detected</em> — sign up with a passkey (your device).
-              </p>
-            )}
-            <p className="muted">
-              Or <button disabled={busy} onClick={() => startGoogleSignIn(AUD, window.location.origin + '/')}>continue with Google</button>{' '}
-              — login-grade; it identifies a workspace but you confirm with a passkey/wallet to use it (ADR-0017).
-            </p>
-          </div>
-        </>
-      )}
-
-      {/* ── Signed in via Google (login-grade): MANDATORY step-up to the bound agent ── */}
-      {session && session.via === 'Google' && (
-        <div className="panel broker">
-          <h2>Confirm it's you to continue</h2>
-          <p className="muted">
-            Signed in with Google — this <strong>identifies your workspace</strong>, but a Google login is
-            login-grade. To use it you must confirm with your <strong>passkey or wallet</strong> (a
-            custody-grade credential of this same workspace).
-          </p>
-          <button onClick={() => stepUp('passkey')}>Continue with passkey</button>{' '}
-          <button onClick={() => stepUp('wallet')}>Continue with wallet</button>{' '}
-          <button onClick={signOut}>Disconnect</button>
-          {stepUpMsg && <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {stepUpMsg}</p>}
-          <p className="muted" style={{ marginTop: '0.5rem' }}>
-            If your passkey/wallet isn't part of this workspace yet, it'll say so — sign in with it directly,
-            then add the other credential.
-          </p>
-        </div>
-      )}
-
-      {/* ── Signed in with a custody credential: the full workspace ── */}
-      {session && session.via !== 'Google' && (
-        <>
-          <div className="panel broker">
-            <h2>
-              {session.fresh ? '✓ Welcome to your workspace' : '✓ Welcome back'}{' '}
-              <span className="badge">via {session.via}</span>
-            </h2>
-            {profile ? (
-              <>
-                <p>
-                  <strong>{profile.name ?? 'your workspace'}</strong>
-                  <br />
-                  <span className="muted">Canonical agent</span> <code>{profile.agent}</code>
-                  <br />
-                  <span className="muted">Signed in with</span> {profile.credential} ·{' '}
-                  <span className="muted">access:</span>{' '}
-                  <strong>{profile.access === 'standard' ? 'standard' : 'full (confirmed with device)'}</strong>
-                </p>
-                {!profile.name && (
-                  <p className="muted">
-                    <em>No <code>.demo.agent</code> name yet.</em> (Name claim lands next; your agent address
-                    is the canonical identity regardless.)
+              {/* Sign up card */}
+              <div className="scard">
+                <h2>New here?</h2>
+                <p className="muted">Choose an agent name and create your Smart Agent.</p>
+                <div style={{ marginBottom: '.375rem' }}>
+                  <input
+                    value={desiredName}
+                    onChange={(e) =>
+                      setDesiredName(e.target.value.toLowerCase().replace(/\.demo\.agent$/, '').replace(/[^a-z0-9-]/g, ''))
+                    }
+                    placeholder="e.g. alice"
+                    aria-label="Choose your agent name"
+                  />
+                </div>
+                {desiredName && (
+                  <p style={{ fontFamily: "'SF Mono','Roboto Mono',monospace", fontSize: '.75rem', color: 'var(--c-g400)', margin: '0 0 .375rem' }}>
+                    {desiredName}.demo.agent
                   </p>
                 )}
-              </>
-            ) : (
-              <p className="muted">Loading your profile…</p>
-            )}
-            <button onClick={signOut}>Sign out</button>
-            <p style={{ marginTop: '0.5rem' }}>
-              <button onClick={() => startGoogleSignIn(AUD, window.location.origin + '/', session.token)}>
-                Link Google to this workspace
-              </button>{' '}
-              <span className="muted">— adds Google as a quick login (custody-authorized, P0-C).</span>
-            </p>
-            <p className="muted" style={{ marginTop: '0.5rem' }}>
-              Your workspace stays safe. Sign back in anytime with the same credential — it resolves to this
-              same agent.
-            </p>
-          </div>
-
-          <div className="panel">
-            <h2>Your contact details</h2>
-            {sensitive ? (
-              <pre>{JSON.stringify(sensitive, null, 2)}</pre>
-            ) : (
-              <>
-                <p className="muted" style={{ filter: 'blur(4px)', userSelect: 'none' }}>
-                  ▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒ · +1 ▒▒▒ ▒▒▒ ▒▒▒▒
-                </p>
-                <button onClick={onRevealSensitive}>Confirm to view contact details</button>
-                {stepUpMsg && <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {stepUpMsg}</p>}
-                <p className="muted">
-                  Custody-grade session — your contact details unlock directly.
-                </p>
-              </>
-            )}
-          </div>
-
-          {session.via !== 'Google' && (
-            <div className="panel">
-              <h2>Your agent services</h2>
-              {service?.a2aAgent ? (
-                <p className="ok">
-                  ✓ Agent service live: <code>{service.a2aAgent}</code>
-                  <br />
-                  It <strong>operates on behalf of</strong> your workspace — an on-chain
-                  <code> OPERATES_ON_BEHALF_OF</code> edge (it proposed; your workspace confirmed).
-                </p>
-              ) : service?.step ? (
-                <p className="ok">⏳ {service.step}</p>
-              ) : (
-                <>
-                  <p className="muted">
-                    Provision a second Smart Agent (an A2A service agent) that acts on your behalf, linked
-                    on-chain via an <code>OPERATES_ON_BEHALF_OF</code> relationship. Signed by your same
-                    credential.
+                {desiredName && signupAvail === 'checking' && (
+                  <p className="muted" style={{ fontSize: '.8rem', margin: '0 0 .375rem' }}>Checking…</p>
+                )}
+                {desiredName && signupAvail === 'available' && (
+                  <p style={{ fontSize: '.8rem', color: 'var(--c-success)', fontWeight: 600, margin: '0 0 .375rem' }}>
+                    ✓ Available
                   </p>
-                  <button onClick={onProvisionService}>Provision an agent service</button>
-                  {service?.error && (
-                    <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {service.error}</p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {session.via !== 'Google' && (
-            <div className="panel">
-              <h2>Add a sign-in method</h2>
-              {addCred?.done ? (
-                <p className="ok">
-                  ✓ {addCred.done}. You can now sign in to{' '}
-                  <code>{profile?.name ?? 'this workspace'}</code> with{' '}
-                  {session.via === 'passkey' ? 'that wallet' : 'this passkey'} too — same agent, same
-                  contact details.
-                </p>
-              ) : addCred?.step ? (
-                <p className="ok">⏳ {addCred.step}</p>
-              ) : (
-                <>
-                  <p className="muted">
-                    This workspace is secured by your <strong>{session.via}</strong>. Add the other so you
-                    can sign in either way. Your agent address never changes — the new credential is added
-                    as a second on-chain custodian, signed by your current one.
+                )}
+                {desiredName && signupAvail === 'taken' && (
+                  <p role="alert" style={{ fontSize: '.8rem', color: 'var(--c-danger)', margin: '0 0 .375rem' }}>
+                    Name taken — try another.
                   </p>
-                  <button onClick={onAddCredential}>
-                    {session.via === 'passkey' ? 'Add a wallet (SIWE)' : 'Add a passkey'}
+                )}
+                <div className="standalone-actions">
+                  <button disabled={busy || signupAvail !== 'available'} onClick={() => onSignup('passkey')} style={{ fontSize: '.85rem' }}>
+                    Create with passkey
                   </button>
-                  {addCred?.error && (
-                    <p className="err" style={{ marginTop: '0.5rem' }}>⛔ {addCred.error}</p>
+                  {hasWallet() && (
+                    <button className="ghost" disabled={busy || signupAvail !== 'available'} onClick={() => onSignup('wallet')} style={{ fontSize: '.85rem' }}>
+                      Create with wallet
+                    </button>
+                  )}
+                </div>
+                {!hasWallet() && (
+                  <p className="muted" style={{ fontSize: '.78rem', marginTop: '.5rem' }}>
+                    Uses a passkey — no browser wallet needed.
+                  </p>
+                )}
+                <p className="muted" style={{ fontSize: '.78rem', marginTop: '.625rem' }}>
+                  Or{' '}
+                  <button
+                    className="ghost"
+                    disabled={busy}
+                    onClick={() => startGoogleSignIn(AUD, window.location.origin + '/')}
+                    style={{ fontSize: '.78rem', padding: '.2rem .5rem', minHeight: '28px', display: 'inline-flex' }}
+                  >
+                    Continue with Google
+                  </button>
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── Signed in via Google (login-grade): step-up required ────── */}
+        {session && session.via === 'Google' && (
+          <div className="scard accent" style={{ maxWidth: '28rem' }}>
+            <h2>Confirm it's you</h2>
+            <p className="muted" style={{ fontSize: '.9rem' }}>
+              Google identifies your workspace, but you need to confirm with your <strong>passkey or wallet</strong> to use it.
+            </p>
+            <div className="standalone-actions">
+              <button onClick={() => stepUp('passkey')}>Continue with passkey</button>
+              <button className="ghost" onClick={() => stepUp('wallet')}>Continue with wallet</button>
+              <button className="ghost" onClick={signOut}>Disconnect</button>
+            </div>
+            {stepUpMsg && (
+              <p role="alert" style={{ fontSize: '.875rem', color: 'var(--c-danger)', marginTop: '.625rem' }}>
+                {stepUpMsg}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── Signed in (custody-grade): full workspace ───────────────── */}
+        {session && session.via !== 'Google' && (
+          <>
+            {/* Welcome + earned badges */}
+            <div className="scard accent" style={{ marginBottom: '1rem' }}>
+              {session.fresh ? (
+                <>
+                  <div style={{ fontSize: '.8rem', fontWeight: 600, color: 'var(--c-success)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '.375rem' }}>
+                    ✓ Smart Agent ready
+                  </div>
+                  {profile && (
+                    <div className="ws-name">{profile.name ?? 'Your workspace'}</div>
+                  )}
+                  {/* Reward badges — what you just earned */}
+                  <div className="reward-row" aria-label="What you earned">
+                    {profile?.name && (
+                      <span className="reward-chip">
+                        <span className="reward-chip-icon" aria-hidden="true">✓</span>
+                        {profile.name} — owned by you
+                      </span>
+                    )}
+                    <span className="reward-chip primary">
+                      <span className="reward-chip-icon" aria-hidden="true">✓</span>
+                      Smart Agent — yours
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: '.8rem', fontWeight: 600, color: 'var(--c-g500)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '.375rem' }}>
+                    Welcome back
+                  </div>
+                  {profile && (
+                    <div className="ws-name">{profile.name ?? 'Your workspace'}</div>
+                  )}
+                </>
+              )}
+              {profile ? (
+                <>
+                  <p className="ws-agent">{profile.agent}</p>
+                  <div className="ws-row">
+                    <span style={{ color: 'var(--c-g500)', fontSize: '.8rem' }}>Signed in via</span>
+                    <strong style={{ fontSize: '.8rem' }}>{session.via}</strong>
+                    <span className="badge" style={{ marginLeft: '.25rem' }}>
+                      {profile.access === 'standard' ? 'standard' : 'full access'}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <p className="muted" style={{ fontSize: '.875rem' }}>Loading…</p>
+              )}
+              <div className="standalone-actions">
+                <button
+                  className="ghost"
+                  style={{ fontSize: '.8125rem', padding: '.375rem .75rem', minHeight: '36px' }}
+                  onClick={() => startGoogleSignIn(AUD, window.location.origin + '/', session.token)}
+                >
+                  Link Google
+                </button>
+              </div>
+            </div>
+
+            {/* Contact details */}
+            <div className="scard">
+              <h2>Contact details</h2>
+              {sensitive ? (
+                <pre>{JSON.stringify(sensitive, null, 2)}</pre>
+              ) : (
+                <>
+                  <p aria-hidden="true" style={{ filter: 'blur(4px)', userSelect: 'none', color: 'var(--c-g400)', fontSize: '.875rem', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
+                    ▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒ · +1 ▒▒▒ ▒▒▒ ▒▒▒▒
+                  </p>
+                  <div className="standalone-actions">
+                    <button onClick={onRevealSensitive} style={{ fontSize: '.875rem' }}>Confirm to view</button>
+                  </div>
+                  {stepUpMsg && (
+                    <p role="alert" style={{ fontSize: '.875rem', color: 'var(--c-danger)', marginTop: '.5rem' }}>
+                      {stepUpMsg}
+                    </p>
                   )}
                 </>
               )}
             </div>
-          )}
-        </>
-      )}
 
-      <p className="muted" style={{ marginTop: '1rem', fontSize: '0.85em' }}>
-        Real on Base Sepolia (chain 84532): identity resolves on-chain, the workspace is a deployed
-        ERC-4337 Smart Agent, and PII is gated by the verified <code>AgentSession</code> (spec 227).
-      </p>
+            {/* Agent services */}
+            {session.via !== 'Google' && (
+              <div className="scard">
+                <h2>Agent services</h2>
+                {service?.a2aAgent ? (
+                  <p style={{ fontSize: '.875rem', color: 'var(--c-success)', margin: 0 }}>
+                    ✓ Agent service live: <code style={{ fontSize: '.8rem' }}>{service.a2aAgent}</code>
+                  </p>
+                ) : service?.step ? (
+                  <p className="muted" style={{ fontSize: '.875rem' }}>
+                    <span className="spinner" aria-hidden="true" style={{ marginRight: '.3rem' }} />
+                    {service.step}
+                  </p>
+                ) : (
+                  <>
+                    <p className="muted" style={{ fontSize: '.875rem' }}>
+                      Provision a service agent that acts on your behalf, linked on-chain.
+                    </p>
+                    <div className="standalone-actions">
+                      <button onClick={onProvisionService} style={{ fontSize: '.875rem' }}>Provision agent service</button>
+                    </div>
+                    {service?.error && (
+                      <p role="alert" style={{ fontSize: '.875rem', color: 'var(--c-danger)', marginTop: '.5rem' }}>
+                        {service.error}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Add sign-in method */}
+            {session.via !== 'Google' && (
+              <div className="scard">
+                <h2>Add a sign-in method</h2>
+                {addCred?.done ? (
+                  <p style={{ fontSize: '.875rem', color: 'var(--c-success)', margin: 0 }}>
+                    ✓ {addCred.done} — same agent, same contact details.
+                  </p>
+                ) : addCred?.step ? (
+                  <p className="muted" style={{ fontSize: '.875rem' }}>
+                    <span className="spinner" aria-hidden="true" style={{ marginRight: '.3rem' }} />
+                    {addCred.step}
+                  </p>
+                ) : (
+                  <>
+                    <p className="muted" style={{ fontSize: '.875rem' }}>
+                      Secured by your <strong>{session.via}</strong>. Add the other credential so you can sign in either way — your agent address never changes.
+                    </p>
+                    <div className="standalone-actions">
+                      <button onClick={onAddCredential} style={{ fontSize: '.875rem' }}>
+                        {session.via === 'passkey' ? 'Add a wallet' : 'Add a passkey'}
+                      </button>
+                    </div>
+                    {addCred?.error && (
+                      <p role="alert" style={{ fontSize: '.875rem', color: 'var(--c-danger)', marginTop: '.5rem' }}>
+                        {addCred.error}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        <p className="muted" style={{ marginTop: '1rem', fontSize: '.78rem' }}>
+          Real on Base Sepolia (chain 84532)
+        </p>
+      </div>
 
       {/* ── Signup progress modal ──────────────────────────────────── */}
       {signup && (
-        <div className="modal-backdrop">
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="signup-modal-title">
           <div className="modal">
-            <h2>
+            <h2 id="signup-modal-title">
               {signup.phase === 'done'
-                ? '✓ Workspace ready'
+                ? '✓ Smart Agent ready'
                 : signup.phase === 'error'
-                  ? "⛔ Couldn't finish"
-                  : 'Creating your workspace…'}
+                  ? "Couldn't finish"
+                  : 'Creating your Smart Agent…'}
             </h2>
-            <ol className="steps">
+
+            {/* Reward badges on done */}
+            {signup.phase === 'done' && desiredName && (
+              <div className="reward-row" aria-label="What you earned">
+                <span className="reward-chip">
+                  <span className="reward-chip-icon" aria-hidden="true">✓</span>
+                  {desiredName}.demo.agent — owned by you
+                </span>
+                <span className="reward-chip primary">
+                  <span className="reward-chip-icon" aria-hidden="true">✓</span>
+                  Smart Agent — yours
+                </span>
+              </div>
+            )}
+
+            <ol className="steps" aria-label={signup.phase === 'error' ? 'Steps taken' : 'Progress steps'}>
               {signup.steps.map((s, i) => {
                 const isLast = i === signup.steps.length - 1;
                 const done = signup.phase === 'done' || !isLast;
                 const current = signup.phase === 'running' && isLast;
                 return (
                   <li key={i} className={done ? 'done' : current ? 'current' : 'pending'}>
-                    {current ? <span className="spinner" /> : <span>{done ? '✓' : '•'}</span>}
+                    <span className="step-icon" aria-hidden="true">
+                      {current ? <span className="spinner" /> : done ? '✓' : '•'}
+                    </span>
                     {s}
                   </li>
                 );
               })}
             </ol>
             {signup.phase === 'running' && (
-              <p className="muted">This takes ~15–30s. Confirm any device or wallet prompt that appears.</p>
+              <p className="muted" style={{ fontSize: '.875rem', marginBottom: 0 }}>
+                Your device may ask you to confirm. This usually takes a few seconds.
+              </p>
             )}
-            {signup.phase === 'done' && <p className="ok">Signing you in…</p>}
+            {signup.phase === 'done' && (
+              <p style={{ fontSize: '.875rem', color: 'var(--c-success)', margin: 0 }}>
+                Signing you in…
+              </p>
+            )}
             {signup.phase === 'error' && (
               <>
-                <p className="err">{signup.error}</p>
-                <p className="muted">Nothing was charged. You can try again.</p>
-                <button className="ghost" onClick={() => setSignup(null)}>Close</button>
+                <div role="alert" style={{
+                  background: 'var(--c-danger-bg)', border: '1px solid var(--c-danger-border)',
+                  borderRadius: 'var(--r-md)', padding: '.625rem .875rem',
+                  color: 'var(--c-danger)', fontSize: '.875rem', marginBottom: '.625rem',
+                }}>
+                  {signup.error}
+                </div>
+                <p className="muted" style={{ fontSize: '.875rem', marginBottom: '.875rem' }}>
+                  Nothing was changed. You can try again.
+                </p>
+                <button className="ghost cta" onClick={() => setSignup(null)}>Close</button>
               </>
             )}
           </div>

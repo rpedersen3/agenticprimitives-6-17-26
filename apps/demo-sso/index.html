@@ -23,6 +23,8 @@
         /* Popup is narrower than full-page mobile; cap at 420px */
         --app-max: 420px;
         --app-px: 20px;
+        /* Standalone app shell max */
+        --shell-max: 760px;
       }
 
       /* ── Reset & base ──────────────────────────────────────────────── */
@@ -44,14 +46,143 @@
         flex-direction: column;
         min-height: 100dvh;
       }
+      /* Standalone shell: topbar + scrollable content area */
       .app-shell {
         flex: 1;
         display: flex;
         flex-direction: column;
-        max-width: 760px;
+        max-width: var(--shell-max);
         width: 100%;
-        margin: 2.5rem auto;
+        margin: 0 auto;
+        padding: 0 1.25rem 2rem;
+      }
+
+      /* ── Standalone topbar ──────────────────────────────────────────── */
+      .standalone-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 56px;
+        border-bottom: 1px solid var(--c-g200);
         padding: 0 1.25rem;
+        position: sticky;
+        top: 0;
+        background: #fff;
+        z-index: 30;
+        max-width: 100%;
+      }
+      .standalone-topbar-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        max-width: var(--shell-max);
+        margin: 0 auto;
+      }
+      .standalone-brand {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        font-size: .9375rem;
+        font-weight: 700;
+        color: var(--c-g900);
+        letter-spacing: -.01em;
+      }
+
+      /* ── Standalone page header ─────────────────────────────────────── */
+      .standalone-hero {
+        padding: 1.5rem 0 1rem;
+        border-bottom: 1px solid var(--c-g100);
+        margin-bottom: 1.25rem;
+      }
+      .standalone-hero h1 {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: var(--c-g900);
+        letter-spacing: -.025em;
+        margin: 0 0 .25rem;
+      }
+      .standalone-hero p {
+        font-size: .9rem;
+        color: var(--c-g500);
+        margin: 0;
+        line-height: 1.5;
+      }
+
+      /* ── Standalone card grid (2-col on wide, 1-col on mobile) ─────── */
+      .standalone-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+      }
+      @media (max-width: 640px) {
+        .standalone-grid { grid-template-columns: 1fr; }
+      }
+
+      /* ── Standalone cards ───────────────────────────────────────────── */
+      .scard {
+        padding: 1.25rem 1.375rem;
+        border: 1px solid var(--c-g200);
+        border-radius: var(--r-lg);
+        background: #fff;
+        box-shadow: var(--sh-sm);
+        margin-bottom: 1rem;
+      }
+      .scard.accent {
+        border-color: var(--c-primary-border);
+        background: linear-gradient(160deg, #fff 60%, var(--c-primary-subtle));
+        box-shadow: var(--sh-card);
+      }
+      .scard h2 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--c-g900);
+        margin: 0 0 .625rem;
+        letter-spacing: -.01em;
+      }
+      .scard p { font-size: .9rem; margin: 0 0 .625rem; }
+      .scard pre {
+        background: var(--c-g100);
+        padding: .6rem;
+        border-radius: var(--r-sm);
+        overflow-x: auto;
+        font-size: .78rem;
+        margin: 0 0 .625rem;
+      }
+      /* Workspace identity block inside the signed-in scard */
+      .ws-name {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: var(--c-g900);
+        letter-spacing: -.02em;
+      }
+      .ws-agent {
+        font-family: 'SF Mono', 'Roboto Mono', monospace;
+        font-size: .78rem;
+        color: var(--c-g500);
+        word-break: break-all;
+        margin: .25rem 0 .75rem;
+      }
+      .ws-row {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        font-size: .875rem;
+        color: var(--c-g700);
+        margin-bottom: .25rem;
+      }
+      .ws-row strong { color: var(--c-g900); }
+
+      /* ── Standalone action row ──────────────────────────────────────── */
+      .standalone-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        margin-top: .875rem;
+      }
+      .standalone-actions button {
+        margin: 0;
       }
 
       /* ── Typography ────────────────────────────────────────────────── */
@@ -167,6 +298,55 @@
         border: 1px solid var(--c-primary-border);
         white-space: nowrap;
       }
+      .badge.success {
+        background: var(--c-success-bg);
+        color: var(--c-success);
+        border-color: var(--c-success-border);
+      }
+      .badge.neutral {
+        background: var(--c-g100);
+        color: var(--c-g500);
+        border-color: var(--c-g300);
+      }
+
+      /* ── Reward row — earned-asset chips shown after key milestones ─── */
+      .reward-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        margin: .875rem 0 .25rem;
+      }
+      .reward-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .375rem;
+        padding: .3rem .75rem .3rem .5rem;
+        border-radius: 999px;
+        background: var(--c-success-bg);
+        border: 1px solid var(--c-success-border);
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--c-success);
+        white-space: nowrap;
+      }
+      .reward-chip-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--c-success);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .65rem;
+        flex-shrink: 0;
+      }
+      .reward-chip.primary {
+        background: var(--c-primary-subtle);
+        border-color: var(--c-primary-border);
+        color: var(--c-primary);
+      }
+      .reward-chip.primary .reward-chip-icon { background: var(--c-primary); }
 
       /* Step indicator pill "Step 1 of 2" */
       .step-indicator {
@@ -271,15 +451,23 @@
       /* ════════════════════════════════════════════════════════════════
          POPUP / CONSENT SCREEN STYLES
          These apply when demo-sso is opened as a popup by a relying site.
-         Layout: single-column mobile card, max 420px, centered, white bg
-         with a blue radial gradient wash at the bottom.
+         Target viewport: 480×680px (window.open width=480,height=680).
+         Layout goal: ALL primary CTAs reachable without scrolling at
+         480×680, 390×844, and 360×640.
+         Strategy:
+           • Compact topbar (44px)
+           • Tight heading (h1 1.375rem, less vertical padding)
+           • Entity chip reduced height
+           • "Can" card: 2–3 bullets only
+           • "Cannot" section hidden behind a <details> disclosure
+           • Sticky bottom action bar — CTAs always visible
          ════════════════════════════════════════════════════════════════ */
 
       /* Popup root wrapper */
       .popup-root {
         display: flex;
         flex-direction: column;
-        min-height: 100dvh;
+        height: 100dvh;         /* fill the popup window exactly */
         background: #fff;
         position: relative;
         overflow: hidden;
@@ -292,13 +480,13 @@
         bottom: -60px;
         transform: translateX(-50%);
         width: 500px;
-        height: 380px;
-        background: radial-gradient(ellipse at 50% 80%, rgba(99,102,241,.16) 0%, rgba(139,92,246,.07) 40%, transparent 72%);
+        height: 340px;
+        background: radial-gradient(ellipse at 50% 80%, rgba(99,102,241,.13) 0%, rgba(139,92,246,.06) 40%, transparent 72%);
         pointer-events: none;
         z-index: 0;
       }
 
-      /* Scrollable content column */
+      /* Scrollable content column — sits above the sticky action bar */
       .popup-scroll {
         flex: 1;
         display: flex;
@@ -310,21 +498,27 @@
         position: relative;
         z-index: 1;
         overflow-y: auto;
+        /* leave space for the sticky action bar */
+        padding-bottom: 4px;
       }
 
-      /* ── Popup top bar (brand + host chip) ──────────────────────────── */
+      /* ── Popup top bar (brand) — compact 44px ───────────────────────── */
       .popup-topbar {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 1rem 0 .75rem;
+        padding: .625rem 0 .5rem;
         gap: .5rem;
+        flex-shrink: 0;
+        border-bottom: 1px solid var(--c-g100);
+        position: relative;
+        z-index: 2;
       }
       .popup-brand {
         display: flex;
         align-items: center;
-        gap: .5rem;
-        font-size: .875rem;
+        gap: .4rem;
+        font-size: .8125rem;
         font-weight: 700;
         color: var(--c-g900);
         letter-spacing: -0.01em;
@@ -332,56 +526,56 @@
 
       /* CSS shield logo (matches demo-org) */
       .brand-shield {
-        width: 28px;
-        height: 28px;
+        width: 24px;
+        height: 24px;
       }
 
-      /* ── Popup heading area ─────────────────────────────────────────── */
+      /* ── Popup heading area — tight vertical rhythm ──────────────────── */
       .popup-heading {
-        padding: .25rem 0 1rem;
+        padding: .625rem 0 .625rem;
         text-align: left;
       }
       .popup-heading h1 {
-        font-size: 1.625rem;
+        font-size: 1.375rem;
         font-weight: 800;
         color: var(--c-g900);
         letter-spacing: -0.03em;
         line-height: 1.2;
-        margin: 0 0 0;
+        margin: 0;
       }
       /* The agent name / org name rendered in indigo */
       .popup-heading .accent-name {
         color: var(--c-primary);
       }
 
-      /* ── Entity chip (the relying host, or org name) ────────────────── */
+      /* ── Entity chip — compact 52px height ──────────────────────────── */
       .entity-chip {
         display: flex;
         align-items: center;
-        gap: .625rem;
-        padding: .625rem .875rem;
+        gap: .5rem;
+        padding: .5rem .75rem;
         background: #fff;
         border: 1px solid var(--c-g200);
-        border-radius: var(--r-lg);
+        border-radius: var(--r-md);
         box-shadow: var(--sh-card);
-        margin: .875rem 0 1rem;
+        margin: .5rem 0 .625rem;
       }
       .entity-chip-icon {
-        width: 36px;
-        height: 36px;
-        border-radius: 10px;
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
         background: var(--c-primary-subtle);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1rem;
+        font-size: .9rem;
         flex-shrink: 0;
         color: var(--c-primary);
       }
       .entity-chip-meta { flex: 1; min-width: 0; }
       .entity-chip-name {
         font-weight: 600;
-        font-size: .9375rem;
+        font-size: .875rem;
         color: var(--c-g900);
         line-height: 1.3;
         white-space: nowrap;
@@ -389,7 +583,7 @@
         text-overflow: ellipsis;
       }
       .entity-chip-sub {
-        font-size: .78rem;
+        font-size: .72rem;
         color: var(--c-g400);
         font-family: 'SF Mono', 'Roboto Mono', monospace;
         white-space: nowrap;
@@ -397,22 +591,22 @@
         text-overflow: ellipsis;
       }
       .entity-chip-badge {
-        font-size: .7rem;
+        font-size: .68rem;
         font-weight: 600;
         color: var(--c-success);
         background: var(--c-success-bg);
         border: 1px solid var(--c-success-border);
         border-radius: 999px;
-        padding: .15rem .5rem;
+        padding: .1rem .45rem;
         white-space: nowrap;
         flex-shrink: 0;
       }
 
-      /* ── Can / cannot tinted cards ──────────────────────────────────── */
+      /* ── Can / cannot tinted cards — condensed ──────────────────────── */
       .perm-card {
-        border-radius: var(--r-lg);
-        padding: 1rem 1rem .875rem;
-        margin-bottom: .75rem;
+        border-radius: var(--r-md);
+        padding: .75rem .875rem .625rem;
+        margin-bottom: .5rem;
       }
       .perm-card.can {
         background: var(--c-success-bg);
@@ -423,11 +617,11 @@
         border: 1px solid var(--c-g200);
       }
       .perm-card-title {
-        font-size: .75rem;
+        font-size: .7rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .06em;
-        margin-bottom: .625rem;
+        margin-bottom: .5rem;
       }
       .perm-card.can .perm-card-title { color: var(--c-success); }
       .perm-card.cannot .perm-card-title { color: var(--c-g500); }
@@ -437,39 +631,68 @@
         margin: 0;
         display: flex;
         flex-direction: column;
-        gap: .4rem;
+        gap: .3rem;
       }
       .perm-list li {
         display: flex;
         align-items: flex-start;
-        gap: .5rem;
-        font-size: .875rem;
-        line-height: 1.45;
+        gap: .4rem;
+        font-size: .8375rem;
+        line-height: 1.4;
         color: var(--c-g700);
         margin: 0;
       }
       .perm-icon {
-        width: 18px;
-        height: 18px;
+        width: 16px;
+        height: 16px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: .65rem;
+        font-size: .6rem;
         flex-shrink: 0;
-        margin-top: .1em;
+        margin-top: .15em;
         font-weight: 700;
       }
       .perm-icon.ok  { background: var(--c-success-bg); color: var(--c-success); border: 1.5px solid var(--c-success-border); }
       .perm-icon.no  { background: #fff; color: var(--c-g400); border: 1.5px solid var(--c-g300); }
 
+      /* "Cannot" disclosure — collapsed by default to save space */
+      .cannot-disclosure {
+        margin-bottom: .5rem;
+      }
+      .cannot-disclosure summary {
+        display: flex;
+        align-items: center;
+        gap: .375rem;
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--c-g500);
+        cursor: pointer;
+        list-style: none;
+        padding: .375rem 0;
+        user-select: none;
+      }
+      .cannot-disclosure summary::-webkit-details-marker { display: none; }
+      .cannot-disclosure summary::before {
+        content: '▸';
+        font-size: .65rem;
+        transition: transform .15s;
+        color: var(--c-g400);
+      }
+      .cannot-disclosure[open] summary::before { transform: rotate(90deg); }
+      .cannot-disclosure .perm-card {
+        margin-top: .375rem;
+        margin-bottom: 0;
+      }
+
       /* ── Running / progress state ───────────────────────────────────── */
       .ceremony-card {
         background: #fff;
         border: 1px solid var(--c-primary-border);
-        border-radius: var(--r-xl);
-        padding: 1.5rem 1.25rem 1.25rem;
-        margin: .5rem 0 1rem;
+        border-radius: var(--r-lg);
+        padding: 1.125rem 1.125rem 1rem;
+        margin: .375rem 0 .75rem;
         text-align: center;
         box-shadow: var(--sh-card);
       }
@@ -477,22 +700,22 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-bottom: 1rem;
+        margin-bottom: .75rem;
       }
 
       /* ── Error card ─────────────────────────────────────────────────── */
       .error-card {
         background: var(--c-danger-bg);
         border: 1px solid var(--c-danger-border);
-        border-radius: var(--r-lg);
-        padding: 1rem 1.125rem;
-        margin-bottom: 1rem;
+        border-radius: var(--r-md);
+        padding: .875rem 1rem;
+        margin-bottom: .875rem;
       }
       .error-card-title {
         font-weight: 700;
         font-size: .9375rem;
         color: var(--c-danger);
-        margin-bottom: .25rem;
+        margin-bottom: .2rem;
       }
       .error-card-body {
         font-size: .875rem;
@@ -504,29 +727,47 @@
       .blocked-card {
         background: var(--c-danger-bg);
         border: 1px solid var(--c-danger-border);
-        border-radius: var(--r-xl);
-        padding: 1.5rem 1.25rem;
-        margin: .5rem 0 1rem;
+        border-radius: var(--r-lg);
+        padding: 1.25rem 1.125rem;
+        margin: .375rem 0 .75rem;
         text-align: center;
       }
       .blocked-icon {
-        font-size: 2rem;
-        margin-bottom: .75rem;
+        font-size: 1.75rem;
+        margin-bottom: .625rem;
       }
 
-      /* ── CTA action area ────────────────────────────────────────────── */
+      /* ── Sticky bottom action bar — CTAs always visible ─────────────── */
+      /*
+       * The action bar is position:sticky bottom:0 inside .popup-root so it
+       * always sits at the bottom of the popup window regardless of how much
+       * content is above it. The .popup-scroll area scrolls independently.
+       */
       .popup-actions {
+        flex-shrink: 0;
         display: flex;
         flex-direction: column;
-        gap: 10px;
-        padding: .75rem 0 .25rem;
+        gap: 8px;
+        padding: .625rem var(--app-px) max(.875rem, env(safe-area-inset-bottom, .875rem));
+        background: #fff;
+        border-top: 1px solid var(--c-g100);
+        position: relative;
+        z-index: 2;
+        max-width: var(--app-max);
+        width: 100%;
+        margin: 0 auto;
+        /* Align to the bottom of the flex column in popup-root */
+      }
+      /* When the popup-root is flex column, actions naturally pin to bottom */
+      .popup-root .popup-actions {
+        margin-top: auto;
       }
 
-      /* ── Privacy footer ─────────────────────────────────────────────── */
+      /* ── Privacy footer — inside scroll, above actions ──────────────── */
       .privacy-footer {
-        padding: .875rem 0 max(1.25rem, env(safe-area-inset-bottom, 1.25rem));
+        padding: .5rem 0 .375rem;
         text-align: center;
-        font-size: .78rem;
+        font-size: .72rem;
         color: var(--c-g400);
       }
     </style>

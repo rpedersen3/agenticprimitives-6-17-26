@@ -823,7 +823,7 @@ export function App() {
                         Set up this site →
                       </button>
                       <p className="muted" style={{ margin: '.25rem 0 0', textAlign: 'center', fontSize: '.82rem' }}>
-                        First time here with <strong>{nameInfo.name}</strong>? Approve once with your passkey, then use Face ID or Windows Hello here.
+                        Approve once with your passkey, then future sign-ins are automatic.
                       </p>
                     </>
                   )}
@@ -942,6 +942,24 @@ export function App() {
                 Base Sepolia
               </div>
             </div>
+
+            {/* Reward row — shown on first connect */}
+            {session.fresh && (
+              <div className="reward-row" aria-label="What you earned">
+                <span className="reward-chip">
+                  <span className="reward-chip-icon" aria-hidden="true">✓</span>
+                  {session.name} — owned by you
+                </span>
+                <span className="reward-chip primary">
+                  <span className="reward-chip-icon" aria-hidden="true">✓</span>
+                  Smart Agent — yours
+                </span>
+                <span className="reward-chip">
+                  <span className="reward-chip-icon" aria-hidden="true">✓</span>
+                  Agentic Org connected
+                </span>
+              </div>
+            )}
 
             {/* Smart Agent card */}
             <div className="card" style={{ marginBottom: '12px' }}>
@@ -1171,7 +1189,7 @@ export function App() {
                   Create organization
                 </p>
                 <p className="muted" style={{ fontSize: '.83rem', marginBottom: '.875rem' }}>
-                  Deploy an Organization Smart Agent custodied by your passkey, linked to you on-chain.
+                  Create an Organization Smart Agent secured by your passkey and linked to you on-chain.
                 </p>
                 <div className="form-section" style={{ marginBottom: '.75rem' }}>
                   <label htmlFor="org-name-input">Organization name</label>
@@ -1284,14 +1302,14 @@ export function App() {
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <div className="modal">
 
-            {/* Step indicator — shown when title contains "Step" or during "Signing you in" */}
-            {(flow.title === 'Signing you in' || flow.title === 'Creating your account…' || flow.title === 'Creating your organization…') && flow.phase === 'running' && (
-              <div className="step-indicator" aria-label="Step 1 of 2">
+            {/* Progress dot indicator — shown while running (no stale step count) */}
+            {flow.phase === 'running' && (
+              <div className="step-indicator" aria-label="In progress">
                 <div className="step-dots" aria-hidden="true">
                   <span className="step-dot active" />
                   <span className="step-dot" />
                 </div>
-                Step 1 of 2
+                In progress
               </div>
             )}
 
@@ -1326,22 +1344,33 @@ export function App() {
                   </ol>
                 )}
                 <p className="muted" style={{ fontSize: '.875rem', marginBottom: 0 }}>
-                  This takes ~15–30 seconds. Confirm any device prompt that appears.
+                  Your device may ask you to confirm. This usually takes a few seconds.
                 </p>
               </>
             )}
 
-            {/* Done */}
+            {/* Done — with reward chips */}
             {flow.phase === 'done' && (
               <>
-                <ol className="steps" aria-label="Completed steps">
-                  {flow.steps.map((s, i) => (
-                    <li key={i} className="done">
-                      <span className="step-icon" aria-hidden="true">✓</span>
-                      {s}
-                    </li>
-                  ))}
-                </ol>
+                {flow.steps.length > 0 && (
+                  <ol className="steps" aria-label="Completed steps">
+                    {flow.steps.map((s, i) => (
+                      <li key={i} className="done">
+                        <span className="step-icon" aria-hidden="true">✓</span>
+                        {s}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                {/* Reward chips for org creation */}
+                {flow.title.includes('Organization') && (
+                  <div className="reward-row" aria-label="What you earned">
+                    <span className="reward-chip">
+                      <span className="reward-chip-icon" aria-hidden="true">✓</span>
+                      Organization — you govern
+                    </span>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '.5rem 0' }}>
                   <span className="spinner spinner-lg" aria-label="Finishing…" />
                 </div>

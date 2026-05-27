@@ -272,6 +272,45 @@
         letter-spacing: .04em;
       }
 
+      /* ── Reward row — earned-asset chips shown after key milestones ─── */
+      .reward-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        margin: .875rem 0 .25rem;
+      }
+      .reward-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .375rem;
+        padding: .3rem .75rem .3rem .5rem;
+        border-radius: 999px;
+        background: var(--c-success-bg);
+        border: 1px solid var(--c-success-border);
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--c-success);
+        white-space: nowrap;
+      }
+      .reward-chip-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--c-success);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .65rem;
+        flex-shrink: 0;
+      }
+      .reward-chip.primary {
+        background: var(--c-primary-subtle);
+        border-color: var(--c-primary-border);
+        color: var(--c-primary);
+      }
+      .reward-chip.primary .reward-chip-icon { background: var(--c-primary); }
+
       /* ── Top bar ─────────────────────────────────────────────────────── */
       .topbar {
         display: flex;
@@ -380,9 +419,16 @@
 
       /* ── Hero (signed-out welcome) ──────────────────────────────────── */
       /*
-       * The hero area has a soft gradient wash rising from the bottom —
-       * a blue radial bloom centred on the shield illustration, fading to white.
-       * On the welcome screen this fills the lower portion of the viewport.
+       * Layout goal: fits 360×640 (topbar 56px + hero 584px) WITHOUT scroll.
+       * All primary CTAs (connect + create) must be visible without scrolling.
+       * Strategy on short viewports (≤700px):
+       *   • Reduce top padding
+       *   • Shrink h1 font size
+       *   • Tighten value-list gap
+       *   • Reduce shield illustration height (no floats below 580px)
+       *   • CTA area is position:sticky or always last visible section
+       *
+       * On taller viewports the hero fills the screen with the gradient wash.
        */
       .hero-screen {
         display: flex;
@@ -417,50 +463,50 @@
         z-index: 1;
       }
       .hero-top {
-        padding-top: 2rem;
-        padding-bottom: 1.5rem;
+        padding-top: 1.75rem;
+        padding-bottom: 1rem;
       }
       .hero-top h1 {
-        font-size: 2rem;
+        font-size: 1.875rem;
         font-weight: 800;
         letter-spacing: -0.035em;
         line-height: 1.15;
-        margin-bottom: .75rem;
+        margin-bottom: .625rem;
       }
       .hero-tagline {
         font-size: .9375rem;
         color: var(--c-g500);
         line-height: 1.5;
-        margin-bottom: 1.25rem;
+        margin-bottom: 1rem;
       }
 
       /* Value-list with icon-chip bullets */
       .value-list {
         list-style: none;
         padding: 0;
-        margin: 0 0 1.5rem;
+        margin: 0 0 1rem;
         display: flex;
         flex-direction: column;
-        gap: .625rem;
+        gap: .5rem;
       }
       .value-list li {
         display: flex;
         align-items: center;
-        gap: .75rem;
-        font-size: .9375rem;
+        gap: .625rem;
+        font-size: .9rem;
         color: var(--c-g700);
         line-height: 1.4;
       }
       /* icon chip: small rounded-square tinted */
       .vi-chip {
-        width: 32px;
-        height: 32px;
-        border-radius: 9px;
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        font-size: .875rem;
+        font-size: .825rem;
       }
       .vi-chip.blue   { background: #dbeafe; color: #2563eb; }
       .vi-chip.green  { background: #dcfce7; color: #16a34a; }
@@ -472,13 +518,13 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 1.5rem 0 1rem;
+        padding: 1rem 0 .75rem;
         position: relative;
       }
       .shield-svg-wrap {
         position: relative;
-        width: 140px;
-        height: 160px;
+        width: 120px;
+        height: 136px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -486,20 +532,20 @@
       /* Floating icon chips around shield */
       .shield-float {
         position: absolute;
-        width: 36px;
-        height: 36px;
+        width: 34px;
+        height: 34px;
         border-radius: 10px;
         background: #fff;
         box-shadow: 0 4px 12px rgba(79,70,229,.15), 0 1px 4px rgba(0,0,0,.08);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1rem;
+        font-size: .9rem;
       }
-      .shield-float.tl { top: 10px; left: -24px; animation: float1 3.5s ease-in-out infinite; }
-      .shield-float.tr { top: 14px; right: -20px; animation: float2 4s ease-in-out infinite; }
-      .shield-float.bl { bottom: 20px; left: -18px; animation: float2 3.8s ease-in-out infinite; }
-      .shield-float.br { bottom: 16px; right: -22px; animation: float1 4.2s ease-in-out infinite; }
+      .shield-float.tl { top: 8px; left: -22px; animation: float1 3.5s ease-in-out infinite; }
+      .shield-float.tr { top: 12px; right: -18px; animation: float2 4s ease-in-out infinite; }
+      .shield-float.bl { bottom: 16px; left: -16px; animation: float2 3.8s ease-in-out infinite; }
+      .shield-float.br { bottom: 12px; right: -20px; animation: float1 4.2s ease-in-out infinite; }
 
       @keyframes float1 {
         0%, 100% { transform: translateY(0); }
@@ -508,6 +554,24 @@
       @keyframes float2 {
         0%, 100% { transform: translateY(0); }
         50%       { transform: translateY(5px); }
+      }
+
+      /* Short viewport (≤700px): compress hero to fit 360×640 or 480×680 */
+      @media (max-height: 700px) {
+        .hero-top { padding-top: 1rem; padding-bottom: .625rem; }
+        .hero-top h1 { font-size: 1.625rem; margin-bottom: .5rem; }
+        .hero-tagline { display: none; }    /* tagline hidden; value list carries the message */
+        .value-list { gap: .375rem; margin-bottom: .75rem; }
+        .value-list li { font-size: .85rem; }
+        .vi-chip { width: 26px; height: 26px; font-size: .75rem; }
+        .shield-hero { padding: .5rem 0 .25rem; }
+        .shield-svg-wrap { width: 96px; height: 110px; }
+        .shield-float { display: none; }   /* floating icons removed on short viewports */
+      }
+
+      /* Very short (≤580px, e.g. 360×640 minus topbar = 584px available): hide shield */
+      @media (max-height: 580px) {
+        .shield-hero { display: none; }
       }
 
       /* ── CTA bottom area (signed-out) ───────────────────────────────── */
@@ -519,7 +583,7 @@
       }
       /* Privacy footer */
       .privacy-footer {
-        padding: .875rem 0 max(1.5rem, env(safe-area-inset-bottom, 1.5rem));
+        padding: .625rem 0 max(1.25rem, env(safe-area-inset-bottom, 1.25rem));
         text-align: center;
         font-size: .78rem;
         color: var(--c-g400);
@@ -885,7 +949,7 @@
       }
       .modal h2 { margin: 0 0 .75rem; }
 
-      /* Step indicator pill "Step 1 of 2" */
+      /* Progress dot indicator (no step count label — count changed with reduced prompts) */
       .step-indicator {
         display: inline-flex;
         align-items: center;
