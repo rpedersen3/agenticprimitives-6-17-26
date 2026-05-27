@@ -34,3 +34,18 @@ export function clientAllowsRedirect(client: OidcClient, redirectUri: string): b
 export function clientAllowsTemplate(client: OidcClient, template: string): boolean {
   return client.allowed_delegation_templates.includes(template);
 }
+
+/** Is `origin` the origin of a registered client's redirect_uri? (CORS allowlist for the
+ *  cross-origin OIDC endpoints — /token, /jwks — called by the relying-site SPA.) */
+export function isAllowedClientOrigin(origin: string): boolean {
+  for (const c of Object.values(CLIENTS)) {
+    for (const r of c.redirect_uris) {
+      try {
+        if (new URL(r).origin === origin) return true;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return false;
+}

@@ -9,7 +9,9 @@ export const onRequestGet = async ({ request }: FnContext): Promise<Response> =>
   const iss = new URL(request.url).origin;
   return json({
     issuer: iss,
-    authorization_endpoint: `${iss}/authorize`,
+    // The authorization UI is the SPA at the origin root (it renders the consent + runs the
+    // ROOT-passkey ceremony from the OIDC query params), so the endpoint is the root.
+    authorization_endpoint: `${iss}/`,
     token_endpoint: `${iss}/token`,
     jwks_uri: `${iss}/jwks`,
     response_types_supported: ['code'],

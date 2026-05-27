@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Address } from '@agenticprimitives/types';
+import type { Address, Hex } from '@agenticprimitives/types';
 import {
   AUD,
   signupWithName,
@@ -15,6 +15,7 @@ import {
   type BasicProfile,
 } from './connect-client';
 import { issueSiteDelegation, toWire } from './lib/delegation';
+import { loadPasskey } from './lib/passkey';
 import { hasWallet } from './lib/wallet';
 import { startGoogleSignIn, exchangeCode } from './server-client';
 
@@ -40,34 +41,49 @@ function shouldRestore(): boolean {
   }
 }
 
-// ── Central-auth enrollment (spec 229 §5 + ADR-0019) ────────────────
-// A relying site redirects here to be ISSUED A SCOPED DELEGATION (person SA → the site's
-// delegate SA), approved + signed by the person's ROOT passkey on THIS origin. The site is
-// a delegate, NEVER a custodian of the person SA.
+// ── OIDC authorization endpoint (spec 230) ──────────────────────────
+// A relying site redirects here (`/authorize`, code + S256 PKCE) to sign the person in.
+// This origin is the OpenID Provider: the ROOT passkey ceremony authenticates the person,
+// /oidc/grant mints the id_token + a single-use code, and the relying site exchanges the
+// code at /token for { id_token, delegation }. Identity = id_token; authority = the scoped
+// delegation (ADR-0019). Internal field names kept terse; param names are standard OIDC.
 interface EnrollReq {
-  aud: string;
-  redirectUri: string;
+  aud: string; // = client_id
+  redirectUri: string; // = redirect_uri (exact-match in the registry)
   state: string;
-  name: string;
-  delegate: Address; // the relying site's delegate Smart Account
-  orgBase?: string; // present → org-creation ceremony (create a child agent), not login enrollment
+  name: string; // = agent_name (the person to sign in / govern)
+  delegate: Address; // the relying site's delegate Smart Account (delegation recipient)
+  nonce: string;
+  codeChallenge: string; // PKCE S256 challenge
+  template: string; // delegation_template: 'site-login' | 'org-create'
+  orgBase?: string; // org_create: the org name to create
 }
-/** Relying sites permitted to initiate enrollment (demo gate — spec 229 §8). */
+/** Relying sites permitted to start an authorization (demo gate — spec 230 §6 + §8). */
 const ALLOWED_RELYING_ORIGINS = ['https://agenticprimitives-demo-org.pages.dev'];
 function parseEnrollReq(): EnrollReq | null {
   try {
     const p = new URL(window.location.href).searchParams;
-    const delegate = p.get('delegate');
+    const clientId = p.get('client_id');
     const redirectUri = p.get('redirect_uri');
-    const aud = p.get('aud');
-    const name = p.get('name');
-    if (!delegate || !redirectUri || !aud || !name) return null;
+    const agentName = p.get('agent_name');
+    const delegate = p.get('delegate');
+    const codeChallenge = p.get('code_challenge');
+    const template = p.get('delegation_template');
+    if (!clientId || !redirectUri || !agentName || !delegate || !codeChallenge || !template) return null;
+    // Code flow + S256 PKCE only (spec 230 §4.1/§8).
+    const responseType = p.get('response_type');
+    if (responseType && responseType !== 'code') return null;
+    const ccm = p.get('code_challenge_method');
+    if (ccm && ccm !== 'S256') return null;
     return {
-      aud,
+      aud: clientId,
       redirectUri,
       state: p.get('state') ?? '',
-      name,
+      name: agentName,
       delegate: delegate as Address,
+      nonce: p.get('nonce') ?? '',
+      codeChallenge,
+      template,
       orgBase: p.get('org_base') ?? undefined,
     };
   } catch {
@@ -417,6 +433,57 @@ export function App() {
     }
   }
 
+  // Turn the verified ROOT-passkey ceremony into an OIDC authorization code (spec 230 §4.2):
+  // POST the passkey proof + the client-signed delegation (+ org payload) to /oidc/grant,
+  // which mints the id_token and stashes {id_token, delegation, org} under a single-use code
+  // bound to the PKCE code_challenge. Returns the code; the relying site exchanges it at /token.
+  async function submitGrant(resolvedName: string, delegationWire: unknown, org?: unknown): Promise<string> {
+    if (!enrollReq) throw new Error('no request');
+    const pk = loadPasskey();
+    if (!pk) throw new Error('No central-auth passkey on this device.');
+    const { challenge } = (await (await fetch('/connect/passkey-challenge')).json()) as { challenge: Hex };
+    const signature = await passkeySignHash(challenge); // ROOT passkey proof-of-possession
+    const r = await fetch('/oidc/grant', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        credentialIdDigest: pk.credentialIdDigest,
+        pubKeyX: pk.pubKeyX.toString(),
+        pubKeyY: pk.pubKeyY.toString(),
+        challenge,
+        signature,
+        client_id: enrollReq.aud,
+        redirect_uri: enrollReq.redirectUri,
+        nonce: enrollReq.nonce,
+        code_challenge: enrollReq.codeChallenge,
+        agent_name: resolvedName,
+        delegation_template: enrollReq.template,
+        delegation: delegationWire,
+        org,
+      }),
+    });
+    const b = (await r.json().catch(() => ({}))) as { code?: string; error?: string };
+    if (!r.ok || !b.code) throw new Error(b.error ?? `grant failed (HTTP ${r.status})`);
+    return b.code;
+  }
+
+  // Deliver the authorization code back to the relying site (popup postMessage, exact origin;
+  // or full-page redirect ?code&state). The token never travels in the URL — only the code.
+  function deliverCode(code: string) {
+    if (!enrollReq) return;
+    if (popupMode) {
+      postToOpener({ type: 'AC_SUCCESS', state: enrollReq.state, code });
+      window.close();
+      return;
+    }
+    const url = new URL(enrollReq.redirectUri);
+    url.searchParams.set('code', code);
+    url.searchParams.set('state', enrollReq.state);
+    window.location.href = url.toString();
+  }
+
+  // site-login: sign the person in (create their home account first if new), issue the scoped
+  // person → site-delegate delegation (ADR-0019), and mint the OIDC code.
   async function approveEnroll() {
     if (!enrollReq) return;
     const onStep = (s: string) => {
@@ -427,7 +494,6 @@ export function App() {
     try {
       let resolvedName = enrollReq.name;
       if (!enrollExists) {
-        // New user → create their home account (ROOT passkey here) + claim the name.
         const base = enrollReq.name.replace(/\.demo\.agent$/, '');
         const created = await signupWithName(base, 'passkey', onStep);
         if (!created.ok) {
@@ -436,7 +502,6 @@ export function App() {
         }
         resolvedName = created.name;
       }
-      // Resolve the person agent address for the named workspace.
       onStep('Authorizing the site…');
       const info = (await (await fetch(`/connect/name-info?name=${encodeURIComponent(resolvedName)}`)).json()) as {
         agent?: Address;
@@ -445,31 +510,17 @@ export function App() {
         setEnrollFlow({ phase: 'error', error: `could not resolve ${resolvedName}` });
         return;
       }
-      // Issue a scoped, redeemer-bound delegation: person SA → the site's delegate SA,
-      // signed by the ROOT passkey (ADR-0019). The site becomes a DELEGATE, not a custodian.
       const delegation = await issueSiteDelegation(info.agent, enrollReq.delegate, passkeySignHash);
-      const wire = toWire(delegation);
-
-      if (popupMode) {
-        postToOpener({ type: 'AC_SUCCESS', state: enrollReq.state, name: resolvedName, agent: info.agent, delegation: wire });
-        window.close();
-        return;
-      }
-      const url = new URL(enrollReq.redirectUri);
-      url.searchParams.set('enrolled', '1');
-      url.searchParams.set('state', enrollReq.state);
-      url.searchParams.set('name', resolvedName);
-      url.searchParams.set('agent', info.agent);
-      url.searchParams.set('delegation', btoa(JSON.stringify(wire)));
-      window.location.href = url.toString();
+      const code = await submitGrant(resolvedName, toWire(delegation));
+      deliverCode(code);
     } catch (e) {
       setEnrollFlow({ phase: 'error', error: e instanceof Error ? e.message : 'enrollment failed' });
     }
   }
-  // Org-creation ceremony (memory project_demo_org_durable_org_custody): create a child agent
-  // (organization now; any service agent later) custodied by the person's ROOT passkey HERE,
-  // and hand the relying site a scoped child→site delegation. Same custody pattern as the
-  // person SA — the relying site is never a custodian.
+
+  // org-create (memory project_demo_org_durable_org_custody): create a child agent (org now;
+  // any service agent later) custodied by the person's ROOT passkey HERE; hand the relying site
+  // a scoped child→site delegation (the OIDC delegation sidecar) + the org payload. Never a custodian.
   async function approveCreateOrg() {
     if (!enrollReq?.orgBase) return;
     const onStep = (s: string) => {
@@ -478,7 +529,6 @@ export function App() {
     };
     setEnrollFlow({ phase: 'running', msg: 'Starting…' });
     try {
-      // Resolve the (already-existing) person agent for the connected name.
       const info = (await (await fetch(`/connect/name-info?name=${encodeURIComponent(enrollReq.name)}`)).json()) as {
         agent?: Address;
       };
@@ -496,18 +546,10 @@ export function App() {
         orgName: created.result.childName,
         edgeId: created.result.edgeId,
         governed: created.result.governed,
-        orgDelegation: created.result.delegation,
       };
-      if (popupMode) {
-        postToOpener({ type: 'AC_SUCCESS', state: enrollReq.state, org });
-        window.close();
-        return;
-      }
-      const url = new URL(enrollReq.redirectUri);
-      url.searchParams.set('org_created', '1');
-      url.searchParams.set('state', enrollReq.state);
-      url.searchParams.set('org', btoa(JSON.stringify(org)));
-      window.location.href = url.toString();
+      // The org→site delegation is the OIDC delegation sidecar; the org payload rides alongside.
+      const code = await submitGrant(enrollReq.name, created.result.delegation, org);
+      deliverCode(code);
     } catch (e) {
       setEnrollFlow({ phase: 'error', error: e instanceof Error ? e.message : 'org creation failed' });
     }

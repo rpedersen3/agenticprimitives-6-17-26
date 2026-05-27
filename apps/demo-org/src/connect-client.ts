@@ -347,69 +347,209 @@ async function deployAgent(
   return { ok: true, agent: submitted.deployedAddress };
 }
 
+// ── OIDC relying-site client (spec 230) ─────────────────────────────
+// demo-org is the OpenID Connect client of the person's central auth (the OP). Sign-in is a
+// standard authorization-code + S256 PKCE flow: /authorize (the OP SPA consent + ROOT-passkey
+// ceremony) → code → /token → { id_token, delegation }. Identity = the id_token (verified
+// against the OP's JWKS); authority = the scoped delegation sidecar (ADR-0019).
+
+const CLIENT_ID = 'demo-org';
+const redirectUri = (): string => window.location.origin + '/';
+
+function b64url(bytes: Uint8Array): string {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function fromB64url(seg: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(seg.replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(bin.length); // ArrayBuffer-backed (Web Crypto BufferSource)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function decodeJwtSegment<T>(seg: string): T {
+  return JSON.parse(new TextDecoder().decode(fromB64url(seg))) as T;
+}
+const randomB64url = (n: number): string => b64url(crypto.getRandomValues(new Uint8Array(n)));
+
+/** PKCE S256: a random verifier + base64url(SHA-256(verifier)) challenge (RFC 7636). */
+async function generatePkce(): Promise<{ verifier: string; challenge: string }> {
+  const verifier = randomB64url(32);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return { verifier, challenge: b64url(new Uint8Array(digest)) };
+}
+
+interface AuthorizeParams {
+  authOrigin: string;
+  state: string;
+  nonce: string;
+  codeChallenge: string;
+  agentName: string;
+  delegate: Address;
+  template: 'site-login' | 'org-create';
+  orgBase?: string;
+}
+/** Build the OIDC `/authorize` URL (the OP's consent UI is the SPA at the origin root). */
+function buildAuthorizeUrl(p: AuthorizeParams): string {
+  const u = new URL('/', p.authOrigin);
+  u.searchParams.set('client_id', CLIENT_ID);
+  u.searchParams.set('redirect_uri', redirectUri());
+  u.searchParams.set('response_type', 'code');
+  u.searchParams.set('scope', 'openid agent');
+  u.searchParams.set('state', p.state);
+  u.searchParams.set('nonce', p.nonce);
+  u.searchParams.set('code_challenge', p.codeChallenge);
+  u.searchParams.set('code_challenge_method', 'S256');
+  u.searchParams.set('agent_name', p.agentName);
+  u.searchParams.set('delegate', p.delegate);
+  u.searchParams.set('delegation_template', p.template);
+  if (p.orgBase) u.searchParams.set('org_base', p.orgBase);
+  return u.toString();
+}
+
+export interface OrgTokenPayload {
+  orgAgent: Address;
+  orgName: string;
+  edgeId: string;
+  governed: boolean;
+}
+export interface TokenResult {
+  idToken: string;
+  delegation?: DelegationWire;
+  org?: OrgTokenPayload;
+}
+
+/** Exchange the authorization code at /token (PKCE) → { id_token, delegation, org? } (§4.3). */
+export async function exchangeCode(authOrigin: string, code: string, codeVerifier: string): Promise<TokenResult> {
+  const r = await fetch(new URL('/token', authOrigin).toString(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'authorization_code', code, code_verifier: codeVerifier, client_id: CLIENT_ID, redirect_uri: redirectUri() }),
+  });
+  const b = (await r.json().catch(() => ({}))) as { id_token?: string; delegation?: DelegationWire; org?: OrgTokenPayload; error?: string };
+  if (!r.ok || !b.id_token) throw new Error(b.error ?? `token exchange failed (HTTP ${r.status})`);
+  return { idToken: b.id_token, delegation: b.delegation, org: b.org };
+}
+
+export interface IdTokenClaims {
+  iss: string;
+  sub: string;
+  aud: string;
+  exp: number;
+  nonce?: string;
+  agent_name?: string;
+  canonical_agent_id?: string;
+}
+/** Verify the OIDC id_token against the OP's JWKS — ES256 alg-pinned to the key, iss/aud
+ *  exact-match, nonce binding, exp. The relying-site half of spec 230 (no connect import). */
+export async function verifyIdToken(authOrigin: string, idToken: string, expectedNonce: string): Promise<IdTokenClaims> {
+  const parts = idToken.split('.');
+  if (parts.length !== 3) throw new Error('id_token malformed');
+  const [h, p, s] = parts as [string, string, string];
+  const header = decodeJwtSegment<{ alg?: string; kid?: string }>(h);
+  const claims = decodeJwtSegment<IdTokenClaims>(p);
+  const { keys } = (await (await fetch(new URL('/jwks', authOrigin).toString())).json()) as {
+    keys: Array<JsonWebKey & { kid: string; alg: string }>;
+  };
+  const jwk = keys.find((k) => k.kid === header.kid);
+  if (!jwk) throw new Error('no JWKS key for id_token kid');
+  if (jwk.alg !== 'ES256' || header.alg !== 'ES256') throw new Error('id_token alg not ES256');
+  const key = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+  const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, fromB64url(s), new TextEncoder().encode(`${h}.${p}`));
+  if (!ok) throw new Error('id_token signature invalid');
+  if (claims.iss !== authOrigin) throw new Error('id_token iss mismatch');
+  if (claims.aud !== CLIENT_ID) throw new Error('id_token aud mismatch');
+  if (expectedNonce && claims.nonce !== expectedNonce) throw new Error('id_token nonce mismatch');
+  if (typeof claims.exp !== 'number' || claims.exp * 1000 <= Date.now()) throw new Error('id_token expired');
+  return claims;
+}
+
 // ── Create a named Organization Smart Agent (spec 229 §7 + ADR-0019) ───────────
 
-/** Start the org-creation ceremony at the central auth (memory project_demo_org_durable_org_custody).
- *  Unlike the prior local deploy, the org is custodied by the person's ROOT passkey AT the central
- *  auth (same pattern as the person SA + any future service agent), never this site's passkey and
- *  never the person SA. We only build the central-auth URL: the person name to resolve, the org
- *  base, and THIS site's delegate SA (which receives the scoped org→site delegation). The caller
- *  opens the popup; the result carries `org` (address, name, edge, governed, org→site delegation). */
+/** Start org creation as an OIDC `org-create` authorization (memory
+ *  project_demo_org_durable_org_custody): the org is custodied by the person's ROOT passkey at
+ *  the central auth (same pattern as the person SA + any future service agent), never this
+ *  site's passkey and never the person SA. Builds the /authorize URL (template=org-create);
+ *  the caller opens the popup and exchanges the returned code → { id_token, delegation, org }. */
 export async function startOrgCreation(
   personName: string,
   delegateSA: Address,
   orgBase: string,
-): Promise<{ url: string; state: string; authOrigin: string }> {
-  const stateBytes = crypto.getRandomValues(new Uint8Array(16));
-  const state = Array.from(stateBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+): Promise<{ url: string; state: string; authOrigin: string; codeVerifier: string; nonce: string }> {
+  const state = randomB64url(16);
+  const nonce = randomB64url(16);
+  const { verifier, challenge } = await generatePkce();
   const authOrigin = await resolveAuthOrigin(personName); // person's central auth (spec 229 §4)
-  const u = new URL('/', authOrigin);
-  u.searchParams.set('aud', AUD);
-  u.searchParams.set('redirect_uri', window.location.origin + '/');
-  u.searchParams.set('state', state);
-  u.searchParams.set('name', personName); // the (existing) person to resolve + govern
-  u.searchParams.set('delegate', delegateSA); // recipient of the scoped org→site delegation
-  u.searchParams.set('org_base', orgBase);
-  return { url: u.toString(), state, authOrigin };
+  const url = buildAuthorizeUrl({
+    authOrigin,
+    state,
+    nonce,
+    codeChallenge: challenge,
+    agentName: personName,
+    delegate: delegateSA,
+    template: 'org-create',
+    orgBase,
+  });
+  return { url, state, authOrigin, codeVerifier: verifier, nonce };
 }
 
 
-/** First-visit enrollment (spec 229 §3 + ADR-0019): register a LOCAL passkey for THIS
- *  origin and deploy this site's **delegate Smart Account** (custodied by that passkey, a
- *  distinct salt so it's its own account). Returns the central-auth URL — the person will
- *  issue a caveated delegation `person → delegateSA` there. The site is a DELEGATE, never a
- *  custodian of the person SA. */
+/** First-visit sign-in (spec 229 §3 + 230): register a LOCAL passkey for THIS origin and
+ *  deploy this site's **delegate Smart Account** (custodied by that passkey, distinct salt).
+ *  Then build the OIDC `/authorize` URL (template=site-login) — the person authenticates with
+ *  their ROOT passkey at the central auth, which issues the id_token + the scoped
+ *  `person → delegateSA` delegation. The site is a DELEGATE, never a custodian. */
+const SITE_DELEGATE_KEY = 'agenticprimitives:demo-org:delegate-sa'; // this origin's persisted delegate SA
+
 export async function startSiteEnrollment(
   name: string,
   onStep?: (s: string) => void,
-): Promise<{ ok: true; url: string; state: string; delegateSA: Address; authOrigin: string } | { ok: false; error: string }> {
-  onStep?.('Creating your sign-in key on this device…');
-  const pk = await registerPasskey(name); // local passkey on THIS origin, stored
-  onStep?.('Setting up this site’s account…');
-  const saltBytes = crypto.getRandomValues(new Uint8Array(8));
-  let salt = 0n;
-  for (const b of saltBytes) salt = (salt << 8n) | BigInt(b);
-  const dep = await deployAgent(
-    {
-      initMethod: 'passkey',
-      credentialIdDigest: pk.credentialIdDigest,
-      pubKeyX: pk.pubKeyX.toString(),
-      pubKeyY: pk.pubKeyY.toString(),
-      salt: salt.toString(),
-    },
-    passkeySignHash,
-  );
-  if (!dep.ok) return { ok: false, error: `site account deploy failed: ${dep.error}` };
-  const stateBytes = crypto.getRandomValues(new Uint8Array(16));
-  const state = Array.from(stateBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+): Promise<
+  | { ok: true; url: string; state: string; delegateSA: Address; authOrigin: string; codeVerifier: string; nonce: string }
+  | { ok: false; error: string }
+> {
+  // Reuse this origin's delegate SA + local passkey if already set up (returning sign-in);
+  // only create them on first visit (so re-signing-in doesn't orphan a fresh passkey).
+  let delegateSA = (localStorage.getItem(SITE_DELEGATE_KEY) as Address | null) ?? null;
+  if (!(delegateSA && loadPasskey())) {
+    onStep?.('Creating your sign-in key on this device…');
+    const pk = await registerPasskey(name); // local passkey on THIS origin, stored
+    onStep?.('Setting up this site’s account…');
+    const saltBytes = crypto.getRandomValues(new Uint8Array(8));
+    let salt = 0n;
+    for (const b of saltBytes) salt = (salt << 8n) | BigInt(b);
+    const dep = await deployAgent(
+      {
+        initMethod: 'passkey',
+        credentialIdDigest: pk.credentialIdDigest,
+        pubKeyX: pk.pubKeyX.toString(),
+        pubKeyY: pk.pubKeyY.toString(),
+        salt: salt.toString(),
+      },
+      passkeySignHash,
+    );
+    if (!dep.ok) return { ok: false, error: `site account deploy failed: ${dep.error}` };
+    delegateSA = dep.agent;
+    try {
+      localStorage.setItem(SITE_DELEGATE_KEY, delegateSA);
+    } catch {
+      /* ignore */
+    }
+  }
+  const state = randomB64url(16);
+  const nonce = randomB64url(16);
+  const { verifier, challenge } = await generatePkce();
   const authOrigin = await resolveAuthOrigin(name); // person's central auth (spec 229 §4)
-  const u = new URL('/', authOrigin);
-  u.searchParams.set('aud', AUD);
-  u.searchParams.set('redirect_uri', window.location.origin + '/');
-  u.searchParams.set('state', state);
-  u.searchParams.set('name', name);
-  u.searchParams.set('delegate', dep.agent);
-  return { ok: true, url: u.toString(), state, delegateSA: dep.agent, authOrigin };
+  const url = buildAuthorizeUrl({
+    authOrigin,
+    state,
+    nonce,
+    codeChallenge: challenge,
+    agentName: name,
+    delegate: delegateSA,
+    template: 'site-login',
+  });
+  return { ok: true, url, state, delegateSA, authOrigin, codeVerifier: verifier, nonce };
 }
 
 /** Connect to the agent that OWNS `name`, proving control with a custody credential.
@@ -444,28 +584,6 @@ export async function connectWithName(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name, aud: AUD, ...proof }),
-  });
-  const b = (await r.json()) as { status?: string; token?: string; name?: string; error?: string };
-  if (r.ok && b.status === 'issued' && b.token) return { ok: true, token: b.token, name: b.name };
-  return { ok: false, error: b.error ?? `connect failed (HTTP ${r.status})` };
-}
-
-/** Sign in via a DELEGATION (ADR-0019): prove control of this site's delegate SA (the site
- *  passkey asserts) and present the stored delegation; the server verifies the person SA
- *  signed it (ERC-1271), it's unrevoked + in-window, and the delegate matches → a scoped
- *  (login-grade) session whose `sub` is the PERSON. No `isCustodian`. */
-export async function connectWithDelegation(
-  name: string,
-  delegation: DelegationWire,
-): Promise<{ ok: true; token: string; name?: string } | { ok: false; error: string }> {
-  const pk = loadPasskey();
-  if (!pk) return { ok: false, error: 'No site passkey on this device — set up this site first.' };
-  const { challenge } = (await (await fetch('/connect/passkey-challenge')).json()) as { challenge: Hex };
-  const signature = await signWithPasskey(challenge);
-  const r = await fetch('/connect/with-delegation', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name, aud: AUD, delegation, credentialIdDigest: pk.credentialIdDigest, challenge, signature }),
   });
   const b = (await r.json()) as { status?: string; token?: string; name?: string; error?: string };
   if (r.ok && b.status === 'issued' && b.token) return { ok: true, token: b.token, name: b.name };

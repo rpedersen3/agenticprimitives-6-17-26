@@ -10,6 +10,7 @@ import { publishJwks } from '@agenticprimitives/connect';
 import { signerFromPrivateJwk } from '../../src/lib/broker-core';
 import { buildRealDirectory } from '../../src/lib/real-directory';
 import { createKvIndexer } from '../../src/lib/kv-indexer';
+import { isAllowedClientOrigin } from '../../src/lib/oidc-clients';
 
 /** Minimal Cloudflare KV surface (avoids a @cloudflare/workers-types dep). */
 export interface KVNamespace {
@@ -61,4 +62,31 @@ export async function getServer(env: Env) {
 
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+}
+
+/** CORS headers for the cross-origin OIDC endpoints (/token, /jwks) — reflects the request
+ *  Origin ONLY if it's a registered client origin (spec 230 §8.10; not a broad `*`). */
+export function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get('Origin') ?? '';
+  if (!origin || !isAllowedClientOrigin(origin)) return {};
+  return {
+    'access-control-allow-origin': origin,
+    'access-control-allow-methods': 'POST, GET, OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    'access-control-max-age': '600',
+    vary: 'Origin',
+  };
+}
+
+/** json() + CORS for a registered client origin. */
+export function jsonCors(body: unknown, request: Request, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', ...corsHeaders(request) },
+  });
+}
+
+/** CORS preflight (204). */
+export function preflight(request: Request): Response {
+  return new Response(null, { status: 204, headers: corsHeaders(request) });
 }

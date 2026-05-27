@@ -1,8 +1,10 @@
 // GET /jwks — the broker's public JWKS. Relying sites fetch this to verify the
 // AgentSession (asymmetric; the private key never leaves the server).
-import { getServer, json, type FnContext } from './_lib/server-broker';
+import { getServer, jsonCors, preflight, type FnContext } from './_lib/server-broker';
 
-export const onRequestGet = async ({ env }: FnContext): Promise<Response> => {
+export const onRequestOptions = ({ request }: FnContext): Response => preflight(request);
+
+export const onRequestGet = async ({ request, env }: FnContext): Promise<Response> => {
   const { jwks } = await getServer(env);
-  return json(jwks);
+  return jsonCors(jwks, request); // CORS so a relying-site SPA can verify the id_token
 };

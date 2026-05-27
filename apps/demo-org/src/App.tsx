@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
-import { connectWithName, connectWithDelegation, signupWithName, startOrgCreation, startSiteEnrollment, readOrgData, readPersonData } from './connect-client';
-import { openCentralAuthPopup, preferRedirect, type OrgResult } from './lib/central-auth';
+import {
+  connectWithName,
+  signupWithName,
+  startOrgCreation,
+  startSiteEnrollment,
+  exchangeCode,
+  verifyIdToken,
+  readOrgData,
+  readPersonData,
+  type OrgTokenPayload,
+} from './connect-client';
+import { openCentralAuthPopup, preferRedirect } from './lib/central-auth';
 import type { DelegationWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
@@ -155,87 +165,53 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Central-auth enrollment return (spec 229): ?enrolled=1 → our local passkey is now an
-  // on-chain custodian; sign in with it directly (retry for post-add RPC lag). ?enroll_error
-  // → surface it. Runs once on mount.
+  // OIDC redirect-fallback return (spec 230): ?code&state. Match the echoed state against the
+  // stash we left (ENROLL_KEY = site-login, ORG_KEY = org-create) and complete the code exchange.
+  // The popup path resolves inline instead. Fail-closed on state mismatch (audit F5). Once on mount.
   useEffect(() => {
     const u = new URL(window.location.href);
-    const enrolled = u.searchParams.get('enrolled');
-    const enrollErr = u.searchParams.get('enroll_error');
-    const retName = u.searchParams.get('name');
+    const code = u.searchParams.get('code');
     const retState = u.searchParams.get('state');
-    // The central auth returns the SCOPED DELEGATION (person SA → our delegate SA), base64
-    // JSON. The site is a delegate, not a custodian (ADR-0019).
-    const delB64 = u.searchParams.get('delegation');
-    if (!enrolled && !enrollErr) return;
-    for (const k of ['enrolled', 'enroll_error', 'name', 'state', 'agent', 'delegation']) u.searchParams.delete(k);
+    const err = u.searchParams.get('enroll_error');
+    if (!code && !err) return;
+    for (const k of ['code', 'state', 'enroll_error']) u.searchParams.delete(k);
     window.history.replaceState({}, '', u.toString());
+    if (err) {
+      setError(`Sign-in was not completed (${err}).`);
+      return;
+    }
 
-    let stored: { state?: string; name?: string } = {};
-    try {
-      stored = JSON.parse(sessionStorage.getItem(ENROLL_KEY) ?? '{}') as { state?: string; name?: string };
-    } catch {
-      /* ignore */
-    }
-    sessionStorage.removeItem(ENROLL_KEY);
+    type LoginStash = { state?: string; name?: string; authOrigin?: string; codeVerifier?: string; nonce?: string };
+    type OrgStash = { state?: string; addr?: string; authOrigin?: string; codeVerifier?: string; nonce?: string };
+    const read = <T,>(k: string): T => {
+      try {
+        return JSON.parse(sessionStorage.getItem(k) ?? '{}') as T;
+      } catch {
+        return {} as T;
+      }
+    };
 
-    if (enrollErr) {
-      setError(`Enrollment was not completed (${enrollErr}).`);
+    const login = read<LoginStash>(ENROLL_KEY);
+    if (login.state && retState && login.state === retState) {
+      sessionStorage.removeItem(ENROLL_KEY);
+      if (!code || !login.authOrigin || !login.codeVerifier) {
+        setError('Sign-in response was incomplete. Please try again.');
+        return;
+      }
+      void completeAuth(login.authOrigin, code, login.codeVerifier, login.nonce ?? '', login.name ?? '', true);
       return;
     }
-    // Fail-closed (audit F5): a return MUST carry a state that matches the one we stashed.
-    if (!stored.state || !retState || stored.state !== retState) {
-      setError('We couldn’t verify that setup response. Please start setup again.');
+    const org = read<OrgStash>(ORG_KEY);
+    if (org.state && retState && org.state === retState) {
+      sessionStorage.removeItem(ORG_KEY);
+      if (!code || !org.authOrigin || !org.codeVerifier || !org.addr) {
+        setError('Org-creation response was incomplete. Please try again.');
+        return;
+      }
+      void completeOrg(org.authOrigin, code, org.codeVerifier, org.addr);
       return;
     }
-    const name = retName ?? stored.name ?? '';
-    if (!name) {
-      setError('Enrollment returned without a name.');
-      return;
-    }
-    let delegation: DelegationWire | undefined;
-    try {
-      if (delB64) delegation = JSON.parse(atob(delB64)) as DelegationWire;
-    } catch {
-      /* ignore */
-    }
-    if (!delegation) {
-      setError('Enrollment returned without a delegation. Please try again.');
-      return;
-    }
-    void finishEnrollment(name, delegation);
-    // run once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Central-auth org-creation return (redirect fallback): ?org_created=1&org=<b64>&state=… →
-  // verify the echoed state, persist the created org (custodied by your ROOT passkey there), show
-  // it. The popup path resolves in onCreateOrg instead. Runs once on mount.
-  useEffect(() => {
-    const u = new URL(window.location.href);
-    if (!u.searchParams.get('org_created')) return;
-    const retState = u.searchParams.get('state');
-    const orgB64 = u.searchParams.get('org');
-    for (const k of ['org_created', 'org', 'state']) u.searchParams.delete(k);
-    window.history.replaceState({}, '', u.toString());
-    let stash: { state?: string; addr?: string } = {};
-    try {
-      stash = JSON.parse(sessionStorage.getItem(ORG_KEY) ?? '{}') as { state?: string; addr?: string };
-    } catch {
-      /* ignore */
-    }
-    sessionStorage.removeItem(ORG_KEY);
-    // Fail-closed (audit F5): the return MUST echo the state we stashed.
-    if (!retState || !stash.state || stash.state !== retState || !stash.addr || !orgB64) {
-      setError('We couldn’t verify that organization response. Please try creating it again.');
-      return;
-    }
-    try {
-      const org = JSON.parse(atob(orgB64)) as OrgResult;
-      setOrgs(persistOrg(org, stash.addr));
-    } catch {
-      setError('Organization response was malformed. Please try again.');
-    }
+    setError('We couldn’t verify that response. Please try again.');
     // run once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -323,24 +299,17 @@ export function App() {
   }, [orgName]);
 
   // ── actions ─────────────────────────────────────────────────────────
-  // Wallet → connectWithName (the wallet IS the person's custodian). Passkey → the site's
-  // scoped delegation (ADR-0019): load the stored delegation + verify it (not isCustodian).
+  // Passkey → the OIDC sign-in at the person's central auth (spec 230). Wallet → connectWithName
+  // (the wallet IS the person's custodian; not an OIDC flow).
   async function onConnectName(via: Via) {
     if (!connectName.trim()) return;
     setConnectErr(null);
+    if (via === 'passkey') {
+      await beginSiteSetup(connectName.trim());
+      return;
+    }
     setBusy(true);
     try {
-      if (via === 'passkey') {
-        const del = loadDelegation(connectName.trim());
-        if (!del) {
-          setConnectErr('This site isn’t set up for that agent yet — use “Set up this site”.');
-          return;
-        }
-        const out = await connectWithDelegation(connectName.trim(), del);
-        if (out.ok) openSession(out.token, 'passkey', out.name ?? connectName.trim(), false);
-        else setConnectErr(out.error);
-        return;
-      }
       const out = await connectWithName(connectName.trim(), 'wallet');
       if (out.ok) openSession(out.token, 'wallet', out.name ?? connectName.trim(), false);
       else setConnectErr(out.error);
@@ -351,28 +320,28 @@ export function App() {
     }
   }
 
-  // After the central auth issues the delegation, store it and sign in via the delegation
-  // (retry for post-issue RPC lag — the person SA / delegate SA reads may briefly lag).
-  async function finishEnrollment(name: string, delegation: DelegationWire) {
+  // Complete an OIDC sign-in (spec 230): exchange the authorization code at /token, verify the
+  // id_token against the OP's JWKS (iss/aud/nonce/exp), store the delegation sidecar, and open
+  // the session FROM the id_token (the id_token IS the proof-of-who — no separate session mint).
+  async function completeAuth(authOrigin: string, code: string, codeVerifier: string, nonce: string, fallbackName: string, fresh: boolean) {
+    setFlow({ title: 'Finishing sign-in…', phase: 'running', steps: ['Verifying your identity…'] });
     try {
-      localStorage.setItem(delegationKey(name), JSON.stringify(delegation));
-      localStorage.setItem(LOCAL_PASSKEY_NAME, name);
-    } catch {
-      /* ignore */
-    }
-    setFlow({ title: 'Finishing setup…', phase: 'running', steps: ['Signing you in…'] });
-    let lastErr = '';
-    for (let i = 0; i < 5; i++) {
-      if (i > 0) await new Promise((r) => setTimeout(r, 2500));
-      const out = await connectWithDelegation(name, delegation);
-      if (out.ok) {
-        setFlow(null);
-        openSession(out.token, 'passkey', out.name ?? name, true);
-        return;
+      const tok = await exchangeCode(authOrigin, code, codeVerifier);
+      const claims = await verifyIdToken(authOrigin, tok.idToken, nonce);
+      const name = claims.agent_name ?? fallbackName;
+      if (tok.delegation) {
+        try {
+          localStorage.setItem(delegationKey(name), JSON.stringify(tok.delegation));
+          localStorage.setItem(LOCAL_PASSKEY_NAME, name);
+        } catch {
+          /* ignore */
+        }
       }
-      lastErr = out.error;
+      setFlow(null);
+      openSession(tok.idToken, 'passkey', name, fresh);
+    } catch (e) {
+      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: e instanceof Error ? e.message : 'sign-in failed' });
     }
-    setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: lastErr || 'sign-in after enrollment failed' });
   }
 
   // Begin cross-origin setup: register a LOCAL passkey for this origin (Windows Hello), then
@@ -383,23 +352,26 @@ export function App() {
   async function beginSiteSetup(name: string) {
     setError(null);
     setConnectErr(null);
-    setFlow({ title: 'Setting up your account', phase: 'running', steps: ['Creating your sign-in key on this device…'] });
+    setFlow({ title: 'Signing you in', phase: 'running', steps: ['Preparing your sign-in key on this device…'] });
     let url: string;
     let state: string;
     let authOrigin: string;
+    let codeVerifier: string;
+    let nonce: string;
     try {
-      // Registers a local passkey + deploys this site's delegate SA (Windows Hello prompts).
+      // Reuses (or first-time creates) the local passkey + delegate SA, then builds the OIDC
+      // /authorize URL (code + S256 PKCE).
       const started = await startSiteEnrollment(name, (s) =>
-        setFlow({ title: 'Setting up your account', phase: 'running', steps: [s] }),
+        setFlow({ title: 'Signing you in', phase: 'running', steps: [s] }),
       );
       if (!started.ok) {
-        setFlow({ title: 'Couldn’t start setup', phase: 'error', steps: [], error: started.error });
+        setFlow({ title: 'Couldn’t start sign-in', phase: 'error', steps: [], error: started.error });
         return;
       }
-      ({ url, state, authOrigin } = started);
+      ({ url, state, authOrigin, codeVerifier, nonce } = started);
     } catch (e) {
       setFlow({
-        title: 'Couldn’t start setup',
+        title: 'Couldn’t start sign-in',
         phase: 'error',
         steps: [],
         error: e instanceof Error ? e.message : 'could not set up this device',
@@ -407,54 +379,39 @@ export function App() {
       return;
     }
 
+    const stash = JSON.stringify({ state, name, authOrigin, codeVerifier, nonce });
+
     // Mobile / narrow viewport → full-page redirect (a popup would open as a tab).
     if (preferRedirect()) {
-      sessionStorage.setItem(ENROLL_KEY, JSON.stringify({ state, name }));
-      setFlow({
-        title: 'Setting up your account',
-        phase: 'running',
-        steps: ['Created your sign-in key', 'Taking you to your secure home to finish…'],
-      });
+      sessionStorage.setItem(ENROLL_KEY, stash);
+      setFlow({ title: 'Signing you in', phase: 'running', steps: ['Taking you to your secure home…'] });
       await new Promise((r) => setTimeout(r, 700));
       window.location.href = url;
       return;
     }
 
     // Desktop → popup-first.
-    setFlow({
-      title: 'Setting up your account',
-      phase: 'running',
-      steps: ['Created your sign-in key', 'Opening your secure home…'],
-    });
+    setFlow({ title: 'Signing you in', phase: 'running', steps: ['Opening your secure home…'] });
     const result = await openCentralAuthPopup(url, state, authOrigin, (msg) =>
-      setFlow({ title: 'Setting up your account', phase: 'running', steps: ['Created your sign-in key', msg] }),
+      setFlow({ title: 'Signing you in', phase: 'running', steps: [msg] }),
     );
     if (result.status === 'blocked') {
-      // Popup blocked → fall back to a redirect (carry state via sessionStorage).
-      sessionStorage.setItem(ENROLL_KEY, JSON.stringify({ state, name }));
-      setFlow({
-        title: 'Setting up your account',
-        phase: 'running',
-        steps: ['Created your sign-in key', 'Your browser blocked the popup — taking you to your secure home…'],
-      });
+      sessionStorage.setItem(ENROLL_KEY, stash);
+      setFlow({ title: 'Signing you in', phase: 'running', steps: ['Your browser blocked the popup — taking you to your secure home…'] });
       await new Promise((r) => setTimeout(r, 1100));
       window.location.href = url;
       return;
     }
     if (result.status === 'cancelled') {
       setFlow(null);
-      setConnectErr('Setup was cancelled. You can try again.');
+      setConnectErr('Sign-in was cancelled. You can try again.');
       return;
     }
     if (result.status === 'error') {
       setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: result.error });
       return;
     }
-    if (!result.delegation) {
-      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: 'no delegation returned from your secure home' });
-      return;
-    }
-    await finishEnrollment(result.name || name, result.delegation);
+    await completeAuth(authOrigin, result.code, codeVerifier, nonce, name, true);
   }
 
   /** Existing agent, first time on this site → set up a site key via the central auth. */
@@ -494,9 +451,10 @@ export function App() {
     }
   }
 
-  // Persist a created org (de-duped by address) for `addr`, returning the merged list.
-  function persistOrg(org: OrgResult, addr: string): Org[] {
-    const rec: Org = { orgAgent: org.orgAgent, orgName: org.orgName, governed: org.governed, orgDelegation: org.orgDelegation };
+  // Persist a created org (de-duped by address) for `addr`, returning the merged list. The
+  // org→site delegation (the OIDC sidecar) is stored with it so "View org data" can present it.
+  function persistOrg(org: OrgTokenPayload, delegation: DelegationWire | undefined, addr: string): Org[] {
+    const rec: Org = { orgAgent: org.orgAgent, orgName: org.orgName, governed: org.governed, orgDelegation: delegation };
     let list: Org[] = [];
     try {
       list = JSON.parse(localStorage.getItem(orgsKey(addr)) ?? '[]') as Org[];
@@ -510,6 +468,24 @@ export function App() {
       /* ignore */
     }
     return next;
+  }
+
+  // Complete an org-create code exchange (popup + redirect-fallback share this): /token →
+  // { id_token, delegation (org→site), org } → persist the org + its delegation.
+  async function completeOrg(authOrigin: string, code: string, codeVerifier: string, addr: string) {
+    setFlow({ title: 'Creating your organization…', phase: 'running', steps: ['Finishing…'] });
+    try {
+      const tok = await exchangeCode(authOrigin, code, codeVerifier);
+      if (!tok.org) throw new Error('no organization returned');
+      setFlow({ title: '✓ Organization created', phase: 'done', steps: [] });
+      setOrgs(persistOrg(tok.org, tok.delegation, addr));
+      await new Promise((r) => setTimeout(r, 900));
+      setOrgName('');
+      setOrgAvail('idle');
+      setFlow(null);
+    } catch (e) {
+      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: e instanceof Error ? e.message : 'create org failed' });
+    }
   }
 
   // Create an organization via the CENTRAL-AUTH ceremony (memory project_demo_org_durable_org_custody):
@@ -531,12 +507,13 @@ export function App() {
       });
       return;
     }
-    const { url, state, authOrigin } = await startOrgCreation(session.name, del.delegate, base);
+    const { url, state, authOrigin, codeVerifier, nonce } = await startOrgCreation(session.name, del.delegate, base);
     setFlow({ title: 'Creating your organization…', phase: 'running', steps: ['Opening your secure home…'] });
+    const stash = JSON.stringify({ state, addr: session.address, authOrigin, codeVerifier, nonce });
 
     // Mobile / narrow viewport → full-page redirect.
     if (preferRedirect()) {
-      sessionStorage.setItem(ORG_KEY, JSON.stringify({ state, addr: session.address }));
+      sessionStorage.setItem(ORG_KEY, stash);
       await new Promise((r) => setTimeout(r, 600));
       window.location.href = url;
       return;
@@ -545,7 +522,7 @@ export function App() {
       setFlow({ title: 'Creating your organization…', phase: 'running', steps: [msg] }),
     );
     if (result.status === 'blocked') {
-      sessionStorage.setItem(ORG_KEY, JSON.stringify({ state, addr: session.address }));
+      sessionStorage.setItem(ORG_KEY, stash);
       setFlow({ title: 'Creating your organization…', phase: 'running', steps: ['Your browser blocked the popup — taking you to your secure home…'] });
       await new Promise((r) => setTimeout(r, 900));
       window.location.href = url;
@@ -559,16 +536,7 @@ export function App() {
       setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: result.error });
       return;
     }
-    if (!result.org) {
-      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: 'no organization returned from your secure home' });
-      return;
-    }
-    setFlow({ title: '✓ Organization created', phase: 'done', steps: [] });
-    setOrgs(persistOrg(result.org, session.address));
-    await new Promise((r) => setTimeout(r, 900));
-    setOrgName('');
-    setOrgAvail('idle');
-    setFlow(null);
+    await completeOrg(authOrigin, result.code, codeVerifier, session.address);
   }
 
   // Read the PERSON's gated PII via the delegation we already hold (person → this site's

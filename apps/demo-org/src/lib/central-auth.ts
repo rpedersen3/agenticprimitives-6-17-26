@@ -5,21 +5,10 @@
 //
 // Security (audit F3/F5): we resolve ONLY on a message from the exact popup window we
 // opened, at the exact central-auth origin, whose echoed `state` matches what we generated.
-import type { DelegationWire } from './delegation';
-import type { Address, Hex } from '@agenticprimitives/types';
-
-/** Result of an org-creation ceremony (the org is custodied by the person's ROOT passkey at
- *  the central auth; we receive a scoped org→delegate delegation to operate it). */
-export interface OrgResult {
-  orgAgent: Address;
-  orgName: string;
-  edgeId: Hex;
-  governed: boolean;
-  orgDelegation: DelegationWire;
-}
-
+// The OP (spec 230) returns a single OIDC authorization CODE over the popup channel; the
+// relying site exchanges it at /token. No tokens/delegations travel in the message or URL.
 export type PopupResult =
-  | { status: 'success'; name: string; agent?: Address; delegation?: DelegationWire; org?: OrgResult }
+  | { status: 'success'; code: string }
   | { status: 'cancelled' }
   | { status: 'error'; error: string }
   | { status: 'blocked' };
@@ -28,11 +17,8 @@ interface AcMessage {
   type: 'AC_PROGRESS' | 'AC_SUCCESS' | 'AC_ERROR' | 'AC_CANCEL';
   state?: string;
   msg?: string;
-  name?: string;
   error?: string;
-  agent?: Address;
-  delegation?: DelegationWire;
-  org?: OrgResult;
+  code?: string;
 }
 
 /** Prefer a redirect on mobile / narrow viewports (a popup opens as a tab there). */
@@ -83,12 +69,13 @@ export function openCentralAuthPopup(
       }
       if (m.type === 'AC_SUCCESS') {
         if (m.state !== expectedState) return; // replay / cross-binding guard (audit F5)
+        if (!m.code) return;
         try {
           popup.close();
         } catch {
           /* ignore */
         }
-        finish({ status: 'success', name: m.name ?? '', agent: m.agent, delegation: m.delegation, org: m.org });
+        finish({ status: 'success', code: m.code });
         return;
       }
       if (m.type === 'AC_ERROR') {
