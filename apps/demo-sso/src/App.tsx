@@ -98,6 +98,62 @@ function relyingAllowed(redirectUri: string): boolean {
   }
 }
 
+// ── Shield SVG ───────────────────────────────────────────────────────────
+// Shared between topbar, popup brand, and the large ceremony hero.
+const ShieldLogo = ({ size = 24, gradient = false }: { size?: number; gradient?: boolean }) => {
+  const id = gradient ? 'sg' : 'sp';
+  return (
+    <svg
+      className="brand-shield"
+      width={size} height={size}
+      viewBox="0 0 40 46"
+      fill="none"
+      aria-hidden="true"
+      style={{ width: size, height: size }}
+    >
+      {gradient && (
+        <defs>
+          <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#818cf8" />
+            <stop offset="55%" stopColor="#4338ca" />
+            <stop offset="100%" stopColor="#3730a3" />
+          </linearGradient>
+          <radialGradient id={`${id}-glow`} cx="50%" cy="60%" r="50%">
+            <stop offset="0%" stopColor="rgba(99,102,241,.45)" />
+            <stop offset="100%" stopColor="rgba(99,102,241,0)" />
+          </radialGradient>
+          <filter id={`${id}-blur`}>
+            <feGaussianBlur stdDeviation="3" result="blur" />
+          </filter>
+        </defs>
+      )}
+      {gradient && (
+        <ellipse
+          cx="20" cy="38" rx="18" ry="10"
+          fill={`url(#${id}-glow)`}
+          filter={`url(#${id}-blur)`}
+          opacity=".65"
+        />
+      )}
+      <path
+        d="M20 1L37 7.5V21C37 30.389 29.832 38.234 20 41C10.168 38.234 3 30.389 3 21V7.5L20 1Z"
+        fill={gradient ? `url(#${id}-fill)` : '#4338ca'}
+      />
+      <path
+        d="M20 5L33 10.5V21C33 28.556 27.506 35.08 20 37.5C12.494 35.08 7 28.556 7 21V10.5L20 5Z"
+        fill="white" fillOpacity={gradient ? '.14' : '.18'}
+      />
+      <path
+        d="M14.5 22.5L18.5 26.5L26 18"
+        stroke="white"
+        strokeWidth={gradient ? '2.8' : '2.2'}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [restoring, setRestoring] = useState<boolean>(shouldRestore);
@@ -567,7 +623,10 @@ export function App() {
     window.location.href = url.toString();
   }
 
-  // ── Central-auth enrollment consent (renders INSTEAD of the normal app) ──
+  // ════════════════════════════════════════════════════════════════════
+  // POPUP / CONSENT SCREENS
+  // Rendered when demo-sso is opened as a central auth popup or redirect.
+  // ════════════════════════════════════════════════════════════════════
   if (enrollReq) {
     const host = (() => {
       try {
@@ -580,24 +639,19 @@ export function App() {
     const isNew = enrollExists === false; // name has no agent yet → create the home account
     const running = enrollFlow.phase === 'running';
     const orgName = enrollReq.orgBase ? `${enrollReq.orgBase.replace(/\.demo\.agent$/, '')}.demo.agent` : '';
-    // Truncate delegate address for display (audit F2 — consent binds to exact delegate)
     const delegateShort = `${enrollReq.delegate.slice(0, 6)}…${enrollReq.delegate.slice(-4)}`;
 
-    // Shared brand topbar (compact — 44px)
+    // Shared brand topbar — compact, centred
     const Topbar = () => (
       <div className="popup-topbar" role="banner">
         <div className="popup-brand">
-          <svg className="brand-shield" viewBox="0 0 30 34" fill="none" aria-hidden="true">
-            <path d="M15 1L28 6.5V17C28 23.627 22.18 29.373 15 32C7.82 29.373 2 23.627 2 17V6.5L15 1Z"
-              fill="#4f46e5" fillOpacity=".12" stroke="#4f46e5" strokeWidth="1.5"/>
-            <path d="M10 17l3.5 3.5L20 13" stroke="#4f46e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          <ShieldLogo size={20} />
           Agentic Connect
         </div>
       </div>
     );
 
-    // ── Not-allowed (unrecognized relying site) ──────────────────────────
+    // ── Not-allowed ──────────────────────────────────────────────────
     if (!allowed) {
       return (
         <div className="popup-root">
@@ -608,7 +662,7 @@ export function App() {
             </div>
             <div className="blocked-card">
               <div className="blocked-icon">⛔</div>
-              <p style={{ fontWeight: 600, color: 'var(--c-g900)', marginBottom: '.35rem' }}>
+              <p style={{ fontWeight: 700, color: 'var(--c-g900)', marginBottom: '.35rem', fontSize: '.9375rem' }}>
                 {host} is not a recognized site
               </p>
               <p style={{ fontSize: '.8375rem', color: 'var(--c-g500)', margin: 0 }}>
@@ -623,7 +677,7 @@ export function App() {
       );
     }
 
-    // ── Checking (enrollExists === null) ────────────────────────────────
+    // ── Checking ─────────────────────────────────────────────────────
     if (enrollExists === null) {
       return (
         <div className="popup-root">
@@ -636,7 +690,7 @@ export function App() {
               <div className="ceremony-spinner-wrap">
                 <span className="spinner spinner-lg" role="status" aria-label="Checking account" />
               </div>
-              <p style={{ color: 'var(--c-g500)', fontSize: '.875rem', margin: 0 }}>
+              <p style={{ color: 'var(--c-g500)', fontSize: '.875rem', margin: 0, fontWeight: 500 }}>
                 Checking your account…
               </p>
             </div>
@@ -648,7 +702,7 @@ export function App() {
       );
     }
 
-    // ── Running (ceremony in progress) ──────────────────────────────────
+    // ── Running / ceremony in progress ───────────────────────────────
     if (running) {
       return (
         <div className="popup-root">
@@ -658,23 +712,44 @@ export function App() {
               <h1>Confirm with your device</h1>
             </div>
             <div className="ceremony-card">
-              <div className="ceremony-spinner-wrap">
-                <span className="spinner spinner-lg" role="status" aria-label="Working" />
+              {/* Large gradient shield as the ceremony hero */}
+              <div style={{
+                display: 'flex', justifyContent: 'center',
+                marginBottom: '1rem',
+              }}>
+                <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ShieldLogo size={64} gradient />
+                  {/* Spinner orbiting the shield */}
+                  <span
+                    className="spinner spinner-lg"
+                    style={{
+                      position: 'absolute',
+                      top: '-10px', right: '-10px',
+                      width: '20px', height: '20px',
+                      borderWidth: '2.5px',
+                    }}
+                    role="status"
+                    aria-label="Working"
+                  />
+                </div>
               </div>
-              <p style={{ fontWeight: 600, fontSize: '.9rem', color: 'var(--c-g900)', marginBottom: '.35rem' }}>
+              <p style={{ fontWeight: 700, fontSize: '.9375rem', color: 'var(--c-g900)', marginBottom: '.3rem' }}>
                 {enrollFlow.msg ?? 'Working…'}
               </p>
-              <p style={{ fontSize: '.8375rem', color: 'var(--c-g500)', margin: 0 }}>
+              <p style={{ fontSize: '.8rem', color: 'var(--c-g500)', margin: 0 }}>
                 Your device may ask you to confirm. This usually takes a few seconds.
               </p>
             </div>
+            {/* Trust signal */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: '.5rem',
-              background: 'var(--c-primary-subtle)', border: '1px solid var(--c-primary-border)',
-              borderRadius: 'var(--r-md)', padding: '.625rem .875rem',
+              background: 'var(--c-primary-subtle)',
+              border: '1px solid var(--c-primary-border)',
+              borderRadius: 'var(--r-md)',
+              padding: '.5rem .875rem',
             }}>
-              <span style={{ fontSize: '.9rem' }} aria-hidden="true">🔐</span>
-              <p style={{ margin: 0, fontSize: '.8375rem', color: 'var(--c-g700)' }}>
+              <ShieldLogo size={16} />
+              <p style={{ margin: 0, fontSize: '.8125rem', color: 'var(--c-g700)' }}>
                 Your Smart Agent stays yours.
               </p>
             </div>
@@ -686,7 +761,7 @@ export function App() {
       );
     }
 
-    // ── Error state ──────────────────────────────────────────────────────
+    // ── Error state ───────────────────────────────────────────────────
     if (enrollFlow.phase === 'error') {
       return (
         <div className="popup-root">
@@ -717,7 +792,7 @@ export function App() {
       );
     }
 
-    // ── Org-create consent ───────────────────────────────────────────────
+    // ── Org-create consent ────────────────────────────────────────────
     if (enrollReq.orgBase) {
       return (
         <div className="popup-root">
@@ -727,7 +802,6 @@ export function App() {
               <h1>Allow org data access?</h1>
             </div>
 
-            {/* Entity chip — the org being created */}
             <div className="entity-chip">
               <div className="entity-chip-icon" aria-hidden="true">🏢</div>
               <div className="entity-chip-meta">
@@ -737,7 +811,6 @@ export function App() {
               <span className="entity-chip-badge">New org</span>
             </div>
 
-            {/* Can card — 2 bullets max */}
             <div className="perm-card can">
               <div className="perm-card-title">This app can:</div>
               <ul className="perm-list">
@@ -752,7 +825,6 @@ export function App() {
               </ul>
             </div>
 
-            {/* Cannot — collapsed disclosure */}
             <details className="cannot-disclosure">
               <summary>What it cannot do</summary>
               <div className="perm-card cannot">
@@ -764,8 +836,7 @@ export function App() {
               </div>
             </details>
 
-            {/* Delegate binding note (audit F2) */}
-            <p style={{ fontSize: '.72rem', color: 'var(--c-g400)', margin: '.375rem 0 0' }}>
+            <p style={{ fontSize: '.7rem', color: 'var(--c-g400)', margin: '.375rem 0 0', lineHeight: 1.5 }}>
               Scoped, revocable access only — site account <code>{delegateShort}</code>.
             </p>
             <div className="privacy-footer">
@@ -782,7 +853,7 @@ export function App() {
       );
     }
 
-    // ── Sign-in consent (default path) ───────────────────────────────────
+    // ── Sign-in consent (default path) ───────────────────────────────
     return (
       <div className="popup-root">
         <Topbar />
@@ -795,7 +866,6 @@ export function App() {
             </h1>
           </div>
 
-          {/* Entity chip — the relying site requesting access */}
           <div className="entity-chip">
             <div className="entity-chip-icon" aria-hidden="true">🌐</div>
             <div className="entity-chip-meta">
@@ -804,7 +874,6 @@ export function App() {
             </div>
           </div>
 
-          {/* Can card — 2 bullets max to save vertical space */}
           <div className="perm-card can">
             <div className="perm-card-title">This app can:</div>
             <ul className="perm-list">
@@ -819,7 +888,6 @@ export function App() {
             </ul>
           </div>
 
-          {/* Cannot — collapsed disclosure, saves ~100px */}
           <details className="cannot-disclosure">
             <summary>What it cannot do</summary>
             <div className="perm-card cannot">
@@ -831,17 +899,8 @@ export function App() {
             </div>
           </details>
 
-          {/* New-user note (only when this will also create the home account) */}
           {isNew && (
-            <div style={{
-              background: 'var(--c-primary-subtle)',
-              border: '1px solid var(--c-primary-border)',
-              borderRadius: 'var(--r-md)',
-              padding: '.625rem .875rem',
-              marginTop: '.5rem',
-              fontSize: '.8375rem',
-              color: 'var(--c-g700)',
-            }}>
+            <div className="new-user-notice">
               <strong>New here:</strong> we'll create your Smart Agent for{' '}
               <strong>{enrollReq.name}</strong> first — one device confirmation.
             </div>
@@ -861,37 +920,20 @@ export function App() {
     );
   }
 
-  // ── Shield logo for standalone topbar ─────────────────────────────────
-  const ShieldLogo = ({ size = 28 }: { size?: number }) => (
-    <svg
-      className="brand-shield"
-      width={size}
-      height={size}
-      viewBox="0 0 40 40"
-      fill="none"
-      aria-hidden="true"
-      style={{ width: size, height: size }}
-    >
-      <rect width="40" height="40" rx="10" fill="#4f46e5" />
-      <path d="M20 8 L30 12 L30 22 C30 27.5 25.5 32 20 33.5 C14.5 32 10 27.5 10 22 L10 12 Z"
-        fill="white" fillOpacity="0.25" />
-      <path d="M20 11 L28 14.5 L28 22 C28 26.5 24.5 30.5 20 31.8 C15.5 30.5 12 26.5 12 22 L12 14.5 Z"
-        fill="white" fillOpacity="0.9" />
-      <path d="M17 21 L19.5 23.5 L23.5 18"
-        stroke="#4f46e5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  // ════════════════════════════════════════════════════════════════════
+  // STANDALONE APP (demo-sso's own home page)
+  // ════════════════════════════════════════════════════════════════════
 
   const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
   return (
     <div id="app-root" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
 
-      {/* Standalone topbar */}
+      {/* Standalone top bar */}
       <header className="standalone-topbar">
         <div className="standalone-topbar-inner">
           <div className="standalone-brand">
-            <ShieldLogo size={28} />
+            <ShieldLogo size={26} />
             {session && session.via !== 'Google' && profile?.name
               ? profile.name
               : 'Agentic Connect'}
@@ -899,7 +941,7 @@ export function App() {
           {session && (
             <button
               className="ghost"
-              style={{ fontSize: '.8125rem', padding: '.375rem .75rem', minHeight: '36px' }}
+              style={{ fontSize: '.8125rem', padding: '.35rem .75rem', minHeight: '36px' }}
               onClick={signOut}
             >
               Sign out
@@ -921,14 +963,15 @@ export function App() {
         )}
 
         {restoring && !session && (
-          <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--c-g400)' }}>
+          <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--c-g400)' }}>
             <span className="spinner spinner-lg" aria-label="Restoring session" />
           </div>
         )}
 
-        {/* ── Not signed in ─────────────────────────────────────────── */}
+        {/* ── Not signed in ──────────────────────────────────────── */}
         {!session && !restoring && (
           <>
+            {/* Hero */}
             <div className="standalone-hero">
               <h1>Your secure home</h1>
               <p>Your portable Smart Agent — created once, reachable from any app.</p>
@@ -941,10 +984,11 @@ export function App() {
             )}
 
             <div className="standalone-grid">
-              {/* Connect card */}
+
+              {/* Sign-in card */}
               <div className="scard accent">
                 <h2>Sign in</h2>
-                <p className="muted">Enter your agent name to sign in.</p>
+                <p className="muted" style={{ fontSize: '.875rem' }}>Enter your agent name to sign in.</p>
                 <div style={{ marginBottom: '.625rem' }}>
                   <input
                     value={connectName}
@@ -954,18 +998,18 @@ export function App() {
                   />
                 </div>
                 {nameInfo.status === 'checking' && (
-                  <p className="muted" style={{ fontSize: '.8rem', margin: '0 0 .5rem' }}>
-                    <span className="spinner" aria-hidden="true" style={{ marginRight: '.3rem' }} />
+                  <p className="muted" style={{ fontSize: '.8rem', margin: '0 0 .5rem', display: 'flex', alignItems: 'center', gap: '.35rem' }}>
+                    <span className="spinner" aria-hidden="true" />
                     Checking…
                   </p>
                 )}
                 {nameInfo.status === 'none' && (
-                  <p style={{ fontSize: '.8rem', color: 'var(--c-g500)', margin: '0 0 .5rem' }}>
+                  <p style={{ fontSize: '.8rem', color: 'var(--c-g400)', margin: '0 0 .5rem' }}>
                     No agent with that name — sign up below.
                   </p>
                 )}
                 {nameInfo.status === 'found' && (
-                  <p style={{ fontSize: '.8rem', color: 'var(--c-success)', fontWeight: 600, margin: '0 0 .5rem' }}>
+                  <p style={{ fontSize: '.8rem', color: 'var(--c-success)', fontWeight: 700, margin: '0 0 .5rem' }}>
                     ✓ Found {nameInfo.name}
                   </p>
                 )}
@@ -976,22 +1020,22 @@ export function App() {
                 )}
                 <div className="standalone-actions">
                   {nameInfo.status === 'found' && nameInfo.hasPasskey && (
-                    <button disabled={busy} onClick={() => onConnectName('passkey')} style={{ fontSize: '.85rem' }}>
+                    <button disabled={busy} onClick={() => onConnectName('passkey')} style={{ fontSize: '.875rem' }}>
                       Continue with passkey
                     </button>
                   )}
                   {nameInfo.status === 'found' && nameInfo.hasEoa && (
-                    <button className="ghost" disabled={busy} onClick={() => onConnectName('wallet')} style={{ fontSize: '.85rem' }}>
+                    <button className="ghost" disabled={busy} onClick={() => onConnectName('wallet')} style={{ fontSize: '.875rem' }}>
                       Continue with wallet
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Sign up card */}
+              {/* Sign-up card */}
               <div className="scard">
                 <h2>New here?</h2>
-                <p className="muted">Choose an agent name and create your Smart Agent.</p>
+                <p className="muted" style={{ fontSize: '.875rem' }}>Choose an agent name and create your Smart Agent.</p>
                 <div style={{ marginBottom: '.375rem' }}>
                   <input
                     value={desiredName}
@@ -1008,10 +1052,13 @@ export function App() {
                   </p>
                 )}
                 {desiredName && signupAvail === 'checking' && (
-                  <p className="muted" style={{ fontSize: '.8rem', margin: '0 0 .375rem' }}>Checking…</p>
+                  <p className="muted" style={{ fontSize: '.8rem', margin: '0 0 .375rem', display: 'flex', alignItems: 'center', gap: '.35rem' }}>
+                    <span className="spinner" aria-hidden="true" />
+                    Checking…
+                  </p>
                 )}
                 {desiredName && signupAvail === 'available' && (
-                  <p style={{ fontSize: '.8rem', color: 'var(--c-success)', fontWeight: 600, margin: '0 0 .375rem' }}>
+                  <p style={{ fontSize: '.8rem', color: 'var(--c-success)', fontWeight: 700, margin: '0 0 .375rem' }}>
                     ✓ Available
                   </p>
                 )}
@@ -1021,11 +1068,11 @@ export function App() {
                   </p>
                 )}
                 <div className="standalone-actions">
-                  <button disabled={busy || signupAvail !== 'available'} onClick={() => onSignup('passkey')} style={{ fontSize: '.85rem' }}>
+                  <button disabled={busy || signupAvail !== 'available'} onClick={() => onSignup('passkey')} style={{ fontSize: '.875rem' }}>
                     Create with passkey
                   </button>
                   {hasWallet() && (
-                    <button className="ghost" disabled={busy || signupAvail !== 'available'} onClick={() => onSignup('wallet')} style={{ fontSize: '.85rem' }}>
+                    <button className="ghost" disabled={busy || signupAvail !== 'available'} onClick={() => onSignup('wallet')} style={{ fontSize: '.875rem' }}>
                       Create with wallet
                     </button>
                   )}
@@ -1047,11 +1094,12 @@ export function App() {
                   </button>
                 </p>
               </div>
+
             </div>
           </>
         )}
 
-        {/* ── Signed in via Google (login-grade): step-up required ────── */}
+        {/* ── Signed in via Google (login-grade): step-up ─────────── */}
         {session && session.via === 'Google' && (
           <div className="scard accent" style={{ maxWidth: '28rem' }}>
             <h2>Confirm it's you</h2>
@@ -1071,20 +1119,23 @@ export function App() {
           </div>
         )}
 
-        {/* ── Signed in (custody-grade): full workspace ───────────────── */}
+        {/* ── Signed in (custody-grade) ────────────────────────────── */}
         {session && session.via !== 'Google' && (
           <>
-            {/* Welcome + earned badges */}
+            {/* Welcome card + reward chips */}
             <div className="scard accent" style={{ marginBottom: '1rem' }}>
               {session.fresh ? (
                 <>
-                  <div style={{ fontSize: '.8rem', fontWeight: 600, color: 'var(--c-success)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '.375rem' }}>
+                  <div style={{
+                    fontSize: '.72rem', fontWeight: 800, color: 'var(--c-success)',
+                    textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '.375rem',
+                  }}>
                     ✓ Smart Agent ready
                   </div>
                   {profile && (
                     <div className="ws-name">{profile.name ?? 'Your workspace'}</div>
                   )}
-                  {/* Reward badges — what you just earned */}
+                  {/* Reward chips — ownership moment */}
                   <div className="reward-row" aria-label="What you earned">
                     {profile?.name && (
                       <span className="reward-chip">
@@ -1100,7 +1151,10 @@ export function App() {
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: '.8rem', fontWeight: 600, color: 'var(--c-g500)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '.375rem' }}>
+                  <div style={{
+                    fontSize: '.72rem', fontWeight: 700, color: 'var(--c-g400)',
+                    textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '.375rem',
+                  }}>
                     Welcome back
                   </div>
                   {profile && (
@@ -1112,7 +1166,7 @@ export function App() {
                 <>
                   <p className="ws-agent">{profile.agent}</p>
                   <div className="ws-row">
-                    <span style={{ color: 'var(--c-g500)', fontSize: '.8rem' }}>Signed in via</span>
+                    <span style={{ color: 'var(--c-g400)', fontSize: '.78rem' }}>Signed in via</span>
                     <strong style={{ fontSize: '.8rem' }}>{session.via}</strong>
                     <span className="badge" style={{ marginLeft: '.25rem' }}>
                       {profile.access === 'standard' ? 'standard' : 'full access'}
@@ -1125,7 +1179,7 @@ export function App() {
               <div className="standalone-actions">
                 <button
                   className="ghost"
-                  style={{ fontSize: '.8125rem', padding: '.375rem .75rem', minHeight: '36px' }}
+                  style={{ fontSize: '.8125rem', padding: '.35rem .75rem', minHeight: '36px' }}
                   onClick={() => startGoogleSignIn(AUD, window.location.origin + '/', session.token)}
                 >
                   Link Google
@@ -1137,10 +1191,15 @@ export function App() {
             <div className="scard">
               <h2>Contact details</h2>
               {sensitive ? (
-                <pre>{JSON.stringify(sensitive, null, 2)}</pre>
+                <pre style={{ fontSize: '.8rem' }}>{JSON.stringify(sensitive, null, 2)}</pre>
               ) : (
                 <>
-                  <p aria-hidden="true" style={{ filter: 'blur(4px)', userSelect: 'none', color: 'var(--c-g400)', fontSize: '.875rem', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
+                  <p aria-hidden="true" style={{
+                    filter: 'blur(4px)', userSelect: 'none',
+                    color: 'var(--c-g300)', fontSize: '.875rem',
+                    fontFamily: "'SF Mono','Roboto Mono',monospace",
+                    letterSpacing: '.08em',
+                  }}>
                     ▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒ · +1 ▒▒▒ ▒▒▒ ▒▒▒▒
                   </p>
                   <div className="standalone-actions">
@@ -1164,8 +1223,8 @@ export function App() {
                     ✓ Agent service live: <code style={{ fontSize: '.8rem' }}>{service.a2aAgent}</code>
                   </p>
                 ) : service?.step ? (
-                  <p className="muted" style={{ fontSize: '.875rem' }}>
-                    <span className="spinner" aria-hidden="true" style={{ marginRight: '.3rem' }} />
+                  <p className="muted" style={{ fontSize: '.875rem', display: 'flex', alignItems: 'center', gap: '.35rem' }}>
+                    <span className="spinner" aria-hidden="true" />
                     {service.step}
                   </p>
                 ) : (
@@ -1195,8 +1254,8 @@ export function App() {
                     ✓ {addCred.done} — same agent, same contact details.
                   </p>
                 ) : addCred?.step ? (
-                  <p className="muted" style={{ fontSize: '.875rem' }}>
-                    <span className="spinner" aria-hidden="true" style={{ marginRight: '.3rem' }} />
+                  <p className="muted" style={{ fontSize: '.875rem', display: 'flex', alignItems: 'center', gap: '.35rem' }}>
+                    <span className="spinner" aria-hidden="true" />
                     {addCred.step}
                   </p>
                 ) : (
@@ -1221,7 +1280,7 @@ export function App() {
           </>
         )}
 
-        <p className="muted" style={{ marginTop: '1rem', fontSize: '.78rem' }}>
+        <p className="muted" style={{ marginTop: '1rem', fontSize: '.72rem', color: 'var(--c-g300)', letterSpacing: '.02em' }}>
           Real on Base Sepolia (chain 84532)
         </p>
       </div>
@@ -1230,17 +1289,28 @@ export function App() {
       {signup && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="signup-modal-title">
           <div className="modal">
-            <h2 id="signup-modal-title">
-              {signup.phase === 'done'
-                ? '✓ Smart Agent ready'
-                : signup.phase === 'error'
+
+            {/* Header: done gets the large shield + check */}
+            {signup.phase === 'done' ? (
+              <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                <div style={{ display: 'inline-flex', justifyContent: 'center', marginBottom: '.75rem' }}>
+                  <ShieldLogo size={52} gradient />
+                </div>
+                <h2 id="signup-modal-title" style={{ margin: 0, color: 'var(--c-success)', fontSize: '1.125rem' }}>
+                  Smart Agent ready
+                </h2>
+              </div>
+            ) : (
+              <h2 id="signup-modal-title">
+                {signup.phase === 'error'
                   ? "Couldn't finish"
                   : 'Creating your Smart Agent…'}
-            </h2>
+              </h2>
+            )}
 
-            {/* Reward badges on done */}
+            {/* Reward chips on done */}
             {signup.phase === 'done' && desiredName && (
-              <div className="reward-row" aria-label="What you earned">
+              <div className="reward-row" aria-label="What you earned" style={{ justifyContent: 'center', marginBottom: '1rem' }}>
                 <span className="reward-chip">
                   <span className="reward-chip-icon" aria-hidden="true">✓</span>
                   {desiredName}.demo.agent — owned by you
@@ -1267,13 +1337,14 @@ export function App() {
                 );
               })}
             </ol>
+
             {signup.phase === 'running' && (
               <p className="muted" style={{ fontSize: '.875rem', marginBottom: 0 }}>
                 Your device may ask you to confirm. This usually takes a few seconds.
               </p>
             )}
             {signup.phase === 'done' && (
-              <p style={{ fontSize: '.875rem', color: 'var(--c-success)', margin: 0 }}>
+              <p style={{ fontSize: '.875rem', color: 'var(--c-success)', margin: 0, textAlign: 'center', fontWeight: 600 }}>
                 Signing you in…
               </p>
             )}

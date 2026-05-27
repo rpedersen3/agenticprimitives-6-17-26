@@ -135,6 +135,73 @@ function PiiMask({ lines }: { lines: string[] }) {
   );
 }
 
+// ── Shield SVG ───────────────────────────────────────────────────────────
+// Gradient-filled shield used across topbar, hero, and cards.
+// Two sizes: 30px (topbar) and 88px (hero). The large hero variant
+// includes an outer glow halo and a gradient fill matching the mockups.
+
+const ShieldLogo = ({ size = 30, gradient = false }: { size?: number; gradient?: boolean }) => {
+  const id = gradient ? 'sg' : 'sp';
+  return (
+    <svg
+      className="brand-shield"
+      width={size}
+      height={size}
+      viewBox="0 0 40 46"
+      fill="none"
+      aria-hidden="true"
+      style={{ width: size, height: size }}
+    >
+      {gradient && (
+        <defs>
+          <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#818cf8" />
+            <stop offset="55%" stopColor="#4338ca" />
+            <stop offset="100%" stopColor="#3730a3" />
+          </linearGradient>
+          <radialGradient id={`${id}-glow`} cx="50%" cy="60%" r="50%">
+            <stop offset="0%" stopColor="rgba(99,102,241,.45)" />
+            <stop offset="100%" stopColor="rgba(99,102,241,0)" />
+          </radialGradient>
+          <filter id={`${id}-blur`}>
+            <feGaussianBlur stdDeviation="3" result="blur" />
+          </filter>
+        </defs>
+      )}
+      {/* Outer glow on large hero shield */}
+      {gradient && (
+        <ellipse
+          cx="20" cy="36"
+          rx="18" ry="10"
+          fill={`url(#${id}-glow)`}
+          filter={`url(#${id}-blur)`}
+          opacity=".7"
+        />
+      )}
+      {/* Shield body */}
+      <path
+        d="M20 1L37 7.5V21C37 30.389 29.832 38.234 20 41C10.168 38.234 3 30.389 3 21V7.5L20 1Z"
+        fill={gradient ? `url(#${id}-fill)` : '#4338ca'}
+        opacity={gradient ? 1 : 1}
+      />
+      {/* Inner highlight layer */}
+      <path
+        d="M20 5L33 10.5V21C33 28.556 27.506 35.08 20 37.5C12.494 35.08 7 28.556 7 21V10.5L20 5Z"
+        fill="white"
+        fillOpacity={gradient ? '.14' : '.18'}
+      />
+      {/* Check mark */}
+      <path
+        d="M14.5 22.5L18.5 26.5L26 18"
+        stroke="white"
+        strokeWidth={gradient ? '2.8' : '2.4'}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
 // ── App ───────────────────────────────────────────────────────────────────
 
 export function App() {
@@ -635,47 +702,16 @@ export function App() {
 
   const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
-  // ── Shield logo (shared across topbar and hero) ──────────────────────
-  const ShieldLogo = ({ size = 30 }: { size?: number }) => (
-    <svg
-      className="brand-shield"
-      width={size}
-      height={size}
-      viewBox="0 0 40 40"
-      fill="none"
-      aria-hidden="true"
-    >
-      <rect width="40" height="40" rx="10" fill="#4f46e5" />
-      <path
-        d="M20 8 L30 12 L30 22 C30 27.5 25.5 32 20 33.5 C14.5 32 10 27.5 10 22 L10 12 Z"
-        fill="white"
-        fillOpacity="0.25"
-      />
-      <path
-        d="M20 11 L28 14.5 L28 22 C28 26.5 24.5 30.5 20 31.8 C15.5 30.5 12 26.5 12 22 L12 14.5 Z"
-        fill="white"
-        fillOpacity="0.9"
-      />
-      <path
-        d="M17 21 L19.5 23.5 L23.5 18"
-        stroke="#4f46e5"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-
   // ── render ───────────────────────────────────────────────────────────
 
   return (
     <div id="app-root" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
 
-      {/* Top bar */}
+      {/* ── Top bar ─────────────────────────────────────────────────── */}
       <header className="topbar">
         <div className="topbar-inner">
           <div className="brand">
-            <ShieldLogo size={30} />
+            <ShieldLogo size={28} />
             {session ? session.name : 'Agentic Org'}
           </div>
           {session ? (
@@ -687,12 +723,12 @@ export function App() {
                 onClick={() => setMenuOpen((o) => !o)}
               >
                 <span>Account</span>
-                <span aria-hidden="true" style={{ fontSize: '.75rem', color: 'var(--c-g400)' }}>▾</span>
+                <span aria-hidden="true" style={{ fontSize: '.7rem', color: 'var(--c-g300)', fontWeight: 400 }}>▾</span>
               </button>
               {menuOpen && (
                 <div className="menu-pop" role="menu" onMouseLeave={() => setMenuOpen(false)}>
                   <div className="menu-meta">
-                    <div style={{ fontWeight: 600, color: 'var(--c-g900)', marginBottom: '.1rem' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--c-g900)', marginBottom: '.1rem', fontSize: '.875rem' }}>
                       {session.name}
                     </div>
                     <div>via {session.via}</div>
@@ -722,7 +758,7 @@ export function App() {
             background: 'var(--c-danger-bg)',
             borderBottom: '1px solid var(--c-danger-border)',
             padding: '.75rem var(--app-px)',
-            fontSize: '.9rem',
+            fontSize: '.875rem',
             color: 'var(--c-danger)',
             textAlign: 'center',
           }}
@@ -731,12 +767,14 @@ export function App() {
         </div>
       )}
 
-      {/* ── Signed-out view ────────────────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════
+          SIGNED-OUT HERO
+          ════════════════════════════════════════════════════════════ */}
       {!session && (
         <div className="hero-screen">
           <div className="hero-content">
 
-            {/* Hero top: headline + value bullets */}
+            {/* Headline + value bullets */}
             <div className="hero-top">
               <h1>
                 Your agent name is your portable{' '}
@@ -744,37 +782,56 @@ export function App() {
               </h1>
               <ul className="value-list" aria-label="Benefits">
                 <li>
-                  <span className="vi-chip blue" aria-hidden="true">🔑</span>
+                  <span className="vi-chip blue" aria-hidden="true">
+                    {/* Passkey icon */}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="8" cy="15" r="4"/><path d="M15 9h4M15 12h2"/>
+                      <path d="M12 15h1l2-6"/>
+                    </svg>
+                  </span>
                   Sign in with a <strong>passkey.</strong>
                 </li>
                 <li>
-                  <span className="vi-chip green" aria-hidden="true">✓</span>
+                  <span className="vi-chip green" aria-hidden="true">
+                    {/* Check icon */}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </span>
                   Connect apps with <strong>approval.</strong>
                 </li>
                 <li>
-                  <span className="vi-chip purple" aria-hidden="true">🛡</span>
+                  <span className="vi-chip purple" aria-hidden="true">
+                    {/* Shield icon */}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                  </span>
                   Revoke access <strong>anytime.</strong>
                 </li>
               </ul>
             </div>
 
-            {/* Shield illustration */}
+            {/* Shield illustration — large gradient with floating chips */}
             <div className="shield-hero" aria-hidden="true">
               <div className="shield-svg-wrap">
                 <span className="shield-float tl">🏛</span>
                 <span className="shield-float tr">📊</span>
                 <span className="shield-float bl">🔗</span>
                 <span className="shield-float br">⚡</span>
-                <ShieldLogo size={96} />
+                <ShieldLogo size={88} gradient />
               </div>
             </div>
 
-            {/* Name-entry section: existing agent */}
-            <div style={{ marginBottom: '1rem' }}>
-              <p style={{ fontSize: '.8rem', fontWeight: 600, color: 'var(--c-g500)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '.5rem' }}>
+            {/* ── Existing-agent sign-in ─────────────────────────── */}
+            <div style={{ marginBottom: '.875rem' }}>
+              <p style={{
+                fontSize: '.72rem', fontWeight: 700, color: 'var(--c-g400)',
+                textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '.5rem',
+              }}>
                 Already have an agent?
               </p>
-              <div className="form-section" style={{ marginBottom: '12px' }}>
+              <div className="form-section" style={{ marginBottom: '10px' }}>
                 <div className="input-wrap">
                   <input
                     id="connect-name-input"
@@ -809,21 +866,22 @@ export function App() {
                 )}
               </div>
 
-              {/* Connect CTAs — only when agent found */}
               {nameInfo.status === 'found' && (
                 <div className="connect-actions" style={{ marginTop: '0' }}>
                   {nameInfo.hasPasskey && hasLocalDelegation(nameInfo.name!) && (
                     <button className="cta" disabled={busy} onClick={() => onConnectName('passkey')}>
+                      {busy ? <span className="spinner" aria-hidden="true" /> : null}
                       Continue with passkey →
                     </button>
                   )}
                   {nameInfo.hasPasskey && !hasLocalDelegation(nameInfo.name!) && (
                     <>
                       <button className="cta" disabled={busy} onClick={() => onAddSite(nameInfo.name!)}>
+                        {busy ? <span className="spinner" aria-hidden="true" /> : null}
                         Set up this site →
                       </button>
-                      <p className="muted" style={{ margin: '.25rem 0 0', textAlign: 'center', fontSize: '.82rem' }}>
-                        Approve once with your passkey, then future sign-ins are automatic.
+                      <p className="muted" style={{ margin: '.25rem 0 0', textAlign: 'center', fontSize: '.8rem' }}>
+                        Approve once with your passkey — future sign-ins are one tap.
                       </p>
                     </>
                   )}
@@ -845,10 +903,13 @@ export function App() {
             {/* Divider */}
             <div className="divider">or create a new agent</div>
 
-            {/* Sign-up section */}
+            {/* ── New agent sign-up ──────────────────────────────── */}
             <div style={{ marginBottom: '1rem' }}>
-              <div className="form-section" style={{ marginBottom: '12px' }}>
-                <p style={{ fontSize: '.8rem', fontWeight: 600, color: 'var(--c-g500)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '.5rem' }}>
+              <div className="form-section" style={{ marginBottom: '10px' }}>
+                <p style={{
+                  fontSize: '.72rem', fontWeight: 700, color: 'var(--c-g400)',
+                  textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '.5rem',
+                }}>
                   Choose your agent name
                 </p>
                 <div className="input-wrap">
@@ -870,7 +931,7 @@ export function App() {
                   )}
                 </div>
                 {desiredName && (
-                  <div style={{ marginTop: '.35rem', fontSize: '.82rem', color: 'var(--c-g400)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
+                  <div style={{ marginTop: '.3rem', fontSize: '.78rem', color: 'var(--c-g400)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
                     {desiredName}.demo.agent
                   </div>
                 )}
@@ -914,14 +975,13 @@ export function App() {
                   </button>
                 )}
                 {!hasWallet() && signupAvail !== 'available' && (
-                  <p className="muted" style={{ textAlign: 'center', fontSize: '.82rem', marginTop: '.25rem' }}>
+                  <p className="muted" style={{ textAlign: 'center', fontSize: '.8rem', marginTop: '.25rem' }}>
                     Uses a passkey — no browser wallet required.
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Privacy footer */}
             <div className="privacy-footer">
               🔒 You're in control. Your data stays private.
             </div>
@@ -929,23 +989,24 @@ export function App() {
         </div>
       )}
 
-      {/* ── Signed-in dashboard ────────────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════
+          SIGNED-IN DASHBOARD
+          ════════════════════════════════════════════════════════════ */}
       {session && (
         <>
           <div className="app-shell dashboard">
 
-            {/* Page header: agent name as H1 */}
+            {/* Page header */}
             <div className="dash-header">
-              <h1>{session.name}</h1>
+              <h1 style={{ color: 'var(--c-g900)' }}>{session.name}</h1>
               <div className="dash-sub">
-                {session.fresh ? 'Just connected · ' : 'Active · '}
-                Base Sepolia
+                {session.fresh ? 'Just connected' : 'Active'} · Base Sepolia
               </div>
             </div>
 
-            {/* Reward row — shown on first connect */}
+            {/* Ownership moment — shown on first arrival */}
             {session.fresh && (
-              <div className="reward-row" aria-label="What you earned">
+              <div className="reward-row" aria-label="What you now own">
                 <span className="reward-chip">
                   <span className="reward-chip-icon" aria-hidden="true">✓</span>
                   {session.name} — owned by you
@@ -962,7 +1023,7 @@ export function App() {
             )}
 
             {/* Smart Agent card */}
-            <div className="card" style={{ marginBottom: '12px' }}>
+            <div className="card" style={{ marginBottom: '10px' }}>
               <div className="card-row">
                 <div className="card-row-icon blue" aria-hidden="true">
                   <ShieldLogo size={22} />
@@ -984,31 +1045,46 @@ export function App() {
             </div>
 
             {/* Connected Apps card */}
-            <div className="card" style={{ marginBottom: '12px' }}>
-              <div className="card-row" style={{ marginBottom: '.75rem' }}>
-                <div className="card-row-icon purple" aria-hidden="true">⬡</div>
+            <div className="card" style={{ marginBottom: '10px' }}>
+              <div className="card-row" style={{ marginBottom: '.625rem' }}>
+                <div className="card-row-icon purple" aria-hidden="true">
+                  {/* Grid icon */}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                  </svg>
+                </div>
                 <div className="card-row-meta">
                   <div className="card-row-label">Connected Apps</div>
                 </div>
               </div>
-              <div style={{ textAlign: 'center', padding: '.5rem 0 .25rem', color: 'var(--c-g400)', fontSize: '.875rem' }}>
-                <div style={{ fontSize: '1.5rem', marginBottom: '.375rem' }} aria-hidden="true">☁</div>
-                <div style={{ fontWeight: 500 }}>Agentic Org is connected</div>
-                <div style={{ fontSize: '.8rem', marginTop: '.25rem', color: 'var(--c-g400)' }}>This site can read your approved data.</div>
+              <div style={{ textAlign: 'center', padding: '.375rem 0 .125rem', color: 'var(--c-g400)', fontSize: '.8375rem' }}>
+                <div style={{ fontSize: '1.375rem', marginBottom: '.3rem' }} aria-hidden="true">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--c-g200)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block' }}>
+                    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+                  </svg>
+                </div>
+                <div style={{ fontWeight: 600, color: 'var(--c-g700)' }}>Agentic Org is connected</div>
+                <div style={{ fontSize: '.76rem', marginTop: '.2rem' }}>This site can read your approved data.</div>
               </div>
             </div>
 
-            {/* Sensitive Data section */}
-            <div style={{ marginBottom: '8px' }}>
+            {/* Sensitive Data section header */}
+            <div style={{ marginBottom: '6px' }}>
               <h3>Sensitive Data</h3>
             </div>
 
-            {/* Profile / Contact data tile (Flow C) */}
+            {/* Profile / Contact data (passkey sessions only) */}
             {session.via === 'passkey' && (
               <div className="card" style={{ marginBottom: '10px' }}>
                 <div className="section-header" style={{ marginBottom: personData && 'record' in personData && personData.record != null ? '.75rem' : '0' }}>
                   <div className="card-row" style={{ flex: 1 }}>
-                    <div className="card-row-icon green" aria-hidden="true">👤</div>
+                    <div className="card-row-icon green" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                      </svg>
+                    </div>
                     <div className="card-row-meta">
                       <div className="card-row-label">Profile · Contact data</div>
                       <div className="card-row-sub">Email, phone and more</div>
@@ -1035,21 +1111,21 @@ export function App() {
                         <span className="lock-icon" aria-hidden="true">🔒</span>
                         Protected
                       </span>
-                      <span style={{ fontSize: '.78rem', color: 'var(--c-g400)' }}>Confirm to view</span>
+                      <span style={{ fontSize: '.75rem', color: 'var(--c-g400)' }}>Confirm to view</span>
                     </div>
                     <div aria-hidden="true">
                       <div className="pii-mask">
                         <span className="pii-icon">✉</span>
-                        <span style={{ letterSpacing: '.1em' }}>▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒</span>
+                        <span style={{ letterSpacing: '.12em' }}>▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒</span>
                       </div>
                       <div className="pii-mask">
                         <span className="pii-icon">📞</span>
-                        <span style={{ letterSpacing: '.1em' }}>+1 ▒▒▒ ▒▒▒ ▒▒▒▒</span>
+                        <span style={{ letterSpacing: '.12em' }}>+1 ▒▒▒ ▒▒▒ ▒▒▒▒</span>
                       </div>
                     </div>
                     <button
                       className="cta"
-                      style={{ marginTop: '1rem' }}
+                      style={{ marginTop: '.875rem' }}
                       onClick={onViewPersonData}
                       aria-label="Confirm to view contact details"
                     >
@@ -1091,9 +1167,9 @@ export function App() {
               </div>
             )}
 
-            {/* Organizations tile (Flow D) */}
+            {/* Organizations */}
             <div className="card" style={{ marginBottom: '10px' }}>
-              <div style={{ marginBottom: orgs.length > 0 ? '.875rem' : '0' }}>
+              <div style={{ marginBottom: orgs.length > 0 ? '.75rem' : '0' }}>
                 <div className="card-row">
                   <div className="card-row-icon purple" aria-hidden="true">🏛</div>
                   <div className="card-row-meta">
@@ -1117,7 +1193,7 @@ export function App() {
                             <div className="org-name">{o.orgName}</div>
                             <div className="org-addr">{short(o.orgAgent)}</div>
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '.4rem', flexShrink: 0 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '.375rem', flexShrink: 0 }}>
                             {o.governed ? (
                               <span className="badge success">Governance</span>
                             ) : (
@@ -1126,7 +1202,7 @@ export function App() {
                             {!(data && 'record' in data && data.record != null) && (
                               <button
                                 className="ghost"
-                                style={{ fontSize: '.8rem', padding: '.375rem .75rem', minHeight: '36px' }}
+                                style={{ fontSize: '.78rem', padding: '.35rem .75rem', minHeight: '36px' }}
                                 disabled={data?.loading}
                                 onClick={() => onViewOrgData(o)}
                                 aria-label={`View details for ${o.orgName}`}
@@ -1145,7 +1221,7 @@ export function App() {
                         </div>
 
                         {data?.loading && (
-                          <div className="sensitive-block" style={{ marginTop: '.75rem', textAlign: 'center', padding: '.875rem' }}>
+                          <div className="sensitive-block" style={{ marginTop: '.625rem', textAlign: 'center', padding: '.875rem' }}>
                             <span className="spinner" aria-label={`Loading ${o.orgName} details`} />
                           </div>
                         )}
@@ -1157,7 +1233,7 @@ export function App() {
                         )}
 
                         {data && 'record' in data && data.record != null && (
-                          <div className="sensitive-block revealed" style={{ marginTop: '.75rem' }}>
+                          <div className="sensitive-block revealed" style={{ marginTop: '.625rem' }}>
                             <div className="sensitive-header">
                               <span className="sensitive-label" style={{ color: 'var(--c-success)' }}>
                                 <span aria-hidden="true">✓</span> {o.orgName}
@@ -1184,14 +1260,20 @@ export function App() {
               )}
 
               {/* Create org sub-form */}
-              <div style={{ borderTop: orgs.length > 0 ? '1px solid var(--c-g200)' : 'none', paddingTop: orgs.length > 0 ? '1rem' : '0' }}>
-                <p style={{ fontSize: '.8rem', fontWeight: 600, color: 'var(--c-g500)', textTransform: 'uppercase', letterSpacing: '.06em', margin: '0 0 .5rem' }}>
+              <div style={{
+                borderTop: orgs.length > 0 ? '1px solid var(--c-g100)' : 'none',
+                paddingTop: orgs.length > 0 ? '.875rem' : '0',
+              }}>
+                <p style={{
+                  fontSize: '.72rem', fontWeight: 700, color: 'var(--c-g400)',
+                  textTransform: 'uppercase', letterSpacing: '.08em', margin: '0 0 .5rem',
+                }}>
                   Create organization
                 </p>
-                <p className="muted" style={{ fontSize: '.83rem', marginBottom: '.875rem' }}>
+                <p className="muted" style={{ fontSize: '.8rem', marginBottom: '.75rem' }}>
                   Create an Organization Smart Agent secured by your passkey and linked to you on-chain.
                 </p>
-                <div className="form-section" style={{ marginBottom: '.75rem' }}>
+                <div className="form-section" style={{ marginBottom: '.625rem' }}>
                   <label htmlFor="org-name-input">Organization name</label>
                   <div className="input-wrap">
                     <input
@@ -1210,14 +1292,14 @@ export function App() {
                     )}
                   </div>
                   {orgName && (
-                    <div style={{ marginTop: '.3rem', fontSize: '.8rem', color: 'var(--c-g400)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
+                    <div style={{ marginTop: '.3rem', fontSize: '.76rem', color: 'var(--c-g400)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
                       {orgName}.demo.agent
                     </div>
                   )}
                   {orgName && orgAvail === 'checking' && (
                     <div className="field-hint checking" role="status" aria-live="polite">
                       <span className="spinner" aria-hidden="true" />
-                      Checking availability…
+                      Checking…
                     </div>
                   )}
                   {orgName && orgAvail === 'available' && (
@@ -1237,12 +1319,12 @@ export function App() {
               </div>
             </div>
 
-            {/* Treasury tile — disabled, Soon */}
-            <div className="card" style={{ marginBottom: '10px', opacity: .7 }}>
+            {/* Treasury — Soon */}
+            <div className="card" style={{ marginBottom: '10px', opacity: .65 }}>
               <div className="card-row">
                 <div className="card-row-icon amber" aria-hidden="true">💰</div>
                 <div className="card-row-meta">
-                  <div className="card-row-label" style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                  <div className="card-row-label">
                     Treasury
                     <span className="badge soon">Soon</span>
                   </div>
@@ -1251,12 +1333,12 @@ export function App() {
               </div>
             </div>
 
-            {/* Permissions tile — disabled, Soon */}
-            <div className="card" style={{ marginBottom: '10px', opacity: .7 }}>
+            {/* Permissions — Soon */}
+            <div className="card" style={{ marginBottom: '10px', opacity: .65 }}>
               <div className="card-row">
                 <div className="card-row-icon purple" aria-hidden="true">🔐</div>
                 <div className="card-row-meta">
-                  <div className="card-row-label" style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                  <div className="card-row-label">
                     Permissions
                     <span className="badge soon">Soon</span>
                   </div>
@@ -1266,16 +1348,21 @@ export function App() {
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '.875rem 0 1.5rem', textAlign: 'center', fontSize: '.75rem', color: 'var(--c-g400)' }}>
+            <div style={{ padding: '.75rem 0 1.5rem', textAlign: 'center', fontSize: '.72rem', color: 'var(--c-g300)', letterSpacing: '.02em' }}>
               Real on Base Sepolia (chain 84532)
             </div>
           </div>
 
-          {/* Bottom tab bar */}
+          {/* ── Bottom tab bar ──────────────────────────────────── */}
           <nav className="tab-bar" aria-label="Main sections">
             <div className="tab-bar-inner">
               <button className="tab-item active" aria-current="page">
-                <span className="tab-icon" aria-hidden="true">👤</span>
+                <span className="tab-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  </svg>
+                </span>
                 Profile
               </button>
               <button className="tab-item">
@@ -1297,12 +1384,13 @@ export function App() {
         </>
       )}
 
-      {/* ── Progress modal / bottom sheet ──────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════
+          PROGRESS MODAL / BOTTOM SHEET
+          ════════════════════════════════════════════════════════════ */}
       {flow && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <div className="modal">
 
-            {/* Progress dot indicator — shown while running (no stale step count) */}
             {flow.phase === 'running' && (
               <div className="step-indicator" aria-label="In progress">
                 <div className="step-dots" aria-hidden="true">
@@ -1315,7 +1403,7 @@ export function App() {
 
             <h2 id="modal-title">{flow.title}</h2>
 
-            {/* Running: spinner + steps */}
+            {/* Running */}
             {flow.phase === 'running' && (
               <>
                 {flow.steps.length === 0 ? (
@@ -1362,7 +1450,6 @@ export function App() {
                     ))}
                   </ol>
                 )}
-                {/* Reward chips for org creation */}
                 {flow.title.includes('Organization') && (
                   <div className="reward-row" aria-label="What you earned">
                     <span className="reward-chip">
@@ -1398,7 +1485,7 @@ export function App() {
                     borderRadius: 'var(--r-md)',
                     padding: '.75rem 1rem',
                     color: 'var(--c-danger)',
-                    fontSize: '.9rem',
+                    fontSize: '.875rem',
                     marginBottom: '.75rem',
                   }}
                 >
