@@ -253,25 +253,30 @@ fallback to a weaker check (ADR-0013).
 - **Header** (upper-right): signed-out → **Sign in / Sign up**; signed-in →
   `rpedersen.agent` with a menu (view agent, copy address, sign out).
 - **Connect** = §3/§6 (name-first; no Google; no SIWE required).
-- **Create organization:** type an org name → `/connect/name-info` uniqueness
-  gate → deploy a **simple (mode-0) AgentAccount custodied by the connected local
-  (site) passkey** (salt from credential + `org` scope + entropy — **never the
-  name**, ADR-0010) → claim the org name (batched register + setPrimary,
-  nonce-gated) → **add the person's central/ROOT passkey as a second (recovery)
-  custodian** so the org is controllable + recoverable from home, not siloed to
-  the site key → **person `HAS_GOVERNANCE_OVER` org** edge (propose from person SA,
-  confirm from org SA). Progress modal; then a "My organizations" list.
+- **Create organization (central-auth ceremony):** type an org name →
+  `/connect/name-info` uniqueness gate → demo-org calls `startOrgCreation` (build the
+  central-auth URL with the person name, the org base, and **this site's delegate SA**)
+  and opens the demo-sso popup. The popup runs `createChildAgentForSite`: deploy a
+  **mode-0 AgentAccount custodied by the person's ROOT passkey ONLY** (salt = scope +
+  entropy — **never the name**, ADR-0010) → claim the org name (batched register +
+  setPrimary, nonce-gated) → **person `HAS_GOVERNANCE_OVER` org** edge (propose from the
+  person SA, confirm from the org SA — the ROOT passkey signs both, as it custodies both)
+  → mint a scoped `org → site-delegate` delegation. The popup returns
+  `{orgAgent, orgName, edgeId, governed, orgDelegation}`; demo-org stores it and shows a
+  "My organizations" list. Progress modal throughout.
 
-  **Org custody = site signer + root recovery.** The site passkey handles
-  day-to-day org signing; the ROOT credential is a recovery/home custodian. The
-  ROOT's PUBLIC key is captured during P2 enrollment (returned on the
-  `?enrolled=1` redirect as `root_digest/x/y` — public only) and cached, so adding
-  it needs **no extra redirect** at org-creation (the site passkey, the org's first
-  custodian, signs the `addPasskey`). If no root was captured (the agent was created
-  fresh on this site, so the site key IS the only credential), the org is
-  site-key-only — surfaced in the UI. The `HAS_GOVERNANCE_OVER` edge is governance
-  *metadata*, not custody (an agent can't be a custodian of another — the hard rule);
-  control comes from the shared credential set.
+  **Org custody = the ROOT passkey, full stop** (decided 2026-05-26; memory
+  `project_demo_org_durable_org_custody`). EVERY agent a relying site creates — the org
+  now, **any service agent (e.g. Treasury) later** — follows the SAME pattern as the
+  person SA: deployed at the central auth, custodied by the ROOT passkey ONLY (no EOA
+  co-custodian, never the site's per-origin passkey, never the person SA — an agent can't
+  custody another agent, the hard rule). So the agent is controllable from the person's
+  canonical identity anywhere and survives a relying-site storage wipe. The relying site
+  is handed a scoped, revocable `agent → site-delegate` delegation to *operate* the agent
+  (e.g. `readOrgData` presents it; demo-mcp keys the read by the delegator), never custody.
+  `createChildAgentForSite` is parameterized by relationship type so Treasury is a thin
+  addition (different `relationshipType`/direction, same custody + delegation shape).
+  `HAS_GOVERNANCE_OVER` is governance *metadata*, not signing power.
 
 ## 8. Security considerations
 
@@ -378,6 +383,10 @@ discloses the full-authority grant in consent until the delegation rewrite ships
 5. **Caveat tuning per relying site** — the target/method/time caveats a relying
    site needs (e.g. demo-org needs factory + naming + relationship targets to create
    orgs). Decide the default caveat set in the P6 build.
+6. ~~Who custodies agents a relying site creates (org/treasury)?~~ **RESOLVED — the
+   person's ROOT passkey ONLY**, via the central-auth ceremony (decided 2026-05-26;
+   §7, memory `project_demo_org_durable_org_custody`). Same pattern as the person SA;
+   never the site passkey, never the person SA. Generalizes to any service agent.
 
 ## 12. Phase plan addendum (ADR-0019 delegation rewrite)
 
@@ -388,6 +397,13 @@ discloses the full-authority grant in consent until the delegation rewrite ships
   `DelegationManager.redeemDelegation`; regression test (relying-site delegate
   `isCustodian == false`; server rejects non-allowlisted `aud`/`redirect_uri`).
   Retires the `addPasskey`-custodian path for relying-site enrollment.
+- **P7 — Created agents are ROOT-passkey-custodied via the central-auth ceremony**
+  (decided 2026-05-26; §7). Org creation moves from a local demo-org deploy (site-passkey
+  custodian) to a demo-sso popup ceremony (`createChildAgentForSite`): deploy custodied by
+  the ROOT passkey ONLY → claim name → `person→HAS_GOVERNANCE_OVER→org` → mint a scoped
+  `org→site-delegate` delegation. demo-org stores it; `readOrgData` presents it (no local
+  signing). `createChildAgentForSite` is parameterized by relationship type so **any service
+  agent (Treasury) reuses it**. Retires the local org deploy + the EOA co-custodian idea.
 
 ## 13. Out of scope
 

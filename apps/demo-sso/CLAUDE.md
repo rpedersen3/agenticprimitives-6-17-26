@@ -120,6 +120,12 @@ for local use `.dev.vars`. Full local-vs-deploy steps + the Google console confi
   slot on the person SA. **Live** (spec-229 P6): `approveEnroll` signs the delegation
   with the ROOT passkey via `src/lib/delegation.ts` `issueSiteDelegation` (time-boxed,
   `value 0`, naming + relationship targets). No `addPasskey` in the enrollment path.
+- **Created agents are ROOT-passkey-custodied** (memory `project_demo_org_durable_org_custody`):
+  a relying site (demo-org) can ask this origin to create a child agent (org now;
+  any service agent e.g. Treasury later) via the `?org_base=…` consent +
+  `createChildAgentForSite`: deploy custodied by the ROOT passkey ONLY (same as the
+  person SA), claim its name, record `person→HAS_GOVERNANCE_OVER→child`, and hand the
+  site a scoped `child→delegate` delegation. The site is never a custodian of anything.
 
 ## Running
 

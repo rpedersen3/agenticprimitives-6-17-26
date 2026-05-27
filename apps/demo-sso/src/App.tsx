@@ -6,6 +6,7 @@ import {
   stepUpToAgent,
   connectWithName,
   provisionA2aAgent,
+  createChildAgentForSite,
   addWalletCredential,
   addPasskeyCredential,
   passkeySignHash,
@@ -49,6 +50,7 @@ interface EnrollReq {
   state: string;
   name: string;
   delegate: Address; // the relying site's delegate Smart Account
+  orgBase?: string; // present → org-creation ceremony (create a child agent), not login enrollment
 }
 /** Relying sites permitted to initiate enrollment (demo gate — spec 229 §8). */
 const ALLOWED_RELYING_ORIGINS = ['https://agenticprimitives-demo-org.pages.dev'];
@@ -60,7 +62,14 @@ function parseEnrollReq(): EnrollReq | null {
     const aud = p.get('aud');
     const name = p.get('name');
     if (!delegate || !redirectUri || !aud || !name) return null;
-    return { aud, redirectUri, state: p.get('state') ?? '', name, delegate: delegate as Address };
+    return {
+      aud,
+      redirectUri,
+      state: p.get('state') ?? '',
+      name,
+      delegate: delegate as Address,
+      orgBase: p.get('org_base') ?? undefined,
+    };
   } catch {
     return null;
   }
@@ -457,6 +466,52 @@ export function App() {
       setEnrollFlow({ phase: 'error', error: e instanceof Error ? e.message : 'enrollment failed' });
     }
   }
+  // Org-creation ceremony (memory project_demo_org_durable_org_custody): create a child agent
+  // (organization now; any service agent later) custodied by the person's ROOT passkey HERE,
+  // and hand the relying site a scoped child→site delegation. Same custody pattern as the
+  // person SA — the relying site is never a custodian.
+  async function approveCreateOrg() {
+    if (!enrollReq?.orgBase) return;
+    const onStep = (s: string) => {
+      setEnrollFlow({ phase: 'running', msg: s });
+      if (popupMode) postToOpener({ type: 'AC_PROGRESS', msg: s });
+    };
+    setEnrollFlow({ phase: 'running', msg: 'Starting…' });
+    try {
+      // Resolve the (already-existing) person agent for the connected name.
+      const info = (await (await fetch(`/connect/name-info?name=${encodeURIComponent(enrollReq.name)}`)).json()) as {
+        agent?: Address;
+      };
+      if (!info.agent) {
+        setEnrollFlow({ phase: 'error', error: `could not resolve ${enrollReq.name}` });
+        return;
+      }
+      const created = await createChildAgentForSite(info.agent, enrollReq.orgBase, enrollReq.delegate, onStep);
+      if (!created.ok) {
+        setEnrollFlow({ phase: 'error', error: created.error });
+        return;
+      }
+      const org = {
+        orgAgent: created.result.childAgent,
+        orgName: created.result.childName,
+        edgeId: created.result.edgeId,
+        governed: created.result.governed,
+        orgDelegation: created.result.delegation,
+      };
+      if (popupMode) {
+        postToOpener({ type: 'AC_SUCCESS', state: enrollReq.state, org });
+        window.close();
+        return;
+      }
+      const url = new URL(enrollReq.redirectUri);
+      url.searchParams.set('org_created', '1');
+      url.searchParams.set('state', enrollReq.state);
+      url.searchParams.set('org', btoa(JSON.stringify(org)));
+      window.location.href = url.toString();
+    } catch (e) {
+      setEnrollFlow({ phase: 'error', error: e instanceof Error ? e.message : 'org creation failed' });
+    }
+  }
   function denyEnroll() {
     if (!enrollReq) return;
     if (popupMode) {
@@ -482,6 +537,7 @@ export function App() {
     const allowed = relyingAllowed(enrollReq.redirectUri);
     const isNew = enrollExists === false; // name has no agent yet → create the home account
     const running = enrollFlow.phase === 'running';
+    const orgName = enrollReq.orgBase ? `${enrollReq.orgBase.replace(/\.demo\.agent$/, '')}.demo.agent` : '';
     return (
       <div>
         <h1>Agentic Connect — your secure home</h1>
@@ -493,6 +549,44 @@ export function App() {
                 ⛔ <strong>{host}</strong> isn’t a site we recognize. For your safety, this request was blocked.
               </p>
               <p className="muted">Only start account setup from a site you trust.</p>
+            </>
+          ) : enrollReq.orgBase ? (
+            <>
+              <h2>Create a new organization?</h2>
+              <p>
+                <strong>{host}</strong> wants to create an organization under your identity:
+              </p>
+              <p style={{ fontSize: '1.2rem', margin: '0.3rem 0' }}>
+                <code>{orgName}</code>
+              </p>
+              <p className="muted" style={{ margin: '0.4rem 0' }}>
+                <strong>What this does:</strong>
+                <br />· Deploys a new Smart Agent <code>{orgName}</code>, custodied by <strong>your central-auth
+                passkey</strong> — the same key that secures <code>{enrollReq.name}</code>
+                <br />· Records on-chain that you govern it (<code>{enrollReq.name}</code> → governs → {orgName})
+                <br />· Grants {host} <em>scoped, revocable</em> access to act for this organization — it never
+                becomes a custodian
+              </p>
+              <p className="muted" style={{ margin: '0.4rem 0' }}>
+                <strong>What it does NOT do:</strong>
+                <br />· The organization is controlled by <strong>you</strong> (your passkey), not by {host}, and not
+                by your personal agent
+              </p>
+              <p className="muted">No charge — on a public test network (no real funds).</p>
+              {running && <p className="ok">⏳ {enrollFlow.msg}</p>}
+              {running && <p className="muted">Confirm any device prompt. This can take 15–30s.</p>}
+              {enrollFlow.phase === 'error' && (
+                <>
+                  <p className="err">⛔ {enrollFlow.error}</p>
+                  <p className="muted">Nothing was charged. You can try again or cancel.</p>
+                </>
+              )}
+              {!running && (
+                <p>
+                  <button onClick={approveCreateOrg}>Create &amp; approve with your device</button>{' '}
+                  <button className="ghost" onClick={denyEnroll}>Cancel</button>
+                </p>
+              )}
             </>
           ) : enrollExists === null ? (
             <>

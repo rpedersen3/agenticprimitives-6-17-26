@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
-import { connectWithName, connectWithDelegation, signupWithName, createOrg, startSiteEnrollment, readOrgData, readPersonData } from './connect-client';
-import { openCentralAuthPopup, preferRedirect } from './lib/central-auth';
+import { connectWithName, connectWithDelegation, signupWithName, startOrgCreation, startSiteEnrollment, readOrgData, readPersonData } from './connect-client';
+import { openCentralAuthPopup, preferRedirect, type OrgResult } from './lib/central-auth';
 import type { DelegationWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
 
 const ENROLL_KEY = 'agenticprimitives:demo-org:enroll';
+const ORG_KEY = 'agenticprimitives:demo-org:org-create'; // {state, addr} stashed across an org-creation redirect
 const LOCAL_PASSKEY_NAME = 'agenticprimitives:demo-org:passkey-name';
 /** Normalize an agent name to its full `<label>.demo.agent` form for stable storage keys. */
 const fullName = (name: string) => {
@@ -42,6 +43,9 @@ interface Org {
   orgAgent: string;
   orgName: string;
   governed?: boolean; // true if person→org HAS_GOVERNANCE_OVER edge was recorded
+  // Scoped org→delegate delegation minted at creation (org is custodied by your ROOT passkey
+  // at the central auth). Lets this site read the org's data without another passkey ceremony.
+  orgDelegation?: DelegationWire;
 }
 
 /** Decode a JWS payload segment (base64url JSON). */
@@ -200,6 +204,38 @@ export function App() {
       return;
     }
     void finishEnrollment(name, delegation);
+    // run once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Central-auth org-creation return (redirect fallback): ?org_created=1&org=<b64>&state=… →
+  // verify the echoed state, persist the created org (custodied by your ROOT passkey there), show
+  // it. The popup path resolves in onCreateOrg instead. Runs once on mount.
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    if (!u.searchParams.get('org_created')) return;
+    const retState = u.searchParams.get('state');
+    const orgB64 = u.searchParams.get('org');
+    for (const k of ['org_created', 'org', 'state']) u.searchParams.delete(k);
+    window.history.replaceState({}, '', u.toString());
+    let stash: { state?: string; addr?: string } = {};
+    try {
+      stash = JSON.parse(sessionStorage.getItem(ORG_KEY) ?? '{}') as { state?: string; addr?: string };
+    } catch {
+      /* ignore */
+    }
+    sessionStorage.removeItem(ORG_KEY);
+    // Fail-closed (audit F5): the return MUST echo the state we stashed.
+    if (!retState || !stash.state || stash.state !== retState || !stash.addr || !orgB64) {
+      setError('We couldn’t verify that organization response. Please try creating it again.');
+      return;
+    }
+    try {
+      const org = JSON.parse(atob(orgB64)) as OrgResult;
+      setOrgs(persistOrg(org, stash.addr));
+    } catch {
+      setError('Organization response was malformed. Please try again.');
+    }
     // run once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -457,40 +493,81 @@ export function App() {
     }
   }
 
-  async function onCreateOrg(via: Via) {
+  // Persist a created org (de-duped by address) for `addr`, returning the merged list.
+  function persistOrg(org: OrgResult, addr: string): Org[] {
+    const rec: Org = { orgAgent: org.orgAgent, orgName: org.orgName, governed: org.governed, orgDelegation: org.orgDelegation };
+    let list: Org[] = [];
+    try {
+      list = JSON.parse(localStorage.getItem(orgsKey(addr)) ?? '[]') as Org[];
+    } catch {
+      /* ignore */
+    }
+    const next = [rec, ...list.filter((o) => o.orgAgent.toLowerCase() !== rec.orgAgent.toLowerCase())];
+    try {
+      localStorage.setItem(orgsKey(addr), JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+    return next;
+  }
+
+  // Create an organization via the CENTRAL-AUTH ceremony (memory project_demo_org_durable_org_custody):
+  // the org is deployed + custodied by your ROOT passkey AT the central auth — same pattern as your
+  // person agent — and we receive a scoped org→delegate delegation to read its data. This site is
+  // never a custodian. Needs the stored delegation (→ this site's delegate SA) from passkey setup.
+  async function onCreateOrg() {
     if (!session) return;
     const base = orgName.trim();
     if (!base || orgAvail !== 'available') return;
-    const steps: string[] = [];
-    const onStep = (s: string) => {
-      steps.push(s);
-      setFlow({ title: 'Creating your organization…', phase: 'running', steps: [...steps] });
-    };
-    setFlow({ title: 'Creating your organization…', phase: 'running', steps: [] });
-    // The person→org governance edge is recorded AS THE PERSON by redeeming this site's
-    // delegation (ADR-0019). Pass it for the passkey/delegation session.
-    const delegation = via === 'passkey' ? (loadDelegation(session.name) ?? undefined) : undefined;
-    try {
-      const out = await createOrg(via, session.address, base, onStep, delegation);
-      if (!out.ok) {
-        setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [...steps], error: out.error });
-        return;
-      }
-      setFlow({ title: '✓ Organization created', phase: 'done', steps: [...steps] });
-      const next = [{ orgAgent: out.result.orgAgent, orgName: out.result.orgName, governed: out.result.governed }, ...orgs];
-      setOrgs(next);
-      try {
-        localStorage.setItem(orgsKey(session.address), JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
-      await new Promise((r) => setTimeout(r, 900));
-      setOrgName('');
-      setOrgAvail('idle');
-      setFlow(null);
-    } catch (e) {
-      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [...steps], error: e instanceof Error ? e.message : 'create org failed' });
+    const del = loadDelegation(session.name);
+    if (!del) {
+      setFlow({
+        title: 'Set up this site first',
+        phase: 'error',
+        steps: [],
+        error:
+          'Creating an organization uses your central-auth passkey. Sign in with “Continue with passkey” / “Set up this site” first.',
+      });
+      return;
     }
+    const { url, state } = startOrgCreation(session.name, del.delegate, base);
+    setFlow({ title: 'Creating your organization…', phase: 'running', steps: ['Opening your secure home…'] });
+
+    // Mobile / narrow viewport → full-page redirect.
+    if (preferRedirect()) {
+      sessionStorage.setItem(ORG_KEY, JSON.stringify({ state, addr: session.address }));
+      await new Promise((r) => setTimeout(r, 600));
+      window.location.href = url;
+      return;
+    }
+    const result = await openCentralAuthPopup(url, state, (msg) =>
+      setFlow({ title: 'Creating your organization…', phase: 'running', steps: [msg] }),
+    );
+    if (result.status === 'blocked') {
+      sessionStorage.setItem(ORG_KEY, JSON.stringify({ state, addr: session.address }));
+      setFlow({ title: 'Creating your organization…', phase: 'running', steps: ['Your browser blocked the popup — taking you to your secure home…'] });
+      await new Promise((r) => setTimeout(r, 900));
+      window.location.href = url;
+      return;
+    }
+    if (result.status === 'cancelled') {
+      setFlow(null);
+      return;
+    }
+    if (result.status === 'error') {
+      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: result.error });
+      return;
+    }
+    if (!result.org) {
+      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: 'no organization returned from your secure home' });
+      return;
+    }
+    setFlow({ title: '✓ Organization created', phase: 'done', steps: [] });
+    setOrgs(persistOrg(result.org, session.address));
+    await new Promise((r) => setTimeout(r, 900));
+    setOrgName('');
+    setOrgAvail('idle');
+    setFlow(null);
   }
 
   // Read the PERSON's gated PII via the delegation we already hold (person → this site's
@@ -511,19 +588,21 @@ export function App() {
     }
   }
 
-  // Read an org's gated data via an org→person delegation (the org is custodied by this
-  // site's passkey). Demonstrates reading org PII through the delegation model.
-  async function onViewOrgData(orgAgent: string) {
+  // Read an org's gated data via the scoped org→delegate delegation minted at creation (the org
+  // is custodied by your ROOT passkey at the central auth, not this site). No new signature.
+  async function onViewOrgData(org: Org) {
     if (!session) return;
-    setOrgData((m) => ({ ...m, [orgAgent]: { loading: true } }));
+    const key = org.orgAgent;
+    if (!org.orgDelegation) {
+      setOrgData((m) => ({ ...m, [key]: { error: 'No org delegation on this device — re-create the org to grant this site access.' } }));
+      return;
+    }
+    setOrgData((m) => ({ ...m, [key]: { loading: true } }));
     try {
-      const out = await readOrgData(orgAgent as Address, session.address);
-      setOrgData((m) => ({
-        ...m,
-        [orgAgent]: out.ok ? { record: out.record } : { error: out.error },
-      }));
+      const out = await readOrgData(org.orgDelegation);
+      setOrgData((m) => ({ ...m, [key]: out.ok ? { record: out.record } : { error: out.error } }));
     } catch (e) {
-      setOrgData((m) => ({ ...m, [orgAgent]: { error: e instanceof Error ? e.message : 'read failed' } }));
+      setOrgData((m) => ({ ...m, [key]: { error: e instanceof Error ? e.message : 'read failed' } }));
     }
   }
 
@@ -699,8 +778,10 @@ export function App() {
           <div className="panel broker">
             <h2>Create an organization</h2>
             <p className="muted">
-              Pick a unique name. We deploy an <strong>Organization Smart Agent</strong> custodied by your connected
-              credential, claim the name, and record <code>you → HAS_GOVERNANCE_OVER → org</code> on-chain.
+              Pick a unique name. Your <strong>central-auth passkey</strong> deploys an{' '}
+              <strong>Organization Smart Agent</strong> — custodied by you, the same way your personal agent is — claims
+              the name, and records <code>you → HAS_GOVERNANCE_OVER → org</code> on-chain. You’ll approve it in your
+              secure-home popup.
             </p>
             <p>
               <input
@@ -720,7 +801,7 @@ export function App() {
             {orgName && orgAvail === 'taken' && (
               <p className="err" style={{ margin: '0 0 0.5rem' }}>⛔ {orgName}.demo.agent is taken — choose another.</p>
             )}
-            <button disabled={orgAvail !== 'available'} onClick={() => onCreateOrg(session.via)}>
+            <button disabled={orgAvail !== 'available'} onClick={onCreateOrg}>
               Create organization
             </button>
           </div>
@@ -747,7 +828,7 @@ export function App() {
                         className="ghost"
                         style={{ minHeight: '32px', padding: '0.25rem 0.7rem', fontSize: '0.8rem' }}
                         disabled={data?.loading}
-                        onClick={() => onViewOrgData(o.orgAgent)}
+                        onClick={() => onViewOrgData(o)}
                       >
                         {data?.loading ? 'Reading…' : 'View org data'}
                       </button>
@@ -765,8 +846,9 @@ export function App() {
       )}
 
       <p className="muted" style={{ marginTop: '1rem', fontSize: '0.85em' }}>
-        Real on Base Sepolia (chain 84532): your agent + each org are deployed ERC-4337 Smart Agents; the org is
-        custodied by your credential and linked to you by an on-chain relationship (spec 229).
+        Real on Base Sepolia (chain 84532): your agent + each org are deployed ERC-4337 Smart Agents; every org is
+        custodied by your central-auth passkey (same as your personal agent) and linked to you by an on-chain
+        relationship (spec 229).
       </p>
 
       {/* ── Progress modal (sign-up + create-org) ──────────────────── */}

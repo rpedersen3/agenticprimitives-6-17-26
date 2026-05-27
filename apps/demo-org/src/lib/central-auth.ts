@@ -7,10 +7,20 @@
 // opened, at the exact central-auth origin, whose echoed `state` matches what we generated.
 import { CENTRAL_AUTH_ORIGIN } from '../connect-client';
 import type { DelegationWire } from './delegation';
-import type { Address } from '@agenticprimitives/types';
+import type { Address, Hex } from '@agenticprimitives/types';
+
+/** Result of an org-creation ceremony (the org is custodied by the person's ROOT passkey at
+ *  the central auth; we receive a scoped org→delegate delegation to operate it). */
+export interface OrgResult {
+  orgAgent: Address;
+  orgName: string;
+  edgeId: Hex;
+  governed: boolean;
+  orgDelegation: DelegationWire;
+}
 
 export type PopupResult =
-  | { status: 'success'; name: string; agent?: Address; delegation?: DelegationWire }
+  | { status: 'success'; name: string; agent?: Address; delegation?: DelegationWire; org?: OrgResult }
   | { status: 'cancelled' }
   | { status: 'error'; error: string }
   | { status: 'blocked' };
@@ -23,6 +33,7 @@ interface AcMessage {
   error?: string;
   agent?: Address;
   delegation?: DelegationWire;
+  org?: OrgResult;
 }
 
 /** Prefer a redirect on mobile / narrow viewports (a popup opens as a tab there). */
@@ -75,7 +86,7 @@ export function openCentralAuthPopup(
         } catch {
           /* ignore */
         }
-        finish({ status: 'success', name: m.name ?? '', agent: m.agent, delegation: m.delegation });
+        finish({ status: 'success', name: m.name ?? '', agent: m.agent, delegation: m.delegation, org: m.org });
         return;
       }
       if (m.type === 'AC_ERROR') {

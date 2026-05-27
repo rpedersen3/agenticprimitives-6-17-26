@@ -16,6 +16,7 @@ import { connectWallet, personalSign } from './lib/wallet';
 import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from './lib/passkey';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
 import { CONTRACTS } from './lib/chain';
+import { issueSiteDelegation, toWire, type DelegationWire } from './lib/delegation';
 
 /** A function that signs a 32-byte hash (EOA personal_sign or WebAuthn). */
 export type SignHash = (hash: Hex) => Promise<Hex>;
@@ -393,6 +394,85 @@ export async function provisionA2aAgent(
   await executeCall(personAgent, signHash, buildExecuteCallData(confirm), { attempts: 4 }); // person = object (confirmer); best-effort
 
   return { ok: true, result: { a2aAgent, edgeId } };
+}
+
+// ── Create a child agent custodied by the ROOT passkey, on behalf of a relying site ──
+//
+// The template for ALL agents a relying site asks the central auth to create (organization
+// now; Treasury / any service agent later — memory project_demo_org_durable_org_custody).
+// Every such agent follows the SAME pattern as the person SA: deployed here, custodied by
+// the person's ROOT passkey ONLY (never the relying site's per-origin key, never the person
+// SA — the latter is contract-forbidden as a custodian). The relying site is handed back a
+// scoped, redeemer-bound delegation (child → the site's delegate SA) so it can operate the
+// child without another passkey ceremony (ADR-0019).
+
+export interface CreatedAgent {
+  childAgent: Address;
+  childName: string;
+  edgeId: Hex;
+  governed: boolean;
+  delegation: DelegationWire; // child → relying site's delegate SA (scoped)
+}
+
+/** Deploy a child SA (org / service agent) custodied by the ROOT passkey, claim `<base>.demo.agent`,
+ *  record `person --relationshipType--> child` (person proposes, child confirms — both signed by
+ *  the ROOT passkey, the person's & child's custodian), and mint the scoped child→site delegation.
+ *  `relationshipType` defaults to HAS_GOVERNANCE_OVER (organization). */
+export async function createChildAgentForSite(
+  personAgent: Address,
+  base: string,
+  delegateSA: Address,
+  onStep?: (s: string) => void,
+  relationshipType: RelationshipType = RELATIONSHIP_TYPE.HAS_GOVERNANCE_OVER as RelationshipType,
+): Promise<{ ok: true; result: CreatedAgent } | { ok: false; error: string }> {
+  const pk = loadPasskey();
+  if (!pk) return { ok: false, error: 'Your central-auth passkey isn’t on this device — sign in to Agentic Connect first.' };
+  // Name-independent salt (ADR-0010): credential scope + entropy, never the name.
+  const saltBytes = crypto.getRandomValues(new Uint8Array(8));
+  let salt = 0n;
+  for (const b of saltBytes) salt = (salt << 8n) | BigInt(b);
+
+  onStep?.('Deploying the agent…');
+  const dep = await deployAgent(
+    {
+      initMethod: 'passkey',
+      credentialIdDigest: pk.credentialIdDigest,
+      pubKeyX: pk.pubKeyX.toString(),
+      pubKeyY: pk.pubKeyY.toString(),
+      salt: salt.toString(),
+    },
+    passkeySignHash,
+  );
+  if (!dep.ok) return { ok: false, error: `agent deploy failed: ${dep.error}` };
+  const childAgent = dep.agent;
+  if (childAgent.toLowerCase() === personAgent.toLowerCase()) {
+    return { ok: false, error: 'agent collided with your person agent (salt)' };
+  }
+
+  onStep?.('Claiming the name…');
+  const claim = await claimName(childAgent, passkeySignHash, base, onStep, 1n); // fresh deploy: claim is nonce 1
+  if (!claim.ok) return { ok: false, error: claim.error };
+
+  const relationships = CONTRACTS.agentRelationship;
+  const edgeId = computeEdgeId(personAgent, childAgent, relationshipType);
+  const propose = buildProposeEdgeCall({ relationships, subject: personAgent, object: childAgent, relationshipType });
+
+  onStep?.('Recording your control on-chain…');
+  // ROOT passkey is the person's custodian → sign the propose directly on the person SA.
+  const p = await executeCall(personAgent, passkeySignHash, buildExecuteCallData(propose), { attempts: 6 });
+  let governed = p.ok;
+  if (governed) {
+    onStep?.('Confirming the link…');
+    const confirm = buildConfirmEdgeCall({ relationships, edgeId });
+    // child = object (confirmer); child's 3rd op (deploy 0, claim 1, confirm 2).
+    await executeCall(childAgent, passkeySignHash, buildExecuteCallData(confirm), { minNonce: 2n, attempts: 6 });
+  }
+
+  onStep?.('Granting the site scoped access…');
+  // child → relying site's delegate SA, signed by the ROOT passkey (child's custodian).
+  const delegation = await issueSiteDelegation(childAgent, delegateSA, passkeySignHash);
+
+  return { ok: true, result: { childAgent, childName: claim.name, edgeId, governed, delegation: toWire(delegation) } };
 }
 
 // ── Add a second custody credential to an existing agent (the unification) ──

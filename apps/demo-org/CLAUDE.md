@@ -49,11 +49,20 @@ DelegationManager and the SA address never changes.
 - **Sign up here:** passkey signup is homed at the central auth; wallet signup local.
 - Session persists (localStorage + JWT `exp`), restored synchronously.
 
-## Org creation
+## Org / service-agent creation (central-auth ceremony)
 
-`createOrg`: deploy mode-0 AgentAccount custodied by the connected credential
-(salt = credential scope + entropy, **never the name** — ADR-0010) → claim name
-(nonce-gated batch) → `person --HAS_GOVERNANCE_OVER--> org` (propose+confirm).
+EVERY agent created here (org now; any service agent e.g. Treasury later) is
+custodied by **the person's ROOT passkey at demo-sso** — same pattern as the
+person SA — NEVER this site's passkey, NEVER the person SA (memory
+`project_demo_org_durable_org_custody`). `startOrgCreation` only builds the
+central-auth URL; the demo-sso popup runs the ceremony
+(`createChildAgentForSite`): deploy mode-0 AgentAccount custodied by the ROOT
+passkey (salt = scope + entropy, **never the name** — ADR-0010) → claim name →
+`person --HAS_GOVERNANCE_OVER--> org` (propose+confirm, ROOT signs) → mint a
+scoped `org → this-site's-delegate-SA` delegation → return it. demo-org stores
+the org + its delegation; **`readOrgData` presents that stored delegation**
+(requester = delegate), like `readPersonData`. Needs the stored person→site
+delegation (for the delegate SA) → passkey setup required to create orgs.
 
 ## Running / deploy
 
