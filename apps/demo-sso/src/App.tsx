@@ -580,128 +580,330 @@ export function App() {
     const isNew = enrollExists === false; // name has no agent yet → create the home account
     const running = enrollFlow.phase === 'running';
     const orgName = enrollReq.orgBase ? `${enrollReq.orgBase.replace(/\.demo\.agent$/, '')}.demo.agent` : '';
+    // Truncate delegate address for display (audit F2 — consent binds to exact delegate)
+    const delegateShort = `${enrollReq.delegate.slice(0, 6)}…${enrollReq.delegate.slice(-4)}`;
+
+    // Shared brand topbar
+    const Topbar = () => (
+      <div className="popup-topbar">
+        <div className="popup-brand">
+          <svg className="brand-shield" viewBox="0 0 30 34" fill="none" aria-hidden="true">
+            <path d="M15 1L28 6.5V17C28 23.627 22.18 29.373 15 32C7.82 29.373 2 23.627 2 17V6.5L15 1Z"
+              fill="#4f46e5" fillOpacity=".12" stroke="#4f46e5" strokeWidth="1.5"/>
+            <path d="M10 17l3.5 3.5L20 13" stroke="#4f46e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Agentic Connect
+        </div>
+      </div>
+    );
+
+    // ── Not-allowed (unrecognized relying site) ──────────────────────────
+    if (!allowed) {
+      return (
+        <div className="popup-root">
+          <div className="popup-scroll">
+            <Topbar />
+            <div className="popup-heading">
+              <h1>This request can't be approved</h1>
+            </div>
+            <div className="blocked-card">
+              <div className="blocked-icon">⛔</div>
+              <p style={{ fontWeight: 600, color: 'var(--c-g900)', marginBottom: '.4rem' }}>
+                {host} isn't a recognized site
+              </p>
+              <p style={{ fontSize: '.875rem', color: 'var(--c-g500)', margin: 0 }}>
+                For your safety this request was blocked. Only start account setup from a site you trust.
+              </p>
+            </div>
+            <div className="privacy-footer">
+              🔒 You're in control. Your data stays private.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Checking (enrollExists === null) ────────────────────────────────
+    if (enrollExists === null) {
+      return (
+        <div className="popup-root">
+          <div className="popup-scroll">
+            <Topbar />
+            <div className="popup-heading">
+              <h1>One moment…</h1>
+            </div>
+            <div className="ceremony-card">
+              <div className="ceremony-spinner-wrap">
+                <span className="spinner spinner-lg" role="status" aria-label="Checking account" />
+              </div>
+              <p style={{ color: 'var(--c-g500)', fontSize: '.9375rem', margin: 0 }}>
+                Checking your account…
+              </p>
+            </div>
+            <div className="privacy-footer">
+              🔒 You're in control. Your data stays private.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Running (ceremony in progress) ──────────────────────────────────
+    if (running) {
+      return (
+        <div className="popup-root">
+          <div className="popup-scroll">
+            <Topbar />
+            <div style={{ padding: '.25rem 0 .5rem' }}>
+              <div className="step-indicator">
+                <div className="step-dots">
+                  <div className="step-dot active" />
+                  <div className="step-dot" />
+                </div>
+                Step 1 of 2
+              </div>
+            </div>
+            <div className="popup-heading">
+              <h1>Confirm with your device</h1>
+            </div>
+            <div className="ceremony-card">
+              <div className="ceremony-spinner-wrap">
+                <span className="spinner spinner-lg" role="status" aria-label="Working" />
+              </div>
+              <p style={{ fontWeight: 600, fontSize: '.9375rem', color: 'var(--c-g900)', marginBottom: '.4rem' }}>
+                {enrollFlow.msg ?? 'Working…'}
+              </p>
+              <p style={{ fontSize: '.875rem', color: 'var(--c-g500)', margin: 0 }}>
+                Respond to any device prompt that appears. This takes about 15–30 seconds.
+              </p>
+            </div>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '.625rem',
+              background: 'var(--c-primary-subtle)', border: '1px solid var(--c-primary-border)',
+              borderRadius: 'var(--r-lg)', padding: '.75rem 1rem', marginBottom: '1rem',
+            }}>
+              <span style={{ fontSize: '1rem' }}>🔐</span>
+              <p style={{ margin: 0, fontSize: '.875rem', color: 'var(--c-g700)' }}>
+                Your Smart Agent stays yours.
+              </p>
+            </div>
+            <div className="privacy-footer">
+              🔒 You're in control. Your data stays private.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Error state ──────────────────────────────────────────────────────
+    if (enrollFlow.phase === 'error') {
+      return (
+        <div className="popup-root">
+          <div className="popup-scroll">
+            <Topbar />
+            <div className="popup-heading">
+              <h1>Something went wrong</h1>
+            </div>
+            <div className="error-card">
+              <p className="error-card-title">Approval failed</p>
+              <p className="error-card-body">{enrollFlow.error}</p>
+            </div>
+            <p style={{ fontSize: '.875rem', color: 'var(--c-g500)', marginBottom: '1rem' }}>
+              Nothing was changed. You can try again or go back.
+            </p>
+            <div className="popup-actions">
+              {enrollReq.orgBase
+                ? <button className="cta" onClick={approveCreateOrg}>Try again</button>
+                : <button className="cta" onClick={approveEnroll}>Try again</button>
+              }
+              <button className="cta ghost" onClick={denyEnroll}>Cancel</button>
+            </div>
+            <div className="privacy-footer">
+              🔒 You're in control. Your data stays private.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Org-create consent ───────────────────────────────────────────────
+    if (enrollReq.orgBase) {
+      return (
+        <div className="popup-root">
+          <div className="popup-scroll">
+            <Topbar />
+            <div className="popup-heading">
+              <h1>Allow org data<br />access?</h1>
+            </div>
+
+            {/* Entity chip — the org being created */}
+            <div className="entity-chip">
+              <div className="entity-chip-icon">🏢</div>
+              <div className="entity-chip-meta">
+                <div className="entity-chip-name">{orgName}</div>
+                <div className="entity-chip-sub">{host}</div>
+              </div>
+              <span className="entity-chip-badge">New org</span>
+            </div>
+
+            {/* Can card */}
+            <div className="perm-card can">
+              <div className="perm-card-title">This app can:</div>
+              <ul className="perm-list">
+                <li>
+                  <span className="perm-icon ok">✓</span>
+                  View approved org records
+                </li>
+                <li>
+                  <span className="perm-icon ok">✓</span>
+                  Use org data for this session
+                </li>
+                <li>
+                  <span className="perm-icon ok">✓</span>
+                  Create this organization under your identity
+                </li>
+              </ul>
+            </div>
+
+            {/* Cannot card */}
+            <div className="perm-card cannot">
+              <div className="perm-card-title">This app cannot:</div>
+              <ul className="perm-list">
+                <li>
+                  <span className="perm-icon no">✕</span>
+                  Change organization access
+                </li>
+                <li>
+                  <span className="perm-icon no">✕</span>
+                  Add members
+                </li>
+                <li>
+                  <span className="perm-icon no">✕</span>
+                  Move funds
+                </li>
+                <li>
+                  <span className="perm-icon no">✕</span>
+                  Act outside permission
+                </li>
+              </ul>
+            </div>
+
+            {/* Delegate binding note (audit F2) */}
+            <p style={{ fontSize: '.78rem', color: 'var(--c-g400)', marginBottom: '1rem' }}>
+              Site account: <code>{delegateShort}</code> — scoped, revocable access only. No custodian rights.
+            </p>
+
+            <div className="popup-actions">
+              <button className="cta" onClick={approveCreateOrg}>
+                🔐 Create &amp; approve with your device
+              </button>
+              <button className="cta ghost" onClick={denyEnroll}>Deny</button>
+            </div>
+
+            <div className="privacy-footer">
+              🔒 You're in control. You can revoke access anytime.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Sign-in consent (default path) ───────────────────────────────────
     return (
-      <div>
-        <h1>Agentic Connect — your secure home</h1>
-        <div className="panel broker">
-          {!allowed ? (
-            <>
-              <h2>This request can’t be approved</h2>
-              <p className="err">
-                ⛔ <strong>{host}</strong> isn’t a site we recognize. For your safety, this request was blocked.
-              </p>
-              <p className="muted">Only start account setup from a site you trust.</p>
-            </>
-          ) : enrollReq.orgBase ? (
-            <>
-              <h2>Create a new organization?</h2>
-              <p>
-                <strong>{host}</strong> wants to create an organization under your identity:
-              </p>
-              <p style={{ fontSize: '1.2rem', margin: '0.3rem 0' }}>
-                <code>{orgName}</code>
-              </p>
-              <p className="muted" style={{ margin: '0.4rem 0' }}>
-                <strong>What this does:</strong>
-                <br />· Deploys a new Smart Agent <code>{orgName}</code>, custodied by <strong>your central-auth
-                passkey</strong> — the same key that secures <code>{enrollReq.name}</code>
-                <br />· Records on-chain that you govern it (<code>{enrollReq.name}</code> → governs → {orgName})
-                <br />· Grants {host} <em>scoped, revocable</em> access to act for this organization — it never
-                becomes a custodian
-              </p>
-              <p className="muted" style={{ margin: '0.4rem 0' }}>
-                <strong>What it does NOT do:</strong>
-                <br />· The organization is controlled by <strong>you</strong> (your passkey), not by {host}, and not
-                by your personal agent
-              </p>
-              <p className="muted">No charge — on a public test network (no real funds).</p>
-              {running && <p className="ok">⏳ {enrollFlow.msg}</p>}
-              {running && <p className="muted">Confirm any device prompt. This can take 15–30s.</p>}
-              {enrollFlow.phase === 'error' && (
-                <>
-                  <p className="err">⛔ {enrollFlow.error}</p>
-                  <p className="muted">Nothing was charged. You can try again or cancel.</p>
-                </>
-              )}
-              {!running && (
-                <p>
-                  <button onClick={approveCreateOrg}>Create &amp; approve with your device</button>{' '}
-                  <button className="ghost" onClick={denyEnroll}>Cancel</button>
-                </p>
-              )}
-            </>
-          ) : enrollExists === null ? (
-            <>
-              <h2>One moment…</h2>
-              <p className="muted">Checking your account…</p>
-            </>
-          ) : (
-            <>
-              <h2>{isNew ? 'Agentic Org is setting up your account' : `Add ${host} to your account?`}</h2>
-              <p>
-                <strong>{host}</strong> wants to add a sign-in key for:
-              </p>
-              <p style={{ fontSize: '1.2rem', margin: '0.3rem 0' }}>
-                <code>{enrollReq.name}</code>
-              </p>
-              {/* The exact delegate the authority is granted to — consent binds to it (audit F2). */}
-              <p className="muted" style={{ margin: '0 0 0.4rem' }}>
-                Authorizing site account: <code>{enrollReq.delegate.slice(0, 8)}…{enrollReq.delegate.slice(-6)}</code>
-              </p>
+      <div className="popup-root">
+        <div className="popup-scroll">
+          <Topbar />
+          <div className="popup-heading">
+            <h1>
+              Allow this app to<br />work with{' '}
+              <span className="accent-name">{enrollReq.name}?</span>
+            </h1>
+          </div>
 
-              {isNew ? (
-                <>
-                  <p className="muted">
-                    To approve this, we’ll first create your account here — this is your <strong>secure home</strong>.
-                    It takes about 30 seconds.
-                  </p>
-                  <p className="muted" style={{ margin: '0.4rem 0' }}>
-                    <strong>What this does:</strong>
-                    <br />· Creates <code>{enrollReq.name}</code> (your account)
-                    <br />· Lets {host} sign you in as {enrollReq.name} <em>on that site only</em> — not anywhere else
-                  </p>
-                  <p className="muted" style={{ margin: '0.4rem 0' }}>
-                    <strong>What it does NOT do:</strong>
-                    <br />· {host} can’t see your recovery options or sign in elsewhere as you
-                  </p>
-                </>
-              ) : (
-                <p className="muted">
-                  Approving lets you use Windows Hello / Face ID on {host} to sign in as {enrollReq.name}. It does{' '}
-                  <strong>not</strong> give {host} access to your home account, your recovery options, or any other
-                  site — only sign-in on {host}.
-                </p>
-              )}
+          {/* Entity chip — the relying site requesting access */}
+          <div className="entity-chip">
+            <div className="entity-chip-icon">🌐</div>
+            <div className="entity-chip-meta">
+              <div className="entity-chip-name">{host}</div>
+              <div className="entity-chip-sub">{delegateShort}</div>
+            </div>
+          </div>
 
-              <p className="muted">No charge — your account is on a public test network (no real funds).</p>
+          {/* Can card */}
+          <div className="perm-card can">
+            <div className="perm-card-title">This app can:</div>
+            <ul className="perm-list">
+              <li>
+                <span className="perm-icon ok">✓</span>
+                Sign you in as {enrollReq.name}
+              </li>
+              <li>
+                <span className="perm-icon ok">✓</span>
+                Use approved profile data
+              </li>
+              <li>
+                <span className="perm-icon ok">✓</span>
+                Create approved workspaces
+              </li>
+            </ul>
+          </div>
 
-              {running && <p className="ok">⏳ {enrollFlow.msg}</p>}
-              {running && (
-                <p className="muted">Working on the secure network… confirm any device prompt. This can take 15–30s.</p>
-              )}
-              {enrollFlow.phase === 'error' && (
-                <>
-                  <p className="err">⛔ {enrollFlow.error}</p>
-                  <p className="muted">Nothing was charged. You can try again or cancel.</p>
-                </>
-              )}
-              {!running && (
-                <p>
-                  <button onClick={approveEnroll}>
-                    {isNew ? 'Create my account & approve' : 'Approve with your device'}
-                  </button>{' '}
-                  <button className="ghost" onClick={denyEnroll}>Cancel{isNew ? ' — go back' : ''}</button>
-                </p>
-              )}
-            </>
+          {/* Cannot card */}
+          <div className="perm-card cannot">
+            <div className="perm-card-title">This app cannot:</div>
+            <ul className="perm-list">
+              <li>
+                <span className="perm-icon no">✕</span>
+                Change your passkeys
+              </li>
+              <li>
+                <span className="perm-icon no">✕</span>
+                Recover your Smart Agent
+              </li>
+              <li>
+                <span className="perm-icon no">✕</span>
+                Move funds without approval
+              </li>
+              <li>
+                <span className="perm-icon no">✕</span>
+                Act outside permission
+              </li>
+            </ul>
+          </div>
+
+          {/* New-user note (shown only when this will also create the home account) */}
+          {isNew && (
+            <div style={{
+              background: 'var(--c-primary-subtle)',
+              border: '1px solid var(--c-primary-border)',
+              borderRadius: 'var(--r-lg)',
+              padding: '.75rem 1rem',
+              marginBottom: '.875rem',
+              fontSize: '.875rem',
+              color: 'var(--c-g700)',
+            }}>
+              <strong>First time here:</strong> we'll create your secure home account for{' '}
+              <strong>{enrollReq.name}</strong> first. Takes about 30 seconds.
+            </div>
           )}
+
+          <div className="popup-actions">
+            <button className="cta" onClick={approveEnroll}>
+              🔐 Approve with device
+            </button>
+            <button className="cta ghost" onClick={denyEnroll}>Deny</button>
+          </div>
+
+          <div className="privacy-footer">
+            🔒 You're in control. Your data stays private.
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="app-shell">
       <h1>Agentic Connect</h1>
       <p className="muted">
         Your portable workspace — created once, on Base Sepolia, and reachable from any app with any
@@ -973,7 +1175,7 @@ export function App() {
               {signup.phase === 'done'
                 ? '✓ Workspace ready'
                 : signup.phase === 'error'
-                  ? '⛔ Couldn’t finish'
+                  ? "⛔ Couldn't finish"
                   : 'Creating your workspace…'}
             </h2>
             <ol className="steps">
