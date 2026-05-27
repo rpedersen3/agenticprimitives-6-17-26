@@ -20,4 +20,10 @@ export const CONTRACTS = {
   custodyPolicy: '0xfdbCB192182712C996a1Ed2FB74D0FE6e7d9db26',
   permissionlessSubregistry: '0xAF6cA36De55296C12F2f7462645c3282f7bc1eeD',
   agentRelationship: '0xB85BA211d6528BE2561a41b629537e5054B648DF',
+  // ERC-7710 delegation (ADR-0019: relying site = scoped delegate of the person SA).
+  delegationManager: '0xaEb6191FFa086a0288A6367eC5D816344A6089f2',
+  timestampEnforcer: '0xb164Cc23A37b7EB84b2788F8906C506b12EFEc99',
+  allowedTargetsEnforcer: '0xe16f0185348283574500a6721A91526ec27da83f',
+  allowedMethodsEnforcer: '0x0229763ACb6AAaC5e99DFf20d0c44B6E34D5503D',
+  valueEnforcer: '0xeC1365428bbF42Ab8dEE80a3C1aba21Fc3014f60',
 } as const satisfies Record<string, Address>;

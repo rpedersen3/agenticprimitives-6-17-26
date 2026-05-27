@@ -16,6 +16,7 @@
     "@agenticprimitives/agent-relationships": "workspace:*",
     "@agenticprimitives/connect": "workspace:*",
     "@agenticprimitives/connect-auth": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
     "@agenticprimitives/identity-directory-adapters": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
     "react": "^18.3.0",

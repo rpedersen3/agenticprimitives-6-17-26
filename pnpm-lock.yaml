@@ -141,6 +141,9 @@ importers:
       '@agenticprimitives/connect-auth':
         specifier: workspace:*
         version: link:../../packages/connect-auth
+      '@agenticprimitives/delegation':
+        specifier: workspace:*
+        version: link:../../packages/delegation
       '@agenticprimitives/identity-directory-adapters':
         specifier: workspace:*
         version: link:../../packages/identity-directory-adapters
@@ -190,6 +193,9 @@ importers:
       '@agenticprimitives/connect-auth':
         specifier: workspace:*
         version: link:../../packages/connect-auth
+      '@agenticprimitives/delegation':
+        specifier: workspace:*
+        version: link:../../packages/delegation
       '@agenticprimitives/identity-directory':
         specifier: workspace:*
         version: link:../../packages/identity-directory
@@ -250,10 +256,10 @@ importers:
         version: 18.3.1(react@18.3.1)
       viem:
         specifier: ^2.21.0
-        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
       wagmi:
         specifier: ^2.12.0
-        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@18.3.28)(bufferutil@4.1.0)(react@18.3.1)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76))(zod@3.25.76)
+        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@18.3.28)(bufferutil@4.1.0)(react@18.3.1)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@4.4.3)
     devDependencies:
       '@types/react':
         specifier: ^18.3.0
@@ -308,10 +314,10 @@ importers:
         version: 18.3.1(react@18.3.1)
       viem:
         specifier: ^2.21.0
-        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
       wagmi:
         specifier: ^2.12.0
-        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@18.3.28)(bufferutil@4.1.0)(react@18.3.1)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@4.4.3)
+        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@18.3.28)(bufferutil@4.1.0)(react@18.3.1)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76))(zod@3.25.76)
     devDependencies:
       '@types/react':
         specifier: ^18.3.0
