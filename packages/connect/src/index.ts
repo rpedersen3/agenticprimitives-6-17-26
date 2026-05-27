@@ -8,11 +8,14 @@
 //   - ../../specs/224-agentic-connect.md — the contract
 //   - ../../docs/architecture/decisions/0014-connect-is-an-sso-broker.md
 
-// Token layer (asymmetric AgentSession + JWKS; CN-4).
+// Token layer (asymmetric AgentSession + JWKS; CN-4) + OIDC id_token / PKCE (spec 230).
 export {
   generateBrokerKeypair,
   mintAgentSession,
   verifyAgentSession,
+  mintIdToken,
+  verifyIdToken,
+  verifyPkceS256,
   exportPublicJwk,
   publishJwks,
   importJwks,
@@ -22,6 +25,10 @@ export {
   type VerifyResult,
   type VerifyOpts,
   type MintAgentSessionInput,
+  type OidcIdToken,
+  type MintIdTokenInput,
+  type VerifyIdTokenResult,
+  type VerifyIdTokenOpts,
 } from './token';
 
 // Broker convergence + issuance (CN-2/5/6/8).

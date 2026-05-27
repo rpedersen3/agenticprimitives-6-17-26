@@ -151,6 +151,106 @@ export async function verifyAgentSession(token: string, opts: VerifyOpts): Promi
   return { ok: true, session: payload as AgentSession };
 }
 
+// ─── OIDC id_token + PKCE (spec 230) ──────────────────────────────────
+//
+// A standards-shaped OpenID Connect ID token, signed with the SAME broker key +
+// verified via JWKS. DISTINCT from the AgentSession (which also carries
+// principal/assurance/jti): the id_token is the boring-standard "who is this"
+// assertion. `sub` + `canonical_agent_id` are the CAIP-10 canonical agent id
+// (ADR-0010/0016 — NEVER an email); `agent_name` is the additive agent-native
+// claim. Authority is NOT here — it rides a separate scoped grant (ADR-0019),
+// kept out of this package by the vocabulary firewall.
+
+export interface OidcIdToken {
+  iss: string;
+  sub: CanonicalAgentId;
+  aud: string;
+  iat: number;
+  exp: number;
+  nonce?: string;
+  agent_name?: string;
+  canonical_agent_id: CanonicalAgentId;
+}
+
+export interface MintIdTokenInput {
+  iss: string;
+  sub: CanonicalAgentId;
+  aud: string;
+  ttlSeconds: number;
+  nonce?: string;
+  agentName?: string;
+  now?: () => number;
+}
+
+/** Mint an OIDC id_token (signed with the broker key). `canonical_agent_id` mirrors `sub`. */
+export async function mintIdToken(input: MintIdTokenInput, signer: BrokerSigner): Promise<string> {
+  const nowSec = Math.floor((input.now?.() ?? Date.now()) / 1000);
+  const payload: OidcIdToken = {
+    iss: input.iss,
+    sub: input.sub,
+    aud: input.aud,
+    iat: nowSec,
+    exp: nowSec + input.ttlSeconds,
+    canonical_agent_id: input.sub,
+    ...(input.nonce ? { nonce: input.nonce } : {}),
+    ...(input.agentName ? { agent_name: input.agentName } : {}),
+  };
+  const header = { alg: signer.alg, kid: signer.kid, typ: 'JWT' };
+  const enc = new TextEncoder();
+  const signingInput = `${base64urlEncode(enc.encode(JSON.stringify(header)))}.${base64urlEncode(enc.encode(JSON.stringify(payload)))}`;
+  const sig = await globalThis.crypto.subtle.sign(sigParams(signer.alg) as AlgorithmIdentifier, signer.privateKey, enc.encode(signingInput));
+  return `${signingInput}.${base64urlEncode(new Uint8Array(sig))}`;
+}
+
+export type VerifyIdTokenResult = { ok: true; claims: OidcIdToken } | { ok: false; reason: string };
+
+export interface VerifyIdTokenOpts {
+  keys: VerifyKey[];
+  expectedIss: string;
+  expectedAud: string;
+  expectedNonce?: string;
+  now?: () => number;
+}
+
+/** Verify an OIDC id_token. Alg PINNED to the key by `kid` (rejects alg:none/confusion);
+ *  `iss`/`aud` exact-match; `nonce` checked when expected; `exp` enforced. */
+export async function verifyIdToken(token: string, opts: VerifyIdTokenOpts): Promise<VerifyIdTokenResult> {
+  const parts = token.split('.');
+  if (parts.length !== 3) return { ok: false, reason: 'not a 3-part JWT' };
+  const [h, p, s] = parts as [string, string, string];
+  let header: { alg?: string; kid?: string };
+  let claims: OidcIdToken;
+  try {
+    header = JSON.parse(new TextDecoder().decode(base64urlDecode(h)));
+    claims = JSON.parse(new TextDecoder().decode(base64urlDecode(p)));
+  } catch {
+    return { ok: false, reason: 'header/payload not valid JSON' };
+  }
+  const key = opts.keys.find((k) => k.kid === header.kid);
+  if (!key) return { ok: false, reason: `no key for kid "${header.kid}"` };
+  if (header.alg !== key.alg) return { ok: false, reason: `alg "${header.alg}" does not match key alg "${key.alg}"` };
+  if (claims.iss !== opts.expectedIss) return { ok: false, reason: 'iss mismatch' };
+  const valid = await globalThis.crypto.subtle.verify(
+    sigParams(key.alg) as AlgorithmIdentifier,
+    key.publicKey,
+    freshBytes(base64urlDecode(s)),
+    new TextEncoder().encode(`${h}.${p}`),
+  );
+  if (!valid) return { ok: false, reason: 'signature invalid' };
+  if (claims.aud !== opts.expectedAud) return { ok: false, reason: 'aud mismatch' };
+  if (opts.expectedNonce !== undefined && claims.nonce !== opts.expectedNonce) return { ok: false, reason: 'nonce mismatch' };
+  const nowSec = Math.floor((opts.now?.() ?? Date.now()) / 1000);
+  if (typeof claims.exp !== 'number' || claims.exp <= nowSec) return { ok: false, reason: 'expired' };
+  return { ok: true, claims };
+}
+
+/** PKCE S256 verification (RFC 7636): `base64url(SHA-256(verifier)) === challenge`.
+ *  Used at the token endpoint to bind a code to the client's `code_verifier`. */
+export async function verifyPkceS256(codeVerifier: string, codeChallenge: string): Promise<boolean> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier));
+  return base64urlEncode(new Uint8Array(digest)) === codeChallenge;
+}
+
 type PublicJwk = JsonWebKey & { kid: string; alg: string; use: string };
 
 /** Export a signer's public key as a JWKS entry. */

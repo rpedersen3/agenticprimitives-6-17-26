@@ -5,6 +5,9 @@ import {
   generateBrokerKeypair,
   mintAgentSession,
   verifyAgentSession,
+  mintIdToken,
+  verifyIdToken,
+  verifyPkceS256,
   publishJwks,
   importJwks,
   convergence,
@@ -184,5 +187,62 @@ describe('redirect — allowlist + single-use code store', () => {
     store.put(code2, { token: 'tok2', aud: 'rp-1' }, 1000);
     t = 2000;
     expect(store.take(code2)).toBeNull(); // expired
+  });
+});
+
+describe('OIDC id_token (spec 230) — mint / verify', () => {
+  const idArgs = { iss: 'https://r-pedersen.agentictrust.io', aud: 'demo-org', ttlSeconds: 600, now: () => NOW };
+
+  it('roundtrips with standard + agent-extension claims (ES256)', async () => {
+    const signer = await generateBrokerKeypair('ES256');
+    const token = await mintIdToken({ sub: SUB, nonce: 'n-123', agentName: 'rpedersen.agent', ...idArgs }, signer);
+    const r = await verifyIdToken(token, {
+      keys: [signer],
+      expectedIss: idArgs.iss,
+      expectedAud: 'demo-org',
+      expectedNonce: 'n-123',
+      now: () => NOW,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.claims.sub).toBe(SUB);
+      expect(r.claims.canonical_agent_id).toBe(SUB); // mirrors sub (ADR-0010/0016)
+      expect(r.claims.agent_name).toBe('rpedersen.agent');
+      expect(r.claims.nonce).toBe('n-123');
+    }
+  });
+
+  it('rejects nonce mismatch (replay binding)', async () => {
+    const signer = await generateBrokerKeypair('ES256');
+    const token = await mintIdToken({ sub: SUB, nonce: 'n-123', ...idArgs }, signer);
+    const r = await verifyIdToken(token, { keys: [signer], expectedIss: idArgs.iss, expectedAud: 'demo-org', expectedNonce: 'WRONG', now: () => NOW });
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects iss / aud mismatch + wrong key', async () => {
+    const signer = await generateBrokerKeypair('ES256');
+    const other = await generateBrokerKeypair('ES256');
+    const token = await mintIdToken({ sub: SUB, ...idArgs }, signer);
+    expect((await verifyIdToken(token, { keys: [signer], expectedIss: 'https://evil.example', expectedAud: 'demo-org', now: () => NOW })).ok).toBe(false);
+    expect((await verifyIdToken(token, { keys: [signer], expectedIss: idArgs.iss, expectedAud: 'other-rp', now: () => NOW })).ok).toBe(false);
+    expect((await verifyIdToken(token, { keys: [other], expectedIss: idArgs.iss, expectedAud: 'demo-org', now: () => NOW })).ok).toBe(false);
+  });
+
+  it('rejects expired', async () => {
+    const signer = await generateBrokerKeypair('ES256');
+    const token = await mintIdToken({ sub: SUB, ...idArgs }, signer);
+    const r = await verifyIdToken(token, { keys: [signer], expectedIss: idArgs.iss, expectedAud: 'demo-org', now: () => NOW + 601_000 });
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe('PKCE S256 (spec 230 §8.4)', () => {
+  it('accepts a matching verifier, rejects a wrong one', async () => {
+    const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+    // challenge = base64url(SHA-256(verifier))
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+    const challenge = Buffer.from(new Uint8Array(digest)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    expect(await verifyPkceS256(verifier, challenge)).toBe(true);
+    expect(await verifyPkceS256('not-the-verifier', challenge)).toBe(false);
   });
 });

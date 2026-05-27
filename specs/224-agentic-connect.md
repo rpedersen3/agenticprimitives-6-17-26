@@ -66,6 +66,14 @@ Two distinct tokens, two trust models:
   verifier, one trust domain. It is named (`BrokerSession`), NOT "the session", to
   keep it distinct from `AgentSession` and from the delegation `SessionRow`
   (vocabulary-map rows required).
+- **`OidcIdToken`** (cross-origin, OIDC) — the standards-shaped "who is this"
+  assertion (`iss`/`sub`/`aud`/`exp`/`iat`/`nonce` + `agent_name` +
+  `canonical_agent_id`), signed with the SAME broker key and verified via JWKS.
+  Minted by `mintIdToken` / verified by `verifyIdToken` (+ `verifyPkceS256` for the
+  code-exchange). Distinct from `AgentSession` (no `principal`/`assurance`/`jti`).
+  Specced in **[spec 230](230-agentic-connect-oidc-provider.md)** (the person-scoped
+  OpenID Provider); the engine + key live here. Authority is NOT in the id_token — it
+  rides a delegation sidecar (ADR-0019).
 - **`AgentSession`** (cross-origin) — delivered to *independent relying sites*
   that must verify but must NOT be able to forge. **Asymmetric**, private key held
   only by the broker, published via a **JWKS endpoint** with `kid` +
