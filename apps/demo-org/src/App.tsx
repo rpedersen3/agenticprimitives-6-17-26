@@ -812,13 +812,9 @@ export function App() {
               </ul>
             </div>
 
-            {/* Shield illustration — large gradient with floating chips */}
+            {/* Shield illustration */}
             <div className="shield-hero" aria-hidden="true">
               <div className="shield-svg-wrap">
-                <span className="shield-float tl">🏛</span>
-                <span className="shield-float tr">📊</span>
-                <span className="shield-float bl">🔗</span>
-                <span className="shield-float br">⚡</span>
                 <ShieldLogo size={88} gradient />
               </div>
             </div>
@@ -996,53 +992,68 @@ export function App() {
         <>
           <div className="app-shell dashboard">
 
-            {/* Page header */}
-            <div className="dash-header">
-              <h1 style={{ color: 'var(--c-g900)' }}>{session.name}</h1>
-              <div className="dash-sub">
-                {session.fresh ? 'Just connected' : 'Active'} · Base Sepolia
+            {/* Smart Agent ID card — hero for both fresh arrival and returning */}
+            {session.fresh ? (
+              <div className="agent-id-card" aria-label="Your Smart Agent">
+                <div className="agent-id-eyebrow">
+                  <ShieldLogo size={18} />
+                  Personal Smart Agent
+                </div>
+                <div className="agent-id-name">{session.name}</div>
+                <button
+                  className="addr-chip"
+                  onClick={() => navigator.clipboard?.writeText(session.address)}
+                  title="Copy address"
+                  aria-label="Copy agent address"
+                  style={{ marginTop: '.5rem' }}
+                >
+                  {short(session.address)}
+                  <span className="addr-chip-copy" aria-hidden="true">⎘</span>
+                </button>
+                <div className="agent-id-owned">
+                  <span className="agent-id-owned-dot" aria-hidden="true" />
+                  Owned by you · Base Sepolia
+                </div>
+                {orgs.length > 0 && (
+                  <div className="agent-id-orgs" aria-label="Organizations you govern">
+                    {orgs.map((o) => (
+                      <span key={o.orgAgent} className="agent-id-org-chip">
+                        🏛 {o.orgName}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-
-            {/* Ownership moment — shown on first arrival */}
-            {session.fresh && (
-              <div className="reward-row" aria-label="What you now own">
-                <span className="reward-chip">
-                  <span className="reward-chip-icon" aria-hidden="true">✓</span>
-                  {session.name} — owned by you
-                </span>
-                <span className="reward-chip primary">
-                  <span className="reward-chip-icon" aria-hidden="true">✓</span>
-                  Smart Agent — yours
-                </span>
-                <span className="reward-chip">
-                  <span className="reward-chip-icon" aria-hidden="true">✓</span>
-                  Agentic Org connected
-                </span>
-              </div>
+            ) : (
+              <>
+                <div className="dash-header">
+                  <h1 style={{ color: 'var(--c-g900)' }}>{session.name}</h1>
+                  <div className="dash-sub">
+                    Active · Base Sepolia
+                  </div>
+                </div>
+                <div className="card" style={{ marginBottom: '10px' }}>
+                  <div className="card-row">
+                    <div className="card-row-icon blue" aria-hidden="true">
+                      <ShieldLogo size={22} />
+                    </div>
+                    <div className="card-row-meta">
+                      <div className="card-row-label">Smart Agent</div>
+                      <button
+                        className="addr-chip"
+                        onClick={() => navigator.clipboard?.writeText(session.address)}
+                        title="Copy address"
+                        aria-label="Copy agent address"
+                      >
+                        {short(session.address)}
+                        <span className="addr-chip-copy" aria-hidden="true">⎘</span>
+                      </button>
+                    </div>
+                    <span className="card-chevron" aria-hidden="true">›</span>
+                  </div>
+                </div>
+              </>
             )}
-
-            {/* Smart Agent card */}
-            <div className="card" style={{ marginBottom: '10px' }}>
-              <div className="card-row">
-                <div className="card-row-icon blue" aria-hidden="true">
-                  <ShieldLogo size={22} />
-                </div>
-                <div className="card-row-meta">
-                  <div className="card-row-label">Smart Agent</div>
-                  <button
-                    className="addr-chip"
-                    onClick={() => navigator.clipboard?.writeText(session.address)}
-                    title="Copy address"
-                    aria-label="Copy agent address"
-                  >
-                    {short(session.address)}
-                    <span className="addr-chip-copy" aria-hidden="true">⎘</span>
-                  </button>
-                </div>
-                <span className="card-chevron" aria-hidden="true">›</span>
-              </div>
-            </div>
 
             {/* Connected Apps card */}
             <div className="card" style={{ marginBottom: '10px' }}>

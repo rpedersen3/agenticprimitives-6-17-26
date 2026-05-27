@@ -581,30 +581,13 @@
         align-items: center;
         justify-content: center;
       }
-      /* Floating icon chips */
-      .shield-float {
-        position: absolute;
-        width: 34px; height: 34px;
-        border-radius: 10px;
-        background: #fff;
-        box-shadow: 0 4px 14px rgba(67,56,202,.18), 0 1px 4px rgba(0,0,0,.08);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: .875rem;
-      }
-      .shield-float.tl { top: 8px; left: -24px;  animation: float1 3.6s ease-in-out infinite; }
-      .shield-float.tr { top: 14px; right: -20px; animation: float2 4.1s ease-in-out infinite; }
-      .shield-float.bl { bottom: 18px; left: -18px; animation: float2 3.9s ease-in-out infinite; }
-      .shield-float.br { bottom: 14px; right: -22px; animation: float1 4.3s ease-in-out infinite; }
-
       @keyframes float1 {
-        0%, 100% { transform: translateY(0) rotate(0deg); }
-        50%       { transform: translateY(-7px) rotate(2deg); }
+        0%, 100% { transform: translateY(0); }
+        50%       { transform: translateY(-5px); }
       }
       @keyframes float2 {
-        0%, 100% { transform: translateY(0) rotate(0deg); }
-        50%       { transform: translateY(5px) rotate(-2deg); }
+        0%, 100% { transform: translateY(0); }
+        50%       { transform: translateY(4px); }
       }
 
       /* ── Short viewport squeeze ──────────────────────────────────────── */
@@ -731,6 +714,75 @@
         background: var(--c-success);
         display: inline-block;
         flex-shrink: 0;
+      }
+
+      /* ── Smart Agent ID card ─────────────────────────────────────────── */
+      /*
+       * The hero "what you got" card shown on first arrival (session.fresh).
+       * Styled as a solid ID card — name large, address copyable, owned-by note.
+       * Replaces the header + reward chips pattern for the fresh state.
+       * The substance IS the design: no extra decoration needed.
+       */
+      .agent-id-card {
+        background: linear-gradient(160deg, var(--c-primary-subtle) 0%, #fff 60%);
+        border: 1.5px solid var(--c-primary-border);
+        border-radius: var(--r-xl);
+        padding: 1.125rem 1.25rem 1rem;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 20px rgba(67,56,202,.13), 0 1px 6px rgba(15,23,42,.06);
+        animation: pop .28s var(--ease);
+      }
+      .agent-id-eyebrow {
+        display: flex;
+        align-items: center;
+        gap: .375rem;
+        font-size: .68rem;
+        font-weight: 800;
+        color: var(--c-primary);
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        margin-bottom: .4rem;
+      }
+      .agent-id-name {
+        font-size: 1.5rem;
+        font-weight: 900;
+        color: var(--c-g900);
+        letter-spacing: -0.04em;
+        line-height: 1.18;
+        word-break: break-all;
+      }
+      .agent-id-owned {
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        font-size: .76rem;
+        color: var(--c-g500);
+        margin-top: .5rem;
+      }
+      .agent-id-owned-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: var(--c-success);
+        flex-shrink: 0;
+      }
+      .agent-id-orgs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .375rem;
+        margin-top: .625rem;
+      }
+      .agent-id-org-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .75rem;
+        font-weight: 700;
+        color: var(--c-g700);
+        background: #fff;
+        border: 1px solid var(--c-g200);
+        border-radius: 999px;
+        padding: .2rem .625rem;
+        white-space: nowrap;
       }
 
       /* Address chip */

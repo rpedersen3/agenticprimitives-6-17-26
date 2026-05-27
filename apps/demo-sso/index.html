@@ -462,16 +462,6 @@
         position: relative;
         overflow: hidden;
       }
-      /* Gradient bloom from bottom */
-      .popup-root::after {
-        content: '';
-        position: absolute;
-        left: 50%; bottom: -60px;
-        transform: translateX(-50%);
-        width: 520px; height: 360px;
-        background: var(--grad-hero);
-        pointer-events: none; z-index: 0;
-      }
 
       /* Scrollable content column */
       .popup-scroll {
@@ -699,6 +689,43 @@
         font-size: .8375rem;
         color: var(--c-g700);
         line-height: 1.5;
+      }
+
+      /* ── Agent grant card — the concrete "what you get" hero ────────── */
+      /*
+       * The centrepiece of the consent screen. Shows the real agent name
+       * as the primary value, not buried in a permission question.
+       * Replaces the old popup-heading h1 for the sign-in consent path.
+       */
+      .agent-grant-card {
+        background: linear-gradient(160deg, #fff 40%, var(--c-primary-subtle));
+        border: 1.5px solid var(--c-primary-border);
+        border-radius: var(--r-xl);
+        padding: 1rem 1.125rem .875rem;
+        margin: .625rem 0 .625rem;
+        box-shadow: var(--sh-card);
+      }
+      .agent-grant-label {
+        font-size: .68rem;
+        font-weight: 800;
+        color: var(--c-primary);
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        margin-bottom: .3rem;
+      }
+      .agent-grant-name {
+        font-size: 1.3125rem;
+        font-weight: 900;
+        color: var(--c-g900);
+        letter-spacing: -0.03em;
+        line-height: 1.2;
+        word-break: break-all;
+      }
+      .agent-grant-sub {
+        font-size: .76rem;
+        color: var(--c-g500);
+        margin-top: .3rem;
+        line-height: 1.4;
       }
     </style>
   </head>

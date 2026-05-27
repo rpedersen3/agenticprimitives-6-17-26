@@ -712,45 +712,14 @@ export function App() {
               <h1>Confirm with your device</h1>
             </div>
             <div className="ceremony-card">
-              {/* Large gradient shield as the ceremony hero */}
-              <div style={{
-                display: 'flex', justifyContent: 'center',
-                marginBottom: '1rem',
-              }}>
-                <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ShieldLogo size={64} gradient />
-                  {/* Spinner orbiting the shield */}
-                  <span
-                    className="spinner spinner-lg"
-                    style={{
-                      position: 'absolute',
-                      top: '-10px', right: '-10px',
-                      width: '20px', height: '20px',
-                      borderWidth: '2.5px',
-                    }}
-                    role="status"
-                    aria-label="Working"
-                  />
-                </div>
+              <div className="ceremony-spinner-wrap">
+                <span className="spinner spinner-lg" role="status" aria-label="Working" />
               </div>
               <p style={{ fontWeight: 700, fontSize: '.9375rem', color: 'var(--c-g900)', marginBottom: '.3rem' }}>
                 {enrollFlow.msg ?? 'Working…'}
               </p>
               <p style={{ fontSize: '.8rem', color: 'var(--c-g500)', margin: 0 }}>
                 Your device may ask you to confirm. This usually takes a few seconds.
-              </p>
-            </div>
-            {/* Trust signal */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '.5rem',
-              background: 'var(--c-primary-subtle)',
-              border: '1px solid var(--c-primary-border)',
-              borderRadius: 'var(--r-md)',
-              padding: '.5rem .875rem',
-            }}>
-              <ShieldLogo size={16} />
-              <p style={{ margin: 0, fontSize: '.8125rem', color: 'var(--c-g700)' }}>
-                Your Smart Agent stays yours.
               </p>
             </div>
             <div className="privacy-footer">
@@ -858,22 +827,30 @@ export function App() {
       <div className="popup-root">
         <Topbar />
         <div className="popup-scroll">
-          <div className="popup-heading">
-            <h1>
-              Allow{' '}
-              <span className="accent-name">{enrollReq.name}</span>{' '}
-              to connect here?
-            </h1>
+
+          {/* What you get — the agent name is the centrepiece */}
+          <div className="agent-grant-card">
+            <div className="agent-grant-label">
+              {isNew ? 'You\'re about to get' : 'Signing in as'}
+            </div>
+            <div className="agent-grant-name">{enrollReq.name}</div>
+            {isNew && (
+              <div className="agent-grant-sub">
+                Personal Smart Agent · yours on Base Sepolia
+              </div>
+            )}
           </div>
 
+          {/* Requesting site */}
           <div className="entity-chip">
             <div className="entity-chip-icon" aria-hidden="true">🌐</div>
             <div className="entity-chip-meta">
-              <div className="entity-chip-name">{host}</div>
+              <div className="entity-chip-name">{host} is requesting access</div>
               <div className="entity-chip-sub">{delegateShort}</div>
             </div>
           </div>
 
+          {/* Permissions — can (visible) + cannot (collapsed) */}
           <div className="perm-card can">
             <div className="perm-card-title">This app can:</div>
             <ul className="perm-list">
@@ -883,7 +860,7 @@ export function App() {
               </li>
               <li>
                 <span className="perm-icon ok" aria-hidden="true">✓</span>
-                Use approved profile data and create workspaces
+                Read approved profile data for this session
               </li>
             </ul>
           </div>
@@ -899,20 +876,13 @@ export function App() {
             </div>
           </details>
 
-          {isNew && (
-            <div className="new-user-notice">
-              <strong>New here:</strong> we'll create your Smart Agent for{' '}
-              <strong>{enrollReq.name}</strong> first — one device confirmation.
-            </div>
-          )}
-
           <div className="privacy-footer">
-            🔒 You're in control. You can revoke access anytime.
+            🔒 Scoped access only. Revoke anytime.
           </div>
         </div>
         <div className="popup-actions">
           <button className="cta" onClick={approveEnroll}>
-            Approve with your device
+            {isNew ? 'Create agent and approve' : 'Approve with your device'}
           </button>
           <button className="cta ghost" onClick={denyEnroll}>Deny</button>
         </div>
