@@ -355,6 +355,14 @@ async function deployAgent(
 
 const CLIENT_ID = 'demo-org';
 const redirectUri = (): string => window.location.origin + '/';
+// This relying site's fixed delegate identity — the demo-org backend account. The person's
+// secure home issues a scoped grant to THIS address; the backend presents it for reads (and
+// could redeem it on-chain later). Fixed + backend-controlled ⇒ the browser creates NO local
+// passkey or account, so sign-in fires zero prompts on this origin (they belong in the secure
+// home). spec 229/230. Configurable via VITE_DEMO_ORG_DELEGATE.
+const DEMO_ORG_DELEGATE: Address =
+  ((import.meta.env?.VITE_DEMO_ORG_DELEGATE as string | undefined) ??
+    '0x89D13c596c45E4eE80Af5ae06C727FE9A820ffD0') as Address;
 
 function b64url(bytes: Uint8Array): string {
   let s = '';
@@ -494,20 +502,19 @@ export async function verifyIdToken(authOrigin: string, idToken: string, expecte
  *  the caller opens the popup and exchanges the returned code → { id_token, delegation, org }. */
 export async function startOrgCreation(
   personName: string,
-  delegateSA: Address,
   orgBase: string,
 ): Promise<{ url: string; state: string; authOrigin: string; codeVerifier: string; nonce: string }> {
   const state = randomB64url(16);
   const nonce = randomB64url(16);
   const { verifier, challenge } = await generatePkce();
-  const authOrigin = await resolveAuthOrigin(personName); // person's central auth (spec 229 §4)
+  const authOrigin = await resolveAuthOrigin(personName); // person's secure home (spec 229 §4)
   const url = buildAuthorizeUrl({
     authOrigin,
     state,
     nonce,
     codeChallenge: challenge,
     agentName: personName,
-    delegate: delegateSA,
+    delegate: DEMO_ORG_DELEGATE,
     template: 'org-create',
     orgBase,
   });
@@ -515,62 +522,29 @@ export async function startOrgCreation(
 }
 
 
-/** First-visit sign-in (spec 229 §3 + 230): register a LOCAL passkey for THIS origin and
- *  deploy this site's **delegate Smart Account** (custodied by that passkey, distinct salt).
- *  Then build the OIDC `/authorize` URL (template=site-login) — the person authenticates with
- *  their ROOT passkey at the central auth, which issues the id_token + the scoped
- *  `person → delegateSA` delegation. The site is a DELEGATE, never a custodian. */
-const SITE_DELEGATE_KEY = 'agenticprimitives:demo-org:delegate-sa'; // this origin's persisted delegate SA
-
+/** Build the OIDC `/authorize` request to the person's secure home (template=site-login).
+ *  demo-org creates NOTHING locally — no passkey, no account, ZERO prompts on this origin.
+ *  The delegate is the fixed backend identity (`DEMO_ORG_DELEGATE`); the person authenticates
+ *  + approves at their secure home, which issues the id_token + the scoped `person → delegate`
+ *  grant. The site is a DELEGATE, never a custodian. (Return sign-in is silent — `silentReauth`
+ *  — so no local "for next time" credential is needed.) */
 export async function startSiteEnrollment(
   name: string,
-  onStep?: (s: string) => void,
-): Promise<
-  | { ok: true; url: string; state: string; delegateSA: Address; authOrigin: string; codeVerifier: string; nonce: string }
-  | { ok: false; error: string }
-> {
-  // Reuse this origin's delegate SA + local passkey if already set up (returning sign-in);
-  // only create them on first visit (so re-signing-in doesn't orphan a fresh passkey).
-  let delegateSA = (localStorage.getItem(SITE_DELEGATE_KEY) as Address | null) ?? null;
-  if (!(delegateSA && loadPasskey())) {
-    onStep?.('Creating your sign-in key on this device…');
-    const pk = await registerPasskey(name); // local passkey on THIS origin, stored
-    onStep?.('Setting up this site’s account…');
-    const saltBytes = crypto.getRandomValues(new Uint8Array(8));
-    let salt = 0n;
-    for (const b of saltBytes) salt = (salt << 8n) | BigInt(b);
-    const dep = await deployAgent(
-      {
-        initMethod: 'passkey',
-        credentialIdDigest: pk.credentialIdDigest,
-        pubKeyX: pk.pubKeyX.toString(),
-        pubKeyY: pk.pubKeyY.toString(),
-        salt: salt.toString(),
-      },
-      passkeySignHash,
-    );
-    if (!dep.ok) return { ok: false, error: `site account deploy failed: ${dep.error}` };
-    delegateSA = dep.agent;
-    try {
-      localStorage.setItem(SITE_DELEGATE_KEY, delegateSA);
-    } catch {
-      /* ignore */
-    }
-  }
+): Promise<{ ok: true; url: string; state: string; authOrigin: string; codeVerifier: string; nonce: string }> {
   const state = randomB64url(16);
   const nonce = randomB64url(16);
   const { verifier, challenge } = await generatePkce();
-  const authOrigin = await resolveAuthOrigin(name); // person's central auth (spec 229 §4)
+  const authOrigin = await resolveAuthOrigin(name); // person's secure home (spec 229 §4)
   const url = buildAuthorizeUrl({
     authOrigin,
     state,
     nonce,
     codeChallenge: challenge,
     agentName: name,
-    delegate: delegateSA,
+    delegate: DEMO_ORG_DELEGATE,
     template: 'site-login',
   });
-  return { ok: true, url, state, delegateSA, authOrigin, codeVerifier: verifier, nonce };
+  return { ok: true, url, state, authOrigin, codeVerifier: verifier, nonce };
 }
 
 /** Connect to the agent that OWNS `name`, proving control with a custody credential.

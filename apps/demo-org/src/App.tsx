@@ -474,33 +474,22 @@ export function App() {
   // home ceremony), falling back to a full-page redirect when the popup is blocked or on
   // mobile. Used for a brand-new signup (central creates the account) AND "set up this site"
   // for an existing agent (central adds this site's key). Spec 229 §3 + popup UX design.
+  // Hand off to the person's secure home. demo-org creates NOTHING locally (zero prompts here);
+  // the secure-home window is the single auth surface where the device prompts happen, each
+  // framed with a promise + receipt. We stay on a calm "continue in your secure home" screen
+  // while it's open (no local prompts firing over it), then receive the result + sign in.
   async function beginSiteSetup(name: string) {
     setError(null);
     setConnectErr(null);
-    setFlow({ title: 'Signing you in', phase: 'running', steps: ['Preparing your sign-in key on this device…'] });
     let url: string;
     let state: string;
     let authOrigin: string;
     let codeVerifier: string;
     let nonce: string;
     try {
-      // Reuses (or first-time creates) the local passkey + delegate SA, then builds the OIDC
-      // /authorize URL (code + S256 PKCE).
-      const started = await startSiteEnrollment(name, (s) =>
-        setFlow({ title: 'Signing you in', phase: 'running', steps: [s] }),
-      );
-      if (!started.ok) {
-        setFlow({ title: "Couldn't start sign-in", phase: 'error', steps: [], error: started.error });
-        return;
-      }
-      ({ url, state, authOrigin, codeVerifier, nonce } = started);
+      ({ url, state, authOrigin, codeVerifier, nonce } = await startSiteEnrollment(name));
     } catch (e) {
-      setFlow({
-        title: "Couldn't start sign-in",
-        phase: 'error',
-        steps: [],
-        error: e instanceof Error ? e.message : 'could not set up this device',
-      });
+      setFlow({ title: "Couldn't start sign-in", phase: 'error', steps: [], error: e instanceof Error ? e.message : 'failed to start' });
       return;
     }
 
@@ -509,21 +498,21 @@ export function App() {
     // Mobile / narrow viewport → full-page redirect (a popup would open as a tab).
     if (preferRedirect()) {
       sessionStorage.setItem(ENROLL_KEY, stash);
-      setFlow({ title: 'Signing you in', phase: 'running', steps: ['Taking you to your secure home…'] });
-      await new Promise((r) => setTimeout(r, 700));
+      setFlow({ title: 'Continue in your secure home', phase: 'running', steps: ['Taking you to your secure home…'] });
+      await new Promise((r) => setTimeout(r, 600));
       window.location.href = url;
       return;
     }
 
-    // Desktop → popup-first.
-    setFlow({ title: 'Signing you in', phase: 'running', steps: ['Opening your secure home…'] });
+    // Desktop → popup-first. Calm handoff screen while the secure-home window is open.
+    setFlow({ title: 'Continue in your secure home', phase: 'running', steps: ['Approve in the secure-home window…'] });
     const result = await openCentralAuthPopup(url, state, authOrigin, (msg) =>
-      setFlow({ title: 'Signing you in', phase: 'running', steps: [msg] }),
+      setFlow({ title: 'Continue in your secure home', phase: 'running', steps: [msg] }),
     );
     if (result.status === 'blocked') {
       sessionStorage.setItem(ENROLL_KEY, stash);
-      setFlow({ title: 'Signing you in', phase: 'running', steps: ['Your browser blocked the popup — taking you to your secure home…'] });
-      await new Promise((r) => setTimeout(r, 1100));
+      setFlow({ title: 'Continue in your secure home', phase: 'running', steps: ['Taking you to your secure home…'] });
+      await new Promise((r) => setTimeout(r, 900));
       window.location.href = url;
       return;
     }
@@ -621,19 +610,8 @@ export function App() {
     if (!session) return;
     const base = orgName.trim();
     if (!base || orgAvail !== 'available') return;
-    const del = loadDelegation(session.name);
-    if (!del) {
-      setFlow({
-        title: 'Set up this site first',
-        phase: 'error',
-        steps: [],
-        error:
-          'Creating an organization uses your central-auth passkey. Sign in with "Continue with passkey" / "Set up this site" first.',
-      });
-      return;
-    }
-    const { url, state, authOrigin, codeVerifier, nonce } = await startOrgCreation(session.name, del.delegate, base);
-    setFlow({ title: 'Creating your organization…', phase: 'running', steps: ['Opening your secure home…'] });
+    const { url, state, authOrigin, codeVerifier, nonce } = await startOrgCreation(session.name, base);
+    setFlow({ title: 'Creating your organization', phase: 'running', steps: ['Approve in the secure-home window…'] });
     const stash = JSON.stringify({ state, addr: session.address, authOrigin, codeVerifier, nonce });
 
     // Mobile / narrow viewport → full-page redirect.
