@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { Address, Hex } from '@agenticprimitives/types';
 import {
   AUD,
@@ -7,6 +7,8 @@ import {
   connectWithName,
   provisionA2aAgent,
   createChildAgentForSite,
+  createSecureHomePasskey,
+  deployAndClaimAgent,
   addWalletCredential,
   addPasskeyCredential,
   passkeySignHash,
@@ -15,7 +17,7 @@ import {
   type BasicProfile,
 } from './connect-client';
 import { issueSiteDelegation, toWire } from './lib/delegation';
-import { loadPasskey } from './lib/passkey';
+import { loadPasskey, type DemoPasskey } from './lib/passkey';
 import { hasWallet } from './lib/wallet';
 import { startGoogleSignIn, exchangeCode } from './server-client';
 
@@ -186,6 +188,15 @@ export function App() {
   const [enrollFlow, setEnrollFlow] = useState<{ phase: 'idle' | 'running' | 'error'; msg?: string; error?: string }>({
     phase: 'idle',
   });
+  // Guided sign-in/sign-up ceremony (spec 230 part 2): one screen per step, a device prompt
+  // behind each, a receipt after — never two WebAuthn prompts back-to-back.
+  const [ceremony, setCeremony] = useState<{
+    step: 'consent' | 'busy' | 'key-ready' | 'agent-ready' | 'connected';
+    busyMsg?: string;
+    passkey?: DemoPasskey;
+    agent?: Address;
+    name?: string;
+  }>({ step: 'consent' });
   // Does the requested name already have an agent on-chain? null = checking.
   // New user (no agent) → create the account here first (E1); existing → enroll-only (E2).
   const [enrollExists, setEnrollExists] = useState<boolean | null>(enrollReq ? null : false);
@@ -531,46 +542,61 @@ export function App() {
     window.location.href = url.toString();
   }
 
-  // site-login: sign the person in (create their home account first if new), issue the scoped
-  // person → site-delegate delegation (ADR-0019), and mint the OIDC code.
-  async function approveEnroll() {
+  // ── Guided sign-in/sign-up ceremony (spec 230 part 2) ──────────────
+  // Each WebAuthn prompt is its own button-gated step with a promise before + a receipt after.
+  const ceremonyFail = (e: unknown) =>
+    setEnrollFlow({ phase: 'error', error: e instanceof Error ? e.message : 'something went wrong' });
+
+  // NEW USER · Step 1 — create the secure-home key (one prompt).
+  async function onCreateKey() {
     if (!enrollReq) return;
-    const onStep = (s: string) => {
-      setEnrollFlow({ phase: 'running', msg: s });
-      if (popupMode) postToOpener({ type: 'AC_PROGRESS', msg: s });
-    };
-    setEnrollFlow({ phase: 'running', msg: 'Starting…' });
+    setCeremony({ step: 'busy', busyMsg: 'Creating your sign-in key…' });
     try {
-      let resolvedName = enrollReq.name;
-      let personAgent: Address | undefined;
-      if (!enrollExists) {
-        // New user: signup returns the KNOWN agent address (from the deploy) — use it directly.
-        // Resolving the just-claimed name on-chain here would race RPC lag ("could not resolve").
-        const base = enrollReq.name.replace(/\.demo\.agent$/, '');
-        const created = await signupWithName(base, 'passkey', onStep, false); // grant signs in (skip extra prompt)
-        if (!created.ok) {
-          setEnrollFlow({ phase: 'error', error: created.error });
-          return;
-        }
-        resolvedName = created.name;
-        personAgent = created.agent;
-      } else {
-        // Existing agent: the name is long-claimed, so name resolution is safe (no lag).
-        onStep('Authorizing the site…');
-        const info = (await (await fetch(`/connect/name-info?name=${encodeURIComponent(resolvedName)}`)).json()) as {
+      const passkey = await createSecureHomePasskey(enrollReq.name);
+      setCeremony({ step: 'key-ready', passkey });
+    } catch (e) {
+      ceremonyFail(e);
+    }
+  }
+
+  // NEW USER · Step 2 — deploy + claim the agent's name (one prompt).
+  async function onSetupAgent() {
+    if (!enrollReq || !ceremony.passkey) return;
+    const passkey = ceremony.passkey;
+    setCeremony((c) => ({ ...c, step: 'busy', busyMsg: 'Setting up your Smart Agent on Base Sepolia…' }));
+    try {
+      const base = enrollReq.name.replace(/\.demo\.agent$/, '');
+      const res = await deployAndClaimAgent(passkey, base);
+      if (!res.ok) return ceremonyFail(res.error);
+      setCeremony((c) => ({ ...c, step: 'agent-ready', agent: res.agent, name: res.name }));
+    } catch (e) {
+      ceremonyFail(e);
+    }
+  }
+
+  // Final step (new + existing) — approve the app: issue the scoped grant + mint the OIDC code.
+  async function onApproveApp() {
+    if (!enrollReq) return;
+    setCeremony((c) => ({ ...c, step: 'busy', busyMsg: 'Connecting the app…' }));
+    if (popupMode) postToOpener({ type: 'AC_PROGRESS', msg: 'Connecting the app…' });
+    try {
+      let agent = ceremony.agent;
+      let name = ceremony.name ?? enrollReq.name;
+      if (!agent) {
+        // Existing agent: resolve by name (long-claimed → no RPC lag).
+        const info = (await (await fetch(`/connect/name-info?name=${encodeURIComponent(enrollReq.name)}`)).json()) as {
           agent?: Address;
         };
-        personAgent = info.agent;
+        if (!info.agent) return ceremonyFail(`could not resolve ${enrollReq.name}`);
+        agent = info.agent;
+        name = enrollReq.name;
       }
-      if (!personAgent) {
-        setEnrollFlow({ phase: 'error', error: `could not resolve ${resolvedName}` });
-        return;
-      }
-      const delegation = await issueSiteDelegation(personAgent, enrollReq.delegate, passkeySignHash);
-      const code = await submitGrant(resolvedName, toWire(delegation));
-      deliverCode(code);
+      const delegation = await issueSiteDelegation(agent, enrollReq.delegate, passkeySignHash);
+      const code = await submitGrant(name, toWire(delegation));
+      setCeremony((c) => ({ ...c, step: 'connected' }));
+      setTimeout(() => deliverCode(code), 1000); // hold the "✓ Connected" receipt briefly, then hand back
     } catch (e) {
-      setEnrollFlow({ phase: 'error', error: e instanceof Error ? e.message : 'enrollment failed' });
+      ceremonyFail(e);
     }
   }
 
@@ -751,10 +777,19 @@ export function App() {
             </div>
           </div>
           <div className="popup-actions">
-            {enrollReq.orgBase
-              ? <button className="cta" onClick={approveCreateOrg}>Try again</button>
-              : <button className="cta" onClick={approveEnroll}>Try again</button>
-            }
+            {enrollReq.orgBase ? (
+              <button className="cta" onClick={approveCreateOrg}>Try again</button>
+            ) : (
+              <button
+                className="cta"
+                onClick={() => {
+                  setEnrollFlow({ phase: 'idle' });
+                  setCeremony({ step: 'consent' });
+                }}
+              >
+                Try again
+              </button>
+            )}
             <button className="cta ghost" onClick={denyEnroll}>Cancel</button>
           </div>
         </div>
@@ -822,69 +857,167 @@ export function App() {
       );
     }
 
-    // ── Sign-in consent (default path) ───────────────────────────────
+    // ── Sign-in / sign-up: GUIDED CEREMONY (spec 230 part 2) ──────────
+    // One screen per step, a device prompt behind each button, a receipt after. New user = 3
+    // steps (key → agent → approve); existing agent = 1 step (approve). Never two prompts back-to-back.
+    const totalSteps = isNew ? 3 : 1;
+    const StepBadge = ({ n }: { n: number }) =>
+      totalSteps > 1 ? <div className="step-pill">Step {n} of {totalSteps}</div> : null;
+    const Receipt = ({ children }: { children: ReactNode }) => (
+      <div className="receipt-chip"><span className="receipt-tick" aria-hidden="true">✓</span>{children}</div>
+    );
+    const CannotDetails = () => (
+      <details className="cannot-disclosure">
+        <summary>What it cannot do</summary>
+        <div className="perm-card cannot">
+          <ul className="perm-list">
+            <li><span className="perm-icon no" aria-hidden="true">✕</span>Change your passkeys or recover your Smart Agent</li>
+            <li><span className="perm-icon no" aria-hidden="true">✕</span>Move funds without your approval</li>
+            <li><span className="perm-icon no" aria-hidden="true">✕</span>Act outside this permission</li>
+          </ul>
+        </div>
+      </details>
+    );
+
+    // Busy (a device prompt is happening / on-chain work in flight).
+    if (ceremony.step === 'busy') {
+      return (
+        <div className="popup-root">
+          <Topbar />
+          <div className="popup-scroll">
+            <div className="popup-heading"><h1>Confirm with your device</h1></div>
+            <div className="ceremony-card">
+              <div className="ceremony-spinner-wrap"><span className="spinner spinner-lg" role="status" aria-label="Working" /></div>
+              <p style={{ fontWeight: 700, fontSize: '.9375rem', color: 'var(--c-g900)', marginBottom: '.3rem' }}>
+                {ceremony.busyMsg ?? 'Working…'}
+              </p>
+              <p style={{ fontSize: '.8rem', color: 'var(--c-g500)', margin: 0 }}>
+                Your device may ask you to confirm. This takes a few seconds.
+              </p>
+            </div>
+            <div className="privacy-footer">🔒 You're in control. Your data stays private.</div>
+          </div>
+        </div>
+      );
+    }
+
+    // Step 1 receipt → Step 2 promise (set up the agent).
+    if (ceremony.step === 'key-ready') {
+      return (
+        <div className="popup-root">
+          <Topbar />
+          <div className="popup-scroll">
+            <StepBadge n={2} />
+            <div className="popup-heading"><h1>Set up your Smart Agent</h1></div>
+            <Receipt>Sign-in key created on this device</Receipt>
+            <p style={{ fontSize: '.875rem', color: 'var(--c-g500)', margin: '.5rem 0 0', lineHeight: 1.55 }}>
+              Next, we'll create <strong>{enrollReq.name}</strong> on Base Sepolia — your own Smart Agent,
+              owned by you. One quick confirmation.
+            </p>
+            <div className="privacy-footer">🔒 You're in control. Your data stays private.</div>
+          </div>
+          <div className="popup-actions">
+            <button className="cta" onClick={onSetupAgent}>Set up my agent</button>
+            <button className="cta ghost" onClick={denyEnroll}>Cancel</button>
+          </div>
+        </div>
+      );
+    }
+
+    // Step 2 receipt → Step 3 promise (approve the app — concrete consent).
+    if (ceremony.step === 'agent-ready') {
+      return (
+        <div className="popup-root">
+          <Topbar />
+          <div className="popup-scroll">
+            <StepBadge n={3} />
+            <div className="popup-heading"><h1>Approve this app</h1></div>
+            <Receipt>{ceremony.name ?? enrollReq.name} created — your Smart Agent is live</Receipt>
+            <div className="entity-chip" style={{ marginTop: '.6rem' }}>
+              <div className="entity-chip-icon" aria-hidden="true">🌐</div>
+              <div className="entity-chip-meta">
+                <div className="entity-chip-name">{host} wants to connect</div>
+                <div className="entity-chip-sub">to {ceremony.name ?? enrollReq.name}</div>
+              </div>
+            </div>
+            <div className="perm-card can">
+              <div className="perm-card-title">This app can:</div>
+              <ul className="perm-list">
+                <li><span className="perm-icon ok" aria-hidden="true">✓</span>Sign you in as <strong>{ceremony.name ?? enrollReq.name}</strong></li>
+                <li><span className="perm-icon ok" aria-hidden="true">✓</span>Create approved workspaces + read approved profile data</li>
+              </ul>
+            </div>
+            <CannotDetails />
+            <div className="privacy-footer">🔒 Scoped access only. Revoke anytime.</div>
+          </div>
+          <div className="popup-actions">
+            <button className="cta" onClick={onApproveApp}>Approve with your device</button>
+            <button className="cta ghost" onClick={denyEnroll}>Deny</button>
+          </div>
+        </div>
+      );
+    }
+
+    // Final receipt (held ~1s before handing back to the app).
+    if (ceremony.step === 'connected') {
+      return (
+        <div className="popup-root">
+          <Topbar />
+          <div className="popup-scroll">
+            <div className="popup-heading"><h1>Connected</h1></div>
+            <div className="agent-grant-card">
+              <div className="agent-grant-label">✓ App connected to</div>
+              <div className="agent-grant-name">{ceremony.name ?? enrollReq.name}</div>
+              <div className="agent-grant-sub">Returning you to {host}…</div>
+            </div>
+            <div className="privacy-footer">🔒 Revoke this app anytime from your secure home.</div>
+          </div>
+        </div>
+      );
+    }
+
+    // Step 0 — consent (the promise before the FIRST device prompt).
     return (
       <div className="popup-root">
         <Topbar />
         <div className="popup-scroll">
-
+          <StepBadge n={1} />
           {/* What you get — the agent name is the centrepiece */}
           <div className="agent-grant-card">
-            <div className="agent-grant-label">
-              {isNew ? 'You\'re about to get' : 'Signing in as'}
-            </div>
+            <div className="agent-grant-label">{isNew ? "You're about to get" : 'Signing in as'}</div>
             <div className="agent-grant-name">{enrollReq.name}</div>
-            {isNew && (
-              <div className="agent-grant-sub">
-                Personal Smart Agent · yours on Base Sepolia
-              </div>
-            )}
+            {isNew && <div className="agent-grant-sub">Your own Personal Smart Agent on Base Sepolia</div>}
           </div>
 
-          {/* Requesting site */}
           <div className="entity-chip">
             <div className="entity-chip-icon" aria-hidden="true">🌐</div>
             <div className="entity-chip-meta">
-              <div className="entity-chip-name">{host} is requesting access</div>
-              <div className="entity-chip-sub">{delegateShort}</div>
+              <div className="entity-chip-name">{host} wants to connect</div>
+              <div className="entity-chip-sub">to {enrollReq.name}</div>
             </div>
           </div>
 
-          {/* Permissions — can (visible) + cannot (collapsed) */}
           <div className="perm-card can">
             <div className="perm-card-title">This app can:</div>
             <ul className="perm-list">
-              <li>
-                <span className="perm-icon ok" aria-hidden="true">✓</span>
-                Sign you in as <strong>{enrollReq.name}</strong>
-              </li>
-              <li>
-                <span className="perm-icon ok" aria-hidden="true">✓</span>
-                Read approved profile data for this session
-              </li>
+              <li><span className="perm-icon ok" aria-hidden="true">✓</span>Sign you in as <strong>{enrollReq.name}</strong></li>
+              <li><span className="perm-icon ok" aria-hidden="true">✓</span>Read approved profile data for this session</li>
             </ul>
           </div>
+          <CannotDetails />
 
-          <details className="cannot-disclosure">
-            <summary>What it cannot do</summary>
-            <div className="perm-card cannot">
-              <ul className="perm-list">
-                <li><span className="perm-icon no" aria-hidden="true">✕</span>Change your passkeys or recover your Smart Agent</li>
-                <li><span className="perm-icon no" aria-hidden="true">✕</span>Move funds without your approval</li>
-                <li><span className="perm-icon no" aria-hidden="true">✕</span>Act outside this permission</li>
-              </ul>
-            </div>
-          </details>
-
-          <div className="privacy-footer">
-            🔒 Scoped access only. Revoke anytime.
-          </div>
+          {isNew && (
+            <p style={{ fontSize: '.8rem', color: 'var(--c-g500)', margin: '.4rem 0 0', lineHeight: 1.55 }}>
+              Two quick confirmations create your agent; one more connects the app.
+            </p>
+          )}
+          <div className="privacy-footer">🔒 Scoped access only. Revoke anytime.</div>
         </div>
         <div className="popup-actions">
-          <button className="cta" onClick={approveEnroll}>
-            {isNew ? 'Create agent and approve' : 'Approve with your device'}
+          <button className="cta" onClick={isNew ? onCreateKey : onApproveApp}>
+            {isNew ? 'Create my Smart Agent' : 'Approve with your device'}
           </button>
-          <button className="cta ghost" onClick={denyEnroll}>Deny</button>
+          <button className="cta ghost" onClick={denyEnroll}>{isNew ? 'Cancel' : 'Deny'}</button>
         </div>
       </div>
     );

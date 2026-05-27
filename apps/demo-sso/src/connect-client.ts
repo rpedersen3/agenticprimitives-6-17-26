@@ -694,6 +694,30 @@ export async function connectWithName(
   return { ok: false, error: b.error ?? `connect failed (HTTP ${r.status})` };
 }
 
+// ── Guided ceremony steps (spec 230 part 2) ─────────────────────────
+// Each step is its OWN exported call so the relying UI can gate every WebAuthn prompt behind a
+// button with a promise before + a receipt after — no two prompts fire back-to-back. (signupWithName
+// runs the same work in one shot; these expose the seams.)
+
+/** Step 1 — create the person's secure-home passkey (ONE WebAuthn create). Stored on this device. */
+export async function createSecureHomePasskey(name: string): Promise<DemoPasskey> {
+  const base = name.replace(/\.demo\.agent$/, '');
+  return registerPasskey(`${base}.demo.agent`);
+}
+
+/** Step 2 — deploy the person's Smart Agent + claim its name in ONE userOp (ONE WebAuthn sign). */
+export async function deployAndClaimAgent(
+  passkey: DemoPasskey,
+  base: string,
+): Promise<{ ok: true; agent: Address; name: string } | { ok: false; error: string }> {
+  const sa = await derivePasskeySa(passkey, 0n);
+  const claim = await buildClaimCallData(base, sa);
+  if (!claim.ok) return { ok: false, error: claim.error };
+  const dep = await bootstrapWithPasskey(passkey, undefined, claim.callData);
+  if (!dep.ok) return { ok: false, error: dep.error };
+  return { ok: true, agent: dep.agent, name: claim.name };
+}
+
 /** Sign up: create a workspace named `<base>.demo.agent` with a custody credential,
  *  and CLAIM the name for THAT credential's agent (so connect-by-name later offers the
  *  right credential). Passkey → a FRESH passkey (a new workspace); wallet → the EOA's
