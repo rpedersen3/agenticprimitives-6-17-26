@@ -93,6 +93,49 @@ function restoreSession(): Session | null {
   }
 }
 
+// ── Presentational helpers ────────────────────────────────────────────────
+
+/** Humanize a snake_case / camelCase / UPPER_CASE key for display. */
+function humanizeKey(k: string): string {
+  return k
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Render an arbitrary JSON record as readable key/value rows. */
+function RecordRows({ record }: { record: unknown }) {
+  if (record == null) return null;
+  const entries = typeof record === 'object' && !Array.isArray(record)
+    ? Object.entries(record as Record<string, unknown>)
+    : [['Value', String(record)]];
+  return (
+    <table className="record-table" aria-label="Data record">
+      <tbody>
+        {entries.map(([k, v]) => (
+          <tr key={k}>
+            <td className="rec-key">{humanizeKey(k)}</td>
+            <td className="rec-val">{String(v ?? '—')}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** Masked PII placeholder (accessibility-safe: hidden from screen readers). */
+function PiiMask({ lines }: { lines: string[] }) {
+  return (
+    <div aria-hidden="true">
+      {lines.map((l, i) => (
+        <span key={i} className="pii-mask">{l}</span>
+      ))}
+    </div>
+  );
+}
+
+// ── App ───────────────────────────────────────────────────────────────────
+
 export function App() {
   const [session, setSession] = useState<Session | null>(restoreSession);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -211,7 +254,7 @@ export function App() {
       void completeOrg(org.authOrigin, code, org.codeVerifier, org.addr);
       return;
     }
-    setError('We couldn’t verify that response. Please try again.');
+    setError("We couldn't verify that response. Please try again.");
     // run once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -340,7 +383,7 @@ export function App() {
       setFlow(null);
       openSession(tok.idToken, 'passkey', name, fresh);
     } catch (e) {
-      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: e instanceof Error ? e.message : 'sign-in failed' });
+      setFlow({ title: "Couldn't finish", phase: 'error', steps: [], error: e instanceof Error ? e.message : 'sign-in failed' });
     }
   }
 
@@ -365,13 +408,13 @@ export function App() {
         setFlow({ title: 'Signing you in', phase: 'running', steps: [s] }),
       );
       if (!started.ok) {
-        setFlow({ title: 'Couldn’t start sign-in', phase: 'error', steps: [], error: started.error });
+        setFlow({ title: "Couldn't start sign-in", phase: 'error', steps: [], error: started.error });
         return;
       }
       ({ url, state, authOrigin, codeVerifier, nonce } = started);
     } catch (e) {
       setFlow({
-        title: 'Couldn’t start sign-in',
+        title: "Couldn't start sign-in",
         phase: 'error',
         steps: [],
         error: e instanceof Error ? e.message : 'could not set up this device',
@@ -408,7 +451,7 @@ export function App() {
       return;
     }
     if (result.status === 'error') {
-      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: result.error });
+      setFlow({ title: "Couldn't finish", phase: 'error', steps: [], error: result.error });
       return;
     }
     await completeAuth(authOrigin, result.code, codeVerifier, nonce, name, true);
@@ -437,7 +480,7 @@ export function App() {
     try {
       const out = await signupWithName(base, via, onStep);
       if (!out.ok) {
-        setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [...steps], error: out.error });
+        setFlow({ title: "Couldn't finish", phase: 'error', steps: [...steps], error: out.error });
         return;
       }
       setFlow({ title: '✓ Account ready', phase: 'done', steps: [...steps] });
@@ -447,7 +490,7 @@ export function App() {
       setSignupAvail('idle');
       setFlow(null);
     } catch (e) {
-      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [...steps], error: e instanceof Error ? e.message : 'signup failed' });
+      setFlow({ title: "Couldn't finish", phase: 'error', steps: [...steps], error: e instanceof Error ? e.message : 'signup failed' });
     }
   }
 
@@ -484,7 +527,7 @@ export function App() {
       setOrgAvail('idle');
       setFlow(null);
     } catch (e) {
-      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: e instanceof Error ? e.message : 'create org failed' });
+      setFlow({ title: "Couldn't finish", phase: 'error', steps: [], error: e instanceof Error ? e.message : 'create org failed' });
     }
   }
 
@@ -503,7 +546,7 @@ export function App() {
         phase: 'error',
         steps: [],
         error:
-          'Creating an organization uses your central-auth passkey. Sign in with “Continue with passkey” / “Set up this site” first.',
+          'Creating an organization uses your central-auth passkey. Sign in with "Continue with passkey" / "Set up this site" first.',
       });
       return;
     }
@@ -533,7 +576,7 @@ export function App() {
       return;
     }
     if (result.status === 'error') {
-      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: result.error });
+      setFlow({ title: "Couldn't finish", phase: 'error', steps: [], error: result.error });
       return;
     }
     await completeOrg(authOrigin, result.code, codeVerifier, session.address);
@@ -545,7 +588,7 @@ export function App() {
     if (!session) return;
     const del = loadDelegation(session.name);
     if (!del) {
-      setPersonData({ error: 'No delegation on this device — sign in via “Set up this site / Continue with passkey”.' });
+      setPersonData({ error: 'No delegation on this device — sign in via "Set up this site / Continue with passkey".' });
       return;
     }
     setPersonData({ loading: true });
@@ -577,275 +620,752 @@ export function App() {
 
   const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
+  // ── Shield logo (shared across topbar and hero) ──────────────────────
+  const ShieldLogo = ({ size = 30 }: { size?: number }) => (
+    <svg
+      className="brand-shield"
+      width={size}
+      height={size}
+      viewBox="0 0 40 40"
+      fill="none"
+      aria-hidden="true"
+    >
+      <rect width="40" height="40" rx="10" fill="#4f46e5" />
+      <path
+        d="M20 8 L30 12 L30 22 C30 27.5 25.5 32 20 33.5 C14.5 32 10 27.5 10 22 L10 12 Z"
+        fill="white"
+        fillOpacity="0.25"
+      />
+      <path
+        d="M20 11 L28 14.5 L28 22 C28 26.5 24.5 30.5 20 31.8 C15.5 30.5 12 26.5 12 22 L12 14.5 Z"
+        fill="white"
+        fillOpacity="0.9"
+      />
+      <path
+        d="M17 21 L19.5 23.5 L23.5 18"
+        stroke="#4f46e5"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+
+  // ── render ───────────────────────────────────────────────────────────
+
   return (
-    <div>
+    <div id="app-root" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
+
+      {/* Top bar */}
       <header className="topbar">
-        <div className="brand">Agentic Org</div>
-        <div className="account">
+        <div className="topbar-inner">
+          <div className="brand">
+            <ShieldLogo size={30} />
+            {session ? session.name : 'Agentic Org'}
+          </div>
           {session ? (
             <div className="menu">
-              <button className="menu-btn" onClick={() => setMenuOpen((o) => !o)}>
-                {session.name} ▾
+              <button
+                className="agent-pill"
+                aria-haspopup="true"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((o) => !o)}
+              >
+                <span>Account</span>
+                <span aria-hidden="true" style={{ fontSize: '.75rem', color: 'var(--c-g400)' }}>▾</span>
               </button>
               {menuOpen && (
-                <div className="menu-pop" onMouseLeave={() => setMenuOpen(false)}>
-                  <div className="muted" style={{ padding: '0.3rem 0.6rem' }}>
-                    <code>{short(session.address)}</code> · {session.via}
+                <div className="menu-pop" role="menu" onMouseLeave={() => setMenuOpen(false)}>
+                  <div className="menu-meta">
+                    <div style={{ fontWeight: 600, color: 'var(--c-g900)', marginBottom: '.1rem' }}>
+                      {session.name}
+                    </div>
+                    <div>via {session.via}</div>
                   </div>
-                  <button onClick={() => navigator.clipboard?.writeText(session.address)}>Copy agent address</button>
-                  <button onClick={signOut}>Sign out</button>
+                  <div className="menu-sep" />
+                  <button
+                    role="menuitem"
+                    onClick={() => navigator.clipboard?.writeText(session.address)}
+                  >
+                    Copy agent address
+                  </button>
+                  <button role="menuitem" style={{ color: 'var(--c-danger)' }} onClick={signOut}>
+                    Sign out
+                  </button>
                 </div>
               )}
             </div>
-          ) : (
-            <span className="muted">Not signed in</span>
-          )}
+          ) : null}
         </div>
       </header>
 
-      <p className="muted">
-        Sign in with your <strong>agent name</strong> — the same canonical Smart Agent you use everywhere — then
-        spin up a named organization it governs. (Relying-site demo; spec 229.)
-      </p>
-
-      {error && <p className="err">⛔ {error}</p>}
-
-      {/* ── Signed out: connect / sign up ──────────────────────────── */}
-      {!session && (
-        <>
-          <div className="panel broker">
-            <h2>Connect to your Smart Agent</h2>
-            <p className="muted">Enter your agent name, then confirm with the credential you set up.</p>
-            <p>
-              <input
-                value={connectName}
-                onChange={(e) => setConnectName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-                placeholder="e.g. rpedersen"
-                style={{ minWidth: '14rem' }}
-              />
-            </p>
-            {nameInfo.status === 'checking' && <p className="muted">Checking…</p>}
-            {nameInfo.status === 'none' && <p className="muted">No agent with that name yet — new here? Sign up below. ↓</p>}
-            {nameInfo.status === 'found' && (
-              <>
-                <p className="ok" style={{ margin: '0 0 0.5rem' }}>
-                  ✓ Found <code>{nameInfo.name}</code>
-                </p>
-                <p>
-                  {nameInfo.hasPasskey && hasLocalDelegation(nameInfo.name!) && (
-                    <button disabled={busy} onClick={() => onConnectName('passkey')}>
-                      Continue with passkey
-                    </button>
-                  )}{' '}
-                  {nameInfo.hasEoa && (
-                    <button disabled={busy} onClick={() => onConnectName('wallet')}>
-                      Continue with wallet
-                    </button>
-                  )}{' '}
-                  {nameInfo.hasPasskey && !hasLocalDelegation(nameInfo.name!) && (
-                    <button disabled={busy} onClick={() => onAddSite(nameInfo.name!)}>
-                      Set up this site (passkey) →
-                    </button>
-                  )}
-                </p>
-                {nameInfo.hasPasskey && !hasLocalDelegation(nameInfo.name!) && (
-                  <p className="muted">
-                    First time using <code>{nameInfo.name}</code> on this site? <strong>Set up this site</strong> —
-                    you’ll approve once with your passkey at your home Connect, then use Windows Hello / Face ID here.
-                  </p>
-                )}
-              </>
-            )}
-            {connectErr && <p className="err">⛔ {connectErr}</p>}
-          </div>
-
-          <div className="panel broker">
-            <h2>New here? Sign up</h2>
-            <p className="muted">
-              Pick a name for your account. With a passkey, we’ll set up your <strong>secure home</strong> (you’ll
-              approve there, then come right back). A wallet creates it here directly.
-            </p>
-            <p>
-              <input
-                value={desiredName}
-                onChange={(e) =>
-                  setDesiredName(e.target.value.toLowerCase().replace(/\.demo\.agent$/, '').replace(/[^a-z0-9-]/g, ''))
-                }
-                placeholder="e.g. alice"
-                style={{ marginRight: '0.25rem' }}
-              />
-              <code>{desiredName ? `${desiredName}.demo.agent` : 'your-name.demo.agent'}</code>
-            </p>
-            {desiredName && signupAvail === 'checking' && <p className="muted">Checking availability…</p>}
-            {desiredName && signupAvail === 'available' && (
-              <p className="ok" style={{ margin: '0 0 0.5rem' }}>✓ {desiredName}.demo.agent is available</p>
-            )}
-            {desiredName && signupAvail === 'taken' && (
-              <p className="err" style={{ margin: '0 0 0.5rem' }}>
-                ⛔ {desiredName}.demo.agent already exists.{' '}
-                <button
-                  className="ghost"
-                  style={{ marginLeft: '0.25rem' }}
-                  onClick={() => {
-                    setConnectName(desiredName);
-                    setDesiredName('');
-                    setSignupAvail('idle');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                >
-                  Connect to {desiredName}.demo.agent instead →
-                </button>
-                <br />
-                <span className="muted">That sends you to the “Connect” box above to sign in with it.</span>
-              </p>
-            )}
-            <p>
-              <button disabled={signupAvail !== 'available'} onClick={() => onSignup('passkey')}>
-                Sign up with passkey
-              </button>{' '}
-              <button disabled={signupAvail !== 'available'} onClick={() => onSignup('wallet')}>
-                Sign up with wallet
-              </button>
-            </p>
-            {!hasWallet() && (
-              <p className="muted">
-                <em>No browser wallet detected</em> — sign up with a passkey.
-              </p>
-            )}
-          </div>
-        </>
+      {/* Page-level error */}
+      {error && (
+        <div
+          role="alert"
+          style={{
+            background: 'var(--c-danger-bg)',
+            borderBottom: '1px solid var(--c-danger-border)',
+            padding: '.75rem var(--app-px)',
+            fontSize: '.9rem',
+            color: 'var(--c-danger)',
+            textAlign: 'center',
+          }}
+        >
+          {error}
+        </div>
       )}
 
-      {/* ── Signed in: create + list organizations ─────────────────── */}
-      {session && (
-        <>
-          <div className="panel">
-            <h2>
-              Welcome{session.fresh ? '' : ' back'}, {session.name}
-            </h2>
-            <p className="muted">
-              Agent <code>{short(session.address)}</code> — signed in via {session.via}.
-            </p>
-            {session.via === 'passkey' && (
-              <>
-                <button
-                  className="ghost"
-                  style={{ minHeight: '36px', padding: '0.3rem 0.8rem', fontSize: '0.85rem' }}
-                  disabled={personData?.loading}
-                  onClick={onViewPersonData}
-                >
-                  {personData?.loading ? 'Reading…' : 'View my contact data'}
-                </button>
-                {personData?.error && <p className="err" style={{ margin: '0.3rem 0 0' }}>⛔ {personData.error}</p>}
-                {personData && 'record' in personData && personData.record != null && (
-                  <pre style={{ marginTop: '0.4rem' }}>{JSON.stringify(personData.record, null, 2)}</pre>
-                )}
-              </>
-            )}
-          </div>
+      {/* ── Signed-out view ────────────────────────────────────────── */}
+      {!session && (
+        <div className="hero-screen">
+          <div className="hero-content">
 
-          <div className="panel broker">
-            <h2>Create an organization</h2>
-            <p className="muted">
-              Pick a unique name. Your <strong>central-auth passkey</strong> deploys an{' '}
-              <strong>Organization Smart Agent</strong> — custodied by you, the same way your personal agent is — claims
-              the name, and records <code>you → HAS_GOVERNANCE_OVER → org</code> on-chain. You’ll approve it in your
-              secure-home popup.
-            </p>
-            <p>
-              <input
-                value={orgName}
-                onChange={(e) =>
-                  setOrgName(e.target.value.toLowerCase().replace(/\.demo\.agent$/, '').replace(/[^a-z0-9-]/g, ''))
-                }
-                placeholder="e.g. acme"
-                style={{ marginRight: '0.25rem' }}
-              />
-              <code>{orgName ? `${orgName}.demo.agent` : 'org-name.demo.agent'}</code>
-            </p>
-            {orgName && orgAvail === 'checking' && <p className="muted">Checking availability…</p>}
-            {orgName && orgAvail === 'available' && (
-              <p className="ok" style={{ margin: '0 0 0.5rem' }}>✓ {orgName}.demo.agent is available</p>
-            )}
-            {orgName && orgAvail === 'taken' && (
-              <p className="err" style={{ margin: '0 0 0.5rem' }}>⛔ {orgName}.demo.agent is taken — choose another.</p>
-            )}
-            <button disabled={orgAvail !== 'available'} onClick={onCreateOrg}>
-              Create organization
-            </button>
-          </div>
-
-          {orgs.length > 0 && (
-            <div className="panel">
-              <h2>Your organizations</h2>
-              <ul>
-                {orgs.map((o) => {
-                  const data = orgData[o.orgAgent];
-                  return (
-                    <li key={o.orgAgent} style={{ marginBottom: '0.6rem' }}>
-                      <strong>{o.orgName}</strong> — <code>{short(o.orgAgent)}</code>{' '}
-                      {o.governed ? (
-                        <span className="badge" title="person → HAS_GOVERNANCE_OVER → org recorded on-chain (via your delegation)">
-                          you govern (on-chain)
-                        </span>
-                      ) : (
-                        <span className="badge" title="Org created; governance edge not recorded">
-                          org created
-                        </span>
-                      )}{' '}
-                      <button
-                        className="ghost"
-                        style={{ minHeight: '32px', padding: '0.25rem 0.7rem', fontSize: '0.8rem' }}
-                        disabled={data?.loading}
-                        onClick={() => onViewOrgData(o)}
-                      >
-                        {data?.loading ? 'Reading…' : 'View org data'}
-                      </button>
-                      {data?.error && <p className="err" style={{ margin: '0.3rem 0 0' }}>⛔ {data.error}</p>}
-                      {data && 'record' in data && data.record != null && (
-                        <pre style={{ marginTop: '0.4rem' }}>{JSON.stringify(data.record, null, 2)}</pre>
-                      )}
-                    </li>
-                  );
-                })}
+            {/* Hero top: headline + value bullets */}
+            <div className="hero-top">
+              <h1>
+                Your agent name is your portable{' '}
+                <span className="accent">identity.</span>
+              </h1>
+              <ul className="value-list" aria-label="Benefits">
+                <li>
+                  <span className="vi-chip blue" aria-hidden="true">🔑</span>
+                  Sign in with a <strong>passkey.</strong>
+                </li>
+                <li>
+                  <span className="vi-chip green" aria-hidden="true">✓</span>
+                  Connect apps with <strong>approval.</strong>
+                </li>
+                <li>
+                  <span className="vi-chip purple" aria-hidden="true">🛡</span>
+                  Revoke access <strong>anytime.</strong>
+                </li>
               </ul>
             </div>
-          )}
+
+            {/* Shield illustration */}
+            <div className="shield-hero" aria-hidden="true">
+              <div className="shield-svg-wrap">
+                <span className="shield-float tl">🏛</span>
+                <span className="shield-float tr">📊</span>
+                <span className="shield-float bl">🔗</span>
+                <span className="shield-float br">⚡</span>
+                <ShieldLogo size={96} />
+              </div>
+            </div>
+
+            {/* Name-entry section: existing agent */}
+            <div style={{ marginBottom: '1rem' }}>
+              <p style={{ fontSize: '.8rem', fontWeight: 600, color: 'var(--c-g500)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '.5rem' }}>
+                Already have an agent?
+              </p>
+              <div className="form-section" style={{ marginBottom: '12px' }}>
+                <div className="input-wrap">
+                  <input
+                    id="connect-name-input"
+                    type="text"
+                    value={connectName}
+                    onChange={(e) => setConnectName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+                    placeholder="Enter your agent name"
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    aria-label="Agent name"
+                  />
+                  {nameInfo.status === 'found' && (
+                    <span className="input-check" aria-hidden="true">✓</span>
+                  )}
+                </div>
+                {nameInfo.status === 'checking' && (
+                  <div className="field-hint checking" role="status" aria-live="polite">
+                    <span className="spinner" aria-hidden="true" />
+                    Checking…
+                  </div>
+                )}
+                {nameInfo.status === 'none' && (
+                  <div className="field-hint none" role="status" aria-live="polite">
+                    No agent found — new here? Create one below.
+                  </div>
+                )}
+                {nameInfo.status === 'found' && (
+                  <div className="field-hint found" role="status" aria-live="polite">
+                    ✓ Found <strong>{nameInfo.name}</strong>
+                  </div>
+                )}
+              </div>
+
+              {/* Connect CTAs — only when agent found */}
+              {nameInfo.status === 'found' && (
+                <div className="connect-actions" style={{ marginTop: '0' }}>
+                  {nameInfo.hasPasskey && hasLocalDelegation(nameInfo.name!) && (
+                    <button className="cta" disabled={busy} onClick={() => onConnectName('passkey')}>
+                      Continue with passkey →
+                    </button>
+                  )}
+                  {nameInfo.hasPasskey && !hasLocalDelegation(nameInfo.name!) && (
+                    <>
+                      <button className="cta" disabled={busy} onClick={() => onAddSite(nameInfo.name!)}>
+                        Set up this site →
+                      </button>
+                      <p className="muted" style={{ margin: '.25rem 0 0', textAlign: 'center', fontSize: '.82rem' }}>
+                        First time here with <strong>{nameInfo.name}</strong>? Approve once with your passkey, then use Face ID or Windows Hello here.
+                      </p>
+                    </>
+                  )}
+                  {nameInfo.hasEoa && (
+                    <button className="cta ghost" disabled={busy} onClick={() => onConnectName('wallet')}>
+                      Continue with wallet
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {connectErr && (
+                <div className="inline-err" role="alert" style={{ marginTop: '.5rem' }}>
+                  <span aria-hidden="true">⛔</span> {connectErr}
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="divider">or create a new agent</div>
+
+            {/* Sign-up section */}
+            <div style={{ marginBottom: '1rem' }}>
+              <div className="form-section" style={{ marginBottom: '12px' }}>
+                <p style={{ fontSize: '.8rem', fontWeight: 600, color: 'var(--c-g500)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '.5rem' }}>
+                  Choose your agent name
+                </p>
+                <div className="input-wrap">
+                  <input
+                    id="signup-name-input"
+                    type="text"
+                    value={desiredName}
+                    onChange={(e) =>
+                      setDesiredName(e.target.value.toLowerCase().replace(/\.demo\.agent$/, '').replace(/[^a-z0-9-]/g, ''))
+                    }
+                    placeholder="e.g. alice"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    aria-label="Choose your agent name"
+                  />
+                  {desiredName && signupAvail === 'available' && (
+                    <span className="input-check" aria-hidden="true">✓</span>
+                  )}
+                </div>
+                {desiredName && (
+                  <div style={{ marginTop: '.35rem', fontSize: '.82rem', color: 'var(--c-g400)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
+                    {desiredName}.demo.agent
+                  </div>
+                )}
+                {desiredName && signupAvail === 'checking' && (
+                  <div className="field-hint checking" role="status" aria-live="polite">
+                    <span className="spinner" aria-hidden="true" />
+                    Checking availability…
+                  </div>
+                )}
+                {desiredName && signupAvail === 'available' && (
+                  <div className="field-hint available" role="status" aria-live="polite">
+                    ✓ {desiredName}.demo.agent is available
+                  </div>
+                )}
+                {desiredName && signupAvail === 'taken' && (
+                  <div role="alert">
+                    <div className="field-hint taken">{desiredName}.demo.agent is already taken.</div>
+                    <button
+                      className="inline"
+                      style={{ marginTop: '.3rem' }}
+                      onClick={() => {
+                        setConnectName(desiredName);
+                        setDesiredName('');
+                        setSignupAvail('idle');
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                    >
+                      Connect to {desiredName}.demo.agent instead
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="connect-actions" style={{ marginTop: 0 }}>
+                <button className="cta" disabled={signupAvail !== 'available'} onClick={() => onSignup('passkey')}>
+                  Create my Smart Agent →
+                </button>
+                {hasWallet() && (
+                  <button className="cta ghost" disabled={signupAvail !== 'available'} onClick={() => onSignup('wallet')}>
+                    Create with wallet
+                  </button>
+                )}
+                {!hasWallet() && signupAvail !== 'available' && (
+                  <p className="muted" style={{ textAlign: 'center', fontSize: '.82rem', marginTop: '.25rem' }}>
+                    Uses a passkey — no browser wallet required.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Privacy footer */}
+            <div className="privacy-footer">
+              🔒 You're in control. Your data stays private.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Signed-in dashboard ────────────────────────────────────── */}
+      {session && (
+        <>
+          <div className="app-shell dashboard">
+
+            {/* Page header: agent name as H1 */}
+            <div className="dash-header">
+              <h1>{session.name}</h1>
+              <div className="dash-sub">
+                {session.fresh ? 'Just connected · ' : 'Active · '}
+                Base Sepolia
+              </div>
+            </div>
+
+            {/* Smart Agent card */}
+            <div className="card" style={{ marginBottom: '12px' }}>
+              <div className="card-row">
+                <div className="card-row-icon blue" aria-hidden="true">
+                  <ShieldLogo size={22} />
+                </div>
+                <div className="card-row-meta">
+                  <div className="card-row-label">Smart Agent</div>
+                  <button
+                    className="addr-chip"
+                    onClick={() => navigator.clipboard?.writeText(session.address)}
+                    title="Copy address"
+                    aria-label="Copy agent address"
+                  >
+                    {short(session.address)}
+                    <span className="addr-chip-copy" aria-hidden="true">⎘</span>
+                  </button>
+                </div>
+                <span className="card-chevron" aria-hidden="true">›</span>
+              </div>
+            </div>
+
+            {/* Connected Apps card */}
+            <div className="card" style={{ marginBottom: '12px' }}>
+              <div className="card-row" style={{ marginBottom: '.75rem' }}>
+                <div className="card-row-icon purple" aria-hidden="true">⬡</div>
+                <div className="card-row-meta">
+                  <div className="card-row-label">Connected Apps</div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'center', padding: '.5rem 0 .25rem', color: 'var(--c-g400)', fontSize: '.875rem' }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '.375rem' }} aria-hidden="true">☁</div>
+                <div style={{ fontWeight: 500 }}>Agentic Org is connected</div>
+                <div style={{ fontSize: '.8rem', marginTop: '.25rem', color: 'var(--c-g400)' }}>This site can read your approved data.</div>
+              </div>
+            </div>
+
+            {/* Sensitive Data section */}
+            <div style={{ marginBottom: '8px' }}>
+              <h3>Sensitive Data</h3>
+            </div>
+
+            {/* Profile / Contact data tile (Flow C) */}
+            {session.via === 'passkey' && (
+              <div className="card" style={{ marginBottom: '10px' }}>
+                <div className="section-header" style={{ marginBottom: personData && 'record' in personData && personData.record != null ? '.75rem' : '0' }}>
+                  <div className="card-row" style={{ flex: 1 }}>
+                    <div className="card-row-icon green" aria-hidden="true">👤</div>
+                    <div className="card-row-meta">
+                      <div className="card-row-label">Profile · Contact data</div>
+                      <div className="card-row-sub">Email, phone and more</div>
+                    </div>
+                  </div>
+                  {personData && 'record' in personData && personData.record != null ? (
+                    <button
+                      className="inline"
+                      onClick={() => setPersonData(null)}
+                      aria-label="Hide contact details"
+                    >
+                      Hide
+                    </button>
+                  ) : (
+                    <span className="card-chevron" aria-hidden="true">›</span>
+                  )}
+                </div>
+
+                {/* Locked state */}
+                {!personData && (
+                  <div className="sensitive-block">
+                    <div className="sensitive-header">
+                      <span className="sensitive-label">
+                        <span className="lock-icon" aria-hidden="true">🔒</span>
+                        Protected
+                      </span>
+                      <span style={{ fontSize: '.78rem', color: 'var(--c-g400)' }}>Confirm to view</span>
+                    </div>
+                    <div aria-hidden="true">
+                      <div className="pii-mask">
+                        <span className="pii-icon">✉</span>
+                        <span style={{ letterSpacing: '.1em' }}>▒▒▒▒▒▒▒@▒▒▒▒.▒▒▒</span>
+                      </div>
+                      <div className="pii-mask">
+                        <span className="pii-icon">📞</span>
+                        <span style={{ letterSpacing: '.1em' }}>+1 ▒▒▒ ▒▒▒ ▒▒▒▒</span>
+                      </div>
+                    </div>
+                    <button
+                      className="cta"
+                      style={{ marginTop: '1rem' }}
+                      onClick={onViewPersonData}
+                      aria-label="Confirm to view contact details"
+                    >
+                      Confirm to view
+                    </button>
+                  </div>
+                )}
+
+                {/* Loading */}
+                {personData?.loading && (
+                  <div className="sensitive-block" style={{ textAlign: 'center', padding: '1.25rem' }}>
+                    <span className="spinner spinner-lg" aria-label="Loading contact details" />
+                    <p className="muted" style={{ marginTop: '.75rem', marginBottom: 0 }}>Reading…</p>
+                  </div>
+                )}
+
+                {/* Error */}
+                {personData?.error && (
+                  <div className="inline-err" role="alert">
+                    <span aria-hidden="true">⛔</span> {personData.error}
+                  </div>
+                )}
+
+                {/* Revealed */}
+                {personData && 'record' in personData && personData.record != null && (
+                  <div className="sensitive-block revealed">
+                    <div className="sensitive-header">
+                      <span className="sensitive-label" style={{ color: 'var(--c-success)' }}>
+                        <span aria-hidden="true">✓</span> Contact details
+                      </span>
+                    </div>
+                    <RecordRows record={personData.record} />
+                    <div className="shared-note">
+                      <span className="shared-note-dot" aria-hidden="true" />
+                      Shared with: this app only
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Organizations tile (Flow D) */}
+            <div className="card" style={{ marginBottom: '10px' }}>
+              <div style={{ marginBottom: orgs.length > 0 ? '.875rem' : '0' }}>
+                <div className="card-row">
+                  <div className="card-row-icon purple" aria-hidden="true">🏛</div>
+                  <div className="card-row-meta">
+                    <div className="card-row-label">Organizations</div>
+                    <div className="card-row-sub">
+                      {orgs.length === 0 ? 'None yet' : `${orgs.length} organization${orgs.length === 1 ? '' : 's'}`}
+                    </div>
+                  </div>
+                  <span className="card-chevron" aria-hidden="true">›</span>
+                </div>
+              </div>
+
+              {orgs.length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                  {orgs.map((o) => {
+                    const data = orgData[o.orgAgent];
+                    return (
+                      <div key={o.orgAgent} className="org-item">
+                        <div className="org-row">
+                          <div className="org-meta">
+                            <div className="org-name">{o.orgName}</div>
+                            <div className="org-addr">{short(o.orgAgent)}</div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '.4rem', flexShrink: 0 }}>
+                            {o.governed ? (
+                              <span className="badge success">Governance</span>
+                            ) : (
+                              <span className="badge">Created</span>
+                            )}
+                            {!(data && 'record' in data && data.record != null) && (
+                              <button
+                                className="ghost"
+                                style={{ fontSize: '.8rem', padding: '.375rem .75rem', minHeight: '36px' }}
+                                disabled={data?.loading}
+                                onClick={() => onViewOrgData(o)}
+                                aria-label={`View details for ${o.orgName}`}
+                              >
+                                {data?.loading ? (
+                                  <>
+                                    <span className="spinner" aria-hidden="true" />
+                                    Reading…
+                                  </>
+                                ) : (
+                                  'View details'
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {data?.loading && (
+                          <div className="sensitive-block" style={{ marginTop: '.75rem', textAlign: 'center', padding: '.875rem' }}>
+                            <span className="spinner" aria-label={`Loading ${o.orgName} details`} />
+                          </div>
+                        )}
+
+                        {data?.error && (
+                          <div className="inline-err" style={{ marginTop: '.4rem' }} role="alert">
+                            <span aria-hidden="true">⛔</span> {data.error}
+                          </div>
+                        )}
+
+                        {data && 'record' in data && data.record != null && (
+                          <div className="sensitive-block revealed" style={{ marginTop: '.75rem' }}>
+                            <div className="sensitive-header">
+                              <span className="sensitive-label" style={{ color: 'var(--c-success)' }}>
+                                <span aria-hidden="true">✓</span> {o.orgName}
+                              </span>
+                              <button
+                                className="inline"
+                                onClick={() => setOrgData((m) => {
+                                  const next = { ...m };
+                                  delete next[o.orgAgent];
+                                  return next;
+                                })}
+                                aria-label={`Hide details for ${o.orgName}`}
+                              >
+                                Hide
+                              </button>
+                            </div>
+                            <RecordRows record={data.record} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Create org sub-form */}
+              <div style={{ borderTop: orgs.length > 0 ? '1px solid var(--c-g200)' : 'none', paddingTop: orgs.length > 0 ? '1rem' : '0' }}>
+                <p style={{ fontSize: '.8rem', fontWeight: 600, color: 'var(--c-g500)', textTransform: 'uppercase', letterSpacing: '.06em', margin: '0 0 .5rem' }}>
+                  Create organization
+                </p>
+                <p className="muted" style={{ fontSize: '.83rem', marginBottom: '.875rem' }}>
+                  Deploy an Organization Smart Agent custodied by your passkey, linked to you on-chain.
+                </p>
+                <div className="form-section" style={{ marginBottom: '.75rem' }}>
+                  <label htmlFor="org-name-input">Organization name</label>
+                  <div className="input-wrap">
+                    <input
+                      id="org-name-input"
+                      type="text"
+                      value={orgName}
+                      onChange={(e) =>
+                        setOrgName(e.target.value.toLowerCase().replace(/\.demo\.agent$/, '').replace(/[^a-z0-9-]/g, ''))
+                      }
+                      placeholder="e.g. acme"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                    />
+                    {orgName && orgAvail === 'available' && (
+                      <span className="input-check" aria-hidden="true">✓</span>
+                    )}
+                  </div>
+                  {orgName && (
+                    <div style={{ marginTop: '.3rem', fontSize: '.8rem', color: 'var(--c-g400)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
+                      {orgName}.demo.agent
+                    </div>
+                  )}
+                  {orgName && orgAvail === 'checking' && (
+                    <div className="field-hint checking" role="status" aria-live="polite">
+                      <span className="spinner" aria-hidden="true" />
+                      Checking availability…
+                    </div>
+                  )}
+                  {orgName && orgAvail === 'available' && (
+                    <div className="field-hint available" role="status" aria-live="polite">
+                      ✓ {orgName}.demo.agent is available
+                    </div>
+                  )}
+                  {orgName && orgAvail === 'taken' && (
+                    <div className="field-hint taken" role="alert">
+                      {orgName}.demo.agent is taken — choose another name.
+                    </div>
+                  )}
+                </div>
+                <button className="cta" disabled={orgAvail !== 'available'} onClick={onCreateOrg}>
+                  Create organization
+                </button>
+              </div>
+            </div>
+
+            {/* Treasury tile — disabled, Soon */}
+            <div className="card" style={{ marginBottom: '10px', opacity: .7 }}>
+              <div className="card-row">
+                <div className="card-row-icon amber" aria-hidden="true">💰</div>
+                <div className="card-row-meta">
+                  <div className="card-row-label" style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                    Treasury
+                    <span className="badge soon">Soon</span>
+                  </div>
+                  <div className="card-row-sub">On-chain balances and transfers</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Permissions tile — disabled, Soon */}
+            <div className="card" style={{ marginBottom: '10px', opacity: .7 }}>
+              <div className="card-row">
+                <div className="card-row-icon purple" aria-hidden="true">🔐</div>
+                <div className="card-row-meta">
+                  <div className="card-row-label" style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                    Permissions
+                    <span className="badge soon">Soon</span>
+                  </div>
+                  <div className="card-row-sub">Review and revoke app access</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '.875rem 0 1.5rem', textAlign: 'center', fontSize: '.75rem', color: 'var(--c-g400)' }}>
+              Real on Base Sepolia (chain 84532)
+            </div>
+          </div>
+
+          {/* Bottom tab bar */}
+          <nav className="tab-bar" aria-label="Main sections">
+            <div className="tab-bar-inner">
+              <button className="tab-item active" aria-current="page">
+                <span className="tab-icon" aria-hidden="true">👤</span>
+                Profile
+              </button>
+              <button className="tab-item">
+                <span className="tab-icon" aria-hidden="true">🏛</span>
+                Orgs
+              </button>
+              <button className="tab-item" aria-disabled="true">
+                <span className="tab-soon" aria-hidden="true">Soon</span>
+                <span className="tab-icon" aria-hidden="true">💰</span>
+                Treasury
+              </button>
+              <button className="tab-item" aria-disabled="true">
+                <span className="tab-soon" aria-hidden="true">Soon</span>
+                <span className="tab-icon" aria-hidden="true">🔐</span>
+                Perms
+              </button>
+            </div>
+          </nav>
         </>
       )}
 
-      <p className="muted" style={{ marginTop: '1rem', fontSize: '0.85em' }}>
-        Real on Base Sepolia (chain 84532): your agent + each org are deployed ERC-4337 Smart Agents; every org is
-        custodied by your central-auth passkey (same as your personal agent) and linked to you by an on-chain
-        relationship (spec 229).
-      </p>
-
-      {/* ── Progress modal (sign-up + create-org) ──────────────────── */}
+      {/* ── Progress modal / bottom sheet ──────────────────────────── */}
       {flow && (
-        <div className="modal-backdrop">
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <div className="modal">
-            <h2>{flow.title}</h2>
-            <ol className="steps">
-              {flow.steps.map((s, i) => {
-                const isLast = i === flow.steps.length - 1;
-                const done = flow.phase === 'done' || !isLast;
-                const current = flow.phase === 'running' && isLast;
-                return (
-                  <li key={i} className={done ? 'done' : current ? 'current' : 'pending'}>
-                    {current ? <span className="spinner" /> : <span>{done ? '✓' : '•'}</span>}
-                    {s}
-                  </li>
-                );
-              })}
-            </ol>
-            {flow.phase === 'running' && (
-              <p className="muted">This takes ~15–30s. Confirm any device or wallet prompt that appears.</p>
+
+            {/* Step indicator — shown when title contains "Step" or during "Signing you in" */}
+            {(flow.title === 'Signing you in' || flow.title === 'Creating your account…' || flow.title === 'Creating your organization…') && flow.phase === 'running' && (
+              <div className="step-indicator" aria-label="Step 1 of 2">
+                <div className="step-dots" aria-hidden="true">
+                  <span className="step-dot active" />
+                  <span className="step-dot" />
+                </div>
+                Step 1 of 2
+              </div>
             )}
+
+            <h2 id="modal-title">{flow.title}</h2>
+
+            {/* Running: spinner + steps */}
+            {flow.phase === 'running' && (
+              <>
+                {flow.steps.length === 0 ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '.75rem 0 .5rem' }}>
+                    <span className="spinner spinner-lg" aria-label="Working…" />
+                  </div>
+                ) : (
+                  <ol className="steps" aria-label="Progress steps">
+                    {flow.steps.map((s, i) => {
+                      const isLast = i === flow.steps.length - 1;
+                      const done = !isLast;
+                      const current = isLast;
+                      return (
+                        <li key={i} className={done ? 'done' : current ? 'current' : 'pending'}>
+                          <span className="step-icon" aria-hidden="true">
+                            {current
+                              ? <span className="spinner" />
+                              : done
+                                ? '✓'
+                                : '•'}
+                          </span>
+                          {s}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+                <p className="muted" style={{ fontSize: '.875rem', marginBottom: 0 }}>
+                  This takes ~15–30 seconds. Confirm any device prompt that appears.
+                </p>
+              </>
+            )}
+
+            {/* Done */}
+            {flow.phase === 'done' && (
+              <>
+                <ol className="steps" aria-label="Completed steps">
+                  {flow.steps.map((s, i) => (
+                    <li key={i} className="done">
+                      <span className="step-icon" aria-hidden="true">✓</span>
+                      {s}
+                    </li>
+                  ))}
+                </ol>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '.5rem 0' }}>
+                  <span className="spinner spinner-lg" aria-label="Finishing…" />
+                </div>
+              </>
+            )}
+
+            {/* Error */}
             {flow.phase === 'error' && (
               <>
-                <p className="err">{flow.error}</p>
-                <p className="muted">Nothing was charged. You can try again.</p>
-                <button className="ghost" onClick={() => setFlow(null)}>Close</button>
+                {flow.steps.length > 0 && (
+                  <ol className="steps" aria-label="Steps taken">
+                    {flow.steps.map((s, i) => (
+                      <li key={i} className="done">
+                        <span className="step-icon" aria-hidden="true">✓</span>
+                        {s}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                <div
+                  role="alert"
+                  style={{
+                    background: 'var(--c-danger-bg)',
+                    border: '1px solid var(--c-danger-border)',
+                    borderRadius: 'var(--r-md)',
+                    padding: '.75rem 1rem',
+                    color: 'var(--c-danger)',
+                    fontSize: '.9rem',
+                    marginBottom: '.75rem',
+                  }}
+                >
+                  {flow.error}
+                </div>
+                <p className="muted" style={{ fontSize: '.875rem', marginBottom: '.875rem' }}>
+                  Nothing was changed. You can try again.
+                </p>
+                <button className="cta ghost" onClick={() => setFlow(null)}>
+                  Close
+                </button>
               </>
             )}
           </div>
