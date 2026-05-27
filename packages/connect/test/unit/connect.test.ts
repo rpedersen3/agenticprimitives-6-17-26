@@ -191,7 +191,7 @@ describe('redirect — allowlist + single-use code store', () => {
 });
 
 describe('OIDC id_token (spec 230) — mint / verify', () => {
-  const idArgs = { iss: 'https://r-pedersen.agentictrust.io', aud: 'demo-org', ttlSeconds: 600, now: () => NOW };
+  const idArgs = { iss: 'https://r-pedersen.impact-agent.io', aud: 'demo-org', ttlSeconds: 600, now: () => NOW };
 
   it('roundtrips with standard + agent-extension claims (ES256)', async () => {
     const signer = await generateBrokerKeypair('ES256');

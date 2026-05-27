@@ -20,25 +20,44 @@ export type SignHash = (hash: Hex) => Promise<Hex>;
 export const AUD = 'demo-org';
 const CHAIN_ID = 84532;
 
-/** The configured PLATFORM Connect origin — the default home + the bootstrap/sign-up origin
- *  (a name with no agent yet has nothing to resolve). Not exported: callers go through
- *  `resolveAuthOrigin` so the per-person flip is a one-function change. */
-const PLATFORM_AUTH_ORIGIN =
-  (import.meta.env?.VITE_CENTRAL_AUTH_ORIGIN as string | undefined) ?? 'https://agenticprimitives-demo-sso.pages.dev';
+/** The registrable Connect SSO domain. Each person's central auth (their human
+ *  sign-in home) is their own single-label subdomain of this (spec 232). NOTE the
+ *  split: SSO is `<label>.impact-agent.me` (Vercel); the agent's A2A endpoint is a
+ *  separate domain `<label>.impact-agent.io` (Cloudflare). Relying sites send
+ *  users HERE for sign-in. */
+const CENTRAL_AUTH_DOMAIN = 'impact-agent.me';
 
-/** Resolve where a name's central auth lives (spec 229 §4 / P4). One mechanism, no fallback
- *  chain: the canonical source is the agent's on-chain `authOrigin` profile facet
- *  (`getStringProperty(agent, keccak256("authOrigin"))`). An UNSET facet is an answer, not a
- *  trigger — it resolves to `PLATFORM_AUTH_ORIGIN` (a constant default, not a second lookup).
- *
- *  Domain-deferred phase (P5 not done): `*.agentictrust.io` isn't live and every agent's
- *  origin is the one platform origin, so the facet is NOT written and this returns the
- *  platform origin without an on-chain read (writing/reading a uniform value would only burn
- *  scarce paymaster gas). At the P5 flip, swap the body to read the facet — signature is
- *  already async so no caller changes. `name` is accepted now so the seam is stable. */
+/** The configured PLATFORM Connect origin — the apex landing + the bootstrap/sign-up
+ *  origin (a name with no agent yet has nothing to resolve, so it lands at the apex).
+ *  Not exported: callers go through `resolveAuthOrigin`. */
+const PLATFORM_AUTH_ORIGIN =
+  (import.meta.env?.VITE_CENTRAL_AUTH_ORIGIN as string | undefined) ?? `https://${CENTRAL_AUTH_DOMAIN}`;
+
+/** The label part of a name (`alice.demo.agent` → `alice`; `alice` → `alice`). */
+function nameLabel(name: string): string {
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/\.demo\.agent$/, '')
+      .replace(/\.+$/, '')
+      .split('.')[0] ?? ''
+  );
+}
+
+/** Resolve where a name's central auth lives (spec 229 §4 / spec 231 — P5).
+ *  ONE mechanism, no fallback chain (ADR-0013): each person's secure home is their
+ *  own subdomain `<label>.impact-agent.io`, and the home origin is DERIVED from the
+ *  name — the subdomain ⟺ name-label binding is canonical in this deployment, a pure
+ *  computation, not a remote lookup. An empty/unparseable name (bootstrap / sign-up —
+ *  no agent yet, so nothing to resolve) lands at the platform apex. The on-chain
+ *  `authOrigin` profile facet (agent-profile `AUTH_ORIGIN`) remains the FUTURE override
+ *  for self-hosted homes; deriving it here adds no information and no gas. `async` keeps
+ *  the seam stable for that future facet read. */
 // eslint-disable-next-line @typescript-eslint/require-await
-export async function resolveAuthOrigin(_name?: string): Promise<string> {
-  return PLATFORM_AUTH_ORIGIN;
+export async function resolveAuthOrigin(name?: string): Promise<string> {
+  const label = name ? nameLabel(name) : '';
+  return label ? `https://${label}.${CENTRAL_AUTH_DOMAIN}` : PLATFORM_AUTH_ORIGIN;
 }
 
 export type SiweOutcome =

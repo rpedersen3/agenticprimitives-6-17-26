@@ -10,6 +10,7 @@
 export {
   CAIP10_NAMESPACE_ALLOWLIST,
   AGENT_CARD_SCHEMA_VERSION,
+  AUTH_ORIGIN,
 } from './constants';
 
 export {

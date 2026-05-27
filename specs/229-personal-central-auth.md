@@ -37,7 +37,7 @@ fighting it:
 - **Each relying site keeps its own local passkey** as an on-chain custodian, so
   **return visits are one-touch** (local Windows Hello / Face ID, no redirect).
 - **The first visit to a new site bootstraps via the person's central auth** —
-  the person's own origin (`<handle>.agentictrust.io`, the same subdomain that
+  the person's own origin (`<handle>.impact-agent.io`, the same subdomain that
   hosts their A2A-agent app) which holds their **primary** credential. The central
   auth proves custody **once** and authorizes adding the new site's local passkey
   as a custodian (`addPasskey` signed by the primary credential, gas-sponsored).
@@ -111,14 +111,14 @@ From `/home/barb/smart-agent` (`003-intent-marketplace-proposal`):
 ## 4. Issuer discovery (one mechanism — ADR-0013)
 
 A relying site must learn **where a name's central auth lives** to redirect there.
-The person's central auth is their own SSI-wallet origin (`<handle>.agentictrust.io`),
+The person's central auth is their own SSI-wallet origin (`<handle>.impact-agent.io`),
 where the ROOT passkey is registered (WebAuthn `rpId = that host`). The relying site
 discovers it from the name and redirects there.
 
 **Canonical mechanism — the `authOrigin` facet.** A person agent declares its central
 auth as an on-chain **profile string property** on the `agentProfileResolver`:
 `getStringProperty(agent, AUTH_ORIGIN)` (predicate `keccak256("authOrigin")`), e.g.
-`"https://r-pedersen.agentictrust.io"`. Resolution is a single read — `name → agent →
+`"https://r-pedersen.impact-agent.io"`. Resolution is a single read — `name → agent →
 authOrigin` — **no fallback chain**. An UNSET facet is an *answer*, not a trigger to try a
 second mechanism: it resolves to the configured **platform default origin** (a pure
 constant). That keeps ADR-0013's "one mechanism" intact (a defined default for an unset
@@ -130,12 +130,14 @@ optional field is not a second remote lookup).
   relying site uses the configured platform Connect origin. This is a *different operation*,
   not a fallback within the connect read path.
 
-**Migration phasing (see P4/P5).** Until `*.agentictrust.io` is live, every agent's
-auth origin IS the one shared platform origin, so the facet is **not written** (a per-person
-write to a uniform value would only burn gas). Relying sites isolate resolution behind a
-single `resolveAuthOrigin(name)` seam that returns the platform origin today; at the P5
-domain flip the seam reads the facet and per-person facets are populated. The protocol in §5
-is unchanged across the migration; only this resolver + deployment topology change.
+**Migration phasing (see P4/P5).** P4 isolated resolution behind a single
+`resolveAuthOrigin(name)` seam. At the **P5 flip (live on `*.impact-agent.io`)** the seam
+**derives** each person's home from the name (`<label>.impact-agent.io`) — the subdomain ⟺
+name-label binding is canonical, so this is a pure computation, not a facet read. The
+`authOrigin` profile facet (below) is **not written** (it would add no information over the
+derivation and would cost a profile-register + an ontology-term registration); it is retained
+as the FUTURE override for self-hosted homes. The protocol in §5 is unchanged; only this
+resolver + deployment topology change.
 
 ## 5. Enrollment protocol (central auth `/authorize` → `/token`)
 
@@ -184,7 +186,7 @@ ROOT credential remains the SA's **only custodian**.
 
 ```
 rpedersen.agent  →  Person Smart Agent (ERC-4337)
-  ├─ ROOT passkey   rpId: auth.agentictrust.io   the ONLY custodian (custody-grade;
+  ├─ ROOT passkey   rpId: auth.impact-agent.io   the ONLY custodian (custody-grade;
   │                                               add/remove creds, recover, rotate)
   └─ optional EOA / SIWE                          recovery / fallback custodian
         │
@@ -390,11 +392,24 @@ discloses the full-authority grant in consent until the delegation rewrite ships
   the domain-deferred phase the seam returns the configured platform origin and the facet is
   NOT written (uniform value → a write would only burn scarce paymaster gas). **Done
   2026-05-27** (demo-org). No on-chain writes added.
-- **P5 (future, domain-gated) — `*.agentictrust.io`:** wildcard Worker/route, per-person
-  subdomain as the WebAuthn RP (`rpId = <handle>.agentictrust.io`), per-person ROOT passkey,
-  host→agent context in demo-sso, and **populate each person's `authOrigin` facet** so the
-  P4 seam reads per-person subdomains. The real domain is intentionally NOT provisioned yet
-  (user, 2026-05-27). Deployment-topology + facet population only — no protocol change.
+- **P5 — `*.impact-agent.io` (the real domain; in progress 2026-05-27).** Each person's
+  central auth is their own **single-label subdomain** `<handle>.impact-agent.io`, served by
+  demo-sso (Pages) via a wildcard custom domain. **Subdomain-isolated ROOT passkey**: the
+  WebAuthn RP ID is the serving host, so a passkey created at `<handle>.impact-agent.io` is
+  bound to (and isolated to) that subdomain. **Signup happens AT the subdomain** — passkey
+  signup/connect at the apex redirects to `<label>.impact-agent.io` and auto-resumes there
+  (`src/lib/host.ts` + `App.tsx` `redirectForPasskey`/resume effects). The apex
+  `impact-agent.io` is the platform landing + bootstrap origin.
+  - **`resolveAuthOrigin` is name-derivation, NOT a facet read.** In this deployment the
+    subdomain ⟺ name-label binding is canonical, so the home origin is a PURE function of the
+    name (`<label>.impact-agent.io`) — one mechanism, no remote read (ADR-0013). Writing the
+    `authOrigin` facet on-chain would need a profile-`register()` + an OntologyTermRegistry
+    term for ZERO added information, so it is **not written**. The `authOrigin` predicate
+    (`@agenticprimitives/agent-profile` `AUTH_ORIGIN`) is retained as the FUTURE override for
+    self-hosted homes; when that lands, `resolveAuthOrigin` reads it first and falls back to
+    name-derivation (still one mechanism + a pure default).
+  - **The personal subdomain ALSO serves the agent's A2A endpoint** (`.well-known/agent-card.json`
+    + `/api/a2a`) — one unified endpoint per agent. See **[spec 231](231-personal-subdomain-endpoint.md)**.
   ⚠️ The subdomain answers *where the ROOT passkey lives*, NOT *what a relying site may do*
   (that stays a scoped delegation — ADR-0019). A personal origin must never be used to
   justify making a relying site a custodian.
@@ -436,4 +451,5 @@ discloses the full-authority grant in consent until the delegation rewrite ships
 
 - Wallet/SIWE and Google paths on demo-org (name + passkey only here).
 - Multi-custodian / threshold / CustodyPolicy orgs (simple mode-0 org only).
-- The real `agentictrust.io` domain + wildcard Worker (P5).
+- On-chain `authOrigin` facet writes (P5 uses name-derivation; the facet is the
+  future self-hosted-home override only).

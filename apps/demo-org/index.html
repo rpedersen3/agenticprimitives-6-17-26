@@ -549,6 +549,74 @@
         box-shadow: var(--sh-md, 0 4px 14px rgba(17,24,39,.06)); padding: 1.1rem 1.1rem 1.25rem;
         margin: 1.25rem 0 1rem;
       }
+      .connect-visual {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: .5rem;
+        margin-bottom: .875rem;
+      }
+      .connect-node {
+        min-width: 0;
+        border: 1px solid var(--c-g200);
+        border-radius: var(--r-lg);
+        padding: .65rem .6rem;
+        background: var(--c-g50);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .35rem;
+        text-align: center;
+        font-size: .68rem;
+        font-weight: 800;
+        color: var(--c-g700);
+        line-height: 1.2;
+      }
+      .connect-node.home {
+        background: linear-gradient(160deg, #fff 35%, var(--c-primary-subtle));
+        border-color: var(--c-primary-border);
+        color: var(--c-primary);
+      }
+      .connect-node span {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .connect-node-icon {
+        width: 38px; height: 38px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fff;
+        color: var(--c-primary);
+        box-shadow: var(--sh-sm);
+      }
+      .connect-arrow {
+        color: var(--c-primary);
+        font-weight: 900;
+        font-size: 1.1rem;
+      }
+      .signin-card-copy {
+        border: 1px solid var(--c-primary-border);
+        border-radius: var(--r-md);
+        background: var(--c-primary-subtle);
+        padding: .75rem .875rem;
+        margin-bottom: .875rem;
+      }
+      .signin-card-copy strong {
+        display: block;
+        color: var(--c-g900);
+        font-size: .9rem;
+        margin-bottom: .2rem;
+      }
+      .signin-card-copy span {
+        display: block;
+        color: var(--c-g500);
+        font-size: .8rem;
+        line-height: 1.45;
+      }
       .signin-label {
         display: block; font-size: .72rem; font-weight: 700; color: var(--c-g500);
         text-transform: uppercase; letter-spacing: .08em; margin-bottom: .45rem;

@@ -391,6 +391,83 @@
       @keyframes receipt-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
       @media (prefers-reduced-motion: no-preference) { .receipt-chip { animation: receipt-in .25s var(--ease, ease); } }
 
+      /* ── Personal secure-home hero ─────────────────────────────────── */
+      .agent-home-card,
+      .agent-badge-card {
+        background: linear-gradient(160deg, #fff 35%, var(--c-primary-subtle));
+        border: 1.5px solid var(--c-primary-border);
+        border-radius: var(--r-xl);
+        padding: 1.05rem 1.1rem;
+        margin: .625rem 0 .75rem;
+        box-shadow: var(--sh-card);
+        text-align: center;
+      }
+      .agent-home-hero,
+      .agent-badge-shield {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: .45rem;
+        margin-bottom: .7rem;
+      }
+      .agent-home-url {
+        max-width: 100%;
+        padding: .32rem .75rem;
+        border-radius: 999px;
+        background: #fff;
+        border: 1px solid var(--c-primary-border);
+        color: var(--c-primary);
+        font-family: 'SF Mono', 'Roboto Mono', monospace;
+        font-size: .75rem;
+        font-weight: 800;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        box-shadow: var(--sh-sm);
+      }
+      .agent-badge-kicker {
+        font-size: .7rem;
+        font-weight: 900;
+        color: var(--c-success);
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        margin-bottom: .3rem;
+      }
+      .agent-badge-name {
+        font-size: 1.35rem;
+        font-weight: 900;
+        color: var(--c-g900);
+        letter-spacing: -.04em;
+        line-height: 1.18;
+        word-break: break-word;
+      }
+      .agent-badge-sub {
+        margin-top: .35rem;
+        color: var(--c-g500);
+        font-size: .82rem;
+        line-height: 1.45;
+      }
+      .first-step-note {
+        background: #fff;
+        border: 1px solid var(--c-g200);
+        border-radius: var(--r-md);
+        padding: .75rem .875rem;
+        margin-bottom: .625rem;
+      }
+      .first-step-note strong {
+        display: block;
+        color: var(--c-g900);
+        font-size: .875rem;
+        margin-bottom: .25rem;
+      }
+      .first-step-note span {
+        display: block;
+        color: var(--c-g500);
+        font-size: .8rem;
+        line-height: 1.45;
+      }
+
       /* ── Spinner ────────────────────────────────────────────────────── */
       .spinner {
         width: 1.05rem; height: 1.05rem;

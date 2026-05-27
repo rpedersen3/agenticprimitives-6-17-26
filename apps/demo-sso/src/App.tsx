@@ -20,6 +20,7 @@ import { issueSiteDelegation, toWire } from './lib/delegation';
 import { loadPasskey, type DemoPasskey } from './lib/passkey';
 import { hasWallet } from './lib/wallet';
 import { startGoogleSignIn, exchangeCode } from './server-client';
+import { CENTRAL_AUTH_DOMAIN, subdomainHandle } from './lib/host';
 
 interface Session {
   token: string;
@@ -156,6 +157,35 @@ const ShieldLogo = ({ size = 24, gradient = false }: { size?: number; gradient?:
   );
 };
 
+/** The label part of a name (`alice.demo.agent` → `alice`; `alice` → `alice`). */
+function labelOf(name: string): string {
+  return name.trim().toLowerCase().replace(/\.demo\.agent$/, '').replace(/\.+$/, '').split('.')[0] ?? '';
+}
+
+/** Is this page served on the Connect central-auth domain family (apex or a
+ *  personal subdomain)? Off it (localhost dev, pages.dev preview) we do NOT
+ *  redirect — the passkey binds to the serving host, which is fine for dev. */
+function onCentralAuthDomain(): boolean {
+  const h = window.location.hostname;
+  return h === CENTRAL_AUTH_DOMAIN || h.endsWith('.' + CENTRAL_AUTH_DOMAIN);
+}
+
+/** Subdomain-isolated passkeys (spec 229 P5): a ROOT passkey must be created at
+ *  the person's OWN subdomain so its WebAuthn RP ID = `<label>.impact-agent.io`.
+ *  If a passkey signup/connect is triggered for `name` while we're NOT on that
+ *  subdomain (but ARE on the central-auth domain), navigate there carrying the
+ *  intent; the page auto-resumes the ceremony on load. Returns true if it
+ *  redirected (caller should stop). */
+function redirectForPasskey(intent: 'signup' | 'connect', name: string): boolean {
+  const label = labelOf(name);
+  if (!label || !onCentralAuthDomain()) return false;
+  if (window.location.hostname === `${label}.${CENTRAL_AUTH_DOMAIN}`) return false; // already home
+  const u = new URL(`https://${label}.${CENTRAL_AUTH_DOMAIN}/`);
+  u.searchParams.set(intent === 'signup' ? 'passkey_signup' : 'passkey_connect', label);
+  window.location.href = u.toString();
+  return true;
+}
+
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [restoring, setRestoring] = useState<boolean>(shouldRestore);
@@ -173,6 +203,9 @@ export function App() {
   const [stepUpMsg, setStepUpMsg] = useState<string | null>(null);
   const [desiredName, setDesiredName] = useState('');
   const [connectName, setConnectName] = useState('');
+  // Subdomain-isolated passkey resume (spec 229 P5): set when we land on a
+  // personal subdomain carrying a `passkey_signup`/`passkey_connect` intent.
+  const [resume, setResume] = useState<{ intent: 'signup' | 'connect'; label: string } | null>(null);
   const [connectErr, setConnectErr] = useState<string | null>(null);
   const [nameInfo, setNameInfo] = useState<{
     status: 'idle' | 'checking' | 'none' | 'found';
@@ -339,10 +372,56 @@ export function App() {
     return () => clearTimeout(t);
   }, [desiredName]);
 
+  // Subdomain-isolated passkey resume (spec 229 P5). We were redirected to this
+  // personal subdomain to run the ROOT-passkey ceremony here (RP ID = this host).
+  // Prefill the matching name input + arm the flow; the availability /
+  // name-info effects + the auto-run effect below carry it to completion.
+  useEffect(() => {
+    const p = new URL(window.location.href).searchParams;
+    const sup = p.get('passkey_signup');
+    const con = p.get('passkey_connect');
+    if (!sup && !con) return;
+    const home = subdomainHandle();
+    if (home && sup === home) {
+      setDesiredName(home);
+      setResume({ intent: 'signup', label: home });
+    } else if (home && con === home) {
+      setConnectName(home);
+      setResume({ intent: 'connect', label: home });
+    }
+    p.delete('passkey_signup');
+    p.delete('passkey_connect');
+    const u = new URL(window.location.href);
+    u.search = p.toString();
+    window.history.replaceState({}, '', u.toString());
+  }, []);
+
+  // Fire the armed passkey flow once its supporting state is ready. Signup waits
+  // for the availability check (and falls back to connect if the name now
+  // exists); connect can fire immediately.
+  useEffect(() => {
+    if (!resume || busy) return;
+    if (resume.intent === 'connect') {
+      setResume(null);
+      void onConnectName('passkey');
+    } else if (signupAvail === 'available') {
+      setResume(null);
+      void onSignup('passkey');
+    } else if (signupAvail === 'taken') {
+      setResume(null);
+      setConnectName(resume.label);
+      void onConnectName('passkey');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resume, signupAvail, busy]);
+
   // Connect by agent-service name: resolve name → agent → prove with a custody
   // credential (the name is the identity; any custodian credential gets you in).
   async function onConnectName(via: 'wallet' | 'passkey') {
     if (!connectName.trim()) return;
+    // Passkeys are bound to their subdomain — sign in at the person's own home
+    // (spec 229 P5). If we're not there yet, redirect; the subdomain resumes.
+    if (via === 'passkey' && redirectForPasskey('connect', connectName)) return;
     setConnectErr(null);
     setBusy(true);
     try {
@@ -361,6 +440,10 @@ export function App() {
   async function onSignup(via: 'wallet' | 'passkey') {
     const base = desiredName.trim();
     if (!base || signupAvail !== 'available') return;
+    // The ROOT passkey must be created at the person's OWN subdomain so its
+    // WebAuthn RP ID = <label>.impact-agent.io (spec 229 P5). Redirect there
+    // first; the subdomain auto-resumes the signup once it loads.
+    if (via === 'passkey' && redirectForPasskey('signup', base)) return;
     setError(null);
     setBusy(true);
     const steps: string[] = [];
@@ -663,6 +746,8 @@ export function App() {
         return enrollReq.aud;
       }
     })();
+    const personalLabel = enrollReq.name.replace(/\.demo\.agent$/, '');
+    const personalUrl = `${personalLabel}.${CENTRAL_AUTH_DOMAIN}`;
     const allowed = relyingAllowed(enrollReq.redirectUri);
     const isNew = enrollExists === false; // name has no agent yet → create the home account
     const running = enrollFlow.phase === 'running';
@@ -936,14 +1021,13 @@ export function App() {
           <div className="popup-scroll">
             <StepBadge n={3} />
             <div className="popup-heading"><h1>Approve this app</h1></div>
-            <Receipt>{ceremony.name ?? enrollReq.name} created — your Smart Agent is live</Receipt>
-            <div className="entity-chip" style={{ marginTop: '.6rem' }}>
-              <div className="entity-chip-icon" aria-hidden="true">🌐</div>
-              <div className="entity-chip-meta">
-                <div className="entity-chip-name">{host} wants to connect</div>
-                <div className="entity-chip-sub">to {ceremony.name ?? enrollReq.name}</div>
-              </div>
+            <div className="agent-badge-card">
+              <div className="agent-badge-shield"><ShieldLogo size={64} gradient /></div>
+              <div className="agent-badge-kicker">Smart Agent ready</div>
+              <div className="agent-badge-name">{ceremony.name ?? enrollReq.name}</div>
+              <div className="agent-badge-sub">Your personal agent now has a secure home.</div>
             </div>
+            <Receipt>{host} is asking to become a connected app</Receipt>
             <div className="perm-card can">
               <div className="perm-card-title">This app can:</div>
               <ul className="perm-list">
@@ -969,12 +1053,13 @@ export function App() {
           <Topbar />
           <div className="popup-scroll">
             <div className="popup-heading"><h1>Connected</h1></div>
-            <div className="agent-grant-card">
-              <div className="agent-grant-label">✓ App connected to</div>
-              <div className="agent-grant-name">{ceremony.name ?? enrollReq.name}</div>
-              <div className="agent-grant-sub">Returning you to {host}…</div>
+            <div className="agent-badge-card">
+              <div className="agent-badge-shield"><ShieldLogo size={72} gradient /></div>
+              <div className="agent-badge-kicker">You're connected</div>
+              <div className="agent-badge-name">{ceremony.name ?? enrollReq.name}</div>
+              <div className="agent-badge-sub">{host} is now a connected app. You can revoke it anytime.</div>
             </div>
-            <div className="privacy-footer">🔒 Revoke this app anytime from your secure home.</div>
+            <div className="privacy-footer">Returning you to {host}…</div>
           </div>
         </div>
       );
@@ -987,39 +1072,45 @@ export function App() {
         <div className="popup-scroll">
           <StepBadge n={1} />
           {/* What you get — the agent name is the centrepiece */}
-          <div className="agent-grant-card">
-            <div className="agent-grant-label">{isNew ? "You're about to get" : 'Signing in as'}</div>
-            <div className="agent-grant-name">{enrollReq.name}</div>
-            {isNew && <div className="agent-grant-sub">Your own Personal Smart Agent, secured by your device</div>}
-          </div>
-
-          <div className="entity-chip">
-            <div className="entity-chip-icon" aria-hidden="true">🌐</div>
-            <div className="entity-chip-meta">
-              <div className="entity-chip-name">{host} wants to connect</div>
-              <div className="entity-chip-sub">to {enrollReq.name}</div>
+          {isNew ? (
+            <div className="agent-home-card">
+              <div className="agent-home-hero">
+                <ShieldLogo size={70} gradient />
+                <div className="agent-home-url">{personalUrl}</div>
+              </div>
+              <div className="agent-grant-label">Your personal sign-in page</div>
+              <div className="agent-grant-name">{enrollReq.name}</div>
+              <div className="agent-grant-sub">
+                This is your secure home for signing in, managing your Smart Agent, and approving connected apps.
+              </div>
             </div>
-          </div>
-
-          <div className="perm-card can">
-            <div className="perm-card-title">This app can:</div>
-            <ul className="perm-list">
-              <li><span className="perm-icon ok" aria-hidden="true">✓</span>Sign you in as <strong>{enrollReq.name}</strong></li>
-              <li><span className="perm-icon ok" aria-hidden="true">✓</span>Read approved profile data for this session</li>
-            </ul>
-          </div>
-          <CannotDetails />
-
-          {isNew && (
-            <p style={{ fontSize: '.8rem', color: 'var(--c-g500)', margin: '.4rem 0 0', lineHeight: 1.55 }}>
-              First you create a sign-in key, then your Smart Agent, then the app permission.
-            </p>
+          ) : (
+            <div className="agent-home-card">
+              <div className="agent-home-hero">
+                <ShieldLogo size={58} gradient />
+                <div className="agent-home-url">{personalUrl}</div>
+              </div>
+              <div className="agent-grant-label">Welcome back to your secure home</div>
+              <div className="agent-grant-name">{enrollReq.name}</div>
+              <div className="agent-grant-sub">{host} is asking to connect as an approved app.</div>
+            </div>
           )}
+
+          <div className="first-step-note">
+            <strong>{isNew ? 'First, create your secure sign-in key.' : 'Review this connected app request.'}</strong>
+            <span>
+              {isNew
+                ? 'Your device will ask you to confirm. After that, we will set up your Smart Agent and ask which permission this app gets.'
+                : `${host} only gets the permission you approve here.`}
+            </span>
+          </div>
+
+          {!isNew && <CannotDetails />}
           <div className="privacy-footer">🔒 Permission for this app only. Revoke anytime.</div>
         </div>
         <div className="popup-actions">
           <button className="cta" onClick={isNew ? onCreateKey : onApproveApp}>
-            {isNew ? 'Create my sign-in key' : 'Approve with your device'}
+            {isNew ? 'Set up my secure home' : 'Approve with your device'}
           </button>
           <button className="cta ghost" onClick={denyEnroll}>{isNew ? 'Cancel' : 'Deny'}</button>
         </div>

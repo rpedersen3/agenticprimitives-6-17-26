@@ -9,7 +9,7 @@ unchanged; only the transport becomes standard OIDC).
 Make the **login / assertion layer** of a person's central auth a compliant OIDC
 **OpenID Provider (OP)**, so relying apps integrate with boring, well-understood
 plumbing (discovery, authorization-code + PKCE, JWKS, `id_token`) instead of a
-bespoke popup protocol. The person's central auth (`<handle>.agentictrust.io`, spec
+bespoke popup protocol. The person's central auth (`<handle>.impact-agent.io`, spec
 229 §4) **is the OP / issuer**; the ROOT passkey is its credential.
 
 **Hard split — identity vs authority:**
@@ -67,10 +67,10 @@ Served per-origin; `issuer` MUST equal the serving origin (the person's OP).
 
 ```json
 {
-  "issuer": "https://r-pedersen.agentictrust.io",
-  "authorization_endpoint": "https://r-pedersen.agentictrust.io/authorize",
-  "token_endpoint": "https://r-pedersen.agentictrust.io/token",
-  "jwks_uri": "https://r-pedersen.agentictrust.io/jwks",
+  "issuer": "https://r-pedersen.impact-agent.io",
+  "authorization_endpoint": "https://r-pedersen.impact-agent.io/authorize",
+  "token_endpoint": "https://r-pedersen.impact-agent.io/token",
+  "jwks_uri": "https://r-pedersen.impact-agent.io/jwks",
   "response_types_supported": ["code"],
   "grant_types_supported": ["authorization_code"],
   "subject_types_supported": ["public"],
@@ -132,7 +132,7 @@ against `iss`'s `jwks_uri`.
 
 ```json
 {
-  "iss": "https://r-pedersen.agentictrust.io",
+  "iss": "https://r-pedersen.impact-agent.io",
   "sub": "eip155:84532:0xPersonAgent",
   "aud": "demo-org",
   "exp": 1700000600,
@@ -228,6 +228,8 @@ discovery routes (the `functions/.well-known/` dotfile path works on Pages), `/t
 ## 11. Out of scope
 
 - OID4VCI / verifiable-credential issuance (borrow framing only, §2).
-- The real `*.agentictrust.io` domain + per-person origins (spec 229 P5 — deferred).
+- Per-person origins are LIVE on `*.impact-agent.io` (spec 229 P5 / spec 231); each
+  `<handle>.impact-agent.io` is its own OP issuer by Host (the `iss` derives from the
+  serving origin — already host-relative, no code change).
 - Any change to the authority model (ADR-0019) — delegation semantics are unchanged.
 - Google/SIWE relying-site paths on demo-org (passkey-name first; spec 229 §13).

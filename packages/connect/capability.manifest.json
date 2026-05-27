@@ -57,7 +57,14 @@
     "newAuthCode",
     "createInMemoryAuthCodeStore",
     "AuthCodeValue",
-    "AuthCodeStore"
+    "AuthCodeStore",
+    "mintIdToken",
+    "verifyIdToken",
+    "verifyPkceS256",
+    "OidcIdToken",
+    "MintIdTokenInput",
+    "VerifyIdTokenResult",
+    "VerifyIdTokenOpts"
   ],
   "forbiddenTerms": [
     {

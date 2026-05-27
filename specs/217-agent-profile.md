@@ -126,6 +126,14 @@ Spec 217 ADDS one predicate:
 
 - `native-id` (CAIP-10 — per ADR-0008)
 
+Spec 229 (P5) ADDS one optional string predicate, exported here as
+`AUTH_ORIGIN = keccak256("authOrigin")`:
+
+- `authOrigin` — where the agent's **central auth** lives (its own
+  `<handle>.impact-agent.io` subdomain holding the ROOT passkey). Read by relying
+  sites as `name → agent → getStringProperty(agent, AUTH_ORIGIN)`, a single
+  resolution (ADR-0013). Unset → the relying site's platform default origin.
+
 Plus an **optional** on-chain `AgentProfileResolver` contract that
 mirrors a few additional fields for cheap discovery without a
 metadata-uri fetch:

@@ -4,24 +4,21 @@ End-to-end interaction for **passkey sign-in** on `demo-sso`: credential ceremon
 
 **Specs:** [224](../../../specs/224-agentic-connect.md) (broker + `AgentSession`), [223](../../../specs/223-identity-directory.md) (resolve), [227](../../../specs/227-real-connect-experience.md) (real journey).
 
-For the separate-origin SSO product shape, see
-[Name-first per-site passkey SSO](./name-first-per-site-passkey-sso.md): the
-central ANS passkey is a root/bootstrap credential on the person Smart Agent, and
-each relying site adds its own local WebAuthn/P-256 signer to that same agent.
-
 ---
 
 ## Actors
 
-| Actor | Role |
-| --- | --- |
-| **Browser** | WebAuthn passkey, holds `AgentSession` JWT, calls Connect + `/a2a` proxy + `/me` |
-| **Connect origin** (`demo-sso` Pages) | Broker (JWKS), `/connect/*`, `/me/*` (person MCP), proxies `/a2a/*` |
-| **identity-directory** | Indexer proposes agent; on-chain `hasPasskey` confirms |
-| **demo-a2a** (upstream Worker) | ERC-4337 deploy + UserOp build/submit (Base Sepolia 84532) |
-| **Person SA** | Canonical agent (`sub` = `eip155:84532:0x…`) |
-| **A2A SA** | Second Smart Agent; `OPERATES_ON_BEHALF_OF` → person |
-| **Person MCP** | In this demo: **`/me/profile` and `/me/sensitive`** on Connect (not a separate MCP worker yet) |
+
+| Actor                                 | Role                                                                                           |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Browser**                           | WebAuthn passkey, holds `AgentSession` JWT, calls Connect + `/a2a` proxy + `/me`               |
+| **Connect origin** (`demo-sso` Pages) | Broker (JWKS), `/connect/*`, `/me/*` (person MCP), proxies `/a2a/*`                            |
+| **identity-directory**                | Indexer proposes agent; on-chain `hasPasskey` confirms                                         |
+| **demo-a2a** (upstream Worker)        | ERC-4337 deploy + UserOp build/submit (Base Sepolia 84532)                                     |
+| **Person SA**                         | Canonical agent (`sub` = `eip155:84532:0x…`)                                                   |
+| **A2A SA**                            | Second Smart Agent; `OPERATES_ON_BEHALF_OF` → person                                           |
+| **Person MCP**                        | In this demo: `**/me/profile` and `/me/sensitive`** on Connect (not a separate MCP worker yet) |
+
 
 ---
 
@@ -64,6 +61,8 @@ flowchart TB
   ASA --> REL --> PSA
 ```
 
+
+
 ---
 
 ## Phase 1 — Passkey sign-in (returning user)
@@ -102,13 +101,15 @@ sequenceDiagram
   C-->>B: basic profile
 ```
 
-**Checks on `/connect/passkey`** ([`functions/connect/passkey.ts`](../functions/connect/passkey.ts)):
+
+
+**Checks on `/connect/passkey`** (`[functions/connect/passkey.ts](../functions/connect/passkey.ts)`):
 
 1. **Membership** — directory + on-chain: passkey is a **current** custodian.
 2. **Proof-of-possession** — `isValidSignature` over the **single-use** challenge.
 3. **Issuance** — `principal.role = custody-grade`, `assurance = onchain-confirmed`.
 
-**`AgentSession` (no `owner` field):**
+`**AgentSession` (no `owner` field):**
 
 ```json
 {
@@ -148,13 +149,15 @@ sequenceDiagram
   end
 ```
 
-**Code:** [`src/connect-client.ts`](../src/connect-client.ts) — `bootstrapWithPasskey`, `claimName`.
+
+
+**Code:** `[src/connect-client.ts](../src/connect-client.ts)` — `bootstrapWithPasskey`, `claimName`.
 
 ---
 
 ## Phase 3 — Person MCP: basic profile + sensitive PII
 
-The demo **person MCP** is implemented as Connect Pages routes **`/me/*`**, not `apps/demo-mcp` (spec 227 allows either; this app verifies on-origin).
+The demo **person MCP** is implemented as Connect Pages routes `**/me/*`**, not `apps/demo-mcp` (spec 227 allows either; this app verifies on-origin).
 
 ```mermaid
 sequenceDiagram
@@ -179,16 +182,20 @@ sequenceDiagram
   end
 ```
 
-| Route | Gate | Data |
-| --- | --- | --- |
-| `GET /me/profile` | Any valid session | Canonical id, `.demo.agent` name, credential kind, access label |
-| `GET /me/sensitive` | `assurance === 'onchain-confirmed'` only | Email, phone (demo store keyed by `sub`, never email) |
 
-**UI:** blurred placeholder → **Confirm to view contact details** → `fetchSensitive` ([`src/App.tsx`](../src/App.tsx)).
+
+
+| Route               | Gate                                     | Data                                                            |
+| ------------------- | ---------------------------------------- | --------------------------------------------------------------- |
+| `GET /me/profile`   | Any valid session                        | Canonical id, `.demo.agent` name, credential kind, access label |
+| `GET /me/sensitive` | `assurance === 'onchain-confirmed'` only | Email, phone (demo store keyed by `sub`, never email)           |
+
+
+**UI:** blurred placeholder → **Confirm to view contact details** → `fetchSensitive` (`[src/App.tsx](../src/App.tsx)`).
 
 **Passkey vs Google:** passkey session is custody-grade → sensitive PII allowed. Google OIDC is login-grade → `/me/sensitive` returns 403 until step-up with passkey or wallet (ADR-0017).
 
-**Not the same as** `connect.requiresStepUp('credential-change')` — that gates **on-chain writes**. PII read uses `canReadSensitivePii` on `assurance` ([`src/lib/pii.ts`](../src/lib/pii.ts), spec 227 §7).
+**Not the same as** `connect.requiresStepUp('credential-change')` — that gates **on-chain writes**. PII read uses `canReadSensitivePii` on `assurance` (`[src/lib/pii.ts](../src/lib/pii.ts)`, spec 227 §7).
 
 ---
 
@@ -211,7 +218,9 @@ sequenceDiagram
   Note over S,R: a2a = subject/proposer person = object/confirmer
 ```
 
-**Code:** `provisionA2aAgent` in [`src/connect-client.ts`](../src/connect-client.ts).
+
+
+**Code:** `provisionA2aAgent` in `[src/connect-client.ts](../src/connect-client.ts)`.
 
 ---
 
@@ -235,37 +244,43 @@ sequenceDiagram
   end
 ```
 
+
+
 **Today:** the demo proves **person → MCP** via the user’s passkey session. **A2A → MCP** is the next integration (A2A obtains its own token; the person session is never forwarded).
 
 ---
 
 ## HTTP surface (passkey path)
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/connect/passkey-challenge` | Single-use challenge |
-| POST | `/connect/passkey` | Verify PoP + issue `AgentSession` |
-| POST | `/connect/enroll` | Map credential → agent after bootstrap |
-| GET | `/jwks` | Verify tokens (`/me`, relying sites) |
-| GET | `/me/profile` | Person MCP — basic |
-| GET | `/me/sensitive` | Person MCP — PII (custody session) |
-| POST | `/a2a/session/deploy` | Build deploy UserOp (proxied) |
-| POST | `/a2a/session/deploy/submit` | Submit UserOp |
-| POST | `/a2a/account/build-call-userop` | Naming, relationships, etc. |
+
+| Method | Path                             | Purpose                                |
+| ------ | -------------------------------- | -------------------------------------- |
+| GET    | `/connect/passkey-challenge`     | Single-use challenge                   |
+| POST   | `/connect/passkey`               | Verify PoP + issue `AgentSession`      |
+| POST   | `/connect/enroll`                | Map credential → agent after bootstrap |
+| GET    | `/jwks`                          | Verify tokens (`/me`, relying sites)   |
+| GET    | `/me/profile`                    | Person MCP — basic                     |
+| GET    | `/me/sensitive`                  | Person MCP — PII (custody session)     |
+| POST   | `/a2a/session/deploy`            | Build deploy UserOp (proxied)          |
+| POST   | `/a2a/session/deploy/submit`     | Submit UserOp                          |
+| POST   | `/a2a/account/build-call-userop` | Naming, relationships, etc.            |
+
 
 ---
 
 ## Key source files
 
-| File | Responsibility |
-| --- | --- |
-| [`src/connect-client.ts`](../src/connect-client.ts) | `passkeyLogin`, bootstrap, A2A provision, `fetchProfile` / `fetchSensitive` |
-| [`src/lib/passkey.ts`](../src/lib/passkey.ts) | WebAuthn register/assert |
-| [`functions/connect/passkey.ts`](../functions/connect/passkey.ts) | Server resolve + PoP + issue |
-| [`functions/me/[[path]].ts`](../functions/me/[[path]].ts) | Person MCP routes |
-| [`src/lib/pii.ts`](../src/lib/pii.ts) | PII gates |
-| [`functions/a2a/[[path]].ts`](../functions/a2a/[[path]].ts) | Proxy to demo-a2a |
-| [`src/lib/real-directory.ts`](../src/lib/real-directory.ts) | Production directory + on-chain reads |
+
+| File                                                              | Responsibility                                                              |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `[src/connect-client.ts](../src/connect-client.ts)`               | `passkeyLogin`, bootstrap, A2A provision, `fetchProfile` / `fetchSensitive` |
+| `[src/lib/passkey.ts](../src/lib/passkey.ts)`                     | WebAuthn register/assert                                                    |
+| `[functions/connect/passkey.ts](../functions/connect/passkey.ts)` | Server resolve + PoP + issue                                                |
+| `[functions/me/[[path]].ts](../functions/me/[[path]].ts)`         | Person MCP routes                                                           |
+| `[src/lib/pii.ts](../src/lib/pii.ts)`                             | PII gates                                                                   |
+| `[functions/a2a/[[path]].ts](../functions/a2a/[[path]].ts)`       | Proxy to demo-a2a                                                           |
+| `[src/lib/real-directory.ts](../src/lib/real-directory.ts)`       | Production directory + on-chain reads                                       |
+
 
 ---
 
@@ -282,4 +297,4 @@ pnpm --filter @agenticprimitives-demo/sso build
 wrangler pages dev dist --kv AUTH_CODES
 ```
 
-Set `DEMO_A2A_URL`, `RPC_URL`, `BROKER_PRIVATE_JWK` per [`.dev.vars.example`](../.dev.vars.example). See [OIDC-SETUP.md](../OIDC-SETUP.md) for Google OIDC.
+Set `DEMO_A2A_URL`, `RPC_URL`, `BROKER_PRIVATE_JWK` per `[.dev.vars.example](../.dev.vars.example)`. See [OIDC-SETUP.md](../OIDC-SETUP.md) for Google OIDC.

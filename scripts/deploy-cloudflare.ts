@@ -213,8 +213,16 @@ const a2aVars: Record<string, string> = {
   MCP_URL: demoMcpUrl,
   // Every Pages project that calls demo-a2a needs CSRF/origin clearance
   // (demo-web, demo-web-pro, demo-web-recovery, demo-sso — spec 227 — and
-  // demo-org, the relying-site app — spec 229).
-  ALLOWED_ORIGINS: `${DEMO_WEB_URL},${DEMO_WEB_PRO_URL},${DEMO_WEB_RECOVERY_URL},${DEMO_SSO_URL},${DEMO_ORG_URL}`,
+  // demo-org, the relying-site app — spec 229). Plus the canonical Connect
+  // domain `impact-agent.io` AND its per-person subdomains via the single
+  // wildcard `https://*.impact-agent.io` (spec 231 — each `<handle>.…` is a
+  // distinct Origin serving that agent's unified SSO + A2A endpoint).
+  // `*.impact-agent.io` = the A2A agent subdomains (this Worker's own route).
+  // `*.impact-agent.me` = the SSO app (Vercel, spec 232) which calls this Worker
+  // as a relayer (SA deploy / UserOps) cross-origin — so its origins are cleared too.
+  ALLOWED_ORIGINS: `${DEMO_WEB_URL},${DEMO_WEB_PRO_URL},${DEMO_WEB_RECOVERY_URL},${DEMO_SSO_URL},${DEMO_ORG_URL},https://impact-agent.io,https://*.impact-agent.io,https://impact-agent.me,https://*.impact-agent.me`,
+  // Personal-subdomain → agent resolution base for the A2A endpoints (spec 231).
+  A2A_PUBLIC_BASE_DOMAIN: 'impact-agent.io',
 };
 const a2aBackend = process.env.A2A_KMS_BACKEND;
 if (a2aBackend === 'gcp-kms') {

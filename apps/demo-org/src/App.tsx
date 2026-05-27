@@ -24,6 +24,10 @@ const fullName = (name: string) => {
   const n = name.trim().toLowerCase();
   return n.endsWith('.demo.agent') ? n : `${n.replace(/\.+$/, '')}.demo.agent`;
 };
+const personalHome = (name: string) => {
+  const n = name.trim().toLowerCase().replace(/\.demo\.agent$/, '').replace(/\.+$/, '');
+  return n ? `${n}.impact-agent.me` : 'yourname.impact-agent.me';
+};
 /** The scoped delegation (person SA → this site's delegate SA) issued at enrollment, stored
  *  per agent name on this device (ADR-0019). Drives "Continue with passkey" + org actions. */
 const delegationKey = (name: string) => `agenticprimitives:demo-org:delegation:${fullName(name)}`;
@@ -729,17 +733,36 @@ export function App() {
             </div>
             <div className="hero-top">
               <h1>
-                Organizations, run by your <span className="accent">agent</span>.
+                Connect with your own <span className="accent">agent sign-in page</span>.
               </h1>
               <p className="hero-sub">
-                Spin up and govern organizations on Base Sepolia — signed in with your own Smart Agent.
+                Start in Agentic Org, then approve access from your personal secure home.
               </p>
             </div>
 
             {/* Sign in with Agentic Connect — ONE button. New vs existing is decided at your
                 secure home; this app never creates the agent, it just connects. */}
             <div className="signin-card">
-              <label className="signin-label" htmlFor="connect-name-input">Your agent name</label>
+              <div className="connect-visual" aria-hidden="true">
+                <div className="connect-node app">
+                  <div className="connect-node-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 21h18M6 21V7l5-3 5 3v14M9.5 11h3M9.5 15h3" />
+                    </svg>
+                  </div>
+                  <span>Agentic Org</span>
+                </div>
+                <div className="connect-arrow">→</div>
+                <div className="connect-node home">
+                  <div className="connect-node-icon"><ShieldLogo size={20} gradient /></div>
+                  <span>{personalHome(connectName)}</span>
+                </div>
+              </div>
+              <div className="signin-card-copy">
+                <strong>Your personal agent home</strong>
+                <span>Sign in once, manage your Smart Agent, and approve connected apps from a page that belongs to you.</span>
+              </div>
+              <label className="signin-label" htmlFor="connect-name-input">Agent name</label>
               <div className="input-wrap">
                 <input
                   id="connect-name-input"
@@ -766,7 +789,7 @@ export function App() {
               )}
               {nameInfo.status === 'none' && connectName.trim() && (
                 <div className="field-hint none" role="status" aria-live="polite">
-                  New here — your secure home will create <strong>{fullName(connectName)}</strong>.
+                  New here? Your secure home will help create <strong>{fullName(connectName)}</strong>.
                 </div>
               )}
 
@@ -787,7 +810,7 @@ export function App() {
             </div>
 
             <div className="privacy-footer">
-              🔒 <strong>Agentic Connect</strong> is your secure home. Agentic Org only gets the access you approve.
+              🔒 Agentic Org only gets the permission you approve from your secure home.
             </div>
           </div>
         </div>
