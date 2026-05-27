@@ -2,6 +2,7 @@
 
 | Doc | Description |
 | --- | --- |
+| [name-first-per-site-passkey-sso.md](./name-first-per-site-passkey-sso.md) | Name-first SSO model: central ANS passkey authorizes per-site passkeys on one Smart Agent |
 | [passkey-sso-flow.md](./passkey-sso-flow.md) | Passkey Connect → bootstrap → A2A agent → person MCP PII |
 | [../CLAUDE.md](../CLAUDE.md) | App layout, server broker, OIDC |
 | [../OIDC-SETUP.md](../OIDC-SETUP.md) | Google OIDC + wrangler secrets |

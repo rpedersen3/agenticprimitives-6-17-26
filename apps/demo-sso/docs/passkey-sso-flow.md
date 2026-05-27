@@ -4,6 +4,11 @@ End-to-end interaction for **passkey sign-in** on `demo-sso`: credential ceremon
 
 **Specs:** [224](../../../specs/224-agentic-connect.md) (broker + `AgentSession`), [223](../../../specs/223-identity-directory.md) (resolve), [227](../../../specs/227-real-connect-experience.md) (real journey).
 
+For the separate-origin SSO product shape, see
+[Name-first per-site passkey SSO](./name-first-per-site-passkey-sso.md): the
+central ANS passkey is a root/bootstrap credential on the person Smart Agent, and
+each relying site adds its own local WebAuthn/P-256 signer to that same agent.
+
 ---
 
 ## Actors
