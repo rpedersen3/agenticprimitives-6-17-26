@@ -301,38 +301,65 @@ export function App() {
     }
   }
 
-  // First-visit: register a local passkey for this origin + redirect to the central auth,
-  // where the person's primary passkey approves adding it as a custodian (spec 229 §3).
-  async function onAddSite(name: string) {
+  // Begin cross-origin setup: register a LOCAL passkey for this origin, frame what's
+  // happening + where we're going, then redirect to the central auth (spec 229 §3).
+  // Used for BOTH a brand-new signup (name doesn't exist → central creates it) and
+  // "set up this site" for an existing agent (central adds this site's key).
+  async function beginSiteSetup(name: string) {
+    setError(null);
     setConnectErr(null);
-    setBusy(true);
+    setFlow({
+      title: 'Setting up your account',
+      phase: 'running',
+      steps: ['Creating your sign-in key on this device…'],
+    });
     try {
-      const { url, state } = await startSiteEnrollment(name);
+      const { url, state } = await startSiteEnrollment(name); // fires Windows Hello here
       sessionStorage.setItem(ENROLL_KEY, JSON.stringify({ state, name }));
+      setFlow({
+        title: 'Setting up your account',
+        phase: 'running',
+        steps: ['Creating your sign-in key on this device…', 'Taking you to your secure home to finish…'],
+      });
+      await new Promise((r) => setTimeout(r, 700)); // let the handoff message register
       window.location.href = url; // → central auth; returns with ?enrolled=1
     } catch (e) {
-      setBusy(false);
-      setConnectErr(e instanceof Error ? e.message : 'could not start enrollment');
+      setFlow({
+        title: 'Couldn’t start setup',
+        phase: 'error',
+        steps: [],
+        error: e instanceof Error ? e.message : 'could not create a sign-in key on this device',
+      });
     }
   }
+
+  /** Existing agent, first time on this site → set up a site key via the central auth. */
+  const onAddSite = (name: string) => beginSiteSetup(name);
 
   async function onSignup(via: Via) {
     const base = desiredName.trim();
     if (!base || signupAvail !== 'available') return;
+    // Passkey signup is HOMED at the central auth: create a local key here, then the central
+    // auth creates your account (ROOT passkey) + links this site. Wallet signup stays local
+    // (a wallet already works across origins, so no central round-trip is needed).
+    if (via === 'passkey') {
+      await beginSiteSetup(base);
+      return;
+    }
     setError(null);
     const steps: string[] = [];
     const onStep = (s: string) => {
       steps.push(s);
-      setFlow({ title: 'Creating your agent…', phase: 'running', steps: [...steps] });
+      setFlow({ title: 'Creating your account…', phase: 'running', steps: [...steps] });
     };
-    setFlow({ title: 'Creating your agent…', phase: 'running', steps: [] });
+    setFlow({ title: 'Creating your account…', phase: 'running', steps: [] });
     try {
       const out = await signupWithName(base, via, onStep);
       if (!out.ok) {
         setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [...steps], error: out.error });
         return;
       }
-      setFlow({ title: '✓ Agent ready', phase: 'done', steps: [...steps] });
+      setFlow({ title: '✓ Account ready', phase: 'done', steps: [...steps] });
       await new Promise((r) => setTimeout(r, 800));
       openSession(out.token, via, out.name, true);
       setDesiredName('');
@@ -474,7 +501,10 @@ export function App() {
 
           <div className="panel broker">
             <h2>New here? Sign up</h2>
-            <p className="muted">Pick an agent name and create it with a passkey or wallet on this site.</p>
+            <p className="muted">
+              Pick a name for your account. With a passkey, we’ll set up your <strong>secure home</strong> (you’ll
+              approve there, then come right back). A wallet creates it here directly.
+            </p>
             <p>
               <input
                 value={desiredName}

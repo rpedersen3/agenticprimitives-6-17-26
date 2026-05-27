@@ -109,6 +109,9 @@ export function App() {
   const [enrollFlow, setEnrollFlow] = useState<{ phase: 'idle' | 'running' | 'error'; msg?: string; error?: string }>({
     phase: 'idle',
   });
+  // Does the requested name already have an agent on-chain? null = checking.
+  // New user (no agent) → create the account here first (E1); existing → enroll-only (E2).
+  const [enrollExists, setEnrollExists] = useState<boolean | null>(enrollReq ? null : false);
 
   const openSession = useCallback(async (token: string, via: string, fresh: boolean) => {
     setSession({ token, via, fresh });
@@ -119,6 +122,20 @@ export function App() {
     }
     setProfile(await fetchProfile(token));
   }, []);
+
+  // Enrollment request → does the name already have an agent? (new user vs existing).
+  useEffect(() => {
+    if (!enrollReq) return;
+    void (async () => {
+      try {
+        const r = await fetch(`/connect/name-info?name=${encodeURIComponent(enrollReq.name)}`);
+        const b = (await r.json()) as { exists?: boolean };
+        setEnrollExists(!!b.exists);
+      } catch {
+        setEnrollExists(false); // treat as new; the on-chain claim is still forced-unique
+      }
+    })();
+  }, [enrollReq]);
 
   // Restore a persisted session on load (within the token's lifetime), unless we're
   // mid Google-redirect (?code / connect_status) — that path mints its own session.
@@ -375,17 +392,30 @@ export function App() {
     setConnectErr(null);
   }
 
-  // Approve adding the relying site's local passkey to the named agent, signed by the
-  // primary passkey on THIS origin, then redirect back to the relying site (spec 229 §5).
+  // Approve the relying site's request. Two paths (spec 229 §5):
+  //  · NEW user (name has no agent yet): create the home account here first — a ROOT
+  //    passkey on THIS origin + deploy the agent + claim the name — THEN add the site's
+  //    public key as a custodian.
+  //  · EXISTING agent: just add the site's public key, signed by the primary passkey here.
   async function approveEnroll() {
     if (!enrollReq) return;
+    const enrollKey = { credentialIdDigest: enrollReq.digest, x: BigInt(enrollReq.x), y: BigInt(enrollReq.y) };
+    const onStep = (s: string) => setEnrollFlow({ phase: 'running', msg: s });
     setEnrollFlow({ phase: 'running', msg: 'Starting…' });
     try {
-      const out = await enrollSitePasskey(
-        enrollReq.name,
-        { credentialIdDigest: enrollReq.digest, x: BigInt(enrollReq.x), y: BigInt(enrollReq.y) },
-        (s) => setEnrollFlow({ phase: 'running', msg: s }),
-      );
+      let resolvedName = enrollReq.name;
+      if (!enrollExists) {
+        // New user → create their home account (ROOT passkey here) + claim the name.
+        const base = enrollReq.name.replace(/\.demo\.agent$/, '');
+        const created = await signupWithName(base, 'passkey', onStep);
+        if (!created.ok) {
+          setEnrollFlow({ phase: 'error', error: created.error });
+          return;
+        }
+        resolvedName = created.name;
+      }
+      // Add the relying site's local passkey as a custodian (signed by the primary passkey).
+      const out = await enrollSitePasskey(resolvedName, enrollKey, onStep);
       if (!out.ok) {
         setEnrollFlow({ phase: 'error', error: out.error });
         return;
@@ -426,32 +456,77 @@ export function App() {
       }
     })();
     const allowed = relyingAllowed(enrollReq.redirectUri);
+    const isNew = enrollExists === false; // name has no agent yet → create the home account
+    const running = enrollFlow.phase === 'running';
     return (
       <div>
-        <h1>Agentic Connect</h1>
+        <h1>Agentic Connect — your secure home</h1>
         <div className="panel broker">
-          <h2>Add a sign-in key?</h2>
           {!allowed ? (
             <>
-              <p className="err">⛔ <strong>{host}</strong> is not an approved site. Enrollment refused.</p>
-              <p className="muted">Only start this from a site you trust.</p>
+              <h2>This request can’t be approved</h2>
+              <p className="err">
+                ⛔ <strong>{host}</strong> isn’t a site we recognize. For your safety, this request was blocked.
+              </p>
+              <p className="muted">Only start account setup from a site you trust.</p>
+            </>
+          ) : enrollExists === null ? (
+            <>
+              <h2>One moment…</h2>
+              <p className="muted">Checking your account…</p>
             </>
           ) : (
             <>
+              <h2>{isNew ? 'Agentic Org is setting up your account' : `Add ${host} to your account?`}</h2>
               <p>
-                <strong>{host}</strong> wants to add a new passkey to <code>{enrollReq.name}</code>.
+                <strong>{host}</strong> wants to add a sign-in key for:
               </p>
-              <p className="muted">
-                Approving registers a <em>{host}</em>-local passkey as a custody credential of{' '}
-                {enrollReq.name} — it lets {host} act as you on this agent. Approve with your{' '}
-                <strong>primary passkey</strong> only if you started this on {host}.
+              <p style={{ fontSize: '1.2rem', margin: '0.3rem 0' }}>
+                <code>{enrollReq.name}</code>
               </p>
-              {enrollFlow.phase === 'running' && <p className="ok">⏳ {enrollFlow.msg}</p>}
-              {enrollFlow.phase === 'error' && <p className="err">⛔ {enrollFlow.error}</p>}
-              {enrollFlow.phase !== 'running' && (
+
+              {isNew ? (
+                <>
+                  <p className="muted">
+                    To approve this, we’ll first create your account here — this is your <strong>secure home</strong>.
+                    It takes about 30 seconds.
+                  </p>
+                  <p className="muted" style={{ margin: '0.4rem 0' }}>
+                    <strong>What this does:</strong>
+                    <br />· Creates <code>{enrollReq.name}</code> (your account)
+                    <br />· Lets {host} sign you in as {enrollReq.name} <em>on that site only</em> — not anywhere else
+                  </p>
+                  <p className="muted" style={{ margin: '0.4rem 0' }}>
+                    <strong>What it does NOT do:</strong>
+                    <br />· {host} can’t see your recovery options or sign in elsewhere as you
+                  </p>
+                </>
+              ) : (
+                <p className="muted">
+                  Approving lets you use Windows Hello / Face ID on {host} to sign in as {enrollReq.name}. It does{' '}
+                  <strong>not</strong> give {host} access to your home account, your recovery options, or any other
+                  site — only sign-in on {host}.
+                </p>
+              )}
+
+              <p className="muted">No charge — your account is on a public test network (no real funds).</p>
+
+              {running && <p className="ok">⏳ {enrollFlow.msg}</p>}
+              {running && (
+                <p className="muted">Working on the secure network… confirm any device prompt. This can take 15–30s.</p>
+              )}
+              {enrollFlow.phase === 'error' && (
+                <>
+                  <p className="err">⛔ {enrollFlow.error}</p>
+                  <p className="muted">Nothing was charged. You can try again or cancel.</p>
+                </>
+              )}
+              {!running && (
                 <p>
-                  <button onClick={approveEnroll}>Approve with passkey</button>{' '}
-                  <button onClick={denyEnroll}>Cancel</button>
+                  <button onClick={approveEnroll}>
+                    {isNew ? 'Create my account & approve' : 'Approve with your device'}
+                  </button>{' '}
+                  <button onClick={denyEnroll}>Cancel{isNew ? ' — go back' : ''}</button>
                 </p>
               )}
             </>

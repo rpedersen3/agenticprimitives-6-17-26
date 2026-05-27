@@ -578,7 +578,7 @@ export async function signupWithName(
   base: string,
   via: 'wallet' | 'passkey',
   onStep?: (s: string) => void,
-): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; token: string; name: string } | { ok: false; error: string }> {
   if (via === 'passkey') {
     onStep?.('Creating your passkey…');
     const pk = await registerPasskey(`${base}.demo.agent`); // FRESH passkey for this workspace
@@ -590,7 +590,7 @@ export async function signupWithName(
     onStep?.('Signing you in…');
     const login = await passkeyLogin(false);
     return login.status === 'issued'
-      ? { ok: true, token: login.token }
+      ? { ok: true, token: login.token, name: claim.name }
       : { ok: false, error: `created, but sign-in returned ${login.status}` };
   }
   // wallet: the EOA's deterministic agent (reconnect if it exists, else bootstrap).
@@ -617,7 +617,7 @@ export async function signupWithName(
   onStep?.('Signing you in…');
   const login = await siweLogin();
   return login.status === 'issued'
-    ? { ok: true, token: login.token }
+    ? { ok: true, token: login.token, name: claim.name }
     : { ok: false, error: `created, but sign-in returned ${login.status}` };
 }
 
