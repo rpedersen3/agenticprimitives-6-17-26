@@ -14,7 +14,7 @@ import {
   type RelationshipType,
 } from '@agenticprimitives/agent-relationships';
 import type { Address, Hex } from '@agenticprimitives/types';
-import { encodeFunctionData } from 'viem';
+import { fromWire, buildRedeemCallData, DELEGATION_MANAGER, type DelegationWire } from './lib/delegation';
 import { connectWallet, personalSign } from './lib/wallet';
 import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from './lib/passkey';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
@@ -337,36 +337,13 @@ async function deployAgent(
   return { ok: true, agent: submitted.deployedAddress };
 }
 
-// ── Create a named Organization Smart Agent (spec 229 §7) ───────────
-
-const ADD_PASSKEY_ABI = [
-  {
-    type: 'function',
-    name: 'addPasskey',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'credentialIdDigest', type: 'bytes32' },
-      { name: 'x', type: 'uint256' },
-      { name: 'y', type: 'uint256' },
-    ],
-    outputs: [],
-  },
-] as const;
-
-/** The person's ROOT/central recovery passkey (public key only), captured during P2
- *  enrollment. Added as a second custodian of a new org so the org is recoverable +
- *  controllable from the central auth, not siloed to this site's key (spec 229 §7). */
-export interface RootCred {
-  credentialIdDigest: Hex;
-  x: bigint;
-  y: bigint;
-}
+// ── Create a named Organization Smart Agent (spec 229 §7 + ADR-0019) ───────────
 
 export interface CreateOrgResult {
   orgAgent: Address;
   orgName: string;
   edgeId: Hex;
-  rootRecovery: boolean; // true if the central/root credential was added as a custodian
+  governed: boolean; // true if the person→org HAS_GOVERNANCE_OVER edge was recorded
 }
 
 /** A distinct, name-independent salt for the org SA: credential scope + entropy,
@@ -378,15 +355,18 @@ function orgSalt(): string {
   return n.toString(); // demo-a2a BigInt()s the salt string
 }
 
-/** Create an Organization Smart Agent custodied by the connected credential, claim its
- *  name, and record `person --HAS_GOVERNANCE_OVER--> org` on-chain (person proposes as
- *  subject; org confirms as object). Both txs signed by the connected credential. */
+/** Create an Organization Smart Agent custodied by the connected credential, claim its name,
+ *  and record `person --HAS_GOVERNANCE_OVER--> org`. Under ADR-0019, when the session is a
+ *  delegation (`via='passkey'` + `delegation` provided), the person→org PROPOSE is executed
+ *  AS THE PERSON by REDEEMING the delegation through the site's delegate SA — the site key is
+ *  never a custodian of the person. The wallet path (the wallet IS the person's custodian)
+ *  signs the propose directly. The org itself is custodied by the connected credential. */
 export async function createOrg(
   via: 'wallet' | 'passkey',
   personAgent: Address,
   orgBase: string,
   onStep?: (s: string) => void,
-  rootCred?: RootCred,
+  delegation?: DelegationWire,
 ): Promise<{ ok: true; result: CreateOrgResult } | { ok: false; error: string }> {
   const salt = orgSalt();
   let signHash: SignHash;
@@ -419,66 +399,79 @@ export async function createOrg(
   // Fresh deploy consumed nonce 0 → the claim batch is nonce 1.
   const claim = await claimName(orgAgent, signHash, orgBase, onStep, 1n);
   if (!claim.ok) return { ok: false, error: claim.error };
-  let orgNonce = 2n; // next op on the org after claim
-
-  // Recovery/root coverage: add the person's central/ROOT passkey (public key only) as a
-  // SECOND custodian, so the org is controllable + recoverable from the central auth — not
-  // siloed to this site's key. Signed by the site key (the org's current custodian).
-  let rootRecovery = false;
-  if (rootCred && rootCred.x !== 0n && rootCred.y !== 0n) {
-    onStep?.('Adding your home recovery key…');
-    const addRoot = encodeFunctionData({
-      abi: ADD_PASSKEY_ABI,
-      functionName: 'addPasskey',
-      args: [rootCred.credentialIdDigest, rootCred.x, rootCred.y],
-    });
-    const callData = buildExecuteCallData({ to: orgAgent, value: 0n, data: addRoot });
-    const ar = await executeCall(orgAgent, signHash, callData, { minNonce: orgNonce, attempts: 8 });
-    if (ar.ok) {
-      rootRecovery = true;
-      orgNonce += 1n;
-    } else {
-      // Non-fatal: the org still exists + is named, just site-key-only. Surface in the result.
-      onStep?.('(recovery key step skipped — org is site-key only)');
-    }
-  }
 
   const relationships = CONTRACTS.agentRelationship;
   const relationshipType = RELATIONSHIP_TYPE.HAS_GOVERNANCE_OVER as RelationshipType;
+  const edgeId = computeEdgeId(personAgent, orgAgent, relationshipType);
+  const propose = buildProposeEdgeCall({ relationships, subject: personAgent, object: orgAgent, relationshipType });
 
   onStep?.('Recording your control on-chain…');
-  // person = subject (has governance over org); person already deployed → no minNonce.
-  const propose = buildProposeEdgeCall({ relationships, subject: personAgent, object: orgAgent, relationshipType });
-  const p = await executeCall(personAgent, signHash, buildExecuteCallData(propose), { attempts: 6 });
-  if (!p.ok) return { ok: false, error: `governance edge failed: ${p.error}` };
+  let governed = false;
+  if (via === 'passkey' && delegation) {
+    // AS THE PERSON via the delegation: the site's delegate SA executes
+    // DelegationManager.redeemDelegation([delegation], relationships, 0, proposeData) → the
+    // proposeEdge runs as the person (the delegator), scoped by caveats.
+    const d = fromWire(delegation);
+    const redeemData = buildRedeemCallData(d, propose.to, BigInt(propose.value), propose.data);
+    const p = await executeCall(
+      d.delegate,
+      signHash,
+      buildExecuteCallData({ to: DELEGATION_MANAGER, value: 0n, data: redeemData }),
+      { attempts: 6 },
+    );
+    governed = p.ok;
+    if (!p.ok) onStep?.('(governance edge skipped — you still own the org)');
+  } else if (via === 'wallet') {
+    // The wallet is the person's own custodian → sign the propose directly on the person SA.
+    const p = await executeCall(personAgent, signHash, buildExecuteCallData(propose), { attempts: 6 });
+    governed = p.ok;
+  }
 
-  onStep?.('Confirming the link…');
-  const edgeId = computeEdgeId(personAgent, orgAgent, relationshipType);
-  const confirm = buildConfirmEdgeCall({ relationships, edgeId });
-  // org = object (confirmer); next org op. Best-effort.
-  await executeCall(orgAgent, signHash, buildExecuteCallData(confirm), { minNonce: orgNonce, attempts: 6 });
+  if (governed) {
+    onStep?.('Confirming the link…');
+    const confirm = buildConfirmEdgeCall({ relationships, edgeId });
+    // org = object (confirmer); org's 3rd op (deploy 0, claim 1, confirm 2). Best-effort.
+    await executeCall(orgAgent, signHash, buildExecuteCallData(confirm), { minNonce: 2n, attempts: 6 });
+  }
 
-  return { ok: true, result: { orgAgent, orgName: claim.name, edgeId, rootRecovery } };
+  return { ok: true, result: { orgAgent, orgName: claim.name, edgeId, governed } };
 }
 
-/** First-visit enrollment (spec 229 §3): register a LOCAL passkey for THIS origin, then
- *  return the central-auth URL that will add its PUBLIC key to `name`'s agent as a custodian
- *  (signed there by the person's primary passkey). The local private key never leaves this
- *  device's authenticator. After it returns, this origin's passkey is a real on-chain
- *  custodian, so connectWithName('passkey') works directly. */
-export async function startSiteEnrollment(name: string): Promise<{ url: string; state: string }> {
+/** First-visit enrollment (spec 229 §3 + ADR-0019): register a LOCAL passkey for THIS
+ *  origin and deploy this site's **delegate Smart Account** (custodied by that passkey, a
+ *  distinct salt so it's its own account). Returns the central-auth URL — the person will
+ *  issue a caveated delegation `person → delegateSA` there. The site is a DELEGATE, never a
+ *  custodian of the person SA. */
+export async function startSiteEnrollment(
+  name: string,
+  onStep?: (s: string) => void,
+): Promise<{ ok: true; url: string; state: string; delegateSA: Address } | { ok: false; error: string }> {
+  onStep?.('Creating your sign-in key on this device…');
   const pk = await registerPasskey(name); // local passkey on THIS origin, stored
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  const state = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  onStep?.('Setting up this site’s account…');
+  const saltBytes = crypto.getRandomValues(new Uint8Array(8));
+  let salt = 0n;
+  for (const b of saltBytes) salt = (salt << 8n) | BigInt(b);
+  const dep = await deployAgent(
+    {
+      initMethod: 'passkey',
+      credentialIdDigest: pk.credentialIdDigest,
+      pubKeyX: pk.pubKeyX.toString(),
+      pubKeyY: pk.pubKeyY.toString(),
+      salt: salt.toString(),
+    },
+    passkeySignHash,
+  );
+  if (!dep.ok) return { ok: false, error: `site account deploy failed: ${dep.error}` };
+  const stateBytes = crypto.getRandomValues(new Uint8Array(16));
+  const state = Array.from(stateBytes, (b) => b.toString(16).padStart(2, '0')).join('');
   const u = new URL('/', CENTRAL_AUTH_ORIGIN);
   u.searchParams.set('aud', AUD);
   u.searchParams.set('redirect_uri', window.location.origin + '/');
   u.searchParams.set('state', state);
   u.searchParams.set('name', name);
-  u.searchParams.set('enroll_digest', pk.credentialIdDigest);
-  u.searchParams.set('enroll_x', pk.pubKeyX.toString());
-  u.searchParams.set('enroll_y', pk.pubKeyY.toString());
-  return { url: u.toString(), state };
+  u.searchParams.set('delegate', dep.agent);
+  return { ok: true, url: u.toString(), state, delegateSA: dep.agent };
 }
 
 /** Connect to the agent that OWNS `name`, proving control with a custody credential.
@@ -513,6 +506,28 @@ export async function connectWithName(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name, aud: AUD, ...proof }),
+  });
+  const b = (await r.json()) as { status?: string; token?: string; name?: string; error?: string };
+  if (r.ok && b.status === 'issued' && b.token) return { ok: true, token: b.token, name: b.name };
+  return { ok: false, error: b.error ?? `connect failed (HTTP ${r.status})` };
+}
+
+/** Sign in via a DELEGATION (ADR-0019): prove control of this site's delegate SA (the site
+ *  passkey asserts) and present the stored delegation; the server verifies the person SA
+ *  signed it (ERC-1271), it's unrevoked + in-window, and the delegate matches → a scoped
+ *  (login-grade) session whose `sub` is the PERSON. No `isCustodian`. */
+export async function connectWithDelegation(
+  name: string,
+  delegation: DelegationWire,
+): Promise<{ ok: true; token: string; name?: string } | { ok: false; error: string }> {
+  const pk = loadPasskey();
+  if (!pk) return { ok: false, error: 'No site passkey on this device — set up this site first.' };
+  const { challenge } = (await (await fetch('/connect/passkey-challenge')).json()) as { challenge: Hex };
+  const signature = await signWithPasskey(challenge);
+  const r = await fetch('/connect/with-delegation', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, aud: AUD, delegation, credentialIdDigest: pk.credentialIdDigest, challenge, signature }),
   });
   const b = (await r.json()) as { status?: string; token?: string; name?: string; error?: string };
   if (r.ok && b.status === 'issued' && b.token) return { ok: true, token: b.token, name: b.name };

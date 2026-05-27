@@ -8,14 +8,13 @@ import {
   provisionA2aAgent,
   addWalletCredential,
   addPasskeyCredential,
-  enrollSitePasskey,
+  passkeySignHash,
   fetchProfile,
   fetchSensitive,
   type BasicProfile,
 } from './connect-client';
-import type { Hex } from '@agenticprimitives/types';
+import { issueSiteDelegation, toWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
-import { loadPasskey } from './lib/passkey';
 import { startGoogleSignIn, exchangeCode } from './server-client';
 
 interface Session {
@@ -31,7 +30,7 @@ const SESSION_KEY = 'agenticprimitives:demo-sso:session';
 function shouldRestore(): boolean {
   try {
     const u = new URL(window.location.href);
-    if (u.searchParams.has('code') || u.searchParams.has('connect_status') || u.searchParams.has('enroll_digest')) {
+    if (u.searchParams.has('code') || u.searchParams.has('connect_status') || u.searchParams.has('delegate')) {
       return false;
     }
     return !!localStorage.getItem(SESSION_KEY);
@@ -40,31 +39,28 @@ function shouldRestore(): boolean {
   }
 }
 
-// ── Central-auth enrollment (spec 229 §5) ───────────────────────────
-// A relying site redirects here to add ITS local passkey (public key only) as a
-// custodian of the named agent, approved by the person's primary passkey on THIS origin.
+// ── Central-auth enrollment (spec 229 §5 + ADR-0019) ────────────────
+// A relying site redirects here to be ISSUED A SCOPED DELEGATION (person SA → the site's
+// delegate SA), approved + signed by the person's ROOT passkey on THIS origin. The site is
+// a delegate, NEVER a custodian of the person SA.
 interface EnrollReq {
   aud: string;
   redirectUri: string;
   state: string;
   name: string;
-  digest: Hex;
-  x: string;
-  y: string;
+  delegate: Address; // the relying site's delegate Smart Account
 }
 /** Relying sites permitted to initiate enrollment (demo gate — spec 229 §8). */
 const ALLOWED_RELYING_ORIGINS = ['https://agenticprimitives-demo-org.pages.dev'];
 function parseEnrollReq(): EnrollReq | null {
   try {
     const p = new URL(window.location.href).searchParams;
-    const digest = p.get('enroll_digest');
-    const x = p.get('enroll_x');
-    const y = p.get('enroll_y');
+    const delegate = p.get('delegate');
     const redirectUri = p.get('redirect_uri');
     const aud = p.get('aud');
     const name = p.get('name');
-    if (!digest || !x || !y || !redirectUri || !aud || !name) return null;
-    return { aud, redirectUri, state: p.get('state') ?? '', name, digest: digest as Hex, x, y };
+    if (!delegate || !redirectUri || !aud || !name) return null;
+    return { aud, redirectUri, state: p.get('state') ?? '', name, delegate: delegate as Address };
   } catch {
     return null;
   }
@@ -414,7 +410,6 @@ export function App() {
 
   async function approveEnroll() {
     if (!enrollReq) return;
-    const enrollKey = { credentialIdDigest: enrollReq.digest, x: BigInt(enrollReq.x), y: BigInt(enrollReq.y) };
     const onStep = (s: string) => {
       setEnrollFlow({ phase: 'running', msg: s });
       if (popupMode) postToOpener({ type: 'AC_PROGRESS', msg: s });
@@ -432,34 +427,31 @@ export function App() {
         }
         resolvedName = created.name;
       }
-      // Add the relying site's local passkey as a custodian (signed by the primary passkey).
-      const out = await enrollSitePasskey(resolvedName, enrollKey, onStep);
-      if (!out.ok) {
-        setEnrollFlow({ phase: 'error', error: out.error });
+      // Resolve the person agent address for the named workspace.
+      onStep('Authorizing the site…');
+      const info = (await (await fetch(`/connect/name-info?name=${encodeURIComponent(resolvedName)}`)).json()) as {
+        agent?: Address;
+      };
+      if (!info.agent) {
+        setEnrollFlow({ phase: 'error', error: `could not resolve ${resolvedName}` });
         return;
       }
-      // Return our ROOT passkey's PUBLIC key so the relying site can add it as a recovery
-      // custodian to orgs the person creates there — the org stays reachable from home, not
-      // siloed to a site key (spec 229 §7). Public-only; the private key never leaves here.
-      const root = loadPasskey();
-      const rootMsg = root
-        ? { credentialIdDigest: root.credentialIdDigest, x: root.pubKeyX.toString(), y: root.pubKeyY.toString() }
-        : undefined;
+      // Issue a scoped, redeemer-bound delegation: person SA → the site's delegate SA,
+      // signed by the ROOT passkey (ADR-0019). The site becomes a DELEGATE, not a custodian.
+      const delegation = await issueSiteDelegation(info.agent, enrollReq.delegate, passkeySignHash);
+      const wire = toWire(delegation);
 
       if (popupMode) {
-        postToOpener({ type: 'AC_SUCCESS', state: enrollReq.state, name: out.name, root: rootMsg });
+        postToOpener({ type: 'AC_SUCCESS', state: enrollReq.state, name: resolvedName, agent: info.agent, delegation: wire });
         window.close();
         return;
       }
       const url = new URL(enrollReq.redirectUri);
       url.searchParams.set('enrolled', '1');
       url.searchParams.set('state', enrollReq.state);
-      url.searchParams.set('name', out.name);
-      if (rootMsg) {
-        url.searchParams.set('root_digest', rootMsg.credentialIdDigest);
-        url.searchParams.set('root_x', rootMsg.x);
-        url.searchParams.set('root_y', rootMsg.y);
-      }
+      url.searchParams.set('name', resolvedName);
+      url.searchParams.set('agent', info.agent);
+      url.searchParams.set('delegation', btoa(JSON.stringify(wire)));
       window.location.href = url.toString();
     } catch (e) {
       setEnrollFlow({ phase: 'error', error: e instanceof Error ? e.message : 'enrollment failed' });
@@ -516,9 +508,9 @@ export function App() {
               <p style={{ fontSize: '1.2rem', margin: '0.3rem 0' }}>
                 <code>{enrollReq.name}</code>
               </p>
-              {/* Fingerprint of the EXACT key being signed — consent binds to the signed bytes (audit F2). */}
+              {/* The exact delegate the authority is granted to — consent binds to it (audit F2). */}
               <p className="muted" style={{ margin: '0 0 0.4rem' }}>
-                Key being added: <code>{enrollReq.digest.slice(0, 10)}…{enrollReq.digest.slice(-6)}</code>
+                Authorizing site account: <code>{enrollReq.delegate.slice(0, 8)}…{enrollReq.delegate.slice(-6)}</code>
               </p>
 
               {isNew ? (

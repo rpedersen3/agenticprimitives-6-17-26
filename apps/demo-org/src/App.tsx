@@ -1,23 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
-import { connectWithName, signupWithName, createOrg, startSiteEnrollment, type RootCred } from './connect-client';
-import { openCentralAuthPopup, preferRedirect, type RootKeyMsg } from './lib/central-auth';
+import { connectWithName, connectWithDelegation, signupWithName, createOrg, startSiteEnrollment } from './connect-client';
+import { openCentralAuthPopup, preferRedirect } from './lib/central-auth';
+import type { DelegationWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
 
 const ENROLL_KEY = 'agenticprimitives:demo-org:enroll';
 const LOCAL_PASSKEY_NAME = 'agenticprimitives:demo-org:passkey-name';
-/** Cached central/ROOT recovery passkey (public key) per agent name — captured on the P2
- *  enrollment return, used to add a recovery custodian to orgs the agent creates here. */
-const rootCredKey = (name: string) => `agenticprimitives:demo-org:root:${name.toLowerCase()}`;
-/** The agent name THIS origin's local passkey is bound to (null if none / unknown). */
-function localPasskeyAgent(): string | null {
+/** Normalize an agent name to its full `<label>.demo.agent` form for stable storage keys. */
+const fullName = (name: string) => {
+  const n = name.trim().toLowerCase();
+  return n.endsWith('.demo.agent') ? n : `${n.replace(/\.+$/, '')}.demo.agent`;
+};
+/** The scoped delegation (person SA → this site's delegate SA) issued at enrollment, stored
+ *  per agent name on this device (ADR-0019). Drives "Continue with passkey" + org actions. */
+const delegationKey = (name: string) => `agenticprimitives:demo-org:delegation:${fullName(name)}`;
+function loadDelegation(name: string): DelegationWire | null {
   try {
-    return loadPasskey() ? localStorage.getItem(LOCAL_PASSKEY_NAME) : null;
+    const raw = localStorage.getItem(delegationKey(name));
+    return raw ? (JSON.parse(raw) as DelegationWire) : null;
   } catch {
     return null;
   }
 }
+/** True iff this device holds a stored delegation for `name` (→ one-touch passkey sign-in). */
+const hasLocalDelegation = (name: string): boolean => !!loadPasskey() && !!loadDelegation(name);
 
 const SESSION_KEY = 'agenticprimitives:demo-org:session';
 const orgsKey = (addr: string) => `agenticprimitives:demo-org:orgs:${addr.toLowerCase()}`;
@@ -33,7 +41,7 @@ interface Session {
 interface Org {
   orgAgent: string;
   orgName: string;
-  recovery?: boolean; // true if the central/root key was added as a recovery custodian
+  governed?: boolean; // true if person→org HAS_GOVERNANCE_OVER edge was recorded
 }
 
 /** Decode a JWS payload segment (base64url JSON). */
@@ -148,13 +156,11 @@ export function App() {
     const enrollErr = u.searchParams.get('enroll_error');
     const retName = u.searchParams.get('name');
     const retState = u.searchParams.get('state');
-    // The central auth returns its ROOT passkey's PUBLIC key so we can add it as a recovery
-    // custodian when this agent creates orgs here (spec 229 §7). Public-only; safe to carry.
-    const rd = u.searchParams.get('root_digest');
-    const rx = u.searchParams.get('root_x');
-    const ry = u.searchParams.get('root_y');
+    // The central auth returns the SCOPED DELEGATION (person SA → our delegate SA), base64
+    // JSON. The site is a delegate, not a custodian (ADR-0019).
+    const delB64 = u.searchParams.get('delegation');
     if (!enrolled && !enrollErr) return;
-    for (const k of ['enrolled', 'enroll_error', 'name', 'state', 'root_digest', 'root_x', 'root_y']) u.searchParams.delete(k);
+    for (const k of ['enrolled', 'enroll_error', 'name', 'state', 'agent', 'delegation']) u.searchParams.delete(k);
     window.history.replaceState({}, '', u.toString());
 
     let stored: { state?: string; name?: string } = {};
@@ -169,9 +175,7 @@ export function App() {
       setError(`Enrollment was not completed (${enrollErr}).`);
       return;
     }
-    // Fail-closed (audit F5): a return MUST carry a state that matches the one we stashed —
-    // a forged return URL (no/wrong state) can't drive us into a fake "success" or inject a
-    // bogus recovery key.
+    // Fail-closed (audit F5): a return MUST carry a state that matches the one we stashed.
     if (!stored.state || !retState || stored.state !== retState) {
       setError('We couldn’t verify that setup response. Please start setup again.');
       return;
@@ -181,8 +185,17 @@ export function App() {
       setError('Enrollment returned without a name.');
       return;
     }
-    const root = rd && rx && ry ? { credentialIdDigest: rd, x: rx, y: ry } : undefined;
-    void finishEnrollment(name, root);
+    let delegation: DelegationWire | undefined;
+    try {
+      if (delB64) delegation = JSON.parse(atob(delB64)) as DelegationWire;
+    } catch {
+      /* ignore */
+    }
+    if (!delegation) {
+      setError('Enrollment returned without a delegation. Please try again.');
+      return;
+    }
+    void finishEnrollment(name, delegation);
     // run once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -270,13 +283,26 @@ export function App() {
   }, [orgName]);
 
   // ── actions ─────────────────────────────────────────────────────────
+  // Wallet → connectWithName (the wallet IS the person's custodian). Passkey → the site's
+  // scoped delegation (ADR-0019): load the stored delegation + verify it (not isCustodian).
   async function onConnectName(via: Via) {
     if (!connectName.trim()) return;
     setConnectErr(null);
     setBusy(true);
     try {
-      const out = await connectWithName(connectName.trim(), via);
-      if (out.ok) openSession(out.token, via, out.name ?? connectName.trim(), false);
+      if (via === 'passkey') {
+        const del = loadDelegation(connectName.trim());
+        if (!del) {
+          setConnectErr('This site isn’t set up for that agent yet — use “Set up this site”.');
+          return;
+        }
+        const out = await connectWithDelegation(connectName.trim(), del);
+        if (out.ok) openSession(out.token, 'passkey', out.name ?? connectName.trim(), false);
+        else setConnectErr(out.error);
+        return;
+      }
+      const out = await connectWithName(connectName.trim(), 'wallet');
+      if (out.ok) openSession(out.token, 'wallet', out.name ?? connectName.trim(), false);
       else setConnectErr(out.error);
     } catch (e) {
       setConnectErr(e instanceof Error ? e.message : 'connect failed');
@@ -285,21 +311,20 @@ export function App() {
     }
   }
 
-  // After the central auth confirms enrollment, this origin's local passkey is an on-chain
-  // custodian → sign in with it (retry for post-add RPC lag), caching the ROOT recovery key.
-  async function finishEnrollment(name: string, root?: RootKeyMsg) {
-    if (root && root.credentialIdDigest && root.x && root.y) {
-      try {
-        localStorage.setItem(rootCredKey(name), JSON.stringify(root));
-      } catch {
-        /* ignore */
-      }
+  // After the central auth issues the delegation, store it and sign in via the delegation
+  // (retry for post-issue RPC lag — the person SA / delegate SA reads may briefly lag).
+  async function finishEnrollment(name: string, delegation: DelegationWire) {
+    try {
+      localStorage.setItem(delegationKey(name), JSON.stringify(delegation));
+      localStorage.setItem(LOCAL_PASSKEY_NAME, name);
+    } catch {
+      /* ignore */
     }
-    setFlow({ title: 'Finishing setup…', phase: 'running', steps: ['Signing you in with your new passkey…'] });
+    setFlow({ title: 'Finishing setup…', phase: 'running', steps: ['Signing you in…'] });
     let lastErr = '';
     for (let i = 0; i < 5; i++) {
       if (i > 0) await new Promise((r) => setTimeout(r, 2500));
-      const out = await connectWithName(name, 'passkey');
+      const out = await connectWithDelegation(name, delegation);
       if (out.ok) {
         setFlow(null);
         openSession(out.token, 'passkey', out.name ?? name, true);
@@ -322,13 +347,21 @@ export function App() {
     let url: string;
     let state: string;
     try {
-      ({ url, state } = await startSiteEnrollment(name)); // fires Windows Hello here
+      // Registers a local passkey + deploys this site's delegate SA (Windows Hello prompts).
+      const started = await startSiteEnrollment(name, (s) =>
+        setFlow({ title: 'Setting up your account', phase: 'running', steps: [s] }),
+      );
+      if (!started.ok) {
+        setFlow({ title: 'Couldn’t start setup', phase: 'error', steps: [], error: started.error });
+        return;
+      }
+      ({ url, state } = started);
     } catch (e) {
       setFlow({
         title: 'Couldn’t start setup',
         phase: 'error',
         steps: [],
-        error: e instanceof Error ? e.message : 'could not create a sign-in key on this device',
+        error: e instanceof Error ? e.message : 'could not set up this device',
       });
       return;
     }
@@ -376,7 +409,11 @@ export function App() {
       setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: result.error });
       return;
     }
-    await finishEnrollment(result.name || name, result.root);
+    if (!result.delegation) {
+      setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [], error: 'no delegation returned from your secure home' });
+      return;
+    }
+    await finishEnrollment(result.name || name, result.delegation);
   }
 
   /** Existing agent, first time on this site → set up a site key via the central auth. */
@@ -426,26 +463,17 @@ export function App() {
       setFlow({ title: 'Creating your organization…', phase: 'running', steps: [...steps] });
     };
     setFlow({ title: 'Creating your organization…', phase: 'running', steps: [] });
-    // Add the central/ROOT recovery key (if we captured one for this agent at enrollment),
-    // so the org is recoverable + governable from home, not siloed to this site's key.
-    let rootCred: RootCred | undefined;
+    // The person→org governance edge is recorded AS THE PERSON by redeeming this site's
+    // delegation (ADR-0019). Pass it for the passkey/delegation session.
+    const delegation = via === 'passkey' ? (loadDelegation(session.name) ?? undefined) : undefined;
     try {
-      const raw = localStorage.getItem(rootCredKey(session.name));
-      if (raw) {
-        const r = JSON.parse(raw) as { credentialIdDigest: string; x: string; y: string };
-        rootCred = { credentialIdDigest: r.credentialIdDigest as `0x${string}`, x: BigInt(r.x), y: BigInt(r.y) };
-      }
-    } catch {
-      /* ignore */
-    }
-    try {
-      const out = await createOrg(via, session.address, base, onStep, rootCred);
+      const out = await createOrg(via, session.address, base, onStep, delegation);
       if (!out.ok) {
         setFlow({ title: 'Couldn’t finish', phase: 'error', steps: [...steps], error: out.error });
         return;
       }
       setFlow({ title: '✓ Organization created', phase: 'done', steps: [...steps] });
-      const next = [{ orgAgent: out.result.orgAgent, orgName: out.result.orgName, recovery: out.result.rootRecovery }, ...orgs];
+      const next = [{ orgAgent: out.result.orgAgent, orgName: out.result.orgName, governed: out.result.governed }, ...orgs];
       setOrgs(next);
       try {
         localStorage.setItem(orgsKey(session.address), JSON.stringify(next));
@@ -518,7 +546,7 @@ export function App() {
                   ✓ Found <code>{nameInfo.name}</code>
                 </p>
                 <p>
-                  {nameInfo.hasPasskey && localPasskeyAgent() === nameInfo.name && (
+                  {nameInfo.hasPasskey && hasLocalDelegation(nameInfo.name!) && (
                     <button disabled={busy} onClick={() => onConnectName('passkey')}>
                       Continue with passkey
                     </button>
@@ -528,13 +556,13 @@ export function App() {
                       Continue with wallet
                     </button>
                   )}{' '}
-                  {nameInfo.hasPasskey && localPasskeyAgent() !== nameInfo.name && (
+                  {nameInfo.hasPasskey && !hasLocalDelegation(nameInfo.name!) && (
                     <button disabled={busy} onClick={() => onAddSite(nameInfo.name!)}>
                       Set up this site (passkey) →
                     </button>
                   )}
                 </p>
-                {nameInfo.hasPasskey && localPasskeyAgent() !== nameInfo.name && (
+                {nameInfo.hasPasskey && !hasLocalDelegation(nameInfo.name!) && (
                   <p className="muted">
                     First time using <code>{nameInfo.name}</code> on this site? <strong>Set up this site</strong> —
                     you’ll approve once with your passkey at your home Connect, then use Windows Hello / Face ID here.
@@ -650,14 +678,13 @@ export function App() {
                 {orgs.map((o) => (
                   <li key={o.orgAgent}>
                     <strong>{o.orgName}</strong> — <code>{short(o.orgAgent)}</code>{' '}
-                    <span className="badge">you govern</span>{' '}
-                    {o.recovery ? (
-                      <span className="badge" title="Custodied by this site's passkey + your central/home recovery key">
-                        🔑 home recovery
+                    {o.governed ? (
+                      <span className="badge" title="person → HAS_GOVERNANCE_OVER → org recorded on-chain (via your delegation)">
+                        you govern (on-chain)
                       </span>
                     ) : (
-                      <span className="badge" title="Custodied only by this site's passkey">
-                        site-key only
+                      <span className="badge" title="Org created; governance edge not recorded">
+                        org created
                       </span>
                     )}
                   </li>

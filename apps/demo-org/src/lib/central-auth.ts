@@ -6,14 +6,11 @@
 // Security (audit F3/F5): we resolve ONLY on a message from the exact popup window we
 // opened, at the exact central-auth origin, whose echoed `state` matches what we generated.
 import { CENTRAL_AUTH_ORIGIN } from '../connect-client';
+import type { DelegationWire } from './delegation';
+import type { Address } from '@agenticprimitives/types';
 
-export interface RootKeyMsg {
-  credentialIdDigest: string;
-  x: string;
-  y: string;
-}
 export type PopupResult =
-  | { status: 'success'; name: string; root?: RootKeyMsg }
+  | { status: 'success'; name: string; agent?: Address; delegation?: DelegationWire }
   | { status: 'cancelled' }
   | { status: 'error'; error: string }
   | { status: 'blocked' };
@@ -24,7 +21,8 @@ interface AcMessage {
   msg?: string;
   name?: string;
   error?: string;
-  root?: RootKeyMsg;
+  agent?: Address;
+  delegation?: DelegationWire;
 }
 
 /** Prefer a redirect on mobile / narrow viewports (a popup opens as a tab there). */
@@ -77,7 +75,7 @@ export function openCentralAuthPopup(
         } catch {
           /* ignore */
         }
-        finish({ status: 'success', name: m.name ?? '', root: m.root });
+        finish({ status: 'success', name: m.name ?? '', agent: m.agent, delegation: m.delegation });
         return;
       }
       if (m.type === 'AC_ERROR') {
