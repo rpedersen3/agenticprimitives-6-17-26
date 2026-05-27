@@ -117,7 +117,9 @@ for local use `.dev.vars`. Full local-vs-deploy steps + the Google console confi
   authorizes no custody-class action without step-up.
 - **Relying site = scoped delegate, not custodian** (ADR-0019 + [`docs/central-auth.md`](docs/central-auth.md)):
   cross-origin enrollment issues a caveated ERC-7710 delegation, NEVER a custodian
-  slot on the person SA. (Demo still uses the `addPasskey` path pending spec-229 P6.)
+  slot on the person SA. **Live** (spec-229 P6): `approveEnroll` signs the delegation
+  with the ROOT passkey via `src/lib/delegation.ts` `issueSiteDelegation` (time-boxed,
+  `value 0`, naming + relationship targets). No `addPasskey` in the enrollment path.
 
 ## Running
 
