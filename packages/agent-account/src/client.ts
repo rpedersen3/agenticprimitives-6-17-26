@@ -528,7 +528,11 @@ export class AgentAccountClient {
   async buildDeployUserOpForAgentAccount(opts: {
     spec: AgentAccountSpec;
     paymaster: Address;
+    /** Optional calldata the freshly-deployed account executes in the SAME userOp (deploy +
+     *  execute atomically). Defaults to '0x' (deploy only). When set, `callGasLimit` covers it. */
+    callData?: Hex;
     verificationGasLimit?: bigint;
+    callGasLimit?: bigint;
     preVerificationGas?: bigint;
     paymasterVerificationGasLimit?: bigint;
     verifyingPaymaster?: {
@@ -551,8 +555,11 @@ export class AgentAccountClient {
     });
     const initCode = (this.opts.factory + factoryCalldata.slice(2)) as Hex;
 
+    const deployCallData = opts.callData ?? '0x';
     const verificationGasLimit = opts.verificationGasLimit ?? 1_500_000n;
-    const callGasLimit = 0n;
+    // Deploy-only → 0; deploy+execute → enough to run the inner calls (default sized for a
+    // small batch like name register + set-primary).
+    const callGasLimit = opts.callGasLimit ?? (deployCallData !== '0x' ? 800_000n : 0n);
     const accountGasLimits = packGasLimits(verificationGasLimit, callGasLimit);
     const preVerificationGas = opts.preVerificationGas ?? 60_000n;
 
@@ -569,7 +576,7 @@ export class AgentAccountClient {
       pmVerifGas,
       pmPostOpGas,
       verifyingPaymaster: opts.verifyingPaymaster,
-      userOpFields: { sender, nonce: 0n, initCode, callData: '0x' as Hex, accountGasLimits, preVerificationGas, gasFees },
+      userOpFields: { sender, nonce: 0n, initCode, callData: deployCallData, accountGasLimits, preVerificationGas, gasFees },
       chainId: this.opts.chainId,
     });
 
@@ -577,7 +584,7 @@ export class AgentAccountClient {
       sender,
       nonce: 0n,
       initCode,
-      callData: '0x',
+      callData: deployCallData,
       accountGasLimits,
       preVerificationGas,
       gasFees,

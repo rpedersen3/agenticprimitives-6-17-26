@@ -2,7 +2,7 @@
 // → PII, all against the live broker + the deployed demo-a2a worker (via /a2a).
 import { buildMessage } from '@agenticprimitives/connect-auth/siwe';
 import { buildSubregistryRegisterCall, buildSetPrimaryNameCall } from '@agenticprimitives/agent-naming';
-import { buildExecuteCallData, buildExecuteBatchCallData } from '@agenticprimitives/agent-account';
+import { buildExecuteCallData, buildExecuteBatchCallData, AgentAccountClient } from '@agenticprimitives/agent-account';
 import {
   buildProposeEdgeCall,
   buildConfirmEdgeCall,
@@ -15,7 +15,7 @@ import { encodeFunctionData } from 'viem';
 import { connectWallet, personalSign } from './lib/wallet';
 import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from './lib/passkey';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
-import { CONTRACTS } from './lib/chain';
+import { CONTRACTS, DEFAULT_RPC_URL } from './lib/chain';
 import { issueSiteDelegation, toWire, type DelegationWire } from './lib/delegation';
 
 /** A function that signs a 32-byte hash (EOA personal_sign or WebAuthn). */
@@ -247,10 +247,52 @@ export async function passkeyLogin(registerIfMissing = true): Promise<PasskeyOut
   return { status: (body.status as 'disambiguate' | 'rejected') ?? 'rejected', passkey };
 }
 
-/** Bootstrap a passkey-direct person SA (no server custodian ever, P0-A) + enroll the facet. */
+// ── Deploy + claim in ONE userOp (ERC-4337 initCode + callData) ─────
+// One signature instead of deploy-then-claim. The freshly-deployed account executes the name
+// claim (register + set-primary) in the same op. Needs the SA address up front (the claim's
+// newOwner) — derived deterministically from the passkey + salt (a factory view, no signature).
+
+/** Deterministic passkey-direct SA address (mode 0, no custodians, the passkey, given salt). */
+async function derivePasskeySa(passkey: DemoPasskey, salt: bigint): Promise<Address> {
+  const accounts = new AgentAccountClient({
+    rpcUrl: DEFAULT_RPC_URL,
+    chainId: CHAIN_ID,
+    entryPoint: CONTRACTS.entryPoint,
+    factory: CONTRACTS.agentAccountFactory,
+  });
+  return accounts.getAddressForAgentAccount({
+    custodians: [],
+    passkey: { credentialIdDigest: passkey.credentialIdDigest, x: passkey.pubKeyX, y: passkey.pubKeyY },
+    salt,
+  });
+}
+
+/** Pick a free name + build the `executeBatch(register, setPrimary)` calldata the new SA runs
+ *  to claim it (newOwner = the SA itself). Returned to ride along in the deploy userOp. */
+async function buildClaimCallData(
+  base: string,
+  sa: Address,
+  onStep?: (s: string) => void,
+): Promise<{ ok: true; callData: Hex; name: string } | { ok: false; error: string }> {
+  onStep?.('Finding a free name…');
+  const picked = (await (await fetch(`/connect/name?base=${encodeURIComponent(base)}`)).json()) as {
+    label?: string;
+    name?: string;
+    node?: Hex;
+    error?: string;
+  };
+  if (!picked.name || !picked.node || !picked.label) return { ok: false, error: picked.error ?? 'no free name' };
+  const register = buildSubregistryRegisterCall({ subregistry: CONTRACTS.permissionlessSubregistry, label: picked.label, newOwner: sa });
+  const setPrimary = buildSetPrimaryNameCall({ registry: CONTRACTS.agentNameRegistry, node: picked.node });
+  return { ok: true, callData: buildExecuteBatchCallData([register, setPrimary]), name: picked.name };
+}
+
+/** Bootstrap a passkey-direct person SA (no server custodian ever, P0-A). When `callData` is
+ *  given, the deploy userOp ALSO executes it (e.g. claim the name) — one signature, not two. */
 export async function bootstrapWithPasskey(
   passkey: DemoPasskey,
   onStep?: (s: string) => void,
+  callData?: Hex,
 ): Promise<{ ok: true; agent: Address } | { ok: false; error: string }> {
   await ensureCsrfToken();
   onStep?.('Preparing your workspace…');
@@ -263,6 +305,7 @@ export async function bootstrapWithPasskey(
       credentialIdDigest: passkey.credentialIdDigest,
       pubKeyX: passkey.pubKeyX.toString(),
       pubKeyY: passkey.pubKeyY.toString(),
+      ...(callData ? { callData } : {}),
     }),
   });
   if (buildRes.status === 409) return { ok: false, error: 'Gas sponsorship is not enabled on the backend (paymaster).' };
@@ -432,7 +475,15 @@ export async function createChildAgentForSite(
   let salt = 0n;
   for (const b of saltBytes) salt = (salt << 8n) | BigInt(b);
 
-  onStep?.('Deploying the agent…');
+  // Derive the SA up front so we can deploy + claim its name in ONE userOp (one prompt).
+  const childAgent = await derivePasskeySa(pk, salt);
+  if (childAgent.toLowerCase() === personAgent.toLowerCase()) {
+    return { ok: false, error: 'agent collided with your person agent (salt)' };
+  }
+  const claim = await buildClaimCallData(base, childAgent, onStep);
+  if (!claim.ok) return { ok: false, error: claim.error };
+
+  onStep?.('Deploying the agent + claiming its name…');
   const dep = await deployAgent(
     {
       initMethod: 'passkey',
@@ -440,18 +491,11 @@ export async function createChildAgentForSite(
       pubKeyX: pk.pubKeyX.toString(),
       pubKeyY: pk.pubKeyY.toString(),
       salt: salt.toString(),
+      callData: claim.callData, // deploy + claim atomically
     },
     passkeySignHash,
   );
   if (!dep.ok) return { ok: false, error: `agent deploy failed: ${dep.error}` };
-  const childAgent = dep.agent;
-  if (childAgent.toLowerCase() === personAgent.toLowerCase()) {
-    return { ok: false, error: 'agent collided with your person agent (salt)' };
-  }
-
-  onStep?.('Claiming the name…');
-  const claim = await claimName(childAgent, passkeySignHash, base, onStep, 1n); // fresh deploy: claim is nonce 1
-  if (!claim.ok) return { ok: false, error: claim.error };
 
   const relationships = CONTRACTS.agentRelationship;
   const edgeId = computeEdgeId(personAgent, childAgent, relationshipType);
@@ -464,8 +508,8 @@ export async function createChildAgentForSite(
   if (governed) {
     onStep?.('Confirming the link…');
     const confirm = buildConfirmEdgeCall({ relationships, edgeId });
-    // child = object (confirmer); child's 3rd op (deploy 0, claim 1, confirm 2).
-    await executeCall(childAgent, passkeySignHash, buildExecuteCallData(confirm), { minNonce: 2n, attempts: 6 });
+    // child = object (confirmer); deploy+claim was the child's nonce 0, so confirm is nonce 1.
+    await executeCall(childAgent, passkeySignHash, buildExecuteCallData(confirm), { minNonce: 1n, attempts: 6 });
   }
 
   onStep?.('Granting the site scoped access…');
@@ -663,11 +707,13 @@ export async function signupWithName(
   if (via === 'passkey') {
     onStep?.('Creating your passkey…');
     const pk = await registerPasskey(`${base}.demo.agent`); // FRESH passkey for this workspace
-    const dep = await bootstrapWithPasskey(pk, onStep); // deploy passkey-direct
-    if (!dep.ok) return { ok: false, error: dep.error };
-    // Fresh deploy consumed nonce 0 → the claim op must be nonce ≥ 1 (gate out the lag).
-    const claim = await claimName(dep.agent, passkeySignHash, base, onStep, 1n);
+    // Deploy + claim the name in ONE userOp (one device prompt): derive the SA address, build
+    // the claim calldata (newOwner = that SA), and deploy with it attached.
+    const sa = await derivePasskeySa(pk, 0n);
+    const claim = await buildClaimCallData(base, sa, onStep);
     if (!claim.ok) return { ok: false, error: claim.error };
+    const dep = await bootstrapWithPasskey(pk, onStep, claim.callData);
+    if (!dep.ok) return { ok: false, error: dep.error };
     // The OIDC enrollment ceremony signs the person in via the grant + id_token, so it skips
     // this extra passkeyLogin (its token would be unused) — saving one device prompt.
     if (!signIn) return { ok: true, token: '', name: claim.name };

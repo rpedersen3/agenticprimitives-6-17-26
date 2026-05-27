@@ -1,41 +1,26 @@
 // POST /oidc/grant — the authorization-endpoint grant (spec 230 §4.2).
 //
-// The SPA at /authorize runs the ROOT-passkey ceremony + on-chain work + signs the
-// delegation client-side, then calls this endpoint to turn the verified credential into an
-// OIDC authorization CODE. We:
-//   1. gate the client_id + redirect_uri + delegation_template against the registry (§6),
-//   2. VERIFY proof-of-possession of the passkey (same derivation as /connect/passkey —
-//      the deterministic SA + isValidSignature over a single-use challenge) → the sub,
-//   3. mint the OIDC id_token (sub = CAIP-10, aud = client_id, nonce echoed),
+// The SPA at /authorize runs the ROOT-passkey ceremony + on-chain work + signs the delegation
+// client-side, then calls this to turn the result into an OIDC authorization CODE. We:
+//   1. gate client_id + redirect_uri + delegation_template against the registry (§6),
+//   2. use the SIGNED DELEGATION as proof-of-possession — verify it (ERC-1271 against the
+//      delegator + window). The ROOT passkey just signed it, so it IS a fresh credential proof;
+//      this removes a separate passkey-assertion prompt. sub = the delegator (CAIP-10).
+//   3. mint the OIDC id_token (sub, aud = client_id, nonce echoed),
 //   4. stash {id_token, delegation, org} under a single-use code BOUND to the PKCE
 //      code_challenge + client_id + redirect_uri, and return { code }.
 // The code (not the token) travels back in the redirect/popup; /token does the PKCE exchange.
 import { mintIdToken, newAuthCode } from '@agenticprimitives/connect';
-import { AgentAccountClient } from '@agenticprimitives/agent-account';
 import { toCanonicalAgentId } from '@agenticprimitives/identity-directory-adapters';
-import type { Address, Hex } from '@agenticprimitives/types';
 import { getServer, json, type FnContext } from '../_lib/server-broker';
-import { recordCredentialFacet } from '../../src/lib/kv-indexer';
-import { CHAIN_ID, CONTRACTS, DEFAULT_RPC_URL } from '../../src/lib/chain';
+import { verifyDelegation, type IncomingDelegation } from '../_lib/verify-delegation';
+import { CHAIN_ID } from '../../src/lib/chain';
 import { getClient, clientAllowsRedirect, clientAllowsTemplate } from '../../src/lib/oidc-clients';
 
 const ID_TOKEN_TTL = 3600; // session-usable for the demo (the relying app treats it as the session)
 const CODE_TTL_MS = 300_000; // 5 min exchange window
 
-async function isDeployedSoon(accounts: AgentAccountClient, sa: Address): Promise<boolean> {
-  for (let i = 0; i < 6; i++) {
-    if (await accounts.isDeployed(sa)) return true;
-    if (i < 5) await new Promise((r) => setTimeout(r, 2500));
-  }
-  return false;
-}
-
 interface GrantBody {
-  credentialIdDigest?: string;
-  pubKeyX?: string;
-  pubKeyY?: string;
-  challenge?: string;
-  signature?: string;
   client_id?: string;
   redirect_uri?: string;
   nonce?: string;
@@ -43,17 +28,14 @@ interface GrantBody {
   code_challenge_method?: string;
   agent_name?: string;
   delegation_template?: string;
-  delegation?: unknown; // opaque DelegationWire (signed client-side)
+  delegation?: IncomingDelegation; // signed client-side; doubles as the proof-of-possession
   org?: unknown; // opaque org payload for the org-create template
 }
 
 export const onRequestPost = async ({ request, env }: FnContext): Promise<Response> => {
   const body = (await request.json().catch(() => null)) as GrantBody | null;
-  if (
-    !body?.credentialIdDigest || !body.pubKeyX || !body.pubKeyY || !body.challenge || !body.signature ||
-    !body.client_id || !body.redirect_uri || !body.code_challenge || !body.delegation_template
-  ) {
-    return json({ error: 'credential proof + client_id + redirect_uri + code_challenge + delegation_template required' }, 400);
+  if (!body?.client_id || !body.redirect_uri || !body.code_challenge || !body.delegation_template || !body.delegation) {
+    return json({ error: 'client_id + redirect_uri + code_challenge + delegation_template + delegation required' }, 400);
   }
   // §8.4: S256 PKCE only.
   if (body.code_challenge_method && body.code_challenge_method !== 'S256') {
@@ -65,47 +47,17 @@ export const onRequestPost = async ({ request, env }: FnContext): Promise<Respon
   if (!clientAllowsRedirect(client, body.redirect_uri)) return json({ error: 'redirect_uri not allowed for client' }, 400);
   if (!clientAllowsTemplate(client, body.delegation_template)) return json({ error: `delegation_template "${body.delegation_template}" not allowed` }, 400);
 
+  // Proof-of-possession = the freshly-signed delegation (ERC-1271 against its delegator + window).
+  const v = await verifyDelegation(env, body.delegation);
+  if (!v.ok) return json({ error: `delegation proof failed: ${v.reason}` }, 401);
+
   const iss = new URL(request.url).origin;
-
-  // Single-use passkey challenge.
-  const chKey = `pkchallenge:${body.challenge}`;
-  if (!(await env.AUTH_CODES.get(chKey))) return json({ error: 'unknown or expired challenge' }, 400);
-  await env.AUTH_CODES.delete(chKey);
-
-  const accounts = new AgentAccountClient({
-    rpcUrl: env.RPC_URL ?? DEFAULT_RPC_URL,
-    chainId: CHAIN_ID,
-    entryPoint: CONTRACTS.entryPoint,
-    factory: CONTRACTS.agentAccountFactory,
-  });
-
-  // Deterministic passkey SA (mode 0, no custodians, passkey set, salt 0) = the person.
-  let sa: Address;
-  try {
-    sa = await accounts.getAddressForAgentAccount({
-      mode: 0,
-      custodians: [],
-      passkey: { credentialIdDigest: body.credentialIdDigest as Hex, x: BigInt(body.pubKeyX), y: BigInt(body.pubKeyY) },
-      salt: 0n,
-    });
-  } catch (e) {
-    return json({ error: 'SA address derivation failed', detail: String(e) }, 502);
-  }
-  if (!(await isDeployedSoon(accounts, sa))) return json({ error: 'agent not deployed' }, 400);
-  if (!(await accounts.hasPasskey(sa, body.credentialIdDigest as Hex))) return json({ error: 'passkey not registered on agent' }, 400);
-
-  // Proof-of-possession over the single-use challenge.
-  if (!(await accounts.isValidSignature(sa, body.challenge as Hex, body.signature as Hex))) {
-    return json({ error: 'passkey signature invalid (proof-of-possession failed)' }, 401);
-  }
-
-  const sub = toCanonicalAgentId(CHAIN_ID, sa);
+  const sub = toCanonicalAgentId(CHAIN_ID, body.delegation.delegator);
   const { signer } = await getServer(env);
   const idToken = await mintIdToken(
     { iss, sub, aud: body.client_id, nonce: body.nonce, agentName: body.agent_name, ttlSeconds: ID_TOKEN_TTL },
     signer,
   );
-  await recordCredentialFacet(env.AUTH_CODES, { kind: 'passkey', id: body.credentialIdDigest, assurance: 'onchain-confirmed', role: 'custody-grade' }, sub);
 
   // Stash the grant under a single-use code, BOUND to the PKCE challenge + client + redirect.
   const code = newAuthCode();
@@ -113,7 +65,7 @@ export const onRequestPost = async ({ request, env }: FnContext): Promise<Respon
     `oidc:${code}`,
     JSON.stringify({
       id_token: idToken,
-      delegation: body.delegation ?? null,
+      delegation: body.delegation,
       org: body.org ?? null,
       code_challenge: body.code_challenge,
       client_id: body.client_id,

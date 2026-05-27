@@ -59,6 +59,13 @@ export async function verifyDelegation(
     entryPoint: CONTRACTS.entryPoint,
     factory: CONTRACTS.agentAccountFactory,
   });
+  // ERC-1271 needs the delegator SA deployed + RPC-visible. Just-enrolled users hit post-deploy
+  // lag, so poll briefly (returns immediately once deployed — fast for the common returning case).
+  for (let i = 0; i < 6; i++) {
+    if (await accounts.isDeployed(d.delegator)) break;
+    if (i === 5) return { ok: false, reason: 'delegator account not yet deployed' };
+    await new Promise((r) => setTimeout(r, 2500));
+  }
   try {
     const ok = await accounts.isValidSignature(d.delegator, digest, d.signature);
     return ok ? { ok: true } : { ok: false, reason: 'ERC-1271 verification failed against the delegator' };

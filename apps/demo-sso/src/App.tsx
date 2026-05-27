@@ -439,19 +439,12 @@ export function App() {
   // bound to the PKCE code_challenge. Returns the code; the relying site exchanges it at /token.
   async function submitGrant(resolvedName: string, delegationWire: unknown, org?: unknown): Promise<string> {
     if (!enrollReq) throw new Error('no request');
-    const pk = loadPasskey();
-    if (!pk) throw new Error('No central-auth passkey on this device.');
-    const { challenge } = (await (await fetch('/connect/passkey-challenge')).json()) as { challenge: Hex };
-    const signature = await passkeySignHash(challenge); // ROOT passkey proof-of-possession
+    // No separate passkey assertion: the just-signed delegation IS the proof-of-possession
+    // (the grant verifies it via ERC-1271). One fewer device prompt.
     const r = await fetch('/oidc/grant', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        credentialIdDigest: pk.credentialIdDigest,
-        pubKeyX: pk.pubKeyX.toString(),
-        pubKeyY: pk.pubKeyY.toString(),
-        challenge,
-        signature,
         client_id: enrollReq.aud,
         redirect_uri: enrollReq.redirectUri,
         nonce: enrollReq.nonce,
