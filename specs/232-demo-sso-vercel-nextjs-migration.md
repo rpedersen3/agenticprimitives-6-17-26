@@ -2,9 +2,25 @@
 
 Status: IN PROGRESS 2026-05-27 — **V1 + V2 DONE** (`apps/demo-sso-next`: Next App
 Router scaffold + SPA mounted; broker ported as thin Route Handlers over the
-verbatim `server/` bodies + `@upstash/redis` KV adapter; native a2a-agent surface;
-builds clean + A2A/discovery verified locally). **V3/V4 = user-run** Vercel deploy
-+ wildcard domain — runbook in [`apps/demo-sso-next/DEPLOY.md`](../apps/demo-sso-next/DEPLOY.md).
+verbatim `server/` bodies + `@upstash/redis` KV adapter; builds clean). **V3/V4 =
+user-run** Vercel deploy + wildcard domain — runbook in
+[`apps/demo-sso-next/DEPLOY.md`](../apps/demo-sso-next/DEPLOY.md).
+
+> **TOPOLOGY UPDATE 2026-05-27 — SSO/A2A SPLIT across two domains (decided by user).**
+> The personal subdomain is split by face, on two TLDs:
+> - **A2A (machine)** = `*.impact-agent.io` → the **Cloudflare `demo-a2a` Worker**
+>   directly (Worker route `*.impact-agent.io/*` + a proxied CNAME → workers.dev).
+>   Host-resolved, native, **no passthrough**. **LIVE + verified.**
+> - **SSO (human)** = `*.impact-agent.me` → **this Vercel app**.
+>
+> So this Vercel app is **SSO-only**: the native a2a-agent surface (§2/§3.1) was
+> **REMOVED** from `apps/demo-sso-next` (A2A lives in the Cloudflare Worker). The
+> app still calls demo-a2a as a **relayer** (gasless SA deploy / UserOps) via the
+> `/a2a/*` rewrite. `CENTRAL_AUTH_DOMAIN = impact-agent.me`. demo-org's
+> `resolveAuthOrigin` → `<label>.impact-agent.me`; demo-a2a CORS allows
+> `https://*.impact-agent.me`. Sections below that describe A2A-in-Next are
+> superseded by this note.
+
 Supersedes spec 231's **Option 2** (the Cloudflare
 wildcard-Worker + `X-Forwarded-Host`/`resolveOrigin`/`PROXY_SHARED_SECRET`
 scaffolding) as the wildcard mechanism. Spec 231's A2A protocol surface
