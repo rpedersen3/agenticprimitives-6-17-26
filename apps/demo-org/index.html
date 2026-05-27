@@ -7,9 +7,12 @@
     <style>
       /* ── Design tokens ─────────────────────────────────────────────── */
       :root {
-        --c-primary: #4338ca; --c-primary-hover: #3730a3; --c-primary-active: #312e81;
-        --c-primary-subtle: #eef2ff; --c-primary-border: #c7d2fe;
-        --c-primary-mid: #818cf8; --c-primary-light: #6366f1;
+        /* Agentic Org is a RELYING APP — its own emerald identity, distinct from Agentic
+           Connect's indigo (the IdP / secure home). The colour shift on redirect signals
+           "you've left the app and arrived at your secure home." */
+        --c-primary: #047857; --c-primary-hover: #036249; --c-primary-active: #064e3b;
+        --c-primary-subtle: #ecfdf5; --c-primary-border: #a7f3d0;
+        --c-primary-mid: #34d399; --c-primary-light: #059669;
         --c-g900: #0f172a; --c-g700: #334155; --c-g500: #64748b; --c-g400: #94a3b8;
         --c-g300: #cbd5e1; --c-g200: #e2e8f0; --c-g100: #f1f5f9; --c-g50: #f8fafc;
         --c-success: #059669; --c-success-bg: #ecfdf5; --c-success-border: #a7f3d0;
@@ -519,17 +522,39 @@
       }
 
       /* Hero top: headline + value bullets */
+      /* Agentic Org app mark (emerald) — the relying app's identity */
+      .app-mark {
+        display: inline-flex; align-items: center; gap: .4rem;
+        font-size: .9rem; font-weight: 800; letter-spacing: -0.01em;
+        color: var(--c-primary); margin: 1.5rem 0 .25rem;
+      }
       .hero-top {
-        padding-top: 1.625rem;
+        padding-top: .25rem;
         padding-bottom: .875rem;
       }
       .hero-top h1 {
-        font-size: 2rem;
+        font-size: 1.9rem;
         font-weight: 900;
         letter-spacing: -0.04em;
         line-height: 1.12;
-        margin-bottom: .75rem;
+        margin-bottom: .5rem;
       }
+      .hero-sub {
+        font-size: .95rem; color: var(--c-g500); line-height: 1.5; margin: 0;
+      }
+
+      /* "Sign in with Agentic Connect" card — the single entry point */
+      .signin-card {
+        background: #fff; border: 1px solid var(--c-g200); border-radius: var(--r-lg, 16px);
+        box-shadow: var(--sh-md, 0 4px 14px rgba(17,24,39,.06)); padding: 1.1rem 1.1rem 1.25rem;
+        margin: 1.25rem 0 1rem;
+      }
+      .signin-label {
+        display: block; font-size: .72rem; font-weight: 700; color: var(--c-g500);
+        text-transform: uppercase; letter-spacing: .08em; margin-bottom: .45rem;
+      }
+      .signin-cta { margin-top: .75rem; }
+      .signin-cta svg { flex: 0 0 auto; }
 
       /* Value-list with tinted icon chips */
       .value-list {

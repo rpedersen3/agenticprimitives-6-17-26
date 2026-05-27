@@ -667,12 +667,14 @@ export function App() {
     const orgName = enrollReq.orgBase ? `${enrollReq.orgBase.replace(/\.demo\.agent$/, '')}.demo.agent` : '';
     const delegateShort = `${enrollReq.delegate.slice(0, 6)}…${enrollReq.delegate.slice(-4)}`;
 
-    // Shared brand topbar — compact, centred
+    // Shared brand topbar — names the IdP + signposts arrival at "your secure home" (the
+    // distinct identity from the relying app you came from).
     const Topbar = () => (
       <div className="popup-topbar" role="banner">
         <div className="popup-brand">
           <ShieldLogo size={20} />
-          Agentic Connect
+          <span>Agentic Connect</span>
+          <span className="popup-brand-sub">· your secure home</span>
         </div>
       </div>
     );

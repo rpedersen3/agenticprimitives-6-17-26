@@ -698,120 +698,64 @@ export function App() {
         <div className="hero-screen">
           <div className="hero-content">
 
-            {/* Headline + value bullets */}
+            {/* Agentic Org — the relying app's OWN identity (an org workspace), not an IdP. */}
+            <div className="app-mark" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21h18M6 21V7l5-3 5 3v14M9.5 11h3M9.5 15h3" />
+              </svg>
+              Agentic Org
+            </div>
             <div className="hero-top">
               <h1>
-                Your agent name is your portable{' '}
-                <span className="accent">identity.</span>
+                Organizations, run by your <span className="accent">agent</span>.
               </h1>
-              <ul className="value-list" aria-label="Benefits">
-                <li>
-                  <span className="vi-chip blue" aria-hidden="true">
-                    {/* Passkey icon */}
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="8" cy="15" r="4"/><path d="M15 9h4M15 12h2"/>
-                      <path d="M12 15h1l2-6"/>
-                    </svg>
-                  </span>
-                  Sign in with a <strong>passkey.</strong>
-                </li>
-                <li>
-                  <span className="vi-chip green" aria-hidden="true">
-                    {/* Check icon */}
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  </span>
-                  Connect apps with <strong>approval.</strong>
-                </li>
-                <li>
-                  <span className="vi-chip purple" aria-hidden="true">
-                    {/* Shield icon */}
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                    </svg>
-                  </span>
-                  Revoke access <strong>anytime.</strong>
-                </li>
-              </ul>
-            </div>
-
-            {/* Shield illustration */}
-            <div className="shield-hero" aria-hidden="true">
-              <div className="shield-svg-wrap">
-                <ShieldLogo size={88} gradient />
-              </div>
-            </div>
-
-            {/* ── Existing-agent sign-in ─────────────────────────── */}
-            <div style={{ marginBottom: '.875rem' }}>
-              <p style={{
-                fontSize: '.72rem', fontWeight: 700, color: 'var(--c-g400)',
-                textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '.5rem',
-              }}>
-                Already have an agent?
+              <p className="hero-sub">
+                Spin up and govern organizations on Base Sepolia — signed in with your own Smart Agent.
               </p>
-              <div className="form-section" style={{ marginBottom: '10px' }}>
-                <div className="input-wrap">
-                  <input
-                    id="connect-name-input"
-                    type="text"
-                    value={connectName}
-                    onChange={(e) => setConnectName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-                    placeholder="Enter your agent name"
-                    autoComplete="username"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    aria-label="Agent name"
-                  />
-                  {nameInfo.status === 'found' && (
-                    <span className="input-check" aria-hidden="true">✓</span>
-                  )}
-                </div>
-                {nameInfo.status === 'checking' && (
-                  <div className="field-hint checking" role="status" aria-live="polite">
-                    <span className="spinner" aria-hidden="true" />
-                    Checking…
-                  </div>
-                )}
-                {nameInfo.status === 'none' && (
-                  <div className="field-hint none" role="status" aria-live="polite">
-                    No agent found — new here? Create one below.
-                  </div>
-                )}
-                {nameInfo.status === 'found' && (
-                  <div className="field-hint found" role="status" aria-live="polite">
-                    ✓ Found <strong>{nameInfo.name}</strong>
-                  </div>
-                )}
-              </div>
+            </div>
 
-              {nameInfo.status === 'found' && (
-                <div className="connect-actions" style={{ marginTop: '0' }}>
-                  {nameInfo.hasPasskey && hasLocalDelegation(nameInfo.name!) && (
-                    <button className="cta" disabled={busy} onClick={() => onConnectName('passkey')}>
-                      {busy ? <span className="spinner" aria-hidden="true" /> : null}
-                      Continue with passkey →
-                    </button>
-                  )}
-                  {nameInfo.hasPasskey && !hasLocalDelegation(nameInfo.name!) && (
-                    <>
-                      <button className="cta" disabled={busy} onClick={() => onAddSite(nameInfo.name!)}>
-                        {busy ? <span className="spinner" aria-hidden="true" /> : null}
-                        Set up this site →
-                      </button>
-                      <p className="muted" style={{ margin: '.25rem 0 0', textAlign: 'center', fontSize: '.8rem' }}>
-                        Approve once with your passkey — future sign-ins are one tap.
-                      </p>
-                    </>
-                  )}
-                  {nameInfo.hasEoa && (
-                    <button className="cta ghost" disabled={busy} onClick={() => onConnectName('wallet')}>
-                      Continue with wallet
-                    </button>
-                  )}
+            {/* Sign in with Agentic Connect — ONE button. New vs existing is decided at your
+                secure home; this app never creates the agent, it just connects. */}
+            <div className="signin-card">
+              <label className="signin-label" htmlFor="connect-name-input">Your agent name</label>
+              <div className="input-wrap">
+                <input
+                  id="connect-name-input"
+                  type="text"
+                  value={connectName}
+                  onChange={(e) => setConnectName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+                  placeholder="e.g. rpedersen"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  aria-label="Agent name"
+                />
+                {nameInfo.status === 'found' && <span className="input-check" aria-hidden="true">✓</span>}
+              </div>
+              {nameInfo.status === 'checking' && (
+                <div className="field-hint checking" role="status" aria-live="polite">
+                  <span className="spinner" aria-hidden="true" /> Checking…
                 </div>
               )}
+              {nameInfo.status === 'found' && (
+                <div className="field-hint found" role="status" aria-live="polite">
+                  ✓ Welcome back, <strong>{nameInfo.name}</strong>
+                </div>
+              )}
+              {nameInfo.status === 'none' && connectName.trim() && (
+                <div className="field-hint none" role="status" aria-live="polite">
+                  New here — your secure home will create <strong>{fullName(connectName)}</strong>.
+                </div>
+              )}
+
+              <button
+                className="cta signin-cta"
+                disabled={!connectName.trim() || busy}
+                onClick={() => onConnectName('passkey')}
+              >
+                {busy ? <span className="spinner" aria-hidden="true" /> : <ShieldLogo size={16} gradient />}
+                Continue with Agentic Connect
+              </button>
 
               {connectErr && (
                 <div className="inline-err" role="alert" style={{ marginTop: '.5rem' }}>
@@ -820,90 +764,8 @@ export function App() {
               )}
             </div>
 
-            {/* Divider */}
-            <div className="divider">or create a new agent</div>
-
-            {/* ── New agent sign-up ──────────────────────────────── */}
-            <div style={{ marginBottom: '1rem' }}>
-              <div className="form-section" style={{ marginBottom: '10px' }}>
-                <p style={{
-                  fontSize: '.72rem', fontWeight: 700, color: 'var(--c-g400)',
-                  textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '.5rem',
-                }}>
-                  Choose your agent name
-                </p>
-                <div className="input-wrap">
-                  <input
-                    id="signup-name-input"
-                    type="text"
-                    value={desiredName}
-                    onChange={(e) =>
-                      setDesiredName(e.target.value.toLowerCase().replace(/\.demo\.agent$/, '').replace(/[^a-z0-9-]/g, ''))
-                    }
-                    placeholder="e.g. alice"
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    aria-label="Choose your agent name"
-                  />
-                  {desiredName && signupAvail === 'available' && (
-                    <span className="input-check" aria-hidden="true">✓</span>
-                  )}
-                </div>
-                {desiredName && (
-                  <div style={{ marginTop: '.3rem', fontSize: '.78rem', color: 'var(--c-g400)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
-                    {desiredName}.demo.agent
-                  </div>
-                )}
-                {desiredName && signupAvail === 'checking' && (
-                  <div className="field-hint checking" role="status" aria-live="polite">
-                    <span className="spinner" aria-hidden="true" />
-                    Checking availability…
-                  </div>
-                )}
-                {desiredName && signupAvail === 'available' && (
-                  <div className="field-hint available" role="status" aria-live="polite">
-                    ✓ {desiredName}.demo.agent is available
-                  </div>
-                )}
-                {desiredName && signupAvail === 'taken' && (
-                  <div role="alert">
-                    <div className="field-hint taken">{desiredName}.demo.agent is already taken.</div>
-                    <button
-                      className="inline"
-                      style={{ marginTop: '.3rem' }}
-                      onClick={() => {
-                        setConnectName(desiredName);
-                        setDesiredName('');
-                        setSignupAvail('idle');
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
-                    >
-                      Connect to {desiredName}.demo.agent instead
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="connect-actions" style={{ marginTop: 0 }}>
-                <button className="cta" disabled={signupAvail !== 'available'} onClick={() => onSignup('passkey')}>
-                  Create my Smart Agent →
-                </button>
-                {hasWallet() && (
-                  <button className="cta ghost" disabled={signupAvail !== 'available'} onClick={() => onSignup('wallet')}>
-                    Create with wallet
-                  </button>
-                )}
-                {!hasWallet() && signupAvail !== 'available' && (
-                  <p className="muted" style={{ textAlign: 'center', fontSize: '.8rem', marginTop: '.25rem' }}>
-                    Uses a passkey — no browser wallet required.
-                  </p>
-                )}
-              </div>
-            </div>
-
             <div className="privacy-footer">
-              🔒 You're in control. Your data stays private.
+              🔒 <strong>Agentic Connect</strong> is your secure home. Agentic Org only gets the access you approve.
             </div>
           </div>
         </div>
