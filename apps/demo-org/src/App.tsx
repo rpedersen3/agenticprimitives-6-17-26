@@ -349,6 +349,24 @@ export function App() {
     }
   }
 
+  // Reset connection: signOut() only drops the session — the stored site delegation
+  // persists, so the next "Continue with Agentic Connect" silently re-auths (ADR-0019)
+  // without the central-auth round-trip. This ALSO forgets all stored delegations +
+  // the local passkey name, so the next connect goes back through dual-v1.impact-agent.me.
+  function resetConnection() {
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('agenticprimitives:demo-org:delegation:') || k === LOCAL_PASSKEY_NAME)) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    signOut(); // clears the session token + resets the UI to the sign-in screen
+  }
+
   // ── name availability checks (debounced) ────────────────────────────
   // Connect: which credentials does the named agent have?
   useEffect(() => {
@@ -690,6 +708,9 @@ export function App() {
                   >
                     Copy agent address
                   </button>
+                  <button role="menuitem" onClick={resetConnection}>
+                    Reset connection (re-link via secure home)
+                  </button>
                   <button role="menuitem" style={{ color: 'var(--c-danger)' }} onClick={signOut}>
                     Sign out
                   </button>
@@ -801,6 +822,19 @@ export function App() {
                 {busy ? <span className="spinner" aria-hidden="true" /> : <ShieldLogo size={16} gradient />}
                 Continue with Agentic Connect
               </button>
+
+              {/* Connected before? A stored delegation makes the click above silently
+                  re-auth (ADR-0019) without the central-auth round-trip. Offer a reset
+                  to forget it + go back through your secure home. */}
+              {hasLocalDelegation(connectName) && (
+                <button
+                  className="ghost"
+                  onClick={resetConnection}
+                  style={{ marginTop: '.5rem', fontSize: '.78rem', background: 'none', border: 'none', color: 'var(--c-g500)', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                >
+                  Connected before — reset to sign in via your secure home
+                </button>
+              )}
 
               {connectErr && (
                 <div className="inline-err" role="alert" style={{ marginTop: '.5rem' }}>
