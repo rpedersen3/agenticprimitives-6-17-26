@@ -9,7 +9,7 @@ import { keccak_256 } from '@noble/hashes/sha3';
 import type { Address, Hex } from '@agenticprimitives/types';
 
 export interface SiweMessageInput {
-  domain: string;             // e.g. 'demo.agenticprimitives.local'
+  domain: string;             // RFC 4501 dnsauthority, e.g. 'app.example'
   address: Address;
   statement?: string;
   uri: string;                // e.g. 'http://127.0.0.1:5173'

@@ -2,9 +2,11 @@ import { keccak256, toHex, type Hex } from 'viem';
 
 /**
  * `authOrigin` profile predicate (spec 229 §4). A person agent declares
- * **where its central auth lives** (their own `<handle>.impact-agent.io`
- * subdomain, which holds the ROOT passkey) as an on-chain string property:
- * `getStringProperty(agent, AUTH_ORIGIN)` → e.g. `"https://alice.impact-agent.io"`.
+ * **where its central auth lives** (the origin holding its ROOT credential)
+ * as an on-chain string property: `getStringProperty(agent, AUTH_ORIGIN)` → e.g.
+ * `"https://<handle>.<connect-domain>"`. The concrete domain is a deployment
+ * concern owned by the consuming app, never this package (see the
+ * "no deployment-domain code in packages" rule in the root CLAUDE.md).
  *
  * Relying sites resolve `name → agent → authOrigin` as a SINGLE read
  * (ADR-0013, one mechanism). An UNSET facet is an *answer*, not a trigger to

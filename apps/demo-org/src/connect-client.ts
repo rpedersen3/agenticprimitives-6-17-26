@@ -13,6 +13,7 @@ import { connectWallet, personalSign } from './lib/wallet';
 import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from './lib/passkey';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
 import { CONTRACTS } from './lib/chain';
+import { nameLabel, personalAuthOrigin, PLATFORM_AUTH_ORIGIN } from './lib/domain';
 
 /** A function that signs a 32-byte hash (EOA personal_sign or WebAuthn). */
 export type SignHash = (hash: Hex) => Promise<Hex>;
@@ -20,44 +21,18 @@ export type SignHash = (hash: Hex) => Promise<Hex>;
 export const AUD = 'demo-org';
 const CHAIN_ID = 84532;
 
-/** The registrable Connect SSO domain. Each person's central auth (their human
- *  sign-in home) is their own single-label subdomain of this (spec 232). NOTE the
- *  split: SSO is `<label>.impact-agent.me` (Vercel); the agent's A2A endpoint is a
- *  separate domain `<label>.impact-agent.io` (Cloudflare). Relying sites send
- *  users HERE for sign-in. */
-const CENTRAL_AUTH_DOMAIN = 'impact-agent.me';
-
-/** The configured PLATFORM Connect origin — the apex landing + the bootstrap/sign-up
- *  origin (a name with no agent yet has nothing to resolve, so it lands at the apex).
- *  Not exported: callers go through `resolveAuthOrigin`. */
-const PLATFORM_AUTH_ORIGIN =
-  (import.meta.env?.VITE_CENTRAL_AUTH_ORIGIN as string | undefined) ?? `https://${CENTRAL_AUTH_DOMAIN}`;
-
-/** The label part of a name (`alice.demo.agent` → `alice`; `alice` → `alice`). */
-function nameLabel(name: string): string {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/\.demo\.agent$/, '')
-      .replace(/\.+$/, '')
-      .split('.')[0] ?? ''
-  );
-}
-
 /** Resolve where a name's central auth lives (spec 229 §4 / spec 231 — P5).
  *  ONE mechanism, no fallback chain (ADR-0013): each person's secure home is their
- *  own subdomain `<label>.impact-agent.io`, and the home origin is DERIVED from the
+ *  own subdomain `<label>.impact-agent.me`, and the home origin is DERIVED from the
  *  name — the subdomain ⟺ name-label binding is canonical in this deployment, a pure
  *  computation, not a remote lookup. An empty/unparseable name (bootstrap / sign-up —
- *  no agent yet, so nothing to resolve) lands at the platform apex. The on-chain
- *  `authOrigin` profile facet (agent-profile `AUTH_ORIGIN`) remains the FUTURE override
- *  for self-hosted homes; deriving it here adds no information and no gas. `async` keeps
- *  the seam stable for that future facet read. */
+ *  no agent yet, so nothing to resolve) lands at the platform apex. Domain config is
+ *  centralized in `./lib/domain` (ADR-0021). The on-chain `authOrigin` profile facet
+ *  (agent-profile `AUTH_ORIGIN`) remains the FUTURE override for self-hosted homes. */
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function resolveAuthOrigin(name?: string): Promise<string> {
   const label = name ? nameLabel(name) : '';
-  return label ? `https://${label}.${CENTRAL_AUTH_DOMAIN}` : PLATFORM_AUTH_ORIGIN;
+  return label ? personalAuthOrigin(label) : PLATFORM_AUTH_ORIGIN;
 }
 
 export type SiweOutcome =

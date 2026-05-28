@@ -15,19 +15,12 @@ import {
 import type { DelegationWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
+// Deployment-domain config lives in one place (ADR-0021): `./lib/domain`.
+import { toAgentName as fullName, personalHome } from './lib/domain';
 
 const ENROLL_KEY = 'agenticprimitives:demo-org:enroll';
 const ORG_KEY = 'agenticprimitives:demo-org:org-create'; // {state, addr} stashed across an org-creation redirect
 const LOCAL_PASSKEY_NAME = 'agenticprimitives:demo-org:passkey-name';
-/** Normalize an agent name to its full `<label>.demo.agent` form for stable storage keys. */
-const fullName = (name: string) => {
-  const n = name.trim().toLowerCase();
-  return n.endsWith('.demo.agent') ? n : `${n.replace(/\.+$/, '')}.demo.agent`;
-};
-const personalHome = (name: string) => {
-  const n = name.trim().toLowerCase().replace(/\.demo\.agent$/, '').replace(/\.+$/, '');
-  return n ? `${n}.impact-agent.me` : 'yourname.impact-agent.me';
-};
 /** The scoped delegation (person SA → this site's delegate SA) issued at enrollment, stored
  *  per agent name on this device (ADR-0019). Drives "Continue with passkey" + org actions. */
 const delegationKey = (name: string) => `agenticprimitives:demo-org:delegation:${fullName(name)}`;

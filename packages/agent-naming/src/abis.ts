@@ -237,7 +237,7 @@ export const agentNameAttributeResolverAbi = [
 
 // ─── AgentNameUniversalResolver ────────────────────────────────────
 
-// ─── PermissionlessSubregistry (demo.agent permissionless child registration) ──
+// ─── PermissionlessSubregistry (permissionless child-name registration) ──
 
 export const permissionlessSubregistryAbi = [
   { type: 'error', name: 'AlreadyClaimed',
