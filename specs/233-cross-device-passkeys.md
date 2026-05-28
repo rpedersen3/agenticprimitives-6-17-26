@@ -100,9 +100,14 @@ contract change (`addPasskey` exists).
   it (`src/connect-client.ts`), so the enroll/approve + all ROOT-signed ceremonies
   roam to any device holding the (synced) passkey. No contract/server change
   (server already verifies on-chain via `isValidSignature`). Builds clean.
-- **P2 — Link-a-device** (Mechanism B): the `linkreq` store + request/approve
-  endpoints + the ROOT-device approval UI + new-device polling. Covers non-synced
-  browsers/devices.
+- **P2 — Link-a-device** (Mechanism B): **IMPLEMENTED 2026-05-27** — `linkreq` KV
+  store + `server/connect/link-{request,lookup,status}.ts` (+ app route wrappers
+  under `app/connect/link/*`); client fns `requestDeviceLink` / `lookupDeviceLink`
+  / `approveDeviceLink` (= `enrollSitePasskey`, ROOT signs `addPasskey`) /
+  `pollDeviceLink`; the two-mode UI at `app/link/page.tsx`. No contract change.
+  Builds clean; validation + on-chain `hasPasskey` poll verified locally. The
+  approving device must hold the agent's EXISTING passkey (its ROOT) at this RP —
+  works for `.me`-native agents (P1 fresh signup); old-origin agents stay orphaned.
 - **P3 (optional) — Nameless discoverable**: encode the agent address in
   `user.id` (userHandle) at registration so `get()` returns it → sign in without
   typing the name. Removes the name-first dependency.
