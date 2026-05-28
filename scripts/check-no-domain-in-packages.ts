@@ -1,11 +1,13 @@
 /**
  * check-no-domain-in-packages.ts
  *
- * Enforces the "no deployment-domain code in packages" rule (root CLAUDE.md /
- * ADR-0021): the reusable `packages/*` are domain- and deployment-AGNOSTIC.
- * Concrete hostnames (impact-agent.me/.io), the demo `.agent` subregistry,
- * hosting providers (pages.dev / workers.dev / vercel), and other deployment
- * domains belong ONLY at the app level (apps/*), passed in via config/env.
+ * Enforces (the automatable subset of) the "packages are generic; white-label /
+ * vertical / deployment code lives in apps" rule (root CLAUDE.md / ADR-0021):
+ * the reusable `packages/*` are generic + vertical-agnostic. Concrete hostnames
+ * (impact-agent.me/.io), the demo `.agent` subregistry, hosting providers
+ * (pages.dev / workers.dev / vercel), and white-label/faith-vertical CONTENT
+ * (church/ministry/discipleship/…) belong ONLY at the app level (apps/*), as an
+ * app-level white-label config the generic core consumes — never embedded here.
  *
  * The `.agent` TLD itself is the naming PROTOCOL (owned by agent-naming) and is
  * allowed; `demo.agent` (a deployment's permissionless subregistry) is not.
@@ -19,6 +21,7 @@ const ROOT = join(import.meta.dirname ?? __dirname, '..');
 const PACKAGES = join(ROOT, 'packages');
 
 const FORBIDDEN: { re: RegExp; what: string }[] = [
+  // Deployment specifics (hostnames / subregistry / hosting providers).
   { re: /impact-agent\.(me|io)/i, what: 'deployment domain impact-agent.me/.io' },
   { re: /\bdemo\.agent\b/i, what: 'demo `.agent` subregistry (deployment-specific)' },
   { re: /\.pages\.dev/i, what: 'Cloudflare Pages hostname' },
@@ -26,6 +29,12 @@ const FORBIDDEN: { re: RegExp; what: string }[] = [
   { re: /\bvercel(-dns)?\b/i, what: 'Vercel hostname/provider' },
   { re: /agentictrust\.io/i, what: 'agentictrust.io domain' },
   { re: /agenticprimitives\.local/i, what: 'agenticprimitives.local dev domain' },
+  // White-label / vertical CONTENT (faith vocabulary) — belongs in apps, never the
+  // generic core (ADR-0021). These nouns don't occur in generic agent primitives.
+  {
+    re: /\b(church|ministry|ministries|congregation|discipleship|parish|denomination|gospel|scripture|sermon|missionary|evangelism)\b/i,
+    what: 'faith-vertical content (white-label — apps only)',
+  },
 ];
 
 const SKIP_DIRS = new Set(['dist', 'node_modules', 'coverage', 'test', 'tests', '__tests__']);
