@@ -14,6 +14,7 @@ import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from 
 import { ensureCsrfToken, csrfHeaders } from './csrf';
 import { CONTRACTS } from './lib/chain';
 import { nameLabel, personalAuthOrigin, PLATFORM_AUTH_ORIGIN } from './lib/domain';
+import { GATEWAY } from './lib/brand';
 
 /** A function that signs a 32-byte hash (EOA personal_sign or WebAuthn). */
 export type SignHash = (hash: Hex) => Promise<Hex>;
@@ -56,7 +57,7 @@ export async function siweLogin(): Promise<SiweOutcome> {
     uri: window.location.origin,
     chainId: CHAIN_ID,
     nonce,
-    statement: 'Sign in to Agentic Org — proving you control this wallet.',
+    statement: `Sign in to ${GATEWAY.appName} — proving you control this wallet.`,
   });
   const signature = await personalSign(address, message);
   const r = await fetch('/connect/siwe', {
@@ -233,7 +234,7 @@ export async function passkeyLogin(registerIfMissing = true): Promise<PasskeyOut
   let passkey = loadPasskey();
   if (!passkey) {
     if (!registerIfMissing) return { status: 'rejected', reason: 'no passkey on this device' };
-    passkey = await registerPasskey('Agentic Org passkey');
+    passkey = await registerPasskey(`${GATEWAY.appName} passkey`);
   }
   const { challenge } = (await (await fetch('/connect/passkey-challenge')).json()) as { challenge: Hex };
   const signature = await signWithPasskey(challenge);
@@ -558,7 +559,7 @@ export async function connectWithName(
       uri: window.location.origin,
       chainId: CHAIN_ID,
       nonce,
-      statement: `Connect to ${name} on Agentic Org.`,
+      statement: `Connect to ${name} on ${GATEWAY.appName}.`,
     });
     const signature = await personalSign(address, message);
     proof = { kind: 'siwe-eoa', message, signature };

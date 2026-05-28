@@ -17,6 +17,8 @@ import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
 // Deployment-domain config lives in one place (ADR-0021): `./lib/domain`.
 import { toAgentName as fullName, personalHome } from './lib/domain';
+// This app's white-label identity (the Faith App gateway): `./lib/brand`.
+import { GATEWAY, gatewayCta } from './lib/brand';
 
 const ENROLL_KEY = 'agenticprimitives:demo-org:enroll';
 const ORG_KEY = 'agenticprimitives:demo-org:org-create'; // {state, addr} stashed across an org-creation redirect
@@ -466,7 +468,7 @@ export function App() {
     setFlow({
       title: 'Finishing your connection',
       phase: 'running',
-      steps: ['Checking the secure home response', 'Opening Agentic Org'],
+      steps: ['Checking the secure home response', `Opening ${GATEWAY.appName}`],
       note: 'No extra device confirmation is needed here.',
     });
     try {
@@ -482,7 +484,7 @@ export function App() {
         }
       }
       setFlow({
-        title: 'Agentic Org is connected',
+        title: `${GATEWAY.appName} is connected`,
         phase: 'done',
         steps: [`Signed in as ${name}`, 'Permission saved for this app'],
         note: 'You can revoke this app later from your secure home.',
@@ -522,7 +524,7 @@ export function App() {
     setFlow({
       title: 'Opening your secure home',
       phase: 'running',
-      steps: ['Agentic Org is asking to connect', 'Your secure home will ask you to confirm with your device'],
+      steps: [`${GATEWAY.appName} is asking to connect`, 'Your secure home will ask you to confirm with your device'],
       note: 'You will come right back here after you approve the app.',
     });
     await new Promise((r) => setTimeout(r, 850));
@@ -618,7 +620,7 @@ export function App() {
     setFlow({
       title: 'Opening your secure home',
       phase: 'running',
-      steps: ['Agentic Org is asking to create an organization', 'Your secure home will ask you to confirm with your device'],
+      steps: [`${GATEWAY.appName} is asking to create an organization`, 'Your secure home will ask you to confirm with your device'],
       note: 'You will return here with the organization connected to this app.',
     });
     await new Promise((r) => setTimeout(r, 850));
@@ -673,7 +675,7 @@ export function App() {
         <div className="topbar-inner">
           <div className="brand">
             <ShieldLogo size={28} />
-            {session ? session.name : 'Agentic Org'}
+            {session ? session.name : GATEWAY.appName}
           </div>
           {session ? (
             <div className="menu">
@@ -738,19 +740,19 @@ export function App() {
         <div className="hero-screen">
           <div className="hero-content">
 
-            {/* Agentic Org — the relying app's OWN identity (an org workspace), not an IdP. */}
+            {/* The Faith App — the relying app's OWN identity (a community app), not an IdP. */}
             <div className="app-mark" aria-hidden="true">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 21h18M6 21V7l5-3 5 3v14M9.5 11h3M9.5 15h3" />
               </svg>
-              Agentic Org
+              {GATEWAY.appName}
             </div>
             <div className="hero-top">
               <h1>
-                Connect with your own <span className="accent">agent sign-in page</span>.
+                Join the <span className="accent">{GATEWAY.community}</span> with your own agent.
               </h1>
               <p className="hero-sub">
-                Start in Agentic Org, then approve access from your personal secure home.
+                Start here, then create or sign in to your personal secure home in the {GATEWAY.community}.
               </p>
             </div>
 
@@ -764,7 +766,7 @@ export function App() {
                       <path d="M3 21h18M6 21V7l5-3 5 3v14M9.5 11h3M9.5 15h3" />
                     </svg>
                   </div>
-                  <span>Agentic Org</span>
+                  <span>{GATEWAY.appName}</span>
                 </div>
                 <div className="connect-arrow">→</div>
                 <div className="connect-node home">
@@ -773,7 +775,7 @@ export function App() {
                 </div>
               </div>
               <div className="signin-card-copy">
-                <strong>Your personal agent home</strong>
+                <strong>Your home in the {GATEWAY.community}</strong>
                 <span>Sign in once, manage your Smart Agent, and approve connected apps from a page that belongs to you.</span>
               </div>
               <label className="signin-label" htmlFor="connect-name-input">Agent name</label>
@@ -803,7 +805,7 @@ export function App() {
               )}
               {nameInfo.status === 'none' && connectName.trim() && (
                 <div className="field-hint none" role="status" aria-live="polite">
-                  New here? Your secure home will help create <strong>{fullName(connectName)}</strong>.
+                  New here? You'll create <strong>{fullName(connectName)}</strong> and join the {GATEWAY.community}.
                 </div>
               )}
 
@@ -813,7 +815,7 @@ export function App() {
                 onClick={() => onConnectName('passkey')}
               >
                 {busy ? <span className="spinner" aria-hidden="true" /> : <ShieldLogo size={16} gradient />}
-                Continue with Agentic Connect
+                {gatewayCta(connectName, nameInfo.status === 'found')}
               </button>
 
               {/* Connected before? A stored delegation makes the click above silently
@@ -837,7 +839,7 @@ export function App() {
             </div>
 
             <div className="privacy-footer">
-              🔒 Agentic Org only gets the permission you approve from your secure home.
+              🔒 {GATEWAY.appName} only gets the permission you approve from your secure home.
             </div>
           </div>
         </div>
@@ -933,7 +935,7 @@ export function App() {
                     <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
                   </svg>
                 </div>
-                <div style={{ fontWeight: 600, color: 'var(--c-g700)' }}>Agentic Org is connected</div>
+                <div style={{ fontWeight: 600, color: 'var(--c-g700)' }}>{GATEWAY.appName} is connected</div>
                 <div style={{ fontSize: '.76rem', marginTop: '.2rem' }}>This site can read your approved data.</div>
               </div>
             </div>

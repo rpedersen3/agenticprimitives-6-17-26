@@ -7,6 +7,7 @@ import { keccak256 } from 'viem';
 import { parseAttestationObject, buildWebAuthnAssertion } from '@agenticprimitives/connect-auth/passkey';
 import { encodeWebAuthnSignature } from '@agenticprimitives/agent-account';
 import type { Hex } from '@agenticprimitives/types';
+import { GATEWAY } from './brand';
 
 const STORAGE_KEY = 'agenticprimitives:demo-org:passkey';
 
@@ -86,7 +87,7 @@ export async function registerPasskey(label: string): Promise<DemoPasskey> {
   const credential = (await navigator.credentials.create({
     publicKey: {
       challenge,
-      rp: { id: window.location.hostname, name: 'Agentic Org' },
+      rp: { id: window.location.hostname, name: GATEWAY.appName },
       user: { id: userId, name: label, displayName: label },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256 / P-256 ONLY (custody needs it; F9)
       // userVerification REQUIRED: an enrolled key becomes a custody credential, so demand
