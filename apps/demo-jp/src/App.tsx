@@ -4,12 +4,22 @@ import { JP, GATEWAY } from './lib/brand';
 import { startSiteEnrollment, exchangeCode, verifyIdToken } from './connect-client';
 import { toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
 import {
-  type AdopterStep, type AdopterType, type ImpactProfile, type JpAdopterRecord, type JpRequiredField,
-  adopterSteps, canDeclareAdoption, impactProfileMissingFields, isAdopterOnboardingComplete,
-  jpRequiredFields, loadImpactProfile, loadJpAdopterRecord,
-  nextAdopterStep, profileCompleteness, projectForJp, requiresWea,
-  saveImpactProfile, saveJpAdopterRecord,
+  type AdopterStep, type AdopterType, type Attestation,
+  type FacilitatorAdopterType, type FacilitatorMinistryArea, type FacilitatorSizeBand,
+  type FacilitatorStep,
+  type ImpactProfile, type JpAdopterRecord, type JpFacilitatorRecord, type JpRequiredField,
+  FACILITATOR_PROFILE_TYPE,
+  adopterSteps, canDeclareAdoption, canDeclareCoverage, facilitatorSteps,
+  impactProfileMissingFields, isAdopterOnboardingComplete, isFacilitatorOnboardingComplete,
+  jpRequiredFields, loadImpactProfile, loadJpAdopterRecord, loadJpFacilitatorRecord,
+  nextAdopterStep, nextFacilitatorStep, profileCompleteness,
+  projectFacilitatorForJp, projectForJp, requiresWea,
+  saveImpactProfile, saveJpAdopterRecord, saveJpFacilitatorRecord,
 } from './lib/vault';
+import {
+  ADOPTER_TYPE_OPTIONS_FAC, MINISTRY_AREA_OPTIONS, SIZE_BAND_OPTIONS,
+  FACILITATOR_ADOPTER_TYPE_LABEL, MINISTRY_AREA_LABEL, SIZE_BAND_LABEL,
+} from './lib/capacity';
 import { MOU_DOC_ID, MOU_TEXT, attestDocConsentBound } from './lib/mou';
 import { WEA_AFFIRMATIONS as WEA_AFFIRMATIONS_LIB, verifyWeaHash } from './lib/wea';
 import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from './lib/people-groups';
@@ -796,7 +806,12 @@ function StepCard({
             )}
             {step === 'adopter-type' && <AdopterTypeForm record={record} onSave={onUpdate} />}
             {step === 'wea-on-file' && <WeaOnFileMissing onOpenWea={onOpenWea} onGoSignWea={onGoSignWea} />}
-            {step === 'mou' && <MouSignForm session={session} record={record} onSave={onUpdate} />}
+            {step === 'mou' && (
+              <MouSignForm
+                session={session}
+                onSign={(att) => onUpdate({ ...record, attestations: { ...record.attestations, mou: att } })}
+              />
+            )}
             {step === 'adoption' && (
               <DeclareAdoptionForm
                 impact={impact}
@@ -1085,7 +1100,10 @@ function WeaOnFileMissing({ onOpenWea, onGoSignWea }: { onOpenWea: () => void; o
   );
 }
 
-function MouSignForm({ session, record, onSave }: { session: Session; record: JpAdopterRecord; onSave: (next: JpAdopterRecord) => void }) {
+/** Sign the ADOPT MOU. Decoupled from the record shape so it can be reused by the
+ *  adopter and facilitator flows — both stick the attestation in `record.attestations.mou`,
+ *  the caller wires that into its own record update. */
+function MouSignForm({ session, onSign }: { session: Session; onSign: (att: Attestation) => void }) {
   const [agreed, setAgreed] = useState(false);
   const [signing, setSigning] = useState(false);
 
@@ -1101,7 +1119,7 @@ function MouSignForm({ session, record, onSave }: { session: Session; record: Jp
         docText: MOU_TEXT,
         delegationJson: { sub: session.token.slice(0, 32) },
       });
-      onSave({ ...record, attestations: { ...record.attestations, mou: att } });
+      onSign(att);
     } finally {
       setSigning(false);
     }
@@ -1357,56 +1375,558 @@ function FacilitatorIntranet({ session, onSignOut, onOpenWea, onGoEditProfile, o
   onGoSignWea: () => void;
 }) {
   const [impact] = useState<ImpactProfile>(() => loadImpactProfile(session.address, session.name));
-  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const [record, setRecord] = useState<JpFacilitatorRecord>(() => loadJpFacilitatorRecord(session.address));
+  const update = useCallback((next: JpFacilitatorRecord) => {
+    saveJpFacilitatorRecord(session.address, next);
+    setRecord(next);
+  }, [session.address]);
+
+  const steps = useMemo(() => facilitatorSteps(impact, record), [impact, record]);
+  const activeStep = useMemo(() => nextFacilitatorStep(impact, record), [impact, record]);
+  const complete = useMemo(() => isFacilitatorOnboardingComplete(impact, record), [impact, record]);
+  const completeness = useMemo(() => profileCompleteness(impact, FACILITATOR_PROFILE_TYPE), [impact]);
+  const canDeclare = useMemo(() => canDeclareCoverage(impact, record), [impact, record]);
+
   const displayName = displayNameFromImpact(impact, session.name);
-  // Facilitators are always organizational — treat them as 'organization' for required
-  // fields (need org name + country in addition to base contact). Adopter type is
-  // unused on this path; this maps onto the same Impact profile schema.
-  const facilitatorAdopterType: AdopterType = 'organization';
+  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+
   return (
     <>
       <IntranetTopbar session={session} subtitle="Facilitator dashboard" onSignOut={onSignOut} impact={impact} />
       <HeaderAlerts
         impact={impact}
-        adopterType={facilitatorAdopterType}
+        adopterType={FACILITATOR_PROFILE_TYPE}
         onGoEditProfile={onGoEditProfile}
       />
       {session.fresh && (
         <div style={{ background: 'var(--c-primary-subtle)', borderBottom: '1px solid var(--c-primary-border)', padding: '.75rem 1.25rem', textAlign: 'center', fontSize: '.9rem', color: 'var(--c-primary-active)' }}>
-          ✓ Connected via {JP.impactName} — welcome, <b>{displayName}</b>.
+          ✓ Connected via {JP.impactName} — welcome, <b>{displayName}</b>. Your home + vault are at{' '}
+          <a href={homeUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--c-primary)' }}>{homeUrl}</a>.
         </div>
       )}
-      <section className="hero" style={{ padding: '3rem 0 2rem' }}>
-        <div className="wrap">
-          <div className="eyebrow">{JP.paths.facilitator.who}</div>
-          <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>{JP.paths.facilitator.title}</h1>
-          <p className="hero-sub" style={{ fontSize: '1rem' }}>{JP.paths.facilitator.body}</p>
-        </div>
-      </section>
-      <section className="section wrap" style={{ paddingTop: 0 }}>
-        <div className="agreement">
-          <h3>Facilitator onboarding — full flow wiring next</h3>
-          <p style={{ color: 'var(--c-g600)' }}>
-            The facilitator flow (set up your facilitator organization at your {JP.impactName} home, declare
-            people-group coverage + capacity, sign the ADOPT MOU + WEA Statement of Faith as a named
-            signatory) is the next phase. Meanwhile, you can already sign the WEA at your home — every
-            faith-aligned community app reuses it.
-          </p>
-          <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
-            <button className="btn btn-primary" onClick={onGoSignWea}>
-              <GlobeGlyph size={16} /> Sign WEA at my {JP.impactName} home →
-            </button>
-            <button className="btn btn-ghost" onClick={onOpenWea}>
-              Read the WEA Statement
-            </button>
-          </div>
-          <p style={{ color: 'var(--c-g500)', fontSize: '.85rem', marginTop: '1rem' }}>
-            Your home: <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{homeUrl}</b></a>
-          </p>
-        </div>
-      </section>
+
+      {complete ? (
+        <FacilitatorSummary session={session} record={record} impact={impact} />
+      ) : (
+        <>
+          <section className="hero" style={{ padding: '3rem 0 2rem' }}>
+            <div className="wrap">
+              <div className="eyebrow">{JP.paths.facilitator.who}</div>
+              <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>{JP.paths.facilitator.title}</h1>
+              <p className="hero-sub" style={{ fontSize: '1rem' }}>
+                {JP.org} runs the program; {JP.impactName} holds your data + signed agreements. We&apos;re only asking
+                you for what JP needs that isn&apos;t already on file with your home.
+              </p>
+            </div>
+          </section>
+
+          <section className="section wrap" style={{ paddingTop: 0 }}>
+            <div className="sec-head">
+              <div className="eyebrow">Facilitator onboarding</div>
+              <h2>{completeness.missing.length === 0 ? 'Sign + declare your coverage — your home holds the rest' : `${JP.org} needs a few things from your ${JP.impactName} profile`}</h2>
+            </div>
+            {completeness.missing.length > 0 && (
+              <ProfileCompletenessBanner
+                completeness={completeness}
+                onGoEditProfile={() => onGoEditProfile(completeness.missing.map((f) => f.key))}
+              />
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '.875rem', marginTop: '1.5rem' }}>
+              {steps.map((s, i) => (
+                <FacilitatorStepCard
+                  key={s.step}
+                  n={i + 1}
+                  step={s.step}
+                  ownedBy={s.ownedBy}
+                  active={s.step === activeStep}
+                  satisfied={s.satisfied}
+                  impact={impact}
+                  record={record}
+                  session={session}
+                  canDeclare={canDeclare}
+                  onUpdate={update}
+                  onOpenWea={onOpenWea}
+                  onGoEditProfile={onGoEditProfile}
+                  onGoSignWea={onGoSignWea}
+                />
+              ))}
+            </div>
+          </section>
+
+          <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
+        </>
+      )}
+
       <IntranetFooter />
     </>
+  );
+}
+
+// ── Facilitator step card ───────────────────────────────────────────────────
+// Mirrors StepCard but for the facilitator record shape (different attestations slot
+// + a coverage declaration instead of an adoption). Kept separate from StepCard so
+// each path's step-list stays a strict literal union and the type-narrowing in
+// stepMeta / step bodies is clean.
+
+function FacilitatorStepCard({
+  n, step, ownedBy, active, satisfied, impact, record, session, canDeclare, onUpdate, onOpenWea, onGoEditProfile, onGoSignWea,
+}: {
+  n: number; step: FacilitatorStep; ownedBy: 'impact' | 'jp'; active: boolean; satisfied: boolean;
+  impact: ImpactProfile; record: JpFacilitatorRecord; session: Session; canDeclare: boolean;
+  onUpdate: (next: JpFacilitatorRecord) => void; onOpenWea: () => void;
+  onGoEditProfile: (missingKeys: string[]) => void;
+  onGoSignWea: () => void;
+}) {
+  const meta = facilitatorStepMeta(step);
+  const status: 'done' | 'active' | 'pending' = satisfied ? 'done' : active ? 'active' : 'pending';
+  return (
+    <div className="agreement" style={{
+      display: 'flex', gap: '1rem', alignItems: 'flex-start',
+      borderColor: status === 'active' ? 'var(--c-primary-border)' : 'var(--c-g200)',
+      background: status === 'active' ? 'linear-gradient(180deg, var(--c-primary-subtle) 0%, #fff 60%)' : 'var(--c-g50)',
+      opacity: status === 'pending' ? .55 : 1,
+    }}>
+      <div style={{
+        flex: '0 0 auto', width: 36, height: 36, borderRadius: 999,
+        background: status === 'done' || status === 'active' ? 'var(--c-primary)' : 'var(--c-g200)',
+        color: status === 'done' || status === 'active' ? '#fff' : 'var(--c-g600)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '.9rem',
+      }}>{status === 'done' ? '✓' : n}</div>
+      <div style={{ flex: 1 }}>
+        <h3 style={{ fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '.5rem', flexWrap: 'wrap' }}>
+          {meta.title}
+          <OwnedByPill ownedBy={ownedBy} />
+        </h3>
+        <p style={{ color: 'var(--c-g600)', fontSize: '.9rem', marginTop: '.25rem' }}>{meta.blurb}</p>
+        {status === 'done' && (
+          <FacilitatorStepDoneSummary step={step} impact={impact} record={record} />
+        )}
+        {status === 'active' && (
+          <div style={{ marginTop: '1rem' }}>
+            {step === 'profile-on-file' && (
+              <ProfileMissingCallout
+                impact={impact}
+                adopterType={FACILITATOR_PROFILE_TYPE}
+                onGoEditProfile={onGoEditProfile}
+              />
+            )}
+            {step === 'wea-on-file' && <WeaOnFileMissing onOpenWea={onOpenWea} onGoSignWea={onGoSignWea} />}
+            {step === 'mou' && (
+              <MouSignForm
+                session={session}
+                onSign={(att) => onUpdate({ ...record, attestations: { ...record.attestations, mou: att } })}
+              />
+            )}
+            {step === 'coverage' && (
+              <CoverageDeclareForm
+                impact={impact}
+                record={record}
+                canDeclare={canDeclare}
+                onSave={onUpdate}
+                onGoEditProfile={onGoEditProfile}
+                onGoSignWea={onGoSignWea}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function facilitatorStepMeta(step: FacilitatorStep): { title: string; blurb: string } {
+  switch (step) {
+    case 'profile-on-file':
+      return {
+        title: 'Your organization + contact profile',
+        blurb: `${JP.org} reads your name, contact info, and organization details from your ${JP.impactName} home — you don't fill them in again here.`,
+      };
+    case 'wea-on-file':
+      return {
+        title: 'WEA Statement of Faith',
+        blurb: `Required for facilitators as a named signatory. ${JP.org} reads it from your ${JP.impactName} home — sign once, re-use everywhere.`,
+      };
+    case 'mou':
+      return {
+        title: 'Sign the ADOPT Memorandum of Understanding',
+        blurb: `The same MOU adopters sign — the document lives in your vault, ${JP.org} receives only the attestation.`,
+      };
+    case 'coverage':
+      return {
+        title: 'Declare your coverage + capacity',
+        blurb: 'Which Frontier People Groups you serve, and the shape of adopters you can host.',
+      };
+  }
+}
+
+function FacilitatorStepDoneSummary({ step, impact, record }: { step: FacilitatorStep; impact: ImpactProfile; record: JpFacilitatorRecord }) {
+  if (step === 'profile-on-file' && impact.contact) {
+    const c = impact.contact;
+    const fields: string[] = [];
+    if (c.firstName || c.lastName) fields.push('name');
+    if (c.email) fields.push('email');
+    if (c.country) fields.push('country');
+    if (c.organizationName) fields.push('organization');
+    return (
+      <div style={{ marginTop: '.75rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
+        <span style={{ color: 'var(--c-primary-active)', fontWeight: 700 }}>✓ On file</span> — your vault holds {fields.join(', ')}.
+        {' '}{JP.org} sees your organization name + a "can reach you" flag; richer fields stay in your vault.
+      </div>
+    );
+  }
+  if (step === 'wea-on-file' && impact.attestations.wea) {
+    const d = new Date(impact.attestations.wea.signedAt * 1000).toLocaleDateString();
+    return (
+      <div style={{ marginTop: '.75rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
+        <span style={{ color: 'var(--c-primary-active)', fontWeight: 700 }}>✓ Signed at your home</span> on <b>{d}</b>. {JP.org} holds the attestation only.
+      </div>
+    );
+  }
+  if (step === 'mou' && record.attestations.mou) {
+    const d = new Date(record.attestations.mou.signedAt * 1000).toLocaleString();
+    return (
+      <div style={{ marginTop: '.75rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
+        <span style={{ color: 'var(--c-primary-active)', fontWeight: 700 }}>✓ Signed</span> on <b>{d}</b>. Receipt: <code style={{ fontSize: '.78rem' }}>{record.attestations.mou.docHash.slice(0, 18)}…</code>
+      </div>
+    );
+  }
+  if (step === 'coverage' && record.coverage) {
+    return (
+      <div style={{ marginTop: '.75rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
+        <span style={{ color: 'var(--c-primary-active)', fontWeight: 700 }}>✓ Declared</span> coverage for <b>{record.coverage.peopleGroupIds.length}</b> people group{record.coverage.peopleGroupIds.length === 1 ? '' : 's'}.
+      </div>
+    );
+  }
+  return null;
+}
+
+// ── Coverage declaration form ───────────────────────────────────────────────
+
+function CoverageDeclareForm({
+  impact, record, canDeclare, onSave, onGoEditProfile, onGoSignWea,
+}: {
+  impact: ImpactProfile;
+  record: JpFacilitatorRecord;
+  canDeclare: boolean;
+  onSave: (next: JpFacilitatorRecord) => void;
+  onGoEditProfile: (missingKeys: string[]) => void;
+  onGoSignWea: () => void;
+}) {
+  const [pgIds, setPgIds] = useState<string[]>(record.coverage?.peopleGroupIds ?? []);
+  const [adopterTypes, setAdopterTypes] = useState<FacilitatorAdopterType[]>(record.coverage?.capacity.adopterTypes ?? []);
+  const [sizeBands, setSizeBands] = useState<FacilitatorSizeBand[]>(record.coverage?.capacity.sizeBands ?? []);
+  const [areas, setAreas] = useState<FacilitatorMinistryArea[]>(record.coverage?.capacity.ministryAreas ?? []);
+  const [description, setDescription] = useState<string>(record.coverage?.description ?? '');
+  const [declaring, setDeclaring] = useState(false);
+
+  const missingFields = useMemo(() => impactProfileMissingFields(impact, FACILITATOR_PROFILE_TYPE), [impact]);
+  const missingWea = !impact.attestations.wea;
+  const missingMou = !record.attestations.mou;
+  const formValid = pgIds.length > 0 && adopterTypes.length > 0 && sizeBands.length > 0 && areas.length > 0;
+  const ready = formValid && canDeclare;
+
+  const toggle = <T,>(arr: T[], v: T, setter: (next: T[]) => void): void => {
+    if (arr.includes(v)) setter(arr.filter((x) => x !== v));
+    else setter([...arr, v]);
+  };
+
+  const declare = () => {
+    if (!ready) return;
+    setDeclaring(true);
+    onSave({
+      ...record,
+      coverage: {
+        peopleGroupIds: pgIds,
+        capacity: { adopterTypes, sizeBands, ministryAreas: areas },
+        description: description.trim() || undefined,
+        declaredAt: Math.floor(Date.now() / 1000),
+      },
+    });
+  };
+
+  return (
+    <>
+      <p style={{ fontSize: '.88rem', color: 'var(--c-g600)' }}>
+        Declare the Frontier People Groups you can serve + the shape of adopters you can host. {JP.org} uses
+        this to match you with new adopters who&apos;ve declared the same group.
+      </p>
+
+      <div style={{ marginTop: '1rem' }}>
+        <h4 style={sectionHeadStyle}>Frontier People Groups you serve <span style={countPill}>{pgIds.length}</span></h4>
+        <p style={sectionDescStyle}>Pick all that apply. Each picked group makes you discoverable to adopters who declare it.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '.6rem', marginTop: '.6rem' }}>
+          {FPG_SEED.map((g) => (
+            <FpgCard key={g.id} g={g} active={pgIds.includes(g.id)} onPick={() => toggle(pgIds, g.id, setPgIds)} />
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '1.5rem' }}>
+        <h4 style={sectionHeadStyle}>Adopter types you can host <span style={countPill}>{adopterTypes.length}</span></h4>
+        <p style={sectionDescStyle}>Which shapes of adopter are you set up to engage with?</p>
+        <div style={chipGridStyle}>
+          {ADOPTER_TYPE_OPTIONS_FAC.map((o) => (
+            <ChipOption key={o.key} label={o.label} blurb={o.blurb} active={adopterTypes.includes(o.key)} onToggle={() => toggle(adopterTypes, o.key, setAdopterTypes)} />
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '1.5rem' }}>
+        <h4 style={sectionHeadStyle}>Size bands <span style={countPill}>{sizeBands.length}</span></h4>
+        <p style={sectionDescStyle}>How many adopters can you host concurrently?</p>
+        <div style={chipGridStyle}>
+          {SIZE_BAND_OPTIONS.map((o) => (
+            <ChipOption key={o.key} label={o.label} blurb={o.blurb} active={sizeBands.includes(o.key)} onToggle={() => toggle(sizeBands, o.key, setSizeBands)} />
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '1.5rem' }}>
+        <h4 style={sectionHeadStyle}>Ministry areas <span style={countPill}>{areas.length}</span></h4>
+        <p style={sectionDescStyle}>What kind of work do you engage in on the field?</p>
+        <div style={chipGridStyle}>
+          {MINISTRY_AREA_OPTIONS.map((o) => (
+            <ChipOption key={o.key} label={o.label} blurb={o.blurb} active={areas.includes(o.key)} onToggle={() => toggle(areas, o.key, setAreas)} />
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '1.5rem' }}>
+        <label htmlFor="fac-desc" style={{ fontSize: '.85rem', fontWeight: 700, color: 'var(--c-g800)', display: 'block' }}>
+          How you engage (visible only to matched adopters)
+        </label>
+        <p style={sectionDescStyle}>Optional. A short note about your approach + posture.</p>
+        <textarea
+          id="fac-desc" rows={3} value={description} onChange={(e) => setDescription(e.target.value)}
+          placeholder="e.g. We host quarterly prayer + update calls and an annual 5-day visit for adopters wanting to engage on the field."
+          style={{
+            width: '100%', padding: '.7rem .9rem', fontSize: '.92rem', borderRadius: 10,
+            border: '1.5px solid var(--c-g300)', background: '#fff', fontFamily: 'inherit', resize: 'vertical',
+            marginTop: '.4rem',
+          }}
+        />
+      </div>
+
+      {!canDeclare && (
+        <div style={{
+          marginTop: '1.25rem', background: '#fef2f2', border: '1.5px solid #fecaca',
+          borderRadius: 14, padding: '1rem 1.25rem',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.55rem', marginBottom: '.6rem' }}>
+            <span aria-hidden="true" style={{
+              width: 26, height: 26, borderRadius: 999, background: '#dc2626', color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '.85rem',
+            }}>!</span>
+            <div style={{ fontWeight: 800, color: '#991b1b' }}>Before {JP.org} can accept your coverage:</div>
+          </div>
+          <ul style={{ margin: 0, paddingLeft: '1.25rem', color: '#7f1d1d', fontSize: '.88rem', lineHeight: 1.65 }}>
+            {missingFields.map((f) => (
+              <li key={f.key}>
+                Add <b>{f.label}</b> to your {JP.impactName} profile — <span style={{ color: '#991b1b' }}>{f.helperWhy}</span>
+              </li>
+            ))}
+            {missingWea && <li>Sign the WEA Statement of Faith at your {JP.impactName} home.</li>}
+            {missingMou && <li>Sign the ADOPT MOU (above).</li>}
+          </ul>
+          <div style={{ marginTop: '.85rem', display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+            {missingFields.length > 0 && (
+              <button
+                onClick={() => onGoEditProfile(missingFields.map((f) => f.key))}
+                style={redBtn}
+              >
+                Complete profile at my {JP.impactName} home →
+              </button>
+            )}
+            {missingWea && (
+              <button onClick={onGoSignWea} style={redBtn}>
+                Sign WEA at my {JP.impactName} home →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <button
+        className="btn btn-primary"
+        disabled={!ready || declaring}
+        style={{ marginTop: '1rem' }}
+        onClick={declare}
+        title={!canDeclare ? 'Resolve the missing items above before declaring.' : !formValid ? 'Pick at least one option in each section.' : undefined}
+      >
+        {declaring ? 'Declaring…' : `Declare coverage for ${pgIds.length} people group${pgIds.length === 1 ? '' : 's'}`}
+      </button>
+    </>
+  );
+}
+
+function ChipOption({ label, blurb, active, onToggle }: { label: string; blurb: string; active: boolean; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        textAlign: 'left', padding: '.65rem .85rem', borderRadius: 12, cursor: 'pointer',
+        background: active ? 'var(--c-primary-subtle)' : '#fff',
+        border: `1.5px solid ${active ? 'var(--c-primary)' : 'var(--c-g200)'}`,
+        display: 'flex', flexDirection: 'column', gap: '.15rem',
+      }}
+    >
+      <div style={{ fontWeight: 700, color: 'var(--c-g900)', fontSize: '.9rem', display: 'flex', alignItems: 'center', gap: '.4rem' }}>
+        <span style={{
+          width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${active ? 'var(--c-primary)' : 'var(--c-g300)'}`,
+          background: active ? 'var(--c-primary)' : '#fff', color: '#fff', flex: '0 0 auto',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '.7rem', fontWeight: 900,
+        }}>{active ? '✓' : ''}</span>
+        {label}
+      </div>
+      <div style={{ fontSize: '.74rem', color: 'var(--c-g500)', marginLeft: '1.4rem' }}>{blurb}</div>
+    </button>
+  );
+}
+
+const sectionHeadStyle: React.CSSProperties = {
+  fontSize: '.92rem', fontWeight: 800, color: 'var(--c-g800)', margin: 0,
+  display: 'flex', alignItems: 'center', gap: '.5rem',
+};
+const sectionDescStyle: React.CSSProperties = { fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.2rem' };
+const countPill: React.CSSProperties = {
+  fontSize: '.68rem', fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase',
+  padding: '.1rem .45rem', borderRadius: 999, background: 'var(--c-primary-subtle)',
+  color: 'var(--c-primary-active)', border: '1px solid var(--c-primary-border)',
+};
+const chipGridStyle: React.CSSProperties = {
+  display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '.5rem', marginTop: '.6rem',
+};
+const redBtn: React.CSSProperties = {
+  background: '#dc2626', color: '#fff', border: 'none',
+  padding: '.6rem 1rem', borderRadius: 999, fontWeight: 700, fontSize: '.88rem', cursor: 'pointer',
+};
+
+// ── Facilitator completion + projection ─────────────────────────────────────
+
+function FacilitatorSummary({ session, record, impact }: { session: Session; record: JpFacilitatorRecord; impact: ImpactProfile }) {
+  const coverage = record.coverage!;
+  const groups = coverage.peopleGroupIds.map(findPeopleGroup).filter((g): g is NonNullable<typeof g> => !!g);
+  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const displayName = displayNameFromImpact(impact, session.name);
+  const orgName = impact.contact?.organizationName;
+
+  return (
+    <>
+      <section className="hero" style={{ padding: '3rem 0 2rem' }}>
+        <div className="wrap">
+          <div className="eyebrow" style={{ color: 'var(--c-primary)' }}>✓ Coverage declared</div>
+          <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>
+            {displayName} of <span style={{ color: 'var(--c-primary)' }}>{orgName ?? 'your organization'}</span>, you&apos;re facilitating <span style={{ color: 'var(--c-primary)' }}>{groups.length}</span> people group{groups.length === 1 ? '' : 's'}.
+          </h1>
+          <p className="hero-sub" style={{ fontSize: '1rem' }}>
+            {JP.org} will match new adopters of {groups.length === 1 ? 'this group' : 'these groups'} to you when their preferences fit your capacity.
+          </p>
+        </div>
+      </section>
+
+      <section className="section wrap" style={{ paddingTop: 0 }}>
+        <div className="sec-head">
+          <div className="eyebrow">Your coverage</div>
+          <h2>People groups you serve</h2>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '.6rem', marginTop: '.75rem' }}>
+          {groups.map((g) => <FpgCard key={g.id} g={g} active onPick={() => { /* read-only */ }} />)}
+        </div>
+      </section>
+
+      <section className="section wrap" style={{ paddingTop: 0 }}>
+        <div className="agreements" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '.875rem' }}>
+          <CapacityCard
+            title="Adopter types you host"
+            values={coverage.capacity.adopterTypes.map((t) => FACILITATOR_ADOPTER_TYPE_LABEL[t])}
+          />
+          <CapacityCard
+            title="Size bands"
+            values={coverage.capacity.sizeBands.map((b) => SIZE_BAND_LABEL[b])}
+          />
+          <CapacityCard
+            title="Ministry areas"
+            values={coverage.capacity.ministryAreas.map((a) => MINISTRY_AREA_LABEL[a])}
+          />
+        </div>
+        {coverage.description && (
+          <div className="agreement" style={{ marginTop: '.875rem' }}>
+            <h3>How you engage</h3>
+            <p style={{ color: 'var(--c-g700)', marginTop: '.35rem' }}>{coverage.description}</p>
+          </div>
+        )}
+      </section>
+
+      <section className="section wrap" style={{ paddingTop: 0 }}>
+        <div className="agreements" style={{ gridTemplateColumns: '1fr', gap: '.875rem' }}>
+          <div className="agreement">
+            <h3>What now</h3>
+            <p style={{ color: 'var(--c-g600)' }}>
+              {JP.org} will introduce new adopters of your declared people groups to you when their
+              preferences fit your capacity. You&apos;ll send quarterly updates back through the same
+              scoped delegation. Both flows ride over the permission you granted at sign-in.
+            </p>
+          </div>
+          <div className="agreement" style={{ background: '#fff' }}>
+            <h3>Where everything lives</h3>
+            <p style={{ color: 'var(--c-g600)' }}>
+              Your ADOPT MOU + WEA Statement of Faith are in your {JP.impactName} vault at{' '}
+              <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{homeUrl}</b></a>.
+              {JP.org} holds the attestations + your public coverage declaration. Revisit and revoke
+              any time from your home.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
+    </>
+  );
+}
+
+function CapacityCard({ title, values }: { title: string; values: string[] }) {
+  return (
+    <div className="agreement">
+      <h3>{title}</h3>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.4rem', marginTop: '.55rem' }}>
+        {values.length === 0 ? (
+          <span style={{ color: 'var(--c-g500)', fontSize: '.85rem' }}>—</span>
+        ) : values.map((v) => (
+          <span key={v} style={{
+            fontSize: '.78rem', fontWeight: 700, padding: '.25rem .65rem', borderRadius: 999,
+            background: 'var(--c-primary-subtle)', color: 'var(--c-primary-active)',
+            border: '1px solid var(--c-primary-border)',
+          }}>{v}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FacilitatorProjectionPanel({ impact, record, session }: { impact: ImpactProfile; record: JpFacilitatorRecord; session: Session }) {
+  const projection = useMemo(() => projectFacilitatorForJp(impact, record), [impact, record]);
+  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  return (
+    <section className="section wrap" style={{ paddingTop: 0 }}>
+      <div className="trust">
+        <div className="eyebrow" style={{ color: 'var(--c-primary-mid)' }}>What JP + matched adopters can see</div>
+        <h2 style={{ fontSize: '1.5rem', maxWidth: '42ch' }}>This is everything {JP.org} surfaces about you. Compare it to your vault — much smaller.</h2>
+        <div style={{ marginTop: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+          <ProjBox label="Organization" value={projection.organizationName ?? '—'} />
+          <ProjBox label="Country" value={projection.organizationCountry ?? '—'} />
+          <ProjBox label="Contact channel" value={projection.hasContact ? '✓ Can reach you (flag only)' : '— none'} />
+          <ProjBox label="ADOPT MOU receipt" value={projection.attestations.mou ? `✓ ${projection.attestations.mou.docHash.slice(0, 16)}…` : '—'} mono />
+          <ProjBox label="WEA receipt" value={projection.attestations.wea ? `✓ ${projection.attestations.wea.docHash.slice(0, 16)}…` : '—'} mono />
+          <ProjBox label="People groups served" value={projection.coverage ? String(projection.coverage.peopleGroupIds.length) : '—'} />
+          <ProjBox label="Adopter types" value={projection.coverage ? String(projection.coverage.capacity.adopterTypes.length) : '—'} />
+          <ProjBox label="Ministry areas" value={projection.coverage ? String(projection.coverage.capacity.ministryAreas.length) : '—'} />
+        </div>
+        <p style={{ marginTop: '1.5rem', fontSize: '.85rem', color: '#94a3b8' }}>
+          Revoke at your home <a href={homeUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--c-primary-mid)' }}>{homeUrl}</a> and this surface goes empty —
+          your vault stays intact, JP just stops introducing new adopters.
+        </p>
+      </div>
+    </section>
   );
 }
 

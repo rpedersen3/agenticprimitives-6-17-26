@@ -258,6 +258,177 @@ export function canDeclareAdoption(impact: ImpactProfile, record: JpAdopterRecor
   return true;
 }
 
+// ── Facilitator path ──────────────────────────────────────────────────────────
+// Facilitators (mission organizations + networks already serving on the field) have
+// a parallel onboarding shape: contact + WEA + MOU + a coverage declaration (which
+// FPGs they serve + capacity matrix). The same Impact-owned / JP-owned split applies:
+// profile + WEA at Impact; MOU + coverage at JP. Facilitators are ALWAYS organizational,
+// so the org-required profile fields are always in scope.
+
+/** A category of adopter the facilitator can serve. Mirrors `AdopterType` but lives
+ *  separately so the two vocabularies can evolve independently if needed. */
+export type FacilitatorAdopterType = 'individual' | 'family' | 'group' | 'church' | 'organization' | 'network';
+
+/** How big a sphere the facilitator can engage — guides the adopter↔facilitator match. */
+export type FacilitatorSizeBand = 'small' | 'medium' | 'large' | 'network';
+
+/** Buckets of on-field work the facilitator does — orthogonal to FPG coverage. */
+export type FacilitatorMinistryArea =
+  | 'prayer-mobilization'
+  | 'bible-translation'
+  | 'leadership-development'
+  | 'church-planting'
+  | 'health'
+  | 'education'
+  | 'business-as-mission'
+  | 'community-development'
+  | 'media';
+
+export interface FacilitatorCapacity {
+  /** Which adopter shapes this facilitator can host (at least one). */
+  adopterTypes: FacilitatorAdopterType[];
+  /** Size bands the facilitator can handle (at least one). */
+  sizeBands: FacilitatorSizeBand[];
+  /** Ministry areas the facilitator engages in (at least one). */
+  ministryAreas: FacilitatorMinistryArea[];
+}
+
+export interface FacilitatorCoverage {
+  /** People-group ids this facilitator can serve (matches `FPG_SEED.id`). At least one. */
+  peopleGroupIds: string[];
+  capacity: FacilitatorCapacity;
+  /** Free-text "how we engage" — visible to matched adopters, not to the broader public. */
+  description?: string;
+  declaredAt: number;
+}
+
+export interface JpFacilitatorRecord {
+  v: 1;
+  attestations: {
+    mou?: Attestation;
+  };
+  coverage?: FacilitatorCoverage;
+}
+
+const FAC_KEY = (addr: Address): string => `agenticprimitives:demo-jp:facilitator-record:${addr.toLowerCase()}`;
+
+export function loadJpFacilitatorRecord(addr: Address): JpFacilitatorRecord {
+  try {
+    const raw = localStorage.getItem(FAC_KEY(addr));
+    if (raw) {
+      const r = JSON.parse(raw) as JpFacilitatorRecord;
+      if (r.v === 1) return r;
+    }
+  } catch {
+    /* ignore */
+  }
+  return { v: 1, attestations: {} };
+}
+
+export function saveJpFacilitatorRecord(addr: Address, record: JpFacilitatorRecord): void {
+  try {
+    localStorage.setItem(FAC_KEY(addr), JSON.stringify(record));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearJpFacilitatorRecord(addr: Address): void {
+  try {
+    localStorage.removeItem(FAC_KEY(addr));
+  } catch {
+    /* ignore */
+  }
+}
+
+export type FacilitatorStep =
+  | 'profile-on-file'        // ✓ Impact has contact + org fields (facilitators are always org)
+  | 'wea-on-file'            // ✓ Impact has WEA (always required for facilitators)
+  | 'mou'                    // interactive — JP-specific signing ceremony (reuses adopter MOU)
+  | 'coverage';              // interactive — facilitator-specific: FPGs + capacity matrix
+
+/** Facilitators are always treated as 'organization' for the profile-required-fields
+ *  check, so the topbar + catch-all banner can compose with the existing helpers. */
+export const FACILITATOR_PROFILE_TYPE = 'organization' as const;
+
+export interface FacilitatorStepView {
+  step: FacilitatorStep;
+  ownedBy: 'impact' | 'jp';
+  satisfied: boolean;
+  interactive: boolean;
+}
+
+function capacityIsComplete(c: FacilitatorCapacity | undefined): boolean {
+  if (!c) return false;
+  return c.adopterTypes.length > 0 && c.sizeBands.length > 0 && c.ministryAreas.length > 0;
+}
+
+function coverageIsComplete(c: FacilitatorCoverage | undefined): boolean {
+  if (!c) return false;
+  if (!Array.isArray(c.peopleGroupIds) || c.peopleGroupIds.length === 0) return false;
+  return capacityIsComplete(c.capacity);
+}
+
+export function facilitatorSteps(impact: ImpactProfile, record: JpFacilitatorRecord): FacilitatorStepView[] {
+  const profileOk = impactProfileMissingFields(impact, FACILITATOR_PROFILE_TYPE).length === 0;
+  const weaOk = !!impact.attestations.wea;
+  const mouOk = !!record.attestations.mou;
+  const coverageOk = coverageIsComplete(record.coverage);
+
+  return [
+    { step: 'profile-on-file', ownedBy: 'impact', satisfied: profileOk, interactive: !profileOk },
+    { step: 'wea-on-file',     ownedBy: 'impact', satisfied: weaOk,     interactive: !weaOk },
+    { step: 'mou',             ownedBy: 'jp',     satisfied: mouOk,     interactive: !mouOk },
+    { step: 'coverage',        ownedBy: 'jp',     satisfied: coverageOk, interactive: !coverageOk },
+  ];
+}
+
+export function nextFacilitatorStep(impact: ImpactProfile, record: JpFacilitatorRecord): FacilitatorStep | null {
+  for (const s of facilitatorSteps(impact, record)) if (!s.satisfied) return s.step;
+  return null;
+}
+
+export function isFacilitatorOnboardingComplete(impact: ImpactProfile, record: JpFacilitatorRecord): boolean {
+  return nextFacilitatorStep(impact, record) === null;
+}
+
+export function canDeclareCoverage(impact: ImpactProfile, record: JpFacilitatorRecord): boolean {
+  if (impactProfileMissingFields(impact, FACILITATOR_PROFILE_TYPE).length > 0) return false;
+  if (!impact.attestations.wea) return false;
+  if (!record.attestations.mou) return false;
+  return true;
+}
+
+// ── Facilitator projection ────────────────────────────────────────────────────
+// What JP shows to MATCHED adopters about this facilitator. Different from JpProjection
+// (which is "what JP holds about you"): this is the public-facing view of the
+// facilitator that adopters see when JP introduces them. Names + org name are public
+// in this projection by design — adopters need to know who they're partnering with.
+
+export interface FacilitatorProjection {
+  attestations: {
+    mou?: Pick<Attestation, 'docHash' | 'docId' | 'signedAt' | 'consentBoundTo'>;
+    wea?: Pick<Attestation, 'docHash' | 'docId' | 'signedAt' | 'consentBoundTo'>;
+  };
+  coverage?: FacilitatorCoverage;
+  organizationName?: string;
+  organizationCountry?: string;
+  hasContact: boolean;
+}
+
+export function projectFacilitatorForJp(impact: ImpactProfile, record: JpFacilitatorRecord): FacilitatorProjection {
+  return {
+    attestations: {
+      mou: record.attestations.mou,
+      wea: impact.attestations.wea,
+    },
+    coverage: record.coverage,
+    organizationName: impact.contact?.organizationName,
+    organizationCountry: impact.contact?.organizationCountry,
+    hasContact: !!impact.contact?.email,
+  };
+}
+
 // ── "What JP can see" projection ──────────────────────────────────────────────
 // The view that flows OUT of the vault, over the delegation, TO JP. Critical for
 // the SSI story: the member sees what JP holds (small) vs. what the vault holds
