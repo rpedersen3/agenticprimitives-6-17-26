@@ -46,6 +46,9 @@ importers:
       '@agenticprimitives/audit':
         specifier: workspace:*
         version: link:../../packages/audit
+      '@agenticprimitives/connect':
+        specifier: workspace:*
+        version: link:../../packages/connect
       '@agenticprimitives/connect-auth':
         specifier: workspace:*
         version: link:../../packages/connect-auth
