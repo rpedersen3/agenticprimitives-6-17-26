@@ -38,6 +38,16 @@ function loadDelegation(name: string): DelegationWire | null {
 const hasLocalDelegation = (name: string): boolean => !!loadPasskey() && !!loadDelegation(name);
 
 const SESSION_KEY = 'agenticprimitives:demo-org:session';
+/** The last Impact name connected on this device — pre-filled so returning is one tap ("Connect
+ *  with Impact" with your name already there), the Google-style common case. */
+const LAST_NAME_KEY = 'agenticprimitives:demo-org:last-name';
+const loadLastName = (): string => {
+  try {
+    return localStorage.getItem(LAST_NAME_KEY) ?? '';
+  } catch {
+    return '';
+  }
+};
 const orgsKey = (addr: string) => `agenticprimitives:demo-org:orgs:${addr.toLowerCase()}`;
 
 type Via = 'wallet' | 'passkey';
@@ -207,8 +217,8 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Connect-by-name
-  const [connectName, setConnectName] = useState('');
+  // Connect-by-name — pre-filled with the last name connected on this device (one-tap return).
+  const [connectName, setConnectName] = useState(loadLastName);
   const [connectErr, setConnectErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [nameInfo, setNameInfo] = useState<{
@@ -247,6 +257,7 @@ export function App() {
     setSession({ token, via, name, address: addr, fresh });
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({ token, via, name }));
+      localStorage.setItem(LAST_NAME_KEY, name); // pre-fill next time → one-tap "Connect with Impact"
       // Remember which agent THIS origin's local passkey is bound to, so we only
       // offer "Continue with passkey" for that agent (not for one set up elsewhere).
       if (via === 'passkey') localStorage.setItem(LOCAL_PASSKEY_NAME, name);
@@ -767,18 +778,26 @@ export function App() {
                     </svg>
                   </div>
                   <span>{GATEWAY.appName}</span>
+                  <span className="connect-node-cap">this app</span>
                 </div>
-                <div className="connect-arrow">→</div>
+                <div className="connect-arrow" aria-hidden="true">
+                  <span className="connect-arrow-glyph">→</span>
+                  <span className="connect-arrow-cap">connects to</span>
+                </div>
                 <div className="connect-node home">
                   <div className="connect-node-icon"><ShieldLogo size={20} gradient /></div>
                   <span>{personalHome(connectName)}</span>
+                  <span className="connect-node-cap">your home — you own it</span>
                 </div>
               </div>
               <div className="signin-card-copy">
-                <strong>Your Impact agent home</strong>
-                <span>Use your Impact name to enter the community, manage your Smart Agent, and choose which apps can work with you.</span>
+                <strong>Sign in at your own home</strong>
+                <span>
+                  Your home — your Smart Agent — belongs to you, not to {GATEWAY.appName}. You sign in there once and
+                  reuse it across {GATEWAY.community} apps; {GATEWAY.appName} only ever gets the permission you approve.
+                </span>
               </div>
-              <label className="signin-label" htmlFor="connect-name-input">Choose your Impact name</label>
+              <label className="signin-label" htmlFor="connect-name-input">Your Impact name</label>
               <div className="input-wrap">
                 <input
                   id="connect-name-input"

@@ -594,9 +594,23 @@
         box-shadow: var(--sh-sm);
       }
       .connect-arrow {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
         color: var(--c-primary);
-        font-weight: 900;
-        font-size: 1.1rem;
+      }
+      .connect-arrow-glyph { font-weight: 900; font-size: 1.1rem; line-height: 1; }
+      .connect-arrow-cap { font-size: .58rem; font-weight: 700; color: var(--c-g400); white-space: nowrap; }
+      /* Caption under each node (overrides the nowrap/ellipsis on .connect-node span). */
+      .connect-node .connect-node-cap {
+        margin-top: .2rem;
+        font-size: .62rem;
+        font-weight: 600;
+        color: var(--c-g400);
+        white-space: normal;
+        overflow: visible;
+        line-height: 1.25;
       }
       .signin-card-copy {
         border: 1px solid var(--c-primary-border);
