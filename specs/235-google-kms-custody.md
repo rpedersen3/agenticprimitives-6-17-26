@@ -65,27 +65,37 @@ spec builds it.)
 
 ## 5. The security gate (the boundary)
 
-All server custody happens in **demo-a2a** (it holds the master); authorization crosses the
-boundary as a **broker-minted Google session**. Two gasless endpoints, both behind the SAME gate:
+All server custody happens in **demo-a2a** (it holds the master) — `apps/demo-a2a/src/custody-google.ts`
+is the boundary. **Chicken-and-egg:** only demo-a2a can compute `SA_expected` (it needs the master
+to derive `C_sub`), but the broker mints the session whose `sub` IS `SA_expected`. Resolved with
+**three** endpoints (the gate is shared):
 
-- `POST /custody/google/bootstrap-and-claim { googleSession, base }` — deploy `SA_expected` +
-  claim `<base>` + setPrimary, signed by `C_sub`.
-- `POST /custody/google/sign { googleSession, hash, sender }` — return the `C_sub` signature for a
-  userOp/delegation digest (post-onboarding actions, incl. graduation).
+- `POST /custody/google/resolve { iss, sub }` → `{ agent, agentId, custodian }` — **broker → a2a,
+  server-to-server, bridge-secret authenticated, CSRF-exempt.** Derive-only (no on-chain effect),
+  so the OIDC callback can mint a custody session (sub = `SA_expected`) + record the facet WITHOUT
+  blocking on a deploy. The user's Google authn already happened at the broker; the bridge secret
+  (`A2A_CUSTODY_BRIDGE_SECRET`, constant-time compared) authenticates the trusted first-party caller.
+- `POST /custody/google/bootstrap-and-claim { session, label, node }` — **client → a2a, custody
+  session.** Deploy `SA_expected` + claim `<label>` + `setPrimary(node)` in ONE `C_sub`-signed,
+  paymaster-sponsored userOp. Idempotent (skips when already deployed).
+- `POST /custody/google/sign { session, hash, sender }` → `{ signature }` — **client → a2a, custody
+  session.** The `C_sub` signature for a userOp/delegation digest (post-onboarding actions,
+  incl. graduation). No device gesture.
 
-**THE GATE (every call):**
-1. Verify `googleSession` against the **broker JWKS** (pin `iss` = the Connect origin, `aud` =
-   the demo-sso AUD). Require `assurance:'onchain-confirmed'` + `role:'custody-grade'` for the
-   Google+KMS facet. Reject otherwise. Fail-closed if the JWKS is unreachable.
-2. Read `(iss,sub)` **from the verified session** — never from the request body.
-3. Derive `C_sub`; compute `SA_expected(iss,sub)`.
-4. **Invariant: act ONLY for `SA_expected`.** `bootstrap-and-claim` deploys/claims for it only;
-   `sign` requires `sender == SA_expected`. No client-supplied target/sender is honored.
+**THE GATE** (`bootstrap-and-claim` + `sign`, both browser-facing → also keep CSRF):
+1. Verify `session` against the cached **broker JWKS** (ES256; pin `iss` = the Connect origin,
+   `aud` = the demo-sso AUD). Require `principal.kind:'oidc'` + `principal.role:'custody-grade'`
+   + `assurance:'onchain-confirmed'`. Reject otherwise. **Fail-closed** if the JWKS is unreachable.
+2. Read `(iss,sub)` **from the verified `principal.id`** (`"<iss>#<sub>"`) — never from the body.
+3. Derive `C_sub`; compute `SA_expected = getAddressForAgentAccount({custodians:[C_sub], salt:0n})`.
+4. **Invariant: act ONLY for `SA_expected`.** Cross-check the session's claimed `sub` (CAIP-10)
+   AND the requested `sender` BOTH equal `SA_expected`. No client-supplied target/sender is honored.
 
-The broker (`server/oidc/google/callback.ts`) mints the custody-grade session (§4 shape) +
-records `facet:oidc:{iss}#{sub} → SA_expected`. **Existing facet wins:** a returning Google
-member resolves to their already-linked SA; only a truly-new `(iss,sub)` gets a fresh
-KMS-custodied `SA_expected` (no two SAs per Google account).
+The broker (`server/oidc/google/callback.ts`) calls `resolve`, then mints the custody-grade session
+(§4 shape, sub = `SA_expected`) + records `facet:oidc:{iss}#{sub} → SA_expected`. **Existing facet
+wins:** a returning Google member resolves to their already-linked SA; only a truly-new `(iss,sub)`
+gets a fresh KMS-custodied `SA_expected` (no two SAs per Google account). Because derivation is
+deterministic, demo-a2a never stores the mapping — it recomputes `SA_expected` from `(iss,sub)`.
 
 ## 6. Custody invariants (ADR-0010 / 0011)
 
