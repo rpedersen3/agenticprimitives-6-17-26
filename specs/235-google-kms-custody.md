@@ -132,6 +132,34 @@ W6 security-auditor pass.
 6. Production guards: local-aes derivation refuses production without `A2A_ALLOW_LOCAL_MASTER_KEY`;
    no silent fallback.
 
+## 9a. Security-auditor verdict (2026-05-29)
+
+**Testnet demo: ACCEPTABLE. Production: BLOCKED on G-1 + G-3.** The gate logic PASSES the design
+checks (§9.1 alg/iss/aud-pinned + custody-grade required + `SA==derived` cross-checked against BOTH
+`session.sub` and the requested `sender` on both client endpoints + JWKS fail-closed; §9.3 key
+isolation, one-way derivation, mod-n soundness, separator-injection resistance — all test-backed;
+§9.5 aud pinning + redirect-uri allowlist; a relying-app-obtained session controls only the
+caller's OWN derived SA). Findings:
+
+- **G-1 (HIGH, deferred — testnet-safe):** the master-key production guard is dead code in the
+  LIVE Worker. `bridgeEnvToProcessEnv` (demo-a2a `index.ts`) defaults `NODE_ENV` to `'development'`
+  when unset, and the Worker never sets `NODE_ENV='production'` (no esbuild `--define`; wrangler
+  vars don't set it), so `LocalSecp256k1Signer`'s prod guard never fires → a future prod deploy
+  that dropped `A2A_KMS_BACKEND=gcp-kms` would silently run the in-memory master with no refusal.
+  Pre-existing (affects the whole Worker's local-key guards), not exploitable on testnet. **Fix
+  before any production deploy:** key the guard off an explicit `APP_ENV=production` Worker var (or
+  flip the bridge default to `'production'` fail-safe) + assert it in `check-production-deploy.ts`.
+- **G-2 (MED, FIXED):** `deriveSubjectCustodian` now threads an `auditSink` → every `C_sub`
+  signature emits `key-custody.sign`.
+- **G-3 (MED, deferred):** the gate (`custody-google.ts` + the 3 endpoints) has NO tests (demo-a2a
+  has no harness). Add a vitest suite: alg-confusion/`alg:none` rejected, wrong-aud rejected,
+  login-grade rejected, JWKS-unreachable→503, `sessionSub≠SA`→403, client `sender≠SA`→403,
+  bridge-secret mismatch→401.
+- **G-4 (LOW, FIXED):** `GoogleSecureHome` surfaces the "Google alone fully controls this home"
+  disclosure + add-a-passkey-later hint.
+- **G-5 / G-6 (INFO):** no OIDC-issuer allowlist + `parseOidcPrincipalId` last-`#` split — both safe
+  in the single-provider, trusted-broker model; pin an issuer allowlist before §10 generalization.
+
 ## 10. Out of scope
 
 - A dedicated per-subject KMS *asymmetric* key (vs HMAC-derived) — a possible hardening follow-up.
