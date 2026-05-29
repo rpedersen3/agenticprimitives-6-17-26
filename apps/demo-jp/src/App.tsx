@@ -105,10 +105,10 @@ export function App() {
         </div>
       </section>
 
-      {/* Trust model — the Impact differentiator */}
+      {/* Trust model — JP runs the program; Impact Community is the data custodian/vault. */}
       <section className="section wrap" style={{ paddingTop: 0 }}>
         <div className="trust">
-          <div className="eyebrow" style={{ color: 'var(--c-primary-mid)' }}>You’re not adopting alone — and your data is yours</div>
+          <div className="eyebrow" style={{ color: 'var(--c-primary-mid)' }}>Self-sovereign by design</div>
           <h2>{JP.trust.title}</h2>
           <div className="trust-grid">
             {JP.trust.points.map((pt, i) => (
@@ -123,7 +123,7 @@ export function App() {
         <div className="sec-head">
           <div className="eyebrow">Accountability</div>
           <h2>What you agree to</h2>
-          <p>Both are signed inside your Impact home and held with you — this site only sees that you signed.</p>
+          <p>Both are signed inside your {JP.impactName} vault and held with you. JP receives the attestation that you signed — not the document itself.</p>
         </div>
         <div className="agreements">
           <div className="agreement">
@@ -140,8 +140,8 @@ export function App() {
 
       <footer>
         <div className="wrap">
-          <span>{JP.org} · Adopt-a-People-Group pilot</span>
-          <span>Identity, data, and agreements powered by <b style={{ color: 'var(--c-primary)' }}>{JP.impactName}</b>.</span>
+          <span>{JP.org} · Adopt-a-People-Group pilot — JP runs the program.</span>
+          <span>Identity + data vault: <b style={{ color: 'var(--c-primary)' }}>{JP.impactName}</b>. You stay in control.</span>
         </div>
       </footer>
 
@@ -162,11 +162,24 @@ function OnboardPanel({ kind, onClose }: { kind: 'adopter' | 'facilitator'; onCl
         <h2>{p.cta}</h2>
         <div className="who">{p.who}</div>
         <p style={{ color: 'var(--c-g600)', marginTop: '.75rem' }}>{p.body}</p>
-        <p style={{ marginTop: '1rem', fontWeight: 700, color: 'var(--c-g800)' }}>Here’s how it works:</p>
+        <p style={{ marginTop: '1rem', fontWeight: 700, color: 'var(--c-g800)' }}>Here’s the flow:</p>
         <ol>{p.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
-        <div className="panel-foot">
-          <button className="btn btn-primary" disabled title="Wired in the next phase">Continue to {JP.impactName} →</button>
-          <span className="soon">Connecting to {JP.impactName} is wired in the next phase — this is the public preview.</span>
+        <p style={{ marginTop: '1rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
+          {JP.org} runs the adoption program. {JP.impactName} is your private identity + data vault — JP only
+          sees what you grant, and you can revoke it any time.
+        </p>
+        <div className="panel-foot" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '.6rem' }}>
+          <button className="btn-sso" disabled title="Wired in the next phase">
+            <span className="btn-sso-glyph" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+              </svg>
+            </span>
+            {JP.ssoCta}
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: '.72rem', fontWeight: 600, color: 'var(--c-g400)' }}>SSO + your vault</span>
+          </button>
+          <span className="soon">{JP.ssoCta} is wired in the next phase — this is the public preview.</span>
         </div>
       </div>
     </div>

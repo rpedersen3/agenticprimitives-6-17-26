@@ -11,8 +11,17 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@agenticprimitives/agent-account": "workspace:*",
+    "@agenticprimitives/agent-naming": "workspace:*",
+    "@agenticprimitives/agent-relationships": "workspace:*",
+    "@agenticprimitives/connect": "workspace:*",
+    "@agenticprimitives/connect-auth": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
+    "@agenticprimitives/identity-directory-adapters": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "viem": "^2.50.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",

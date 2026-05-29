@@ -122,6 +122,25 @@
       .panel-foot { display: flex; gap: .6rem; align-items: center; margin-top: 1.25rem; flex-wrap: wrap; }
       .panel-x { float: right; background: none; border: none; font-size: 1.4rem; line-height: 1; color: var(--c-g400); cursor: pointer; }
       .soon { font-size: .8rem; color: var(--c-g500); background: var(--c-g100); border: 1px solid var(--c-g200); border-radius: var(--r-sm); padding: .55rem .75rem; }
+
+      /* "Connect via Impact Community" SSO button — distinctive, parallel to "Continue with Google". */
+      .btn-sso {
+        display: flex; align-items: center; gap: .65rem;
+        width: 100%; padding: .85rem 1rem;
+        background: #fff; color: var(--c-g900);
+        border: 1.5px solid var(--c-g300); border-radius: 12px;
+        font-size: 1rem; font-weight: 700; cursor: pointer; text-align: left;
+        box-shadow: var(--sh-sm);
+        transition: border-color .15s, background .15s;
+      }
+      .btn-sso:hover:not(:disabled) { border-color: var(--c-primary); background: var(--c-primary-subtle); }
+      .btn-sso:disabled { opacity: .6; cursor: not-allowed; }
+      .btn-sso-glyph {
+        width: 28px; height: 28px; border-radius: 8px; flex: 0 0 auto;
+        display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(150deg, var(--c-primary-mid), var(--c-primary-active));
+        color: #fff; box-shadow: var(--sh-sm);
+      }
       .wea-text { font-size: .9rem; color: var(--c-g700); }
       .wea-text li { margin-bottom: .6rem; }
 

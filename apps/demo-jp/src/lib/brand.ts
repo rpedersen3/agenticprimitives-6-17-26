@@ -2,11 +2,32 @@
 // never in packages. The generic primitives (person/org SA, delegation, attestation, custody) carry
 // none of this. Domains/wiring will move to lib/domain.ts when the connect lands (spec 236 P1-wire).
 
+/** Generic SSO-gateway labels consumed by the (shared with demo-org) connect-client machinery.
+ *  For demo-jp the gateway IS Impact Community — JP is the program; Impact is the home that holds
+ *  the data. Kept separate from `JP` so the JP-only marketing copy stays uncluttered. */
+export const GATEWAY = {
+  /** What this relying app calls itself in SSO-return copy. */
+  appName: 'Joshua Project Adopt',
+  /** The trust home users connect to — Impact Community, in our model. */
+  community: 'Impact Community',
+} as const;
+
+/** Gateway CTA label — kept identical in shape to demo-org's so the shared connect-client renders
+ *  correctly. New JP visitors create their Impact Community home; returning members connect. */
+export function gatewayCta(name: string, exists: boolean): string {
+  if (!name.trim()) return `Connect via ${GATEWAY.community}`;
+  return exists ? `Connect via ${GATEWAY.community}` : `Create your ${GATEWAY.community} home`;
+}
+
 export const JP = {
   appName: 'Adopt',
   org: 'Joshua Project',
-  /** Where the member's identity, data, and signed agreements actually live (spec 236). */
-  impactName: 'Impact',
+  /** The SSO / identity-and-data custodian — the member's own home. JP runs the adoption program;
+   *  Impact Community is where the person's identity, data, and signed agreements live, in a vault
+   *  only they can open. (spec 236.) */
+  impactName: 'Impact Community',
+  /** The SSO step label (parallel to "Continue with Google") that appears inside JP onboarding. */
+  ssoCta: 'Connect via Impact Community',
   hero: {
     eyebrow: 'Joshua Project · Frontier People Groups',
     title: 'Adopt a Frontier People Group',
@@ -34,37 +55,41 @@ export const JP = {
       title: 'Adopt a people group',
       who: 'Individuals · small groups · churches · organizations · networks',
       body: 'Commit to one Frontier People Group through prayer, learning, and engagement. Track progress over time and explore partnership opportunities.',
-      cta: 'Adopt with Impact',
+      cta: 'Start adoption',
+      // The first step is the SSO; the rest is JP's program. The data flows into the member's
+      // Impact Community vault — JP only gets the scoped access (and attestations) it needs.
       steps: [
-        'Connect with your Impact home (or create one) — your secure identity.',
-        'If adopting as a church/org/network: create your organization in Impact.',
-        'Add your personal profile, and your organization’s profile, in Impact.',
-        'Sign the ADOPT Memorandum of Understanding (and the WEA Statement of Faith for orgs/networks).',
-        'Declare your adoption of a Frontier People Group — and choose whether to connect with a facilitator.',
+        'Connect via Impact Community — your identity and a private vault, set up in one step.',
+        'If adopting as a church/org/network: set up your organization (held in your vault).',
+        'Add your contact profile, and your organization’s profile, to your vault.',
+        'Sign the ADOPT Memorandum of Understanding (and the WEA Statement of Faith for orgs/networks) — held in your vault, JP receives the attestation.',
+        'Declare your adoption of a Frontier People Group — and choose whether to be matched with a facilitator.',
       ],
     },
     facilitator: {
       title: 'Facilitate adoptions',
       who: 'Mission organizations · networks already serving on the field',
       body: 'You’re already on the field. Connect with committed adopters: declare your coverage and capacity, and provide quarterly updates to the prayer partners matched with you.',
-      cta: 'Facilitate with Impact',
+      cta: 'Register as a facilitator',
       steps: [
-        'Connect with your Impact home (or create one).',
-        'Create or claim your facilitator organization in Impact.',
-        'Add your organization profile and capacity (people groups, adopter types, size bands, ministry areas).',
-        'Sign the ADOPT MOU and the WEA Statement of Faith as a named signatory.',
+        'Connect via Impact Community — your identity and a private vault.',
+        'Set up your facilitator organization (held in your vault).',
+        'Add your organization profile and capacity (people groups, adopter types, size bands, ministry areas) — into your vault.',
+        'Sign the ADOPT MOU and the WEA Statement of Faith as a named signatory — held in your vault, JP receives the attestation.',
         'Declare facilitator coverage for the people groups you serve.',
       ],
     },
   },
-  // The differentiator vs. a plain form: your data + agreements are yours, held in your own home.
+  // The differentiator vs. a plain form: JP runs the program; Impact Community holds your data in
+  // a vault you alone can open. JP only sees what you grant — and you can revoke anytime.
   trust: {
-    title: 'Your identity and data stay yours',
+    title: 'JP runs the program. Your home holds the data.',
     points: [
-      'Your identity, personal profile, and organization data live in your own secure Impact home — not in this site’s database.',
-      'You sign the ADOPT MOU and WEA Statement of Faith inside Impact; the signed agreements are held there, with you.',
-      'This site only receives a scoped, revocable delegation to the data you approve — and an attestation that you signed. You can revoke it anytime.',
-      'Adopting through Impact means one trusted home you reuse across the mission community, with a clear, auditable trail of who agreed to what, and when.',
+      'JP owns the adoption program and your relationship with it — the brokerage, the people-group commitments, the matches.',
+      'Your identity, contact details, organization profile, and signed agreements live in your own Impact Community vault — a private store only your home credentials can open. Not JP. Not even Impact.',
+      'You sign the ADOPT MOU and WEA Statement of Faith inside your vault; JP receives only the attestation that you signed, not the document itself.',
+      'JP gets a scoped, revocable delegation to the specific data you grant — name, contact, signatory authority. Disconnect anytime and JP’s visibility goes to zero.',
+      'One home, reusable across the mission community. JP carries no data liability; you stay in control of every disclosure.',
     ],
   },
   mou: {

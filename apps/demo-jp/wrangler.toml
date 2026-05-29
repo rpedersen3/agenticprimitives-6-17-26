@@ -1,0 +1,19 @@
+# Cloudflare Pages config for demo-jp — Joshua Project Adopt-a-People-Group pilot (spec 236).
+#
+# Local dev: `pnpm --filter @agenticprimitives-demo/jp dev` (Vite, port 5573, /a2a proxy).
+# Deploy:    `cd apps/demo-jp && wrangler pages deploy dist --project-name=agenticprimitives-demo-jp --branch=main`
+#
+# Secrets (`wrangler pages secret put <NAME> --project-name=agenticprimitives-demo-jp`):
+#   BROKER_PRIVATE_JWK     ES256 (P-256) private JWK (JSON) — this site's own broker key.
+#   BROKER_KID             e.g. "demo-jp-broker-1".
+#   DEMO_A2A_URL           the deployed demo-a2a relayer origin.
+
+name = "agenticprimitives-demo-jp"
+compatibility_date = "2026-05-25"
+pages_build_output_dir = "dist"
+
+# Single-use nonce / passkey-challenge store — demo-jp's OWN namespace (created via
+# `wrangler kv namespace create demo-jp-auth-codes`).
+[[kv_namespaces]]
+binding = "AUTH_CODES"
+id = "54f9dcb30de043fb9023afa81ee8d123"
