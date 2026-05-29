@@ -87,9 +87,10 @@ export function buildSignerBackend(opts: BuildOpts): KmsAccountBackend {
 }
 
 export function buildToolExecutorBackend(toolId: string, opts: BuildOpts): KmsAccountBackend {
-  // For v0 local-aes, per-tool isolation is achieved by deriving a separate
-  // signer key from the master per toolId. v0 demo just returns the master
-  // signer; v0.1 will derive per-tool keys via HKDF.
+  // v0 demo returns the master signer (no per-tool isolation). Per-IDENTITY
+  // key derivation now exists as `deriveSubjectSigner` (HKDF from the master,
+  // bound to an OIDC subject — spec 235); per-TOOL isolation can reuse that
+  // same shape if/when a tool needs its own custodian key.
   void toolId;
   return buildSignerBackend(opts);
 }

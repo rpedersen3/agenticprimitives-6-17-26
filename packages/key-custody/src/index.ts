@@ -8,6 +8,13 @@ export type { Address, Hex };
 export type { A2AKeyProvider, KmsAccountBackend, BuildOpts, KmsBackend } from './types';
 
 export { buildKeyProvider, buildSignerBackend, buildToolExecutorBackend, buildMacProvider } from './factories';
+export {
+  deriveSubjectSigner,
+  deriveSubjectPrivateKeyHex,
+  subjectCanonicalMessage,
+  type SubjectId,
+  type DeriveSubjectOpts,
+} from './derive-subject';
 export { getRelayOnlySigner } from './relay-only';
 export { createKmsAccount } from './account';
 export { canonicalContextBytes } from './aad';

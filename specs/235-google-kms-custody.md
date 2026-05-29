@@ -49,11 +49,16 @@ spec builds it.)
 
 - **Per-subject custodian** `C_sub` = a secp256k1 signer whose private key is derived from the
   master, bound to the Google subject. Canonical message: `kms-custodian:v1:{iss}:{sub}:{rotation}`.
-  - **local-aes (demo):** `HKDF(master, salt = canonical, info = "kms-custodian:v1")` → 32-byte
-    secp256k1 private key. (KMS deferred for the demo, per the local-key pattern + production guards.)
-  - **gcp-kms / aws-kms (prod):** `generateMac(canonical)` → 32 bytes → reduce mod n → secp256k1
-    private key. The MAC never leaves the KMS boundary; the derived key is deterministic.
-  - Output: a viem account whose ADDRESS is `C_sub` (signs 32-byte userOp/EIP-712 hashes).
+  - **local-aes (demo — what ships this wave):** `HKDF-SHA256(ikm = master, salt = "kms-custodian:v1",
+    info = canonical)` → 32 bytes → map to `[1, n-1]` via `(x mod (n-1)) + 1` → secp256k1 private
+    key. iss/sub are percent-encoded in `canonical` so a `:` can't forge the field separators.
+    Wrapped in `LocalSecp256k1Signer` so the production guard (`A2A_ALLOW_LOCAL_MASTER_KEY`) applies.
+  - **gcp-kms / aws-kms (prod — FOLLOW-UP, not built this wave):** the prod providers expose no
+    per-subject `generateMac`/key today, so `deriveSubjectSigner` **fails closed** for KMS backends
+    (no silent fallback to local-aes — ADR-0013). The production path is §10: a per-subject KMS HMAC
+    key (`macSign(canonical)` → seed → secp256k1 priv, seed materialized in-process at sign time) or
+    a per-subject KMS *asymmetric* key (the key never leaves the HSM — stronger, larger build).
+  - Output: a `KmsAccountBackend` whose ADDRESS is `C_sub` (signs 32-byte userOp/EIP-712 hashes).
 - **The agent** `SA_expected = getAddressForAgentAccount({ mode:0, custodians:[C_sub], salt:0n })`
   — deterministic per subject (same shape as the SIWE/EOA path, with the derived address as the
   custodian). New API: `key-custody` `deriveSubjectSigner({subject:{iss,sub,rotation?}, backend})`.

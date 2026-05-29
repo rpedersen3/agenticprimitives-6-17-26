@@ -87,6 +87,17 @@ export function buildSignerBackend(opts: BuildOpts): KmsAccountBackend;
 export function buildToolExecutorBackend(toolId: string, opts: BuildOpts): KmsAccountBackend;
 export function getRelayOnlySigner(opts: BuildOpts): KmsAccountBackend;
 
+// Per-subject custodian signer — a secp256k1 key bound to an OIDC subject,
+// derived from the server master (spec 235: Google × KMS custody). The
+// returned backend's address is the per-subject custodian `C_sub`.
+//   local-aes: HKDF(master, info = "kms-custodian:v1:<enc(iss)>:<enc(sub)>:<rotation>") → priv,
+//              wrapped in LocalSecp256k1Signer (production guard applies).
+//   gcp-kms / aws-kms: NOT YET BUILT — fail closed (no silent fallback, ADR-0013).
+export function deriveSubjectSigner(opts: BuildOpts & { subject: SubjectId }): KmsAccountBackend;
+export function deriveSubjectPrivateKeyHex(master: Uint8Array, subject: SubjectId): Hex; // pure (tested)
+export function subjectCanonicalMessage(subject: SubjectId): string;
+export interface SubjectId { iss: string; sub: string; rotation?: number }
+
 // Built-in implementations (also via subpaths)
 export { LocalAesProvider, LocalSecp256k1Signer } from './providers/local';
 export { AwsKmsProvider, AwsKmsSigner } from './providers/aws';
