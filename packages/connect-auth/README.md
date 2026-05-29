@@ -80,6 +80,7 @@ See [`docs/security.md`](docs/security.md) and [`AUDIT.md`](AUDIT.md).
 ## Documentation Map
 
 - [`docs/concepts.md`](docs/concepts.md) — credential vs canonical SA.
+- [`docs/cross-browser-secure-home-passkey.md`](docs/cross-browser-secure-home-passkey.md) — Chrome/Firefox + Windows Hello secure-home flow.
 - [`docs/api.md`](docs/api.md) — public API guide.
 - [`docs/security.md`](docs/security.md) — invariants.
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) — common errors.
