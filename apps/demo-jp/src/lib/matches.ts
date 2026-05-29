@@ -350,11 +350,42 @@ export const SEED_FACILITATOR_UPDATES: MatchedFacilitatorUpdate[] = [
 ];
 
 /** Updates a matched adopter should see — filtered to the facilitator they're
- *  matched with AND the FPG they declared. Sorted most-recent-first. */
-export function updatesForAdopter(facilitatorId: string, peopleGroupId: string): MatchedFacilitatorUpdate[] {
-  return SEED_FACILITATOR_UPDATES
-    .filter((u) => u.facilitatorId === facilitatorId && u.peopleGroupId === peopleGroupId)
-    .sort((a, b) => b.publishedAt - a.publishedAt);
+ *  matched with AND the FPG they declared. Sorted most-recent-first.
+ *
+ *  Same-browser dual-persona case: when `viewerAddress` is the address whose
+ *  `JpFacilitatorRecord` produced the synthesized self-persona match (`fac-self-<addr>`),
+ *  we ALSO pull the viewer's own `publishedUpdates[]` from that record and merge them
+ *  in. Without this, an adopter who is also a facilitator (same browser, same SA)
+ *  would never see their own published updates on their adopter dashboard — even
+ *  though the facilitator+adopter records sit in the same localStorage. */
+export function updatesForAdopter(
+  facilitatorId: string,
+  peopleGroupId: string,
+  viewerAddress?: Address,
+): MatchedFacilitatorUpdate[] {
+  const seeded = SEED_FACILITATOR_UPDATES
+    .filter((u) => u.facilitatorId === facilitatorId && u.peopleGroupId === peopleGroupId);
+
+  // Self-persona: if the matched facilitator is the viewer's own persona, fold in
+  // their record's published updates filtered to the same FPG.
+  const selfPersonaId = viewerAddress ? `fac-self-${viewerAddress.toLowerCase()}` : null;
+  const own: MatchedFacilitatorUpdate[] = [];
+  if (selfPersonaId === facilitatorId && viewerAddress) {
+    const record = loadJpFacilitatorRecord(viewerAddress);
+    for (const u of record.publishedUpdates ?? []) {
+      if (u.peopleGroupId !== peopleGroupId) continue;
+      own.push({
+        id: u.id,
+        facilitatorId,
+        peopleGroupId: u.peopleGroupId,
+        publishedAt: u.publishedAt,
+        title: u.title,
+        body: u.body,
+      });
+    }
+  }
+
+  return [...own, ...seeded].sort((a, b) => b.publishedAt - a.publishedAt);
 }
 
 // ── Disclosure manifests ─────────────────────────────────────────────────────

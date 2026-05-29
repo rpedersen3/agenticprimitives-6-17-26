@@ -1504,7 +1504,7 @@ function MatchedFacilitatorCard({ f, sharedPgId, addr }: { f: MatchedFacilitator
         </div>
       )}
 
-      {sharedPgId && <UpdatesFromFacilitator facilitatorId={f.id} peopleGroupId={sharedPgId} />}
+      {sharedPgId && <UpdatesFromFacilitator facilitatorId={f.id} peopleGroupId={sharedPgId} viewerAddress={addr} />}
 
       <ContactExchangeWidget
         addr={addr}
@@ -1637,8 +1637,11 @@ const dlVal: React.CSSProperties = { color: 'var(--c-g800)', alignSelf: 'center'
  *  update flows via the introduction's existing scoped delegation (no new
  *  scope required). Most-recent first; the latest expands inline, older ones
  *  collapse behind a "show all" toggle. */
-function UpdatesFromFacilitator({ facilitatorId, peopleGroupId }: { facilitatorId: string; peopleGroupId: string }) {
-  const updates = useMemo(() => updatesForAdopter(facilitatorId, peopleGroupId), [facilitatorId, peopleGroupId]);
+function UpdatesFromFacilitator({ facilitatorId, peopleGroupId, viewerAddress }: { facilitatorId: string; peopleGroupId: string; viewerAddress: Address }) {
+  const updates = useMemo(
+    () => updatesForAdopter(facilitatorId, peopleGroupId, viewerAddress),
+    [facilitatorId, peopleGroupId, viewerAddress],
+  );
   const [showAll, setShowAll] = useState(false);
   if (updates.length === 0) return null;
   const head = updates[0]!;
