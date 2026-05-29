@@ -16,7 +16,7 @@ import type { DelegationWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
 // Deployment-domain config lives in one place (ADR-0021): `./lib/domain`.
-import { AGENT_NAME_PARENT, toAgentName as fullName, personalHome } from './lib/domain';
+import { AGENT_NAME_PARENT, toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
 // This app's white-label identity (the Faith App gateway): `./lib/brand`.
 import { GATEWAY, gatewayCta } from './lib/brand';
 
@@ -708,6 +708,18 @@ export function App() {
                     <div>via {session.via}</div>
                   </div>
                   <div className="menu-sep" />
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      window.open(personalAuthOrigin(nameLabel(session.name)), '_blank', 'noopener,noreferrer');
+                    }}
+                  >
+                    Go to my Impact home ↗
+                    <span style={{ display: 'block', fontSize: '.72rem', color: 'var(--c-g400)', fontWeight: 400 }}>
+                      {personalHome(session.name)}
+                    </span>
+                  </button>
                   <button
                     role="menuitem"
                     onClick={() => navigator.clipboard?.writeText(session.address)}
