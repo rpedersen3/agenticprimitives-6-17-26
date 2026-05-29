@@ -1,15 +1,22 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
 import { JP, GATEWAY } from './lib/brand';
 import { startSiteEnrollment, exchangeCode, verifyIdToken } from './connect-client';
 import { toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
+import {
+  type AdopterStep, type AdopterType, type ImpactProfile, type JpAdopterRecord,
+  adopterSteps, isAdopterOnboardingComplete, loadImpactProfile, loadJpAdopterRecord,
+  nextAdopterStep, projectForJp, requiresWea, saveJpAdopterRecord,
+} from './lib/vault';
+import { MOU_DOC_ID, MOU_TEXT, attestDocConsentBound } from './lib/mou';
+import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from './lib/people-groups';
 
-// JP-Adopt is a RELYING APP (spec 236). It runs the adoption program; Impact Community is the
-// member's home + private data vault. Public capability UX (the marketing render below) lives
-// in this file; the SSO step routes through Impact via `startSiteEnrollment`, the canonical
-// demo-org pattern (ADR-0019). After return, we render a path-specific intranet — adopter or
-// facilitator — keyed off the `kind` we stashed before redirect. MOU/WEA signing + adoption
-// declarations + introductions land in P2–P4.
+// JP-Adopt is a RELYING APP (spec 236). JP runs the program; the member's Impact Community
+// home holds the data + delegates scoped access. Onboarding is a JOINT flow — Impact already
+// holds the profile + community-wide attestations (WEA), JP only runs the JP-specific
+// ceremonies (the ADOPT MOU + the public adoption declaration). The adopter dashboard mirrors
+// that split: passive "✓ on file" checks where Impact owns the data, interactive panels where
+// JP runs the ceremony.
 
 const WEA_AFFIRMATIONS = [
   'The Holy Scriptures as originally given by God, divinely inspired, infallible, entirely trustworthy; and the supreme authority in all matters of faith and conduct.',
@@ -23,13 +30,6 @@ const WEA_AFFIRMATIONS = [
 
 type Kind = 'adopter' | 'facilitator';
 type Modal = null | { kind: Kind } | { kind: 'wea' };
-
-// ── Session ─────────────────────────────────────────────────────────────────
-// The session is an id_token claim bag, the same shape demo-org uses. We
-// additionally remember which JP path the member is on so the intranet renders
-// the right surface — the kind is set when the member clicks "Start adoption"
-// or "Register as a facilitator", stashed into sessionStorage with the enroll
-// state, and restored on `?code` return.
 
 const SESSION_KEY = 'agenticprimitives:demo-jp:session';
 const ENROLL_KEY = 'agenticprimitives:demo-jp:enroll';
@@ -93,11 +93,17 @@ function CheckIcon() {
     </svg>
   );
 }
-
 function GlobeGlyph({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+    </svg>
+  );
+}
+function ShieldIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   );
 }
@@ -108,7 +114,7 @@ export function App() {
   const [session, setSession] = useState<Session | null>(restoreSession);
   const [modal, setModal] = useState<Modal>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null); // copy shown in the SSO button while redirecting
+  const [busy, setBusy] = useState<string | null>(null);
 
   const openSession = useCallback((token: string, name: string, kind: Kind, fresh: boolean) => {
     const addr = addrFromSub(decodeToken(token)?.sub);
@@ -120,24 +126,17 @@ export function App() {
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({ token, name, kind }));
     } catch {
-      /* session just won't persist — non-fatal */
+      /* ignore */
     }
   }, []);
 
   const signOut = useCallback(() => {
     setSession(null);
     setError(null);
-    try {
-      localStorage.removeItem(SESSION_KEY);
-    } catch {
-      /* ignore */
-    }
+    try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
   }, []);
 
-  // ── OIDC return-path handler ──────────────────────────────────────────
-  // demo-org / spec 230 pattern: on ?code&state, match against the stash we left
-  // at `startSiteEnrollment`, then `exchangeCode` + `verifyIdToken` open the
-  // session. Audit F5: fail closed on a state mismatch.
+  // OIDC return-path handler (demo-org / spec 230 pattern).
   useEffect(() => {
     const u = new URL(window.location.href);
     const code = u.searchParams.get('code');
@@ -146,17 +145,10 @@ export function App() {
     if (!code && !err) return;
     for (const k of ['code', 'state', 'enroll_error']) u.searchParams.delete(k);
     window.history.replaceState({}, '', u.toString());
-    if (err) {
-      setError(`Sign-in was not completed (${err}).`);
-      return;
-    }
+    if (err) { setError(`Sign-in was not completed (${err}).`); return; }
 
     let stash: EnrollStash = {};
-    try {
-      stash = JSON.parse(sessionStorage.getItem(ENROLL_KEY) ?? '{}') as EnrollStash;
-    } catch {
-      /* ignore */
-    }
+    try { stash = JSON.parse(sessionStorage.getItem(ENROLL_KEY) ?? '{}') as EnrollStash; } catch { /* ignore */ }
     if (!stash.state || !retState || stash.state !== retState) {
       setError("We couldn't verify that response. Please try again.");
       return;
@@ -179,11 +171,6 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── SSO kickoff ───────────────────────────────────────────────────────
-  // "Connect via Impact Community" — same shape as demo-org's `beginSiteSetup`:
-  // build the central-auth URL with `startSiteEnrollment`, stash {state,nonce,
-  // codeVerifier,kind} in sessionStorage so the `?code` return can complete it,
-  // then full-page redirect to the member's secure home.
   const beginConnect = useCallback(async (name: string, kind: Kind) => {
     setError(null);
     try {
@@ -198,18 +185,14 @@ export function App() {
     }
   }, []);
 
-  // ── render ────────────────────────────────────────────────────────────
-
   if (session) {
-    return (
-      <Intranet
-        session={session}
-        onSignOut={signOut}
-        onOpenWea={() => setModal({ kind: 'wea' })}
-      />
-    );
+    if (session.kind === 'adopter') {
+      return <AdopterIntranet session={session} onSignOut={signOut} onOpenWea={() => setModal({ kind: 'wea' })} />;
+    }
+    return <FacilitatorIntranet session={session} onSignOut={signOut} onOpenWea={() => setModal({ kind: 'wea' })} />;
   }
 
+  // ── Signed-out marketing page (unchanged from the user-approved version) ────
   return (
     <>
       <header className="topbar">
@@ -223,9 +206,7 @@ export function App() {
       </header>
 
       {error && (
-        <div role="alert" style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca', color: '#991b1b', padding: '.75rem 1.25rem', textAlign: 'center', fontSize: '.875rem' }}>
-          {error}
-        </div>
+        <div role="alert" style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca', color: '#991b1b', padding: '.75rem 1.25rem', textAlign: 'center', fontSize: '.875rem' }}>{error}</div>
       )}
 
       <section className="hero">
@@ -335,43 +316,21 @@ export function App() {
   );
 }
 
-// ── Onboarding panel ────────────────────────────────────────────────────────
-// Collects the member's Impact name (same input shape as demo-org's sign-in
-// card) and routes the "Connect via Impact Community" button through the SSO
-// flow. The kind (adopter | facilitator) is held by the parent so the return
-// path can render the right intranet.
+// ── Onboarding-entry panel (unchanged) ──────────────────────────────────────
 
-function OnboardPanel({
-  kind,
-  busy,
-  onClose,
-  onConnect,
-}: {
-  kind: Kind;
-  busy: string | null;
-  onClose: () => void;
-  onConnect: (name: string) => void;
+function OnboardPanel({ kind, busy, onClose, onConnect }: {
+  kind: Kind; busy: string | null; onClose: () => void; onConnect: (name: string) => void;
 }) {
   const p = JP.paths[kind];
   const [name, setName] = useState<string>(() => {
-    try {
-      return localStorage.getItem('agenticprimitives:demo-jp:last-name') ?? '';
-    } catch {
-      return '';
-    }
+    try { return localStorage.getItem('agenticprimitives:demo-jp:last-name') ?? ''; } catch { return ''; }
   });
   const trimmed = name.trim();
-
   const submit = () => {
     if (!trimmed || busy) return;
-    try {
-      localStorage.setItem('agenticprimitives:demo-jp:last-name', trimmed);
-    } catch {
-      /* ignore */
-    }
+    try { localStorage.setItem('agenticprimitives:demo-jp:last-name', trimmed); } catch { /* ignore */ }
     onConnect(trimmed);
   };
-
   return (
     <div className="scrim" onClick={onClose}>
       <div className="panel" onClick={(e) => e.stopPropagation()}>
@@ -385,46 +344,29 @@ function OnboardPanel({
           {JP.org} runs the adoption program. {JP.impactName} is your private identity + data
           vault — JP only sees what you grant, and you can revoke it any time.
         </p>
-
         <div className="panel-foot" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '.6rem' }}>
           <label htmlFor="jp-impact-name" style={{ fontSize: '.78rem', fontWeight: 700, color: 'var(--c-g700)', letterSpacing: '.02em' }}>
             Your {JP.impactName} name
           </label>
           <input
-            id="jp-impact-name"
-            type="text"
-            value={name}
+            id="jp-impact-name" type="text" value={name}
             onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-            placeholder="e.g. rich-pedersen"
-            autoComplete="username"
-            autoCapitalize="none"
-            spellCheck={false}
-            disabled={!!busy}
-            style={{
-              padding: '.75rem .9rem', fontSize: '1rem', borderRadius: 10,
-              border: '1.5px solid var(--c-g300)', background: '#fff', width: '100%',
-              fontFamily: "'SF Mono','Roboto Mono',monospace",
-            }}
+            placeholder="e.g. rich-pedersen" autoComplete="username" autoCapitalize="none"
+            spellCheck={false} disabled={!!busy}
+            style={{ padding: '.75rem .9rem', fontSize: '1rem', borderRadius: 10, border: '1.5px solid var(--c-g300)', background: '#fff', width: '100%', fontFamily: "'SF Mono','Roboto Mono',monospace" }}
           />
           {trimmed && (
             <div style={{ fontSize: '.75rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
               {fullName(trimmed)} · home at {personalHome(trimmed)}
             </div>
           )}
-
-          <button
-            className="btn-sso"
-            onClick={submit}
-            disabled={!trimmed || !!busy}
-            title="Connect via Impact Community to start your JP onboarding"
-          >
+          <button className="btn-sso" onClick={submit} disabled={!trimmed || !!busy} title="Connect via Impact Community">
             <span className="btn-sso-glyph" aria-hidden="true"><GlobeGlyph size={16} /></span>
             {busy ?? JP.ssoCta}
             <span style={{ flex: 1 }} />
             <span style={{ fontSize: '.72rem', fontWeight: 600, color: 'var(--c-g400)' }}>SSO + your vault</span>
           </button>
-
           <span className="soon" style={{ background: 'var(--c-primary-subtle)', borderColor: 'var(--c-primary-border)', color: 'var(--c-primary-active)' }}>
             You’ll confirm with your device at <b>{personalHome(trimmed || 'your-name')}</b>, then come back here to continue with JP.
           </span>
@@ -434,43 +376,27 @@ function OnboardPanel({
   );
 }
 
-// ── Intranet ────────────────────────────────────────────────────────────────
-// Minimal P1 dashboards — confirm the SSO worked + lay out the upcoming pieces
-// (MOU/WEA signing → P2; declarations → P3; introductions → P4). The point is
-// to demonstrate that JP runs the program: the member is "in" the JP adopter
-// or facilitator dashboard, while their data lives in their Impact home.
+// ── Adopter Intranet ────────────────────────────────────────────────────────
+// The dashboard for an adopter. Loads the member's Impact profile (passive — JP
+// observes via the delegation) + the JP adopter record (interactive — JP runs
+// these ceremonies). Steps that Impact already satisfies show as "✓ on file";
+// JP-specific steps expand into inline forms when active.
 
-function Intranet({
-  session,
-  onSignOut,
-  onOpenWea,
-}: {
-  session: Session;
-  onSignOut: () => void;
-  onOpenWea: () => void;
+function AdopterIntranet({ session, onSignOut, onOpenWea }: {
+  session: Session; onSignOut: () => void; onOpenWea: () => void;
 }) {
-  const path = session.kind === 'adopter' ? JP.paths.adopter : JP.paths.facilitator;
-  const short = `${session.address.slice(0, 6)}…${session.address.slice(-4)}`;
+  const [impact] = useState<ImpactProfile>(() => loadImpactProfile(session.address, session.name));
+  const [record, setRecord] = useState<JpAdopterRecord>(() => loadJpAdopterRecord(session.address));
+  const update = useCallback((next: JpAdopterRecord) => { saveJpAdopterRecord(session.address, next); setRecord(next); }, [session.address]);
+
+  const steps = useMemo(() => adopterSteps(impact, record), [impact, record]);
+  const activeStep = useMemo(() => nextAdopterStep(impact, record), [impact, record]);
+  const complete = useMemo(() => isAdopterOnboardingComplete(impact, record), [impact, record]);
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
 
   return (
     <>
-      <header className="topbar">
-        <div className="wrap">
-          <div className="brand">
-            <span className="brand-glyph" aria-hidden="true"><GlobeGlyph /></span>
-            <div>{JP.appName}<small>{JP.org} · {session.kind === 'adopter' ? 'Adopter dashboard' : 'Facilitator dashboard'}</small></div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
-            <span className="powered" title={session.address}>
-              {session.name} · {short}
-            </span>
-            <button className="btn btn-ghost" style={{ padding: '.5rem 1rem', fontSize: '.85rem' }} onClick={onSignOut}>
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+      <IntranetTopbar session={session} subtitle="Adopter dashboard" onSignOut={onSignOut} />
 
       {session.fresh && (
         <div style={{ background: 'var(--c-primary-subtle)', borderBottom: '1px solid var(--c-primary-border)', padding: '.75rem 1.25rem', textAlign: 'center', fontSize: '.9rem', color: 'var(--c-primary-active)' }}>
@@ -479,121 +405,522 @@ function Intranet({
         </div>
       )}
 
-      <section className="hero" style={{ padding: '3rem 0 2rem' }}>
-        <div className="wrap">
-          <div className="eyebrow">{path.who}</div>
-          <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>{path.title} · {session.name}</h1>
-          <p className="hero-sub" style={{ fontSize: '1rem' }}>{path.body}</p>
-        </div>
-      </section>
+      {complete ? (
+        <AdoptionSummary session={session} record={record} impact={impact} />
+      ) : (
+        <>
+          <section className="hero" style={{ padding: '3rem 0 2rem' }}>
+            <div className="wrap">
+              <div className="eyebrow">{JP.paths.adopter.who}</div>
+              <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>{JP.paths.adopter.title}</h1>
+              <p className="hero-sub" style={{ fontSize: '1rem' }}>
+                {JP.org} runs the program; {JP.impactName} holds the data. We’re only asking you for what JP needs that
+                isn’t already on file with your home.
+              </p>
+            </div>
+          </section>
 
-      <section className="section wrap" style={{ paddingTop: 0 }}>
-        <div className="sec-head">
-          <div className="eyebrow">Your JP onboarding</div>
-          <h2>Next steps</h2>
-          <p>JP runs the program. Each step writes to your {JP.impactName} vault — JP gets only the attestation it needs.</p>
-        </div>
+          <section className="section wrap" style={{ paddingTop: 0 }}>
+            <div className="sec-head">
+              <div className="eyebrow">Adopter onboarding</div>
+              <h2>Just the JP-specific steps — your profile is already on file</h2>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '.875rem', marginTop: '1.5rem' }}>
+              {steps.map((s, i) => (
+                <StepCard
+                  key={s.step}
+                  n={i + 1}
+                  step={s.step}
+                  ownedBy={s.ownedBy}
+                  active={s.step === activeStep}
+                  satisfied={s.satisfied}
+                  impact={impact}
+                  record={record}
+                  session={session}
+                  onUpdate={update}
+                  onOpenWea={onOpenWea}
+                />
+              ))}
+            </div>
+          </section>
 
-        <div className="agreements" style={{ gridTemplateColumns: '1fr', gap: '.875rem' }}>
-          <DashboardStep
-            n={1}
-            title={`Connect via ${JP.impactName}`}
-            status="done"
-            body={`Done — signed in as ${session.name}.`}
-          />
-          {session.kind === 'facilitator' && (
-            <DashboardStep
-              n={2}
-              title="Set up your facilitator organization"
-              status="soon"
-              body="Create an Organization Smart Agent secured by your ROOT credential at Impact. Wired next — same ceremony as demo-org’s create-org flow."
-            />
-          )}
-          <DashboardStep
-            n={session.kind === 'facilitator' ? 3 : 2}
-            title="Add your profile to your vault"
-            status="soon"
-            body={`Contact + ${session.kind === 'facilitator' ? 'organization' : 'household'} profile fields, written to your vault. JP gets read access only for fields you grant.`}
-          />
-          <DashboardStep
-            n={session.kind === 'facilitator' ? 4 : 3}
-            title={`Sign ${JP.mou.name}${session.kind === 'facilitator' ? ' + WEA Statement of Faith' : ''}`}
-            status="soon"
-            body={`EIP-712 signed inside your vault. JP receives only the attestation that you signed — not the document. ${session.kind === 'facilitator' ? 'Both signatures required for facilitators.' : 'WEA signature required for church/org/network adopters.'}`}
-            cta={{ label: `Preview ${JP.wea.name}`, onClick: onOpenWea }}
-          />
-          <DashboardStep
-            n={session.kind === 'facilitator' ? 5 : 4}
-            title={session.kind === 'facilitator' ? 'Declare facilitator coverage' : 'Declare your adoption'}
-            status="soon"
-            body={session.kind === 'facilitator'
-              ? 'Declare the people groups, adopter types, and capacity bands you serve. Matched to adopters by the JP broker.'
-              : 'Declare the Frontier People Group you’re adopting, and choose whether to be matched with a facilitator.'}
-          />
-        </div>
-      </section>
+          <JpProjectionPanel impact={impact} record={record} session={session} />
+        </>
+      )}
 
-      <section className="section wrap" style={{ paddingTop: 0 }}>
-        <div className="trust">
-          <div className="eyebrow" style={{ color: 'var(--c-primary-mid)' }}>You stay in control</div>
-          <h2 style={{ fontSize: '1.5rem', maxWidth: '40ch' }}>JP can see only what you grant. Disconnect anytime — your data stays in your vault.</h2>
-          <div className="trust-grid" style={{ marginTop: '1.25rem' }}>
-            <div className="trust-pt"><CheckIcon /><span>This dashboard reads JP’s scoped delegation — disconnect at your Impact home and it goes dark.</span></div>
-            <div className="trust-pt"><CheckIcon /><span>Your profile + signed agreements live in your vault, not on JP’s servers.</span></div>
-          </div>
-          <p style={{ marginTop: '1.25rem', fontSize: '.85rem', color: '#94a3b8' }}>
-            Your home + vault: <a href={homeUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--c-primary-mid)' }}>{homeUrl}</a>
-          </p>
-        </div>
-      </section>
-
-      <footer>
-        <div className="wrap">
-          <span>{JP.org} · Adopt-a-People-Group pilot — JP runs the program.</span>
-          <span>Identity + data vault: <b style={{ color: 'var(--c-primary)' }}>{JP.impactName}</b>. You stay in control.</span>
-        </div>
-      </footer>
+      <IntranetFooter />
     </>
   );
 }
 
-function DashboardStep({
-  n,
-  title,
-  status,
-  body,
-  cta,
-}: {
-  n: number;
-  title: string;
-  status: 'done' | 'soon';
-  body: string;
-  cta?: { label: string; onClick: () => void };
-}) {
+function IntranetTopbar({ session, subtitle, onSignOut }: { session: Session; subtitle: string; onSignOut: () => void }) {
+  const short = `${session.address.slice(0, 6)}…${session.address.slice(-4)}`;
   return (
-    <div className="agreement" style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+    <header className="topbar">
+      <div className="wrap">
+        <div className="brand">
+          <span className="brand-glyph" aria-hidden="true"><GlobeGlyph /></span>
+          <div>{JP.appName}<small>{JP.org} · {subtitle}</small></div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
+          <span className="powered" title={session.address}>{session.name} · {short}</span>
+          <button className="btn btn-ghost" style={{ padding: '.5rem 1rem', fontSize: '.85rem' }} onClick={onSignOut}>Sign out</button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function IntranetFooter() {
+  return (
+    <footer>
+      <div className="wrap">
+        <span>{JP.org} · Adopt-a-People-Group pilot — JP runs the program.</span>
+        <span>Identity + data vault: <b style={{ color: 'var(--c-primary)' }}>{JP.impactName}</b>. You stay in control.</span>
+      </div>
+    </footer>
+  );
+}
+
+// ── Step orchestration ──────────────────────────────────────────────────────
+
+function StepCard({
+  n, step, ownedBy, active, satisfied, impact, record, session, onUpdate, onOpenWea,
+}: {
+  n: number; step: AdopterStep; ownedBy: 'impact' | 'jp'; active: boolean; satisfied: boolean;
+  impact: ImpactProfile; record: JpAdopterRecord; session: Session;
+  onUpdate: (next: JpAdopterRecord) => void; onOpenWea: () => void;
+}) {
+  const meta = stepMeta(step);
+  const status: 'done' | 'active' | 'pending' = satisfied ? 'done' : active ? 'active' : 'pending';
+  return (
+    <div className="agreement" style={{
+      display: 'flex', gap: '1rem', alignItems: 'flex-start',
+      borderColor: status === 'active' ? 'var(--c-primary-border)' : 'var(--c-g200)',
+      background: status === 'active' ? 'linear-gradient(180deg, var(--c-primary-subtle) 0%, #fff 60%)' : 'var(--c-g50)',
+      opacity: status === 'pending' ? .55 : 1,
+    }}>
       <div style={{
         flex: '0 0 auto', width: 36, height: 36, borderRadius: 999,
-        background: status === 'done' ? 'var(--c-primary)' : 'var(--c-g200)',
-        color: status === 'done' ? '#fff' : 'var(--c-g600)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontWeight: 800, fontSize: '.9rem',
-      }}>
-        {status === 'done' ? '✓' : n}
-      </div>
+        background: status === 'done' ? 'var(--c-primary)' : status === 'active' ? 'var(--c-primary)' : 'var(--c-g200)',
+        color: status === 'done' || status === 'active' ? '#fff' : 'var(--c-g600)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '.9rem',
+      }}>{status === 'done' ? '✓' : n}</div>
       <div style={{ flex: 1 }}>
-        <h3 style={{ fontSize: '1.05rem' }}>
-          {title}
-          {status === 'soon' && <span style={{ marginLeft: '.5rem', fontSize: '.7rem', fontWeight: 700, color: 'var(--c-accent)', background: 'var(--c-accent-subtle)', padding: '.15rem .45rem', borderRadius: 999, border: '1px solid var(--c-accent-border)' }}>WIRING NEXT</span>}
+        <h3 style={{ fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '.5rem', flexWrap: 'wrap' }}>
+          {meta.title}
+          <OwnedByPill ownedBy={ownedBy} />
         </h3>
-        <p>{body}</p>
-        {cta && (
-          <button onClick={cta.onClick} style={{ marginTop: '.5rem', background: 'none', border: 'none', color: 'var(--c-primary)', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '.85rem' }}>
-            {cta.label} →
-          </button>
+        <p style={{ color: 'var(--c-g600)', fontSize: '.9rem', marginTop: '.25rem' }}>{meta.blurb}</p>
+        {status === 'done' && step !== 'adopter-type' && step !== 'mou' && step !== 'adoption' && (
+          <StepDoneSummary step={step} impact={impact} record={record} />
+        )}
+        {status === 'active' && (
+          <div style={{ marginTop: '1rem' }}>
+            {step === 'profile-on-file' && <ProfileOnFileMissing session={session} />}
+            {step === 'adopter-type' && <AdopterTypeForm record={record} onSave={onUpdate} />}
+            {step === 'wea-on-file' && <WeaOnFileMissing session={session} onOpenWea={onOpenWea} />}
+            {step === 'mou' && <MouSignForm session={session} record={record} onSave={onUpdate} />}
+            {step === 'adoption' && <DeclareAdoptionForm record={record} onSave={onUpdate} />}
+          </div>
+        )}
+        {status === 'done' && (step === 'adopter-type' || step === 'mou') && (
+          <StepDoneSummary step={step} impact={impact} record={record} />
         )}
       </div>
     </div>
+  );
+}
+
+function OwnedByPill({ ownedBy }: { ownedBy: 'impact' | 'jp' }) {
+  const isImpact = ownedBy === 'impact';
+  return (
+    <span style={{
+      fontSize: '.65rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase',
+      padding: '.18rem .5rem', borderRadius: 999,
+      background: isImpact ? 'var(--c-primary-subtle)' : '#fef3c7',
+      color: isImpact ? 'var(--c-primary-active)' : '#92400e',
+      border: `1px solid ${isImpact ? 'var(--c-primary-border)' : '#fcd34d'}`,
+    }}>
+      {isImpact ? `🏠 from ${JP.impactName}` : `📋 ${JP.org} step`}
+    </span>
+  );
+}
+
+function stepMeta(step: AdopterStep): { title: string; blurb: string } {
+  switch (step) {
+    case 'profile-on-file':
+      return {
+        title: 'Your contact profile',
+        blurb: `${JP.org} reads contact info from your ${JP.impactName} home — you don’t fill it in again here.`,
+      };
+    case 'adopter-type':
+      return {
+        title: 'Who are you adopting as?',
+        blurb: 'This is the only identity-level question specific to ADOPT.',
+      };
+    case 'wea-on-file':
+      return {
+        title: 'WEA Statement of Faith',
+        blurb: `Required for church / organization / network adopters. ${JP.org} reads it from your ${JP.impactName} home — sign it once, re-use it everywhere.`,
+      };
+    case 'mou':
+      return {
+        title: 'Sign the ADOPT Memorandum of Understanding',
+        blurb: `Specific to the ${JP.org} program. The document lives in your vault — ${JP.org} receives only the attestation that you signed.`,
+      };
+    case 'adoption':
+      return {
+        title: 'Declare your adoption',
+        blurb: 'Choose your Frontier People Group and (optionally) ask to be matched with a facilitator.',
+      };
+  }
+}
+
+function StepDoneSummary({ step, impact, record }: { step: AdopterStep; impact: ImpactProfile; record: JpAdopterRecord }) {
+  if (step === 'profile-on-file' && impact.contact) {
+    const fields = [
+      impact.contact.email && 'email',
+      impact.contact.phone && 'phone',
+      impact.contact.country && 'country',
+      impact.contact.city && 'city',
+    ].filter(Boolean) as string[];
+    return (
+      <div style={{ marginTop: '.75rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
+        <span style={{ color: 'var(--c-primary-active)', fontWeight: 700 }}>✓ On file</span> — your vault holds {fields.join(', ')}.
+        {' '}{JP.org} sees a “can reach you” flag; the actual values stay in your vault unless you grant a richer scope.
+      </div>
+    );
+  }
+  if (step === 'wea-on-file' && impact.attestations.wea) {
+    const d = new Date(impact.attestations.wea.signedAt * 1000).toLocaleDateString();
+    return (
+      <div style={{ marginTop: '.75rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
+        <span style={{ color: 'var(--c-primary-active)', fontWeight: 700 }}>✓ Signed at your home</span> on <b>{d}</b>. {JP.org} holds the attestation only.
+      </div>
+    );
+  }
+  if (step === 'adopter-type' && record.adopterType) {
+    return (
+      <div style={{ marginTop: '.75rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
+        <span style={{ color: 'var(--c-primary-active)', fontWeight: 700 }}>✓</span> Adopting as <b>{ADOPTER_TYPE_LABEL[record.adopterType]}</b>.
+      </div>
+    );
+  }
+  if (step === 'mou' && record.attestations.mou) {
+    const d = new Date(record.attestations.mou.signedAt * 1000).toLocaleString();
+    return (
+      <div style={{ marginTop: '.75rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
+        <span style={{ color: 'var(--c-primary-active)', fontWeight: 700 }}>✓ Signed</span> on <b>{d}</b>. Receipt: <code style={{ fontSize: '.78rem' }}>{record.attestations.mou.docHash.slice(0, 18)}…</code>
+      </div>
+    );
+  }
+  return null;
+}
+
+// ── Step bodies ─────────────────────────────────────────────────────────────
+
+function ProfileOnFileMissing({ session }: { session: Session }) {
+  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  return (
+    <div className="soon" style={{ display: 'block' }}>
+      Your {JP.impactName} home doesn’t have contact info yet. Add it once at{' '}
+      <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{homeUrl}</b></a> — it’s reused across every community app.
+    </div>
+  );
+}
+
+const ADOPTER_TYPE_LABEL: Record<AdopterType, string> = {
+  individual: 'an individual',
+  family: 'a family',
+  group: 'a small group',
+  church: 'a church',
+  organization: 'an organization',
+  network: 'a network',
+};
+
+const ADOPTER_TYPE_OPTIONS: { type: AdopterType; label: string; blurb: string }[] = [
+  { type: 'individual', label: 'Individual', blurb: 'You as one person.' },
+  { type: 'family', label: 'Family', blurb: 'A household adopting together.' },
+  { type: 'group', label: 'Small group', blurb: 'A few people praying together.' },
+  { type: 'church', label: 'Church', blurb: 'A local church or congregation.' },
+  { type: 'organization', label: 'Organization', blurb: 'A ministry, agency, or other org.' },
+  { type: 'network', label: 'Network', blurb: 'A network of churches or orgs.' },
+];
+
+function AdopterTypeForm({ record, onSave }: { record: JpAdopterRecord; onSave: (next: JpAdopterRecord) => void }) {
+  const [picked, setPicked] = useState<AdopterType | undefined>(record.adopterType);
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '.6rem' }}>
+        {ADOPTER_TYPE_OPTIONS.map((o) => {
+          const active = picked === o.type;
+          return (
+            <button
+              key={o.type}
+              onClick={() => setPicked(o.type)}
+              style={{
+                textAlign: 'left', padding: '.75rem .9rem', borderRadius: 12, cursor: 'pointer',
+                background: active ? 'var(--c-primary-subtle)' : '#fff',
+                border: `1.5px solid ${active ? 'var(--c-primary)' : 'var(--c-g200)'}`,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: 'var(--c-g900)' }}>{o.label}</div>
+              <div style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.15rem' }}>{o.blurb}</div>
+            </button>
+          );
+        })}
+      </div>
+      <button
+        className="btn btn-primary"
+        disabled={!picked}
+        style={{ marginTop: '1rem' }}
+        onClick={() => picked && onSave({ ...record, adopterType: picked })}
+      >
+        Continue
+      </button>
+    </>
+  );
+}
+
+function WeaOnFileMissing({ session, onOpenWea }: { session: Session; onOpenWea: () => void }) {
+  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  return (
+    <div className="soon" style={{ display: 'block' }}>
+      Church / organization / network adopters affirm the WEA Statement of Faith. Sign it once at your{' '}
+      <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{JP.impactName} home</b></a> — every community
+      app that needs it (including {JP.org}) will see “✓ on file.”
+      {' '}<button onClick={onOpenWea} style={{ background: 'none', border: 'none', color: 'var(--c-primary)', fontWeight: 700, cursor: 'pointer', padding: 0 }}>Read the statement →</button>
+    </div>
+  );
+}
+
+function MouSignForm({ session, record, onSave }: { session: Session; record: JpAdopterRecord; onSave: (next: JpAdopterRecord) => void }) {
+  const [agreed, setAgreed] = useState(false);
+  const [signing, setSigning] = useState(false);
+
+  const sign = async () => {
+    setSigning(true);
+    try {
+      // Bind the attestation to the active JP delegation — revoking the delegation at the
+      // member's home voids the consent the receipt rode in on (ADR-0019). For the demo we
+      // use the session token as the consent-binding seed (it identifies the active grant);
+      // in production this is the actual ERC-7710 delegation hash.
+      const att = await attestDocConsentBound({
+        docId: MOU_DOC_ID,
+        docText: MOU_TEXT,
+        delegationJson: { sub: session.token.slice(0, 32) },
+      });
+      onSave({ ...record, attestations: { ...record.attestations, mou: att } });
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={{
+        background: '#fff', border: '1px solid var(--c-g200)', borderRadius: 12, padding: '1rem 1.25rem',
+        maxHeight: 280, overflow: 'auto', fontSize: '.85rem', lineHeight: 1.55, color: 'var(--c-g700)', whiteSpace: 'pre-wrap',
+      }}>
+        {MOU_TEXT}
+      </div>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '.6rem', marginTop: '1rem', fontSize: '.9rem', color: 'var(--c-g700)' }}>
+        <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ marginTop: '.25rem' }} />
+        <span>I have read the ADOPT MOU and commit to its terms. I understand the document is held in my {JP.impactName} vault and {JP.org} receives only the attestation that I signed.</span>
+      </label>
+      <button
+        className="btn btn-primary"
+        disabled={!agreed || signing}
+        style={{ marginTop: '1rem' }}
+        onClick={() => void sign()}
+      >
+        {signing ? 'Signing with your home…' : <><ShieldIcon /> Sign with my {JP.impactName} home</>}
+      </button>
+    </>
+  );
+}
+
+function DeclareAdoptionForm({ record, onSave }: { record: JpAdopterRecord; onSave: (next: JpAdopterRecord) => void }) {
+  const [picked, setPicked] = useState<string | undefined>(record.adoption?.peopleGroupId);
+  const [requestFacilitator, setRequestFacilitator] = useState<boolean>(record.adoption?.requestFacilitator ?? true);
+  const [declaring, setDeclaring] = useState(false);
+  const pg = picked ? findPeopleGroup(picked) : undefined;
+
+  const declare = () => {
+    if (!pg) return;
+    setDeclaring(true);
+    onSave({
+      ...record,
+      adoption: {
+        peopleGroupId: pg.id,
+        peopleGroupName: pg.name,
+        declaredAt: Math.floor(Date.now() / 1000),
+        requestFacilitator,
+      },
+    });
+  };
+
+  return (
+    <>
+      <p style={{ fontSize: '.88rem', color: 'var(--c-g600)' }}>
+        Pick a Frontier People Group to commit to. (Demo seed of 10 well-known FPGs; the live list
+        comes from {JP.org} in a later phase.)
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '.6rem', marginTop: '.75rem' }}>
+        {FPG_SEED.map((g) => <FpgCard key={g.id} g={g} active={picked === g.id} onPick={() => setPicked(g.id)} />)}
+      </div>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '.6rem', marginTop: '1.25rem', fontSize: '.9rem', color: 'var(--c-g700)' }}>
+        <input type="checkbox" checked={requestFacilitator} onChange={(e) => setRequestFacilitator(e.target.checked)} style={{ marginTop: '.25rem' }} />
+        <span>Match me with a facilitator already serving this people group, when one is available.</span>
+      </label>
+      <button className="btn btn-primary" disabled={!picked || declaring} style={{ marginTop: '1rem' }} onClick={declare}>
+        {declaring ? 'Declaring…' : `Declare adoption of ${pg ? pg.name : '…'}`}
+      </button>
+    </>
+  );
+}
+
+function FpgCard({ g, active, onPick }: { g: PeopleGroup; active: boolean; onPick: () => void }) {
+  return (
+    <button
+      onClick={onPick}
+      style={{
+        textAlign: 'left', padding: '.85rem 1rem', borderRadius: 12, cursor: 'pointer',
+        background: active ? 'var(--c-primary-subtle)' : '#fff',
+        border: `1.5px solid ${active ? 'var(--c-primary)' : 'var(--c-g200)'}`,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '.5rem' }}>
+        <div style={{ fontWeight: 700, color: 'var(--c-g900)' }}>{g.name}</div>
+        <div style={{ fontSize: '.72rem', color: 'var(--c-g500)', fontWeight: 600 }}>{formatPopulation(g.populationApprox)}</div>
+      </div>
+      <div style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.2rem' }}>{g.country} · {g.region}</div>
+      <div style={{ fontSize: '.74rem', color: 'var(--c-g400)', marginTop: '.15rem' }}>{g.religion}</div>
+    </button>
+  );
+}
+
+// ── Completion: adoption summary + JP projection ────────────────────────────
+
+function AdoptionSummary({ session, record, impact }: { session: Session; record: JpAdopterRecord; impact: ImpactProfile }) {
+  const pg = record.adoption ? findPeopleGroup(record.adoption.peopleGroupId) : undefined;
+  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  return (
+    <>
+      <section className="hero" style={{ padding: '3rem 0 2rem' }}>
+        <div className="wrap">
+          <div className="eyebrow" style={{ color: 'var(--c-primary)' }}>✓ Adoption declared</div>
+          <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>
+            {session.name}, you’ve adopted <span style={{ color: 'var(--c-primary)' }}>{pg?.name ?? 'a Frontier People Group'}</span>.
+          </h1>
+          {pg && (
+            <p className="hero-sub" style={{ fontSize: '1rem' }}>
+              {pg.country} · ~{formatPopulation(pg.populationApprox)} people · {pg.religion}.
+              {record.adoption?.requestFacilitator ? ' We’ll match you with a facilitator when one’s available.' : ''}
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="section wrap" style={{ paddingTop: 0 }}>
+        <div className="agreements" style={{ gridTemplateColumns: '1fr', gap: '.875rem' }}>
+          <div className="agreement">
+            <h3>What now</h3>
+            <p style={{ color: 'var(--c-g600)' }}>
+              The ADOPT path is a long walk — Pray, learn, partner. {JP.org} will send you quarterly
+              prayer updates and, when matched, introductions from facilitators on the field.
+              These ride over the scoped delegation you granted at sign-in.
+            </p>
+          </div>
+          <div className="agreement" style={{ background: '#fff' }}>
+            <h3>Where everything lives</h3>
+            <p style={{ color: 'var(--c-g600)' }}>
+              The ADOPT MOU you signed is in your {JP.impactName} vault at{' '}
+              <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{homeUrl}</b></a>.
+              Your contact info + WEA stay there too. {JP.org} only holds the attestations + your public
+              adoption declaration — revisit and revoke any time from your home.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <JpProjectionPanel impact={impact} record={record} session={session} />
+    </>
+  );
+}
+
+function JpProjectionPanel({ impact, record, session }: { impact: ImpactProfile; record: JpAdopterRecord; session: Session }) {
+  const projection = useMemo(() => projectForJp(impact, record), [impact, record]);
+  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  return (
+    <section className="section wrap" style={{ paddingTop: 0 }}>
+      <div className="trust">
+        <div className="eyebrow" style={{ color: 'var(--c-primary-mid)' }}>What JP can see</div>
+        <h2 style={{ fontSize: '1.5rem', maxWidth: '42ch' }}>This is everything {JP.org} holds about you. Compare it to your vault — much smaller.</h2>
+        <div style={{ marginTop: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+          <ProjBox label="Contact channel" value={projection.hasContact ? '✓ Can reach you (flag only)' : '— none'} />
+          <ProjBox label="Adopter type" value={projection.adopterType ? ADOPTER_TYPE_LABEL[projection.adopterType] : '—'} />
+          <ProjBox label="ADOPT MOU receipt" value={projection.attestations.mou ? `✓ ${projection.attestations.mou.docHash.slice(0, 16)}…` : '—'} mono />
+          <ProjBox label="WEA receipt" value={projection.attestations.wea ? `✓ ${projection.attestations.wea.docHash.slice(0, 16)}…` : '— (not required)'} mono />
+          <ProjBox label="Public adoption" value={projection.adoption ? `✓ ${projection.adoption.peopleGroupName}` : '—'} />
+          <ProjBox label="Wants facilitator match" value={projection.adoption ? (projection.adoption.requestFacilitator ? 'Yes' : 'No') : '—'} />
+        </div>
+        <p style={{ marginTop: '1.5rem', fontSize: '.85rem', color: '#94a3b8' }}>
+          Revoke at your home <a href={homeUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--c-primary-mid)' }}>{homeUrl}</a> and this projection goes empty —
+          your vault stays intact, JP just stops seeing it.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function ProjBox({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 12, padding: '.8rem 1rem' }}>
+      <div style={{ fontSize: '.7rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#94a3b8' }}>{label}</div>
+      <div style={{ marginTop: '.35rem', color: '#e2e8f0', fontSize: '.92rem', fontFamily: mono ? "'SF Mono','Roboto Mono',monospace" : undefined }}>{value}</div>
+    </div>
+  );
+}
+
+// ── Facilitator Intranet (placeholder, wired next) ──────────────────────────
+
+function FacilitatorIntranet({ session, onSignOut, onOpenWea }: {
+  session: Session; onSignOut: () => void; onOpenWea: () => void;
+}) {
+  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  return (
+    <>
+      <IntranetTopbar session={session} subtitle="Facilitator dashboard" onSignOut={onSignOut} />
+      {session.fresh && (
+        <div style={{ background: 'var(--c-primary-subtle)', borderBottom: '1px solid var(--c-primary-border)', padding: '.75rem 1.25rem', textAlign: 'center', fontSize: '.9rem', color: 'var(--c-primary-active)' }}>
+          ✓ Connected via {JP.impactName} — welcome, <b>{session.name}</b>.
+        </div>
+      )}
+      <section className="hero" style={{ padding: '3rem 0 2rem' }}>
+        <div className="wrap">
+          <div className="eyebrow">{JP.paths.facilitator.who}</div>
+          <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>{JP.paths.facilitator.title}</h1>
+          <p className="hero-sub" style={{ fontSize: '1rem' }}>{JP.paths.facilitator.body}</p>
+        </div>
+      </section>
+      <section className="section wrap" style={{ paddingTop: 0 }}>
+        <div className="agreement">
+          <h3>Facilitator onboarding — wiring next</h3>
+          <p style={{ color: 'var(--c-g600)' }}>
+            The facilitator flow (set up your facilitator organization at your {JP.impactName} home, declare
+            people-group coverage + capacity, sign the ADOPT MOU + WEA Statement of Faith as a named
+            signatory) is the next phase. The adopter flow ships first.
+          </p>
+          <p style={{ color: 'var(--c-g600)', marginTop: '.5rem' }}>
+            Your home: <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{homeUrl}</b></a>.{' '}
+            <button onClick={onOpenWea} style={{ background: 'none', border: 'none', color: 'var(--c-primary)', fontWeight: 700, cursor: 'pointer', padding: 0 }}>Read the WEA Statement →</button>
+          </p>
+        </div>
+      </section>
+      <IntranetFooter />
+    </>
   );
 }
 
@@ -609,7 +936,7 @@ function WeaModal({ onClose }: { onClose: () => void }) {
         <ul className="wea-text">{WEA_AFFIRMATIONS.map((a, i) => <li key={i}>{a}</li>)}</ul>
         <div className="panel-foot">
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
-          <span className="soon">You’ll affirm this inside your {JP.impactName} home during onboarding.</span>
+          <span className="soon">You’ll affirm this inside your {JP.impactName} home — once, then re-used everywhere.</span>
         </div>
       </div>
     </div>
