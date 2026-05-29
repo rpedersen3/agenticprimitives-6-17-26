@@ -20,6 +20,11 @@ import {
   ADOPTER_TYPE_OPTIONS_FAC, MINISTRY_AREA_OPTIONS, SIZE_BAND_OPTIONS,
   FACILITATOR_ADOPTER_TYPE_LABEL, MINISTRY_AREA_LABEL, SIZE_BAND_LABEL,
 } from './lib/capacity';
+import {
+  type MatchedAdopter, type MatchedFacilitator,
+  DISCLOSURE_ADOPTER_TO_FACILITATOR, DISCLOSURE_FACILITATOR_TO_ADOPTER,
+  matchAdoptersForFacilitator, matchFacilitatorsForAdopter,
+} from './lib/matches';
 import { MOU_DOC_ID, MOU_TEXT, attestDocConsentBound } from './lib/mou';
 import { WEA_AFFIRMATIONS as WEA_AFFIRMATIONS_LIB, verifyWeaHash } from './lib/wea';
 import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from './lib/people-groups';
@@ -1289,6 +1294,14 @@ function AdoptionSummary({ session, record, impact }: { session: Session; record
   const pg = record.adoption ? findPeopleGroup(record.adoption.peopleGroupId) : undefined;
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
   const displayName = displayNameFromImpact(impact, session.name);
+  // If the adopter asked to be matched, look up facilitators serving this FPG with capacity
+  // for this adopter type. The match runs over `MatchedFacilitator` (the released scoped
+  // projection), not the raw seed data — same surface the production broker would expose.
+  const facilitators = useMemo(() => {
+    if (!record.adoption || !record.adopterType) return [] as MatchedFacilitator[];
+    if (!record.adoption.requestFacilitator) return [] as MatchedFacilitator[];
+    return matchFacilitatorsForAdopter(record.adoption, record.adopterType);
+  }, [record.adoption, record.adopterType]);
   return (
     <>
       <section className="hero" style={{ padding: '3rem 0 2rem' }}>
@@ -1328,10 +1341,193 @@ function AdoptionSummary({ session, record, impact }: { session: Session; record
         </div>
       </section>
 
+      <MatchedFacilitatorsPanel
+        facilitators={facilitators}
+        sharedPgId={record.adoption?.peopleGroupId}
+        requestedMatch={!!record.adoption?.requestFacilitator}
+        homeUrl={homeUrl}
+      />
+
       <JpProjectionPanel impact={impact} record={record} session={session} />
     </>
   );
 }
+
+function MatchedFacilitatorsPanel({
+  facilitators,
+  sharedPgId,
+  requestedMatch,
+  homeUrl,
+}: {
+  facilitators: MatchedFacilitator[];
+  sharedPgId: string | undefined;
+  requestedMatch: boolean;
+  homeUrl: string;
+}) {
+  if (!requestedMatch) {
+    return (
+      <section className="section wrap" style={{ paddingTop: 0 }}>
+        <div className="agreement" style={{ background: '#fff' }}>
+          <h3>You opted out of facilitator matching</h3>
+          <p style={{ color: 'var(--c-g600)' }}>
+            That&apos;s fine — you can still adopt, pray, and report. Want to change your mind later?
+            Revisit your adoption from your <a href={homeUrl} target="_blank" rel="noopener noreferrer">{JP.impactName} home</a>.
+          </p>
+        </div>
+      </section>
+    );
+  }
+  if (facilitators.length === 0) {
+    return (
+      <section className="section wrap" style={{ paddingTop: 0 }}>
+        <div className="agreement" style={{ background: '#fff' }}>
+          <h3>No facilitator match yet</h3>
+          <p style={{ color: 'var(--c-g600)' }}>
+            No facilitator in JP&apos;s network currently covers this people group with capacity for your adopter type.
+            JP will introduce you when one declares coverage that fits.
+          </p>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="section wrap" style={{ paddingTop: 0 }}>
+      <div className="sec-head">
+        <div className="eyebrow">JP introduced you to</div>
+        <h2>{facilitators.length === 1 ? 'Your facilitator' : `Your facilitators (${facilitators.length})`}</h2>
+        <p>
+          Matched on your declared people group + adopter type. JP released a small scoped slice to you (and to them) —
+          your vaults stay sealed. Revoke at your home to end the match.
+        </p>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.25rem' }}>
+        {facilitators.map((f) => (
+          <MatchedFacilitatorCard key={f.id} f={f} sharedPgId={sharedPgId} />
+        ))}
+      </div>
+      <DisclosureManifest
+        title="What JP released to you for this match"
+        released={DISCLOSURE_FACILITATOR_TO_ADOPTER.released}
+        notReleased={DISCLOSURE_FACILITATOR_TO_ADOPTER.notReleased}
+      />
+    </section>
+  );
+}
+
+function MatchedFacilitatorCard({ f, sharedPgId }: { f: MatchedFacilitator; sharedPgId: string | undefined }) {
+  const shared = sharedPgId ? findPeopleGroup(sharedPgId) : undefined;
+  const otherGroups = f.peopleGroupIds
+    .filter((id) => id !== sharedPgId)
+    .map(findPeopleGroup)
+    .filter((g): g is NonNullable<typeof g> => !!g);
+  return (
+    <div className="agreement" style={{ background: '#fff', borderColor: 'var(--c-primary-border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '.75rem', flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ fontSize: '1.2rem' }}>{f.orgName}</h3>
+          <div style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.15rem' }}>
+            {f.orgCountry} · partner: <b>{f.facilitatorFirstName} {f.facilitatorLastInitial}</b>
+          </div>
+        </div>
+        <span style={{
+          fontSize: '.72rem', fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase',
+          padding: '.25rem .6rem', borderRadius: 999,
+          background: 'var(--c-primary)', color: '#fff',
+        }}>JP match</span>
+      </div>
+
+      {shared && (
+        <div style={{
+          marginTop: '.85rem', padding: '.65rem .8rem', borderRadius: 10,
+          background: 'var(--c-primary-subtle)', border: '1px solid var(--c-primary-border)',
+          fontSize: '.88rem', color: 'var(--c-primary-active)', fontWeight: 600,
+        }}>
+          ✓ Both of you are committed to <b>{shared.name}</b> ({shared.country})
+        </div>
+      )}
+
+      <div style={{ marginTop: '1rem' }}>
+        <div style={{ fontSize: '.72rem', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--c-g500)' }}>Ministry areas</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem', marginTop: '.35rem' }}>
+          {f.capacity.ministryAreas.map((a) => (
+            <span key={a} style={{
+              fontSize: '.74rem', fontWeight: 700, padding: '.2rem .55rem', borderRadius: 999,
+              background: 'var(--c-g100)', color: 'var(--c-g700)', border: '1px solid var(--c-g200)',
+            }}>{MINISTRY_AREA_LABEL[a]}</span>
+          ))}
+        </div>
+      </div>
+
+      {otherGroups.length > 0 && (
+        <div style={{ marginTop: '.85rem', fontSize: '.78rem', color: 'var(--c-g500)' }}>
+          Also serves: {otherGroups.slice(0, 4).map((g) => g.name).join(', ')}
+          {otherGroups.length > 4 ? `, +${otherGroups.length - 4} more` : ''}
+        </div>
+      )}
+
+      {f.description && (
+        <div style={{
+          marginTop: '.85rem', padding: '.7rem .85rem', borderRadius: 10,
+          background: 'var(--c-g50)', border: '1px solid var(--c-g200)',
+          fontSize: '.88rem', color: 'var(--c-g700)', lineHeight: 1.5,
+        }}>
+          <div style={{ fontSize: '.7rem', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--c-g500)', marginBottom: '.25rem' }}>How they engage</div>
+          {f.description}
+        </div>
+      )}
+
+      <div style={{ marginTop: '.85rem', fontSize: '.78rem', color: 'var(--c-g500)' }}>
+        Contact: <b>{f.hasContact ? '✓ Can reach them (no email released until you both consent to a contact-exchange)' : 'No channel on file'}</b>
+      </div>
+    </div>
+  );
+}
+
+function DisclosureManifest({
+  title,
+  released,
+  notReleased,
+}: {
+  title: string;
+  released: string[];
+  notReleased: string[];
+}) {
+  return (
+    <div style={{
+      marginTop: '1.25rem', borderRadius: 14, overflow: 'hidden',
+      border: '1px solid var(--c-g200)', background: 'var(--c-g50)',
+    }}>
+      <div style={{ padding: '.85rem 1.1rem', borderBottom: '1px solid var(--c-g200)', background: '#fff' }}>
+        <div style={{ fontSize: '.72rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--c-primary)' }}>
+          Scoped delegation
+        </div>
+        <div style={{ fontWeight: 700, color: 'var(--c-g900)', marginTop: '.2rem', fontSize: '.95rem' }}>{title}</div>
+      </div>
+      <div style={{ padding: '.85rem 1.1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <div>
+          <div style={{ fontSize: '.72rem', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#166534', marginBottom: '.35rem' }}>
+            ✓ Released
+          </div>
+          <ul style={disclosureListStyle}>
+            {released.map((r) => <li key={r} style={{ color: 'var(--c-g700)' }}>{r}</li>)}
+          </ul>
+        </div>
+        <div>
+          <div style={{ fontSize: '.72rem', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#92400e', marginBottom: '.35rem' }}>
+            ✗ Held back
+          </div>
+          <ul style={disclosureListStyle}>
+            {notReleased.map((r) => <li key={r} style={{ color: 'var(--c-g700)' }}>{r}</li>)}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const disclosureListStyle: React.CSSProperties = {
+  margin: 0, paddingLeft: '1.1rem', fontSize: '.8rem', lineHeight: 1.6,
+};
 
 function JpProjectionPanel({ impact, record, session }: { impact: ImpactProfile; record: JpAdopterRecord; session: Session }) {
   const projection = useMemo(() => projectForJp(impact, record), [impact, record]);
@@ -1809,6 +2005,8 @@ function FacilitatorSummary({ session, record, impact }: { session: Session; rec
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
   const displayName = displayNameFromImpact(impact, session.name);
   const orgName = impact.contact?.organizationName;
+  // Adopters JP introduced to this facilitator — intersect on FPG + adopter type.
+  const matchedAdopters = useMemo(() => matchAdoptersForFacilitator(coverage), [coverage]);
 
   return (
     <>
@@ -1879,8 +2077,100 @@ function FacilitatorSummary({ session, record, impact }: { session: Session; rec
         </div>
       </section>
 
+      <MatchedAdoptersPanel adopters={matchedAdopters} />
+
       <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
     </>
+  );
+}
+
+function MatchedAdoptersPanel({ adopters }: { adopters: MatchedAdopter[] }) {
+  if (adopters.length === 0) {
+    return (
+      <section className="section wrap" style={{ paddingTop: 0 }}>
+        <div className="agreement" style={{ background: '#fff' }}>
+          <h3>No adopter matches yet</h3>
+          <p style={{ color: 'var(--c-g600)' }}>
+            No declared adopters currently fit your coverage. JP will introduce them as new adopters
+            declare the people groups + adopter types you serve.
+          </p>
+        </div>
+      </section>
+    );
+  }
+  // Group adopters by their declared FPG so the facilitator can scan by people group.
+  const byPg = new Map<string, MatchedAdopter[]>();
+  for (const a of adopters) {
+    const list = byPg.get(a.peopleGroupId) ?? [];
+    list.push(a);
+    byPg.set(a.peopleGroupId, list);
+  }
+  return (
+    <section className="section wrap" style={{ paddingTop: 0 }}>
+      <div className="sec-head">
+        <div className="eyebrow">JP introduced to you</div>
+        <h2>{adopters.length === 1 ? 'Adopter matched to you' : `Adopters matched to you (${adopters.length})`}</h2>
+        <p>
+          Matched on your declared people groups + adopter types you said you can host. JP released a
+          scoped slice of each adopter; their vaults stay sealed.
+        </p>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1.25rem' }}>
+        {Array.from(byPg.entries()).map(([pgId, list]) => {
+          const pg = findPeopleGroup(pgId);
+          return (
+            <div key={pgId}>
+              <div style={{
+                display: 'flex', alignItems: 'baseline', gap: '.6rem', flexWrap: 'wrap',
+                marginBottom: '.6rem',
+              }}>
+                <h3 style={{ fontSize: '1.05rem' }}>{pg?.name ?? pgId}</h3>
+                <span style={{ fontSize: '.78rem', color: 'var(--c-g500)' }}>{pg?.country}</span>
+                <span style={{
+                  fontSize: '.68rem', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase',
+                  padding: '.15rem .5rem', borderRadius: 999,
+                  background: 'var(--c-primary-subtle)', color: 'var(--c-primary-active)',
+                  border: '1px solid var(--c-primary-border)',
+                }}>{list.length} adopter{list.length === 1 ? '' : 's'}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '.6rem' }}>
+                {list.map((a) => <MatchedAdopterCard key={a.id} a={a} />)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <DisclosureManifest
+        title="What JP released to you for these matches"
+        released={DISCLOSURE_ADOPTER_TO_FACILITATOR.released}
+        notReleased={DISCLOSURE_ADOPTER_TO_FACILITATOR.notReleased}
+      />
+    </section>
+  );
+}
+
+function MatchedAdopterCard({ a }: { a: MatchedAdopter }) {
+  const declared = new Date(a.declaredAt * 1000);
+  const daysAgo = Math.max(0, Math.floor((Date.now() - declared.getTime()) / 86_400_000));
+  const ago = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : daysAgo < 30 ? `${daysAgo} days ago` : daysAgo < 60 ? '~1 month ago' : `~${Math.round(daysAgo / 30)} months ago`;
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid var(--c-g200)', borderRadius: 12, padding: '.85rem 1rem',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '.5rem' }}>
+        <div style={{ fontWeight: 700, color: 'var(--c-g900)' }}>{a.firstName} {a.lastInitial}</div>
+        <span style={{
+          fontSize: '.68rem', fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase',
+          padding: '.1rem .5rem', borderRadius: 999,
+          background: 'var(--c-g100)', color: 'var(--c-g700)', border: '1px solid var(--c-g200)',
+        }}>{FACILITATOR_ADOPTER_TYPE_LABEL[a.adopterType] ?? a.adopterType}</span>
+      </div>
+      <div style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.2rem' }}>{a.country}</div>
+      <div style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.5rem' }}>Declared {ago}</div>
+      <div style={{ fontSize: '.74rem', color: 'var(--c-g500)', marginTop: '.35rem' }}>
+        {a.hasContact ? '✓ Reachable (no email released until both consent)' : 'No channel on file'}
+      </div>
+    </div>
   );
 }
 
