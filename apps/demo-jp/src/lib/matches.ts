@@ -34,6 +34,11 @@ export interface MatchedFacilitator {
   description?: string;
   /** Presence flag — "you can be reached" without releasing the address. */
   hasContact: boolean;
+  /** Full last name — released only on a contact-exchange upgrade. */
+  exchangeLastName?: string;
+  /** Released only on a contact-exchange upgrade (both sides consented). */
+  exchangeEmail?: string;
+  exchangePhone?: string;
 }
 
 /** What a facilitator sees about an adopter JP matched to them. Same pattern. */
@@ -46,6 +51,10 @@ export interface MatchedAdopter {
   peopleGroupId: string;
   declaredAt: number;
   hasContact: boolean;
+  /** Released only on a contact-exchange upgrade (both sides consented). */
+  exchangeLastName?: string;
+  exchangeEmail?: string;
+  exchangePhone?: string;
 }
 
 // ── Seed pool ────────────────────────────────────────────────────────────────
@@ -69,6 +78,9 @@ export const SEED_FACILITATORS: MatchedFacilitator[] = [
     },
     description: 'We host quarterly prayer calls and an annual in-region trip for prayer partners who can travel. Adopters get a monthly written update and a closed prayer channel.',
     hasContact: true,
+    exchangeLastName: 'Mendez',
+    exchangeEmail: 'daniel.m@frontier-path-network.example',
+    exchangePhone: '+1 555 0101',
   },
   {
     id: 'fac-east-asia-bridges',
@@ -84,6 +96,9 @@ export const SEED_FACILITATORS: MatchedFacilitator[] = [
     },
     description: 'Twenty years on the field. We pair each adopter with a long-term local partner relationship and host two prayer days a year.',
     hasContact: true,
+    exchangeLastName: 'Chen',
+    exchangeEmail: 'mei.c@east-asia-bridges.example',
+    exchangePhone: '+852 5555 0102',
   },
   {
     id: 'fac-horn-mission',
@@ -99,6 +114,9 @@ export const SEED_FACILITATORS: MatchedFacilitator[] = [
     },
     description: 'We integrate prayer + community work. Adopters can support specific health or BAM projects on the ground or stay prayer-focused.',
     hasContact: true,
+    exchangeLastName: 'Otieno',
+    exchangeEmail: 'joseph.o@horn-mission-hub.example',
+    exchangePhone: '+254 700 0103',
   },
   {
     id: 'fac-indian-ocean',
@@ -114,6 +132,9 @@ export const SEED_FACILITATORS: MatchedFacilitator[] = [
     },
     description: 'A small team focused on under-served South Asian coastal peoples. We prefer focused, durable prayer partnerships over large groups.',
     hasContact: true,
+    exchangeLastName: 'Ravichandran',
+    exchangeEmail: 'priya.r@indian-ocean-catalyst.example',
+    exchangePhone: '+65 8888 0104',
   },
   {
     id: 'fac-global-prayer',
@@ -132,20 +153,23 @@ export const SEED_FACILITATORS: MatchedFacilitator[] = [
     },
     description: 'Prayer-only network — no field operations, no money. We exist so every FPG has at least one praying community attached to it.',
     hasContact: true,
+    exchangeLastName: 'Aldridge',
+    exchangeEmail: 'rebecca.a@global-prayer-network.example',
+    exchangePhone: '+44 20 7946 0105',
   },
 ];
 
 export const SEED_ADOPTERS: MatchedAdopter[] = [
-  { id: 'adp-sarah-k',       firstName: 'Sarah',  lastInitial: 'K.', country: 'United States',  adopterType: 'family',       peopleGroupId: 'fpg-najdi-sa',     declaredAt: daysAgo(12), hasContact: true },
-  { id: 'adp-fbs',           firstName: 'First',  lastInitial: 'B.', country: 'United States',  adopterType: 'church',       peopleGroupId: 'fpg-pashtun-af',   declaredAt: daysAgo(40), hasContact: true },
-  { id: 'adp-john-c',        firstName: 'John',   lastInitial: 'C.', country: 'Canada',         adopterType: 'individual',   peopleGroupId: 'fpg-uyghur-cn',    declaredAt: daysAgo(5),  hasContact: true },
-  { id: 'adp-living-hope',   firstName: 'Living', lastInitial: 'H.', country: 'United States',  adopterType: 'network',      peopleGroupId: 'fpg-tibetan-cn',   declaredAt: daysAgo(91), hasContact: true },
-  { id: 'adp-maria-l',       firstName: 'Maria',  lastInitial: 'L.', country: 'Spain',          adopterType: 'family',       peopleGroupId: 'fpg-wolof-sn',     declaredAt: daysAgo(33), hasContact: true },
-  { id: 'adp-aviva-r',       firstName: 'Aviva',  lastInitial: 'R.', country: 'United Kingdom', adopterType: 'individual',   peopleGroupId: 'fpg-somali-so',    declaredAt: daysAgo(8),  hasContact: true },
-  { id: 'adp-anderson',      firstName: 'Mark',   lastInitial: 'A.', country: 'Australia',      adopterType: 'family',       peopleGroupId: 'fpg-kabyle-dz',    declaredAt: daysAgo(60), hasContact: true },
-  { id: 'adp-grace-grp',     firstName: 'Grace',  lastInitial: 'C.', country: 'United States',  adopterType: 'group',        peopleGroupId: 'fpg-sindhi-pk',    declaredAt: daysAgo(21), hasContact: true },
-  { id: 'adp-wei-l',         firstName: 'Wei',    lastInitial: 'L.', country: 'Singapore',      adopterType: 'individual',   peopleGroupId: 'fpg-hui-cn',       declaredAt: daysAgo(75), hasContact: true },
-  { id: 'adp-coastal',       firstName: 'Coastal', lastInitial: 'M.', country: 'India',          adopterType: 'church',      peopleGroupId: 'fpg-maldivian-mv', declaredAt: daysAgo(2),  hasContact: true },
+  { id: 'adp-sarah-k',       firstName: 'Sarah',  lastInitial: 'K.', country: 'United States',  adopterType: 'family',       peopleGroupId: 'fpg-najdi-sa',     declaredAt: daysAgo(12), hasContact: true, exchangeLastName: 'Kim',          exchangeEmail: 'sarah.k@example.com',           exchangePhone: '+1 555 0201' },
+  { id: 'adp-fbs',           firstName: 'First',  lastInitial: 'B.', country: 'United States',  adopterType: 'church',       peopleGroupId: 'fpg-pashtun-af',   declaredAt: daysAgo(40), hasContact: true, exchangeLastName: 'Baptist',      exchangeEmail: 'pastor@first-baptist-springfield.example', exchangePhone: '+1 555 0202' },
+  { id: 'adp-john-c',        firstName: 'John',   lastInitial: 'C.', country: 'Canada',         adopterType: 'individual',   peopleGroupId: 'fpg-uyghur-cn',    declaredAt: daysAgo(5),  hasContact: true, exchangeLastName: 'Chen',         exchangeEmail: 'john.c@example.com',            exchangePhone: '+1 416 555 0203' },
+  { id: 'adp-living-hope',   firstName: 'Living', lastInitial: 'H.', country: 'United States',  adopterType: 'network',      peopleGroupId: 'fpg-tibetan-cn',   declaredAt: daysAgo(91), hasContact: true, exchangeLastName: 'Hope Network', exchangeEmail: 'connect@living-hope-network.example',     exchangePhone: '+1 555 0204' },
+  { id: 'adp-maria-l',       firstName: 'Maria',  lastInitial: 'L.', country: 'Spain',          adopterType: 'family',       peopleGroupId: 'fpg-wolof-sn',     declaredAt: daysAgo(33), hasContact: true, exchangeLastName: 'Lopez',        exchangeEmail: 'maria.l@example.com',           exchangePhone: '+34 600 555 205' },
+  { id: 'adp-aviva-r',       firstName: 'Aviva',  lastInitial: 'R.', country: 'United Kingdom', adopterType: 'individual',   peopleGroupId: 'fpg-somali-so',    declaredAt: daysAgo(8),  hasContact: true, exchangeLastName: 'Rodriguez',    exchangeEmail: 'aviva.r@example.com',           exchangePhone: '+44 7700 0206' },
+  { id: 'adp-anderson',      firstName: 'Mark',   lastInitial: 'A.', country: 'Australia',      adopterType: 'family',       peopleGroupId: 'fpg-kabyle-dz',    declaredAt: daysAgo(60), hasContact: true, exchangeLastName: 'Anderson',     exchangeEmail: 'mark.a@example.com',            exchangePhone: '+61 4 5555 0207' },
+  { id: 'adp-grace-grp',     firstName: 'Grace',  lastInitial: 'C.', country: 'United States',  adopterType: 'group',        peopleGroupId: 'fpg-sindhi-pk',    declaredAt: daysAgo(21), hasContact: true, exchangeLastName: 'Community',    exchangeEmail: 'leaders@grace-community-group.example',     exchangePhone: '+1 555 0208' },
+  { id: 'adp-wei-l',         firstName: 'Wei',    lastInitial: 'L.', country: 'Singapore',      adopterType: 'individual',   peopleGroupId: 'fpg-hui-cn',       declaredAt: daysAgo(75), hasContact: true, exchangeLastName: 'Lin',          exchangeEmail: 'wei.l@example.com',             exchangePhone: '+65 9000 0209' },
+  { id: 'adp-coastal',       firstName: 'Coastal', lastInitial: 'M.', country: 'India',          adopterType: 'church',      peopleGroupId: 'fpg-maldivian-mv', declaredAt: daysAgo(2),  hasContact: true, exchangeLastName: 'Mission Church', exchangeEmail: 'pastor@coastal-mission-church.example',  exchangePhone: '+91 99 555 0210' },
 ];
 
 function daysAgo(d: number): number {

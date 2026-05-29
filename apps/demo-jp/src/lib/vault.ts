@@ -416,6 +416,47 @@ export interface FacilitatorProjection {
   hasContact: boolean;
 }
 
+// ── Contact-exchange store ────────────────────────────────────────────────────
+// When two matched parties both consent to release email + phone, the introduction's
+// scope is UPGRADED — JP releases the additional fields to each side. For the demo we
+// track the consent locally (a list of match ids this member has requested + accepted),
+// keyed on their SA address. Production = a server-mediated handshake with both sides'
+// EIP-712 attestations; for the prototype, seeded counter-parties are pre-opted-in, so a
+// member's click flips the match to "exchanged" immediately.
+
+const EXCHANGE_KEY = (addr: Address): string => `agenticprimitives:demo-jp:contact-exchange:${addr.toLowerCase()}`;
+
+export function loadContactExchanges(addr: Address): string[] {
+  try {
+    const raw = localStorage.getItem(EXCHANGE_KEY(addr));
+    if (raw) {
+      const arr = JSON.parse(raw) as unknown;
+      if (Array.isArray(arr)) return arr.filter((s): s is string => typeof s === 'string');
+    }
+  } catch {
+    /* ignore */
+  }
+  return [];
+}
+
+export function recordContactExchange(addr: Address, matchId: string): void {
+  const list = loadContactExchanges(addr);
+  if (list.includes(matchId)) return;
+  try {
+    localStorage.setItem(EXCHANGE_KEY(addr), JSON.stringify([...list, matchId]));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearContactExchanges(addr: Address): void {
+  try {
+    localStorage.removeItem(EXCHANGE_KEY(addr));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function projectFacilitatorForJp(impact: ImpactProfile, record: JpFacilitatorRecord): FacilitatorProjection {
   return {
     attestations: {

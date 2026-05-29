@@ -11,9 +11,10 @@ import {
   FACILITATOR_PROFILE_TYPE,
   adopterSteps, canDeclareAdoption, canDeclareCoverage, facilitatorSteps,
   impactProfileMissingFields, isAdopterOnboardingComplete, isFacilitatorOnboardingComplete,
-  jpRequiredFields, loadImpactProfile, loadJpAdopterRecord, loadJpFacilitatorRecord,
+  jpRequiredFields, loadContactExchanges, loadImpactProfile, loadJpAdopterRecord,
+  loadJpFacilitatorRecord,
   nextAdopterStep, nextFacilitatorStep, profileCompleteness,
-  projectFacilitatorForJp, projectForJp, requiresWea,
+  projectFacilitatorForJp, projectForJp, recordContactExchange, requiresWea,
   saveImpactProfile, saveJpAdopterRecord, saveJpFacilitatorRecord,
 } from './lib/vault';
 import {
@@ -1346,6 +1347,7 @@ function AdoptionSummary({ session, record, impact }: { session: Session; record
         sharedPgId={record.adoption?.peopleGroupId}
         requestedMatch={!!record.adoption?.requestFacilitator}
         homeUrl={homeUrl}
+        addr={session.address}
       />
 
       <JpProjectionPanel impact={impact} record={record} session={session} />
@@ -1358,11 +1360,13 @@ function MatchedFacilitatorsPanel({
   sharedPgId,
   requestedMatch,
   homeUrl,
+  addr,
 }: {
   facilitators: MatchedFacilitator[];
   sharedPgId: string | undefined;
   requestedMatch: boolean;
   homeUrl: string;
+  addr: Address;
 }) {
   if (!requestedMatch) {
     return (
@@ -1402,19 +1406,20 @@ function MatchedFacilitatorsPanel({
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.25rem' }}>
         {facilitators.map((f) => (
-          <MatchedFacilitatorCard key={f.id} f={f} sharedPgId={sharedPgId} />
+          <MatchedFacilitatorCard key={f.id} f={f} sharedPgId={sharedPgId} addr={addr} />
         ))}
       </div>
       <DisclosureManifest
-        title="What JP released to you for this match"
+        title="What JP released to you by default"
         released={DISCLOSURE_FACILITATOR_TO_ADOPTER.released}
         notReleased={DISCLOSURE_FACILITATOR_TO_ADOPTER.notReleased}
+        upgradeNote="Contact-exchange (last name + email + phone) is a richer scope granted on mutual consent. Request it on any card above — when both sides accept, JP releases the additional fields."
       />
     </section>
   );
 }
 
-function MatchedFacilitatorCard({ f, sharedPgId }: { f: MatchedFacilitator; sharedPgId: string | undefined }) {
+function MatchedFacilitatorCard({ f, sharedPgId, addr }: { f: MatchedFacilitator; sharedPgId: string | undefined; addr: Address }) {
   const shared = sharedPgId ? findPeopleGroup(sharedPgId) : undefined;
   const otherGroups = f.peopleGroupIds
     .filter((id) => id !== sharedPgId)
@@ -1476,21 +1481,145 @@ function MatchedFacilitatorCard({ f, sharedPgId }: { f: MatchedFacilitator; shar
         </div>
       )}
 
-      <div style={{ marginTop: '.85rem', fontSize: '.78rem', color: 'var(--c-g500)' }}>
-        Contact: <b>{f.hasContact ? '✓ Can reach them (no email released until you both consent to a contact-exchange)' : 'No channel on file'}</b>
+      <ContactExchangeWidget
+        addr={addr}
+        matchId={f.id}
+        partyLabel={`${f.facilitatorFirstName} at ${f.orgName}`}
+        firstName={f.facilitatorFirstName}
+        lastName={f.exchangeLastName}
+        email={f.exchangeEmail}
+        phone={f.exchangePhone}
+      />
+    </div>
+  );
+}
+
+/** The handshake widget — appears on every match card on both dashboards. Initial
+ *  state shows a presence flag + a Request button; clicking simulates the other
+ *  side's consent (seeded counter-parties are pre-opted-in) → reveals last name +
+ *  email + phone with a "scope upgrade" note. The consent fact is persisted in
+ *  the member's own localStorage so the exchange survives navigation + refresh. */
+function ContactExchangeWidget({
+  addr,
+  matchId,
+  partyLabel,
+  firstName,
+  lastName,
+  email,
+  phone,
+}: {
+  addr: Address;
+  matchId: string;
+  partyLabel: string;
+  firstName: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+}) {
+  const [exchanged, setExchanged] = useState<boolean>(() => loadContactExchanges(addr).includes(matchId));
+  const [requesting, setRequesting] = useState(false);
+
+  const request = useCallback(() => {
+    setRequesting(true);
+    // Brief delay sells the "awaiting their consent" beat for the demo. Seeded
+    // counter-parties are pre-opted-in, so it always resolves to accepted.
+    window.setTimeout(() => {
+      recordContactExchange(addr, matchId);
+      setExchanged(true);
+      setRequesting(false);
+    }, 700);
+  }, [addr, matchId]);
+
+  if (exchanged) {
+    return (
+      <div style={{
+        marginTop: '.95rem', borderRadius: 12,
+        background: 'linear-gradient(180deg, #ecfdf5, #fff)',
+        border: '1px solid #6ee7b7', padding: '.85rem 1rem',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', flexWrap: 'wrap' }}>
+          <span style={{
+            fontSize: '.66rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase',
+            padding: '.18rem .55rem', borderRadius: 999,
+            background: '#059669', color: '#fff',
+          }}>✓ Scope upgrade</span>
+          <span style={{ fontSize: '.82rem', color: '#065f46', fontWeight: 700 }}>
+            Contact exchanged — both sides consented
+          </span>
+        </div>
+        <div style={{ marginTop: '.65rem', display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: '.85rem', rowGap: '.3rem', fontSize: '.88rem' }}>
+          {lastName && (<>
+            <span style={dlKey}>Name</span>
+            <span style={dlVal}><b>{firstName} {lastName}</b></span>
+          </>)}
+          {email && (<>
+            <span style={dlKey}>Email</span>
+            <span style={dlVal}>
+              <a href={`mailto:${email}`} style={{ color: 'var(--c-primary)', textDecoration: 'none' }}>{email}</a>
+            </span>
+          </>)}
+          {phone && (<>
+            <span style={dlKey}>Phone</span>
+            <span style={dlVal}>{phone}</span>
+          </>)}
+        </div>
+        <div style={{ marginTop: '.6rem', fontSize: '.72rem', color: '#065f46' }}>
+          JP released last name + email + phone to you because both sides consented.
+          Revoke at your home to withdraw the upgrade.
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{
+      marginTop: '.95rem', borderRadius: 12,
+      background: 'var(--c-g50)', border: '1px solid var(--c-g200)', padding: '.85rem 1rem',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: '.82rem', color: 'var(--c-g700)', fontWeight: 700 }}>
+            Contact channel: ✓ Reachable
+          </div>
+          <div style={{ fontSize: '.76rem', color: 'var(--c-g500)', marginTop: '.15rem' }}>
+            No email / phone released until both sides consent.
+          </div>
+        </div>
+        <button
+          onClick={request}
+          disabled={requesting}
+          style={{
+            background: 'var(--c-primary)', color: '#fff', border: 'none',
+            padding: '.55rem .95rem', borderRadius: 999, fontWeight: 700, fontSize: '.82rem', cursor: requesting ? 'progress' : 'pointer',
+            flex: '0 0 auto', whiteSpace: 'nowrap',
+            opacity: requesting ? 0.85 : 1,
+          }}
+          title={`Ask ${partyLabel} for a contact exchange. When they consent, JP releases each other's email + phone.`}
+        >
+          {requesting ? 'Awaiting their consent…' : 'Request contact exchange'}
+        </button>
       </div>
     </div>
   );
 }
 
+const dlKey: React.CSSProperties = {
+  fontSize: '.7rem', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase',
+  color: 'var(--c-g500)', alignSelf: 'center',
+};
+const dlVal: React.CSSProperties = { color: 'var(--c-g800)', alignSelf: 'center' };
+
 function DisclosureManifest({
   title,
   released,
   notReleased,
+  upgradeNote,
 }: {
   title: string;
   released: string[];
   notReleased: string[];
+  /** Optional footer note — used to point at the contact-exchange handshake as
+   *  a route from "held back" to "released by mutual consent". */
+  upgradeNote?: string;
 }) {
   return (
     <div style={{
@@ -1521,6 +1650,16 @@ function DisclosureManifest({
           </ul>
         </div>
       </div>
+      {upgradeNote && (
+        <div style={{
+          padding: '.7rem 1.1rem', borderTop: '1px solid var(--c-g200)',
+          background: '#fff', fontSize: '.78rem', color: 'var(--c-g600)',
+          display: 'flex', alignItems: 'flex-start', gap: '.5rem',
+        }}>
+          <span aria-hidden="true" style={{ flex: '0 0 auto', color: 'var(--c-primary)', fontWeight: 800 }}>↗</span>
+          <span>{upgradeNote}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -2077,14 +2216,14 @@ function FacilitatorSummary({ session, record, impact }: { session: Session; rec
         </div>
       </section>
 
-      <MatchedAdoptersPanel adopters={matchedAdopters} />
+      <MatchedAdoptersPanel adopters={matchedAdopters} addr={session.address} />
 
       <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
     </>
   );
 }
 
-function MatchedAdoptersPanel({ adopters }: { adopters: MatchedAdopter[] }) {
+function MatchedAdoptersPanel({ adopters, addr }: { adopters: MatchedAdopter[]; addr: Address }) {
   if (adopters.length === 0) {
     return (
       <section className="section wrap" style={{ paddingTop: 0 }}>
@@ -2133,23 +2272,24 @@ function MatchedAdoptersPanel({ adopters }: { adopters: MatchedAdopter[] }) {
                   border: '1px solid var(--c-primary-border)',
                 }}>{list.length} adopter{list.length === 1 ? '' : 's'}</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '.6rem' }}>
-                {list.map((a) => <MatchedAdopterCard key={a.id} a={a} />)}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '.6rem' }}>
+                {list.map((a) => <MatchedAdopterCard key={a.id} a={a} addr={addr} />)}
               </div>
             </div>
           );
         })}
       </div>
       <DisclosureManifest
-        title="What JP released to you for these matches"
+        title="What JP released to you by default"
         released={DISCLOSURE_ADOPTER_TO_FACILITATOR.released}
         notReleased={DISCLOSURE_ADOPTER_TO_FACILITATOR.notReleased}
+        upgradeNote="Contact-exchange (last name + email + phone) is a richer scope granted on mutual consent. Request it on any adopter card above — when both sides accept, JP releases the additional fields to each side."
       />
     </section>
   );
 }
 
-function MatchedAdopterCard({ a }: { a: MatchedAdopter }) {
+function MatchedAdopterCard({ a, addr }: { a: MatchedAdopter; addr: Address }) {
   const declared = new Date(a.declaredAt * 1000);
   const daysAgo = Math.max(0, Math.floor((Date.now() - declared.getTime()) / 86_400_000));
   const ago = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : daysAgo < 30 ? `${daysAgo} days ago` : daysAgo < 60 ? '~1 month ago' : `~${Math.round(daysAgo / 30)} months ago`;
@@ -2167,9 +2307,16 @@ function MatchedAdopterCard({ a }: { a: MatchedAdopter }) {
       </div>
       <div style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.2rem' }}>{a.country}</div>
       <div style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.5rem' }}>Declared {ago}</div>
-      <div style={{ fontSize: '.74rem', color: 'var(--c-g500)', marginTop: '.35rem' }}>
-        {a.hasContact ? '✓ Reachable (no email released until both consent)' : 'No channel on file'}
-      </div>
+
+      <ContactExchangeWidget
+        addr={addr}
+        matchId={a.id}
+        partyLabel={`${a.firstName} ${a.lastInitial}`}
+        firstName={a.firstName}
+        lastName={a.exchangeLastName}
+        email={a.exchangeEmail}
+        phone={a.exchangePhone}
+      />
     </div>
   );
 }
