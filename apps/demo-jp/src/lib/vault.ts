@@ -23,6 +23,10 @@ export interface ContactProfile {
   phone?: string;
   country?: string;
   city?: string;
+  /** For church / organization / network adopters — held at Impact because "the org you're
+   *  part of" is a community-wide identity fact, not a JP-specific one. */
+  organizationName?: string;
+  organizationCountry?: string;
 }
 
 /** A signed attestation kept in the vault — JP only ever sees the hash + signedAt + the
@@ -64,34 +68,10 @@ export interface ImpactProfile {
 
 const IMPACT_KEY = (addr: Address): string => `agenticprimitives:demo-jp:impact-profile:${addr.toLowerCase()}`;
 
-/** Seed an Impact profile so the "already on file" state has something to show on
- *  first connect. Demonstrates the SSI pattern even before a real Impact MCP exists.
- *  Derived from the member's name so each new home gets its own plausible mock. */
-function seedImpactProfile(name: string): ImpactProfile {
-  const handle = name.replace(/\.impact$/, '').replace(/[^a-z0-9-]/gi, '');
-  return {
-    v: 1,
-    contact: {
-      email: `${handle || 'member'}@example.com`,
-      phone: '+1 555 0100',
-      country: 'United States',
-      city: 'San Francisco',
-    },
-    attestations: {
-      // WEA pre-signed at Impact ~9 months ago, bound to the home's root credential.
-      // For the prototype, the hashes are placeholders; in production these come from
-      // the member's actual on-Impact signing ceremony.
-      wea: {
-        docHash: '0x77ea0000000000000000000000000000000000000000000000000000000000ea' as Hex,
-        docId: 'wea-statement-of-faith-v1',
-        signedAt: Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 270,
-        consentBoundTo: '0x0000000000000000000000000000000000000000000000000000000000000001' as Hex,
-      },
-    },
-  };
-}
-
-export function loadImpactProfile(addr: Address, name: string): ImpactProfile {
+/** Empty starting profile — the demo intentionally does NOT seed contact info so the
+ *  "missing fields" path is observable. In production this would represent a brand-new
+ *  member who hasn't filled in their profile at their Impact home yet. */
+export function loadImpactProfile(addr: Address, _name: string): ImpactProfile {
   try {
     const raw = localStorage.getItem(IMPACT_KEY(addr));
     if (raw) {
@@ -101,10 +81,7 @@ export function loadImpactProfile(addr: Address, name: string): ImpactProfile {
   } catch {
     /* ignore */
   }
-  // First read — seed the mock so the rest of the flow can run.
-  const seeded = seedImpactProfile(name);
-  saveImpactProfile(addr, seeded);
-  return seeded;
+  return { v: 1, attestations: {} };
 }
 
 export function saveImpactProfile(addr: Address, profile: ImpactProfile): void {
@@ -157,6 +134,60 @@ export function clearJpAdopterRecord(addr: Address): void {
   }
 }
 
+// ── JP requirements ───────────────────────────────────────────────────────────
+// JP's adopt program defines what it needs in the member's Impact profile to take
+// an adoption. The fields themselves are held at Impact (community-wide); JP only
+// declares its requirement list + checks for satisfaction. Other relying apps can
+// have different requirement lists over the SAME Impact profile — that's the
+// whole point of holding profile fields at the home, not at each app.
+
+export type ProfileFieldKey = keyof ContactProfile;
+
+export interface JpRequiredField {
+  key: ProfileFieldKey;
+  label: string;
+  helperWhy: string;
+  /** UI hint for the inline-from-JP form. */
+  inputType: 'email' | 'tel' | 'text';
+  placeholder: string;
+}
+
+export function jpRequiredFields(type: AdopterType | undefined): JpRequiredField[] {
+  const base: JpRequiredField[] = [
+    { key: 'email', label: 'Email', helperWhy: 'How JP sends you quarterly prayer updates and matches you with a facilitator.', inputType: 'email', placeholder: 'you@example.com' },
+    { key: 'country', label: 'Country', helperWhy: 'Where you live — for context, not used publicly.', inputType: 'text', placeholder: 'United States' },
+  ];
+  const isOrgish = type === 'church' || type === 'organization' || type === 'network';
+  if (isOrgish) {
+    base.push(
+      { key: 'organizationName', label: 'Organization name', helperWhy: 'The name of the church / organization / network you adopt under.', inputType: 'text', placeholder: 'Grace Community Church' },
+      { key: 'organizationCountry', label: 'Organization country', helperWhy: 'Where the organization is based or operates from.', inputType: 'text', placeholder: 'United States' },
+    );
+  }
+  return base;
+}
+
+export function impactProfileMissingFields(impact: ImpactProfile, type: AdopterType | undefined): JpRequiredField[] {
+  const c = impact.contact ?? {};
+  return jpRequiredFields(type).filter((f) => {
+    const v = c[f.key];
+    return typeof v !== 'string' || v.trim() === '';
+  });
+}
+
+/** A summary used by the dashboard banner — empty `missing` ⇒ everything JP needs is on file. */
+export interface ProfileCompletenessSummary {
+  total: number;
+  satisfied: number;
+  missing: JpRequiredField[];
+}
+
+export function profileCompleteness(impact: ImpactProfile, type: AdopterType | undefined): ProfileCompletenessSummary {
+  const all = jpRequiredFields(type);
+  const missing = impactProfileMissingFields(impact, type);
+  return { total: all.length, satisfied: all.length - missing.length, missing };
+}
+
 // ── Step orchestration ────────────────────────────────────────────────────────
 // The adopter onboarding interleaves "Impact has it ✓" steps (passive — JP just
 // observes) with "JP-specific" steps (interactive — JP runs the ceremony). The
@@ -164,19 +195,16 @@ export function clearJpAdopterRecord(addr: Address): void {
 // ones require the member to take action.
 
 export type AdopterStep =
-  | 'profile-on-file'        // ✓ Impact has contact info (passive)
+  | 'profile-on-file'        // ✓ Impact has the JP-required contact + (if orgish) org fields
   | 'adopter-type'           // interactive — JP asks
-  | 'wea-on-file'            // ✓ Impact has WEA (passive, only for org/network)
+  | 'wea-on-file'            // ✓ Impact has WEA (only for church/org/network adopters)
   | 'mou'                    // interactive — JP-specific signing ceremony
   | 'adoption';              // interactive — JP-specific declaration
 
 export interface AdopterStepView {
   step: AdopterStep;
-  /** Does Impact OR JP run this step? */
   ownedBy: 'impact' | 'jp';
-  /** True if the underlying data is already in the vault (or N/A). */
   satisfied: boolean;
-  /** True if the member must interact to satisfy it; false if it's a passive "already on file" check. */
   interactive: boolean;
 }
 
@@ -186,7 +214,7 @@ export function requiresWea(record: JpAdopterRecord): boolean {
 }
 
 export function adopterSteps(impact: ImpactProfile, record: JpAdopterRecord): AdopterStepView[] {
-  const profileOk = !!impact.contact?.email;
+  const profileOk = impactProfileMissingFields(impact, record.adopterType).length === 0;
   const typeOk = !!record.adopterType;
   const weaNeeded = requiresWea(record);
   const weaOk = !!impact.attestations.wea;
@@ -212,6 +240,16 @@ export function nextAdopterStep(impact: ImpactProfile, record: JpAdopterRecord):
 
 export function isAdopterOnboardingComplete(impact: ImpactProfile, record: JpAdopterRecord): boolean {
   return nextAdopterStep(impact, record) === null;
+}
+
+/** True iff JP can accept the declaration right now — every JP-required field is on
+ *  file at Impact, the MOU is signed, and (for org/network adopters) WEA is signed. */
+export function canDeclareAdoption(impact: ImpactProfile, record: JpAdopterRecord): boolean {
+  if (impactProfileMissingFields(impact, record.adopterType).length > 0) return false;
+  if (!record.adopterType) return false;
+  if (requiresWea(record) && !impact.attestations.wea) return false;
+  if (!record.attestations.mou) return false;
+  return true;
 }
 
 // ── "What JP can see" projection ──────────────────────────────────────────────

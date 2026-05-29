@@ -4,9 +4,11 @@ import { JP, GATEWAY } from './lib/brand';
 import { startSiteEnrollment, exchangeCode, verifyIdToken } from './connect-client';
 import { toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
 import {
-  type AdopterStep, type AdopterType, type ImpactProfile, type JpAdopterRecord,
-  adopterSteps, isAdopterOnboardingComplete, loadImpactProfile, loadJpAdopterRecord,
-  nextAdopterStep, projectForJp, requiresWea, saveJpAdopterRecord,
+  type AdopterStep, type AdopterType, type ImpactProfile, type JpAdopterRecord, type JpRequiredField,
+  adopterSteps, canDeclareAdoption, impactProfileMissingFields, isAdopterOnboardingComplete,
+  jpRequiredFields, loadImpactProfile, loadJpAdopterRecord,
+  nextAdopterStep, profileCompleteness, projectForJp, requiresWea,
+  saveImpactProfile, saveJpAdopterRecord,
 } from './lib/vault';
 import { MOU_DOC_ID, MOU_TEXT, attestDocConsentBound } from './lib/mou';
 import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from './lib/people-groups';
@@ -33,6 +35,19 @@ type Modal = null | { kind: Kind } | { kind: 'wea' };
 
 const SESSION_KEY = 'agenticprimitives:demo-jp:session';
 const ENROLL_KEY = 'agenticprimitives:demo-jp:enroll';
+/** A profile-edit handoff to the member's Impact home (`<name>.impact-agent.me/profile`).
+ *  We send them there to fill in missing fields, then they redirect back here with the
+ *  values as `?profile_<key>=...` query params. State binds the handoff to JP. */
+const PROFILE_HANDOFF_KEY = 'agenticprimitives:demo-jp:profile-handoff';
+interface ProfileHandoffStash { state: string }
+
+function randomB64url(n: number): string {
+  const a = new Uint8Array(n);
+  crypto.getRandomValues(a);
+  let s = '';
+  for (const b of a) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 interface Session {
   token: string;
@@ -115,6 +130,10 @@ export function App() {
   const [modal, setModal] = useState<Modal>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  /** Bumped whenever the Impact profile is updated externally (e.g. returning from the
+   *  member's /profile editor at their Impact home). Used as the `key` on AdopterIntranet
+   *  so it re-mounts and reloads the vault from localStorage. */
+  const [vaultBump, setVaultBump] = useState(0);
 
   const openSession = useCallback((token: string, name: string, kind: Kind, fresh: boolean) => {
     const addr = addrFromSub(decodeToken(token)?.sub);
@@ -171,6 +190,65 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Return-from-Impact-profile-editor: parse `?profile_state` + `?profile_<key>` params,
+  // validate against the stash, merge into the member's ImpactProfile localStorage, then
+  // strip the params and bump `vaultBump` so the dashboard re-reads the vault.
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const profileState = u.searchParams.get('profile_state');
+    if (!profileState) return;
+
+    let stash: ProfileHandoffStash | null = null;
+    try { stash = JSON.parse(sessionStorage.getItem(PROFILE_HANDOFF_KEY) ?? 'null') as ProfileHandoffStash | null; } catch { /* ignore */ }
+    const valid = !!stash && stash.state === profileState;
+
+    // Collect `profile_<key>` values regardless of validity so we can strip them; only
+    // APPLY when state matches.
+    const collected: Record<string, string> = {};
+    const allParams = Array.from(u.searchParams.keys());
+    for (const k of allParams) {
+      if (k.startsWith('profile_') && k !== 'profile_state') {
+        const v = u.searchParams.get(k);
+        if (v) collected[k.slice('profile_'.length)] = v;
+      }
+      if (k === 'profile_state' || k.startsWith('profile_')) u.searchParams.delete(k);
+    }
+    window.history.replaceState({}, '', u.toString());
+
+    if (!valid) {
+      setError("We couldn't verify that profile update. Please try again from JP.");
+      return;
+    }
+    sessionStorage.removeItem(PROFILE_HANDOFF_KEY);
+
+    const restored = restoreSession();
+    if (!restored) return;
+    const existing = loadImpactProfile(restored.address, restored.name);
+    const nextProfile: ImpactProfile = {
+      ...existing,
+      contact: { ...(existing.contact ?? {}), ...collected },
+    };
+    saveImpactProfile(restored.address, nextProfile);
+    setVaultBump((b) => b + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Hand the member off to their Impact home's /profile editor. Stashes a state binding,
+   *  attaches the missing-fields list, and redirects. On return we land back at JP root
+   *  with `?profile_state=&profile_<key>=...` which the effect above merges into the vault. */
+  const goEditProfileAtImpact = useCallback((name: string, missingKeys: string[]) => {
+    const homeOrigin = personalAuthOrigin(nameLabel(name));
+    const state = randomB64url(16);
+    try { sessionStorage.setItem(PROFILE_HANDOFF_KEY, JSON.stringify({ state })); } catch { /* ignore */ }
+    const returnUrl = window.location.origin + '/';
+    const u = new URL('/profile', homeOrigin);
+    u.searchParams.set('app', 'demo-jp');
+    u.searchParams.set('return', returnUrl);
+    u.searchParams.set('state', state);
+    if (missingKeys.length > 0) u.searchParams.set('required', missingKeys.join(','));
+    window.location.href = u.toString();
+  }, []);
+
   const beginConnect = useCallback(async (name: string, kind: Kind) => {
     setError(null);
     try {
@@ -187,7 +265,15 @@ export function App() {
 
   if (session) {
     if (session.kind === 'adopter') {
-      return <AdopterIntranet session={session} onSignOut={signOut} onOpenWea={() => setModal({ kind: 'wea' })} />;
+      return (
+        <AdopterIntranet
+          key={vaultBump}
+          session={session}
+          onSignOut={signOut}
+          onOpenWea={() => setModal({ kind: 'wea' })}
+          onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
+        />
+      );
     }
     return <FacilitatorIntranet session={session} onSignOut={signOut} onOpenWea={() => setModal({ kind: 'wea' })} />;
   }
@@ -382,8 +468,9 @@ function OnboardPanel({ kind, busy, onClose, onConnect }: {
 // these ceremonies). Steps that Impact already satisfies show as "✓ on file";
 // JP-specific steps expand into inline forms when active.
 
-function AdopterIntranet({ session, onSignOut, onOpenWea }: {
+function AdopterIntranet({ session, onSignOut, onOpenWea, onGoEditProfile }: {
   session: Session; onSignOut: () => void; onOpenWea: () => void;
+  onGoEditProfile: (missingKeys: string[]) => void;
 }) {
   const [impact] = useState<ImpactProfile>(() => loadImpactProfile(session.address, session.name));
   const [record, setRecord] = useState<JpAdopterRecord>(() => loadJpAdopterRecord(session.address));
@@ -392,6 +479,8 @@ function AdopterIntranet({ session, onSignOut, onOpenWea }: {
   const steps = useMemo(() => adopterSteps(impact, record), [impact, record]);
   const activeStep = useMemo(() => nextAdopterStep(impact, record), [impact, record]);
   const complete = useMemo(() => isAdopterOnboardingComplete(impact, record), [impact, record]);
+  const completeness = useMemo(() => profileCompleteness(impact, record.adopterType), [impact, record.adopterType]);
+  const canDeclare = useMemo(() => canDeclareAdoption(impact, record), [impact, record]);
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
 
   return (
@@ -423,8 +512,14 @@ function AdopterIntranet({ session, onSignOut, onOpenWea }: {
           <section className="section wrap" style={{ paddingTop: 0 }}>
             <div className="sec-head">
               <div className="eyebrow">Adopter onboarding</div>
-              <h2>Just the JP-specific steps — your profile is already on file</h2>
+              <h2>{completeness.missing.length === 0 ? 'Just the JP-specific steps — your profile is already on file' : `${JP.org} needs a few things from your ${JP.impactName} profile`}</h2>
             </div>
+            {completeness.missing.length > 0 && (
+              <ProfileCompletenessBanner
+                completeness={completeness}
+                onGoEditProfile={() => onGoEditProfile(completeness.missing.map((f) => f.key))}
+              />
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '.875rem', marginTop: '1.5rem' }}>
               {steps.map((s, i) => (
                 <StepCard
@@ -437,8 +532,10 @@ function AdopterIntranet({ session, onSignOut, onOpenWea }: {
                   impact={impact}
                   record={record}
                   session={session}
+                  canDeclare={canDeclare}
                   onUpdate={update}
                   onOpenWea={onOpenWea}
+                  onGoEditProfile={onGoEditProfile}
                 />
               ))}
             </div>
@@ -485,11 +582,12 @@ function IntranetFooter() {
 // ── Step orchestration ──────────────────────────────────────────────────────
 
 function StepCard({
-  n, step, ownedBy, active, satisfied, impact, record, session, onUpdate, onOpenWea,
+  n, step, ownedBy, active, satisfied, impact, record, session, canDeclare, onUpdate, onOpenWea, onGoEditProfile,
 }: {
   n: number; step: AdopterStep; ownedBy: 'impact' | 'jp'; active: boolean; satisfied: boolean;
-  impact: ImpactProfile; record: JpAdopterRecord; session: Session;
+  impact: ImpactProfile; record: JpAdopterRecord; session: Session; canDeclare: boolean;
   onUpdate: (next: JpAdopterRecord) => void; onOpenWea: () => void;
+  onGoEditProfile: (missingKeys: string[]) => void;
 }) {
   const meta = stepMeta(step);
   const status: 'done' | 'active' | 'pending' = satisfied ? 'done' : active ? 'active' : 'pending';
@@ -517,11 +615,25 @@ function StepCard({
         )}
         {status === 'active' && (
           <div style={{ marginTop: '1rem' }}>
-            {step === 'profile-on-file' && <ProfileOnFileMissing session={session} />}
+            {step === 'profile-on-file' && (
+              <ProfileMissingCallout
+                impact={impact}
+                adopterType={record.adopterType}
+                onGoEditProfile={onGoEditProfile}
+              />
+            )}
             {step === 'adopter-type' && <AdopterTypeForm record={record} onSave={onUpdate} />}
             {step === 'wea-on-file' && <WeaOnFileMissing session={session} onOpenWea={onOpenWea} />}
             {step === 'mou' && <MouSignForm session={session} record={record} onSave={onUpdate} />}
-            {step === 'adoption' && <DeclareAdoptionForm record={record} onSave={onUpdate} />}
+            {step === 'adoption' && (
+              <DeclareAdoptionForm
+                impact={impact}
+                record={record}
+                canDeclare={canDeclare}
+                onSave={onUpdate}
+                onGoEditProfile={onGoEditProfile}
+              />
+            )}
           </div>
         )}
         {status === 'done' && (step === 'adopter-type' || step === 'mou') && (
@@ -620,12 +732,106 @@ function StepDoneSummary({ step, impact, record }: { step: AdopterStep; impact: 
 
 // ── Step bodies ─────────────────────────────────────────────────────────────
 
-function ProfileOnFileMissing({ session }: { session: Session }) {
-  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+/** Top-of-dashboard banner shown when JP needs profile fields that aren't on file at
+ *  Impact yet. The "Complete at your Impact home" button is the seamless handoff —
+ *  redirects to `<name>.impact-agent.me/profile?app=demo-jp&return=...&required=...`,
+ *  member fills in, redirects back, JP merges the values into the local ImpactProfile. */
+function ProfileCompletenessBanner({
+  completeness,
+  onGoEditProfile,
+}: {
+  completeness: ReturnType<typeof profileCompleteness>;
+  onGoEditProfile: () => void;
+}) {
   return (
-    <div className="soon" style={{ display: 'block' }}>
-      Your {JP.impactName} home doesn’t have contact info yet. Add it once at{' '}
-      <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{homeUrl}</b></a> — it’s reused across every community app.
+    <div role="status" style={{
+      display: 'flex', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap',
+      background: 'linear-gradient(180deg, #fef3c7, #fffbeb)',
+      border: '1.5px solid #fcd34d', borderRadius: 16, padding: '1rem 1.25rem',
+      marginTop: '1.25rem',
+    }}>
+      <div aria-hidden="true" style={{
+        width: 40, height: 40, borderRadius: 12, background: '#b45309', color: '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, flex: '0 0 auto',
+      }}>!</div>
+      <div style={{ flex: 1, minWidth: 240 }}>
+        <div style={{ fontWeight: 800, color: '#78350f' }}>
+          {completeness.missing.length === 1 ? '1 field' : `${completeness.missing.length} fields`} missing from your {JP.impactName} profile
+        </div>
+        <div style={{ fontSize: '.88rem', color: '#92400e', marginTop: '.2rem' }}>
+          {JP.org} needs <b>{completeness.missing.map((f) => f.label).join(', ')}</b>. Add them once at your
+          {' '}{JP.impactName} home — re-used across every community app.
+        </div>
+      </div>
+      <button onClick={onGoEditProfile} style={{
+        background: '#b45309', color: '#fff', border: 'none',
+        padding: '.65rem 1.1rem', borderRadius: 999, fontWeight: 700, fontSize: '.88rem', cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}>
+        Complete at my {JP.impactName} home →
+      </button>
+    </div>
+  );
+}
+
+/** In-step callout when the profile step is the active one. Same handoff, but with
+ *  per-field detail (which fields are missing, why JP needs each one) inline. */
+function ProfileMissingCallout({
+  impact,
+  adopterType,
+  onGoEditProfile,
+}: {
+  impact: ImpactProfile;
+  adopterType: AdopterType | undefined;
+  onGoEditProfile: (missingKeys: string[]) => void;
+}) {
+  const missing = impactProfileMissingFields(impact, adopterType);
+  const present = jpRequiredFields(adopterType).filter((f) => !missing.some((m) => m.key === f.key));
+  return (
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem', marginBottom: '1rem' }}>
+        {present.map((f) => <FieldRow key={f.key} field={f} state="present" />)}
+        {missing.map((f) => <FieldRow key={f.key} field={f} state="missing" />)}
+      </div>
+      <button
+        className="btn btn-primary"
+        onClick={() => onGoEditProfile(missing.map((f) => f.key))}
+        style={{ width: '100%' }}
+      >
+        <GlobeGlyph size={16} /> Complete profile at my {JP.impactName} home →
+      </button>
+      <p style={{ marginTop: '.6rem', fontSize: '.78rem', color: 'var(--c-g500)', textAlign: 'center' }}>
+        We&apos;ll take you to your home, you fill these in once, and we&apos;ll come straight back to {JP.org}.
+      </p>
+    </>
+  );
+}
+
+function FieldRow({ field, state }: { field: JpRequiredField; state: 'present' | 'missing' }) {
+  const ok = state === 'present';
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: '.6rem',
+      background: ok ? 'var(--c-primary-subtle)' : '#fef3c7',
+      border: `1px solid ${ok ? 'var(--c-primary-border)' : '#fcd34d'}`,
+      borderRadius: 10, padding: '.55rem .8rem',
+    }}>
+      <span aria-hidden="true" style={{
+        flex: '0 0 auto', width: 22, height: 22, borderRadius: 999,
+        background: ok ? 'var(--c-primary)' : '#b45309', color: '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '.7rem',
+      }}>{ok ? '✓' : '!'}</span>
+      <div style={{ flex: 1, fontSize: '.85rem' }}>
+        <div style={{ fontWeight: 700, color: 'var(--c-g800)' }}>{field.label}</div>
+        <div style={{ color: 'var(--c-g600)', fontSize: '.78rem', marginTop: '.1rem' }}>{field.helperWhy}</div>
+      </div>
+      {!ok && (
+        <span style={{
+          fontSize: '.65rem', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase',
+          padding: '.18rem .5rem', borderRadius: 999, background: '#b45309', color: '#fff',
+          flex: '0 0 auto',
+        }}>missing</span>
+      )}
     </div>
   );
 }
@@ -741,14 +947,30 @@ function MouSignForm({ session, record, onSave }: { session: Session; record: Jp
   );
 }
 
-function DeclareAdoptionForm({ record, onSave }: { record: JpAdopterRecord; onSave: (next: JpAdopterRecord) => void }) {
+function DeclareAdoptionForm({
+  impact,
+  record,
+  canDeclare,
+  onSave,
+  onGoEditProfile,
+}: {
+  impact: ImpactProfile;
+  record: JpAdopterRecord;
+  canDeclare: boolean;
+  onSave: (next: JpAdopterRecord) => void;
+  onGoEditProfile: (missingKeys: string[]) => void;
+}) {
   const [picked, setPicked] = useState<string | undefined>(record.adoption?.peopleGroupId);
   const [requestFacilitator, setRequestFacilitator] = useState<boolean>(record.adoption?.requestFacilitator ?? true);
   const [declaring, setDeclaring] = useState(false);
   const pg = picked ? findPeopleGroup(picked) : undefined;
+  const missingFields = useMemo(() => impactProfileMissingFields(impact, record.adopterType), [impact, record.adopterType]);
+  const missingType = !record.adopterType;
+  const missingWea = requiresWea(record) && !impact.attestations.wea;
+  const missingMou = !record.attestations.mou;
 
   const declare = () => {
-    if (!pg) return;
+    if (!pg || !canDeclare) return;
     setDeclaring(true);
     onSave({
       ...record,
@@ -774,7 +996,50 @@ function DeclareAdoptionForm({ record, onSave }: { record: JpAdopterRecord; onSa
         <input type="checkbox" checked={requestFacilitator} onChange={(e) => setRequestFacilitator(e.target.checked)} style={{ marginTop: '.25rem' }} />
         <span>Match me with a facilitator already serving this people group, when one is available.</span>
       </label>
-      <button className="btn btn-primary" disabled={!picked || declaring} style={{ marginTop: '1rem' }} onClick={declare}>
+
+      {!canDeclare && (
+        <div style={{
+          marginTop: '1.25rem', background: '#fef2f2', border: '1.5px solid #fecaca',
+          borderRadius: 14, padding: '1rem 1.25rem',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.55rem', marginBottom: '.6rem' }}>
+            <span aria-hidden="true" style={{
+              width: 26, height: 26, borderRadius: 999, background: '#dc2626', color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '.85rem',
+            }}>!</span>
+            <div style={{ fontWeight: 800, color: '#991b1b' }}>Before {JP.org} can take your declaration:</div>
+          </div>
+          <ul style={{ margin: 0, paddingLeft: '1.25rem', color: '#7f1d1d', fontSize: '.88rem', lineHeight: 1.65 }}>
+            {missingFields.map((f) => (
+              <li key={f.key}>
+                Add <b>{f.label}</b> to your {JP.impactName} profile — <span style={{ color: '#991b1b' }}>{f.helperWhy}</span>
+              </li>
+            ))}
+            {missingType && <li>Choose who you’re adopting as (above).</li>}
+            {missingWea && <li>Sign the WEA Statement of Faith at your {JP.impactName} home (required for {ADOPTER_TYPE_LABEL[record.adopterType!] ?? 'your adopter type'}).</li>}
+            {missingMou && <li>Sign the ADOPT MOU (above).</li>}
+          </ul>
+          {missingFields.length > 0 && (
+            <button
+              onClick={() => onGoEditProfile(missingFields.map((f) => f.key))}
+              style={{
+                marginTop: '.85rem', background: '#dc2626', color: '#fff', border: 'none',
+                padding: '.6rem 1rem', borderRadius: 999, fontWeight: 700, fontSize: '.88rem', cursor: 'pointer',
+              }}
+            >
+              Complete profile at my {JP.impactName} home →
+            </button>
+          )}
+        </div>
+      )}
+
+      <button
+        className="btn btn-primary"
+        disabled={!picked || declaring || !canDeclare}
+        style={{ marginTop: '1rem' }}
+        onClick={declare}
+        title={!canDeclare ? `Resolve the missing items above before declaring.` : undefined}
+      >
         {declaring ? 'Declaring…' : `Declare adoption of ${pg ? pg.name : '…'}`}
       </button>
     </>
