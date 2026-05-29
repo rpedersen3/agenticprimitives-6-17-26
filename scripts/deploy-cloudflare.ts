@@ -279,6 +279,15 @@ if (d.universalSignatureValidator) {
   a2aVars.UNIVERSAL_SIGNATURE_VALIDATOR = d.universalSignatureValidator;
   console.log(`  using UNIVERSAL_SIGNATURE_VALIDATOR ${d.universalSignatureValidator}`);
 }
+// Google × KMS custody (spec 235): the gate verifies broker-minted sessions against the
+// broker JWKS, pinned to the Connect origin (the Personal-Home apex) + the demo-sso aud.
+// A2A_CUSTODY_BRIDGE_SECRET is a SECRET (wrangler secret put), not a --var.
+// The canonical Connect origin the broker mints `iss` from (the apex redirects to www).
+const brokerOrigin = process.env.BROKER_ORIGIN ?? 'https://www.impact-agent.me';
+a2aVars.BROKER_ISS = brokerOrigin;
+a2aVars.BROKER_JWKS_URL = `${brokerOrigin}/jwks`;
+a2aVars.DEMO_SSO_AUD = process.env.DEMO_SSO_AUD ?? 'demo-sso';
+console.log(`  using BROKER_ISS ${brokerOrigin} (custody gate)`);
 const a2aOut = runCapture(
   `wrangler deploy --env production ${buildVarFlags(a2aVars)}`,
   { cwd: join(REPO_ROOT, 'apps', 'demo-a2a') },
