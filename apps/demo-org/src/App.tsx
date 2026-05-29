@@ -16,7 +16,7 @@ import type { DelegationWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
 // Deployment-domain config lives in one place (ADR-0021): `./lib/domain`.
-import { toAgentName as fullName, personalHome } from './lib/domain';
+import { AGENT_NAME_PARENT, toAgentName as fullName, personalHome } from './lib/domain';
 // This app's white-label identity (the Faith App gateway): `./lib/brand`.
 import { GATEWAY, gatewayCta } from './lib/brand';
 
@@ -749,10 +749,10 @@ export function App() {
             </div>
             <div className="hero-top">
               <h1>
-                Join the <span className="accent">{GATEWAY.community}</span> with your own agent.
+                Claim your place in <span className="accent">{GATEWAY.appName}</span>.
               </h1>
               <p className="hero-sub">
-                Start here, then create or sign in to your personal secure home in the {GATEWAY.community}.
+                Get a personal Smart Agent for trusted access, community services, and apps you control.
               </p>
             </div>
 
@@ -775,17 +775,17 @@ export function App() {
                 </div>
               </div>
               <div className="signin-card-copy">
-                <strong>Your home in the {GATEWAY.community}</strong>
-                <span>Sign in once, manage your Smart Agent, and approve connected apps from a page that belongs to you.</span>
+                <strong>Your Impact agent home</strong>
+                <span>Use your Impact name to enter the community, manage your Smart Agent, and choose which apps can work with you.</span>
               </div>
-              <label className="signin-label" htmlFor="connect-name-input">Your name</label>
+              <label className="signin-label" htmlFor="connect-name-input">Choose your Impact name</label>
               <div className="input-wrap">
                 <input
                   id="connect-name-input"
                   type="text"
                   value={connectName}
                   onChange={(e) => setConnectName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-                  placeholder="e.g. rpedersen"
+                  placeholder="e.g. rich-pedersen"
                   autoComplete="username"
                   autoCapitalize="none"
                   spellCheck={false}
@@ -805,9 +805,9 @@ export function App() {
               )}
               {nameInfo.status === 'none' && connectName.trim() && (
                 <div className="name-preview" role="status" aria-live="polite">
-                  <span className="name-preview-label">New here — you'll create your home</span>
+                  <span className="name-preview-label">New here — this creates your Impact name</span>
                   <strong className="name-preview-handle">{fullName(connectName)}</strong>
-                  <span className="name-preview-sub">in the {GATEWAY.community}.</span>
+                  <span className="name-preview-sub">and your personal home at {personalHome(connectName)}.</span>
                 </div>
               )}
 
@@ -841,7 +841,7 @@ export function App() {
             </div>
 
             <div className="privacy-footer">
-              🔒 {GATEWAY.appName} only gets the permission you approve from your secure home.
+              🔒 Your Smart Agent belongs to you. {GATEWAY.appName} only gets the permission you approve.
             </div>
           </div>
         </div>
@@ -1154,7 +1154,12 @@ export function App() {
                       type="text"
                       value={orgName}
                       onChange={(e) =>
-                        setOrgName(e.target.value.toLowerCase().replace(/\.demo\.agent$/, '').replace(/[^a-z0-9-]/g, ''))
+                        setOrgName(
+                          e.target.value
+                            .toLowerCase()
+                            .replace(new RegExp(`\\.${AGENT_NAME_PARENT.replace(/\./g, '\\.')}$`), '')
+                            .replace(/[^a-z0-9-]/g, ''),
+                        )
                       }
                       placeholder="e.g. acme"
                       autoCapitalize="none"
@@ -1166,7 +1171,7 @@ export function App() {
                   </div>
                   {orgName && (
                     <div style={{ marginTop: '.3rem', fontSize: '.76rem', color: 'var(--c-g400)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
-                      {orgName}.demo.agent
+                      {orgName}.{AGENT_NAME_PARENT}
                     </div>
                   )}
                   {orgName && orgAvail === 'checking' && (
@@ -1177,12 +1182,12 @@ export function App() {
                   )}
                   {orgName && orgAvail === 'available' && (
                     <div className="field-hint available" role="status" aria-live="polite">
-                      ✓ {orgName}.demo.agent is available
+                      ✓ {orgName}.{AGENT_NAME_PARENT} is available
                     </div>
                   )}
                   {orgName && orgAvail === 'taken' && (
                     <div className="field-hint taken" role="alert">
-                      {orgName}.demo.agent is taken — choose another name.
+                      {orgName}.{AGENT_NAME_PARENT} is taken — choose another name.
                     </div>
                   )}
                 </div>

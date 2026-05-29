@@ -97,6 +97,28 @@ wins:** a returning Google member resolves to their already-linked SA; only a tr
 gets a fresh KMS-custodied `SA_expected` (no two SAs per Google account). Because derivation is
 deterministic, demo-a2a never stores the mapping — it recomputes `SA_expected` from `(iss,sub)`.
 
+## 5b. Rotation — a fresh home from the same Google account
+
+One Google account derives ONE deterministic agent — so to let a member start a NEW home with the
+same Google login, we bump a per-subject **rotation** counter that feeds the derivation:
+`deriveSubjectSigner({iss, sub, rotation})` → a different `C_sub` → a different `SA`.
+
+- **Counter:** the broker stores `rotation:{iss}#{sub}` → N (default 0) in its KV. It's the source
+  of truth; demo-a2a is stateless about it.
+- **Carried in the session:** the broker mints the custody session with a `rotation` claim
+  (`AgentSession.rotation`, default 0). demo-a2a's gate reads `rotation` from the VERIFIED session
+  and derives `C_sub(iss, sub, rotation)` — the only authenticated broker→gate channel, same as
+  `(iss,sub)`. The `SA == derived` invariant (§5.4) holds WITH rotation in the derivation.
+- **"Use Google for a new home":** `POST /oidc/google/rotate` (gated by the current custody session)
+  increments the counter. The member signs out + signs back in with Google → the next session
+  derives the next rotation → a fresh `SA` → `GoogleSecureHome` names it.
+- **The old home is left behind, NOT detached:** demo-a2a can still derive `C_sub(rotation = N-1)`,
+  so the server still custodies it. This is the user-chosen "start fresh" behavior. To TRULY detach
+  the old home (so Google can't control it), graduate it first (§7) — add a passkey/wallet + remove
+  `C_sub`. Rotation is for "give me a new one"; graduation is for "this one is now mine alone."
+- **Facet:** on the new sign-in the broker records `facet:oidc:{iss}#{sub} → SA(rotation=N)` (the
+  facet always points at the CURRENT rotation's SA; relying apps resolve the member's active home).
+
 ## 6. Custody invariants (ADR-0010 / 0011)
 
 The SA address is canonical and never changes. `C_sub` is a **credential facet** — replaceable.

@@ -78,6 +78,9 @@ export interface MintAgentSessionInput {
   ttlSeconds: number;
   now?: () => number;
   jti?: string;
+  /** Per-subject derivation rotation (Google × KMS custody, spec 235 §5b). Carried so the custody
+   *  gate derives the matching per-subject key. Omitted for non-rotated sessions. */
+  rotation?: number;
 }
 
 /** Mint a signed AgentSession (asymmetric). */
@@ -92,6 +95,7 @@ export async function mintAgentSession(input: MintAgentSessionInput, signer: Bro
     iat: nowSec,
     exp: nowSec + input.ttlSeconds,
     jti: input.jti ?? randomB64url(12),
+    ...(input.rotation ? { rotation: input.rotation } : {}),
   };
   const header = { alg: signer.alg, kid: signer.kid, typ: 'JWT' };
   const enc = new TextEncoder();

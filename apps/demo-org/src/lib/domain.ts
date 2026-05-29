@@ -1,12 +1,12 @@
 // THE single source of demo-org's deployment-domain config (ADR-0021). demo-org
 // is a RELYING site: it sends users to the person's Connect SSO home and labels
-// `.agent` names. No other file should hardcode a hostname or the name TLD —
+// `.impact` names. No other file should hardcode a hostname or the name TLD —
 // import from here. Deployment-specific BY DESIGN; never hoist into packages/*
 // (enforced by `pnpm check:no-domain-in-packages`).
 //
-// Split (spec 232): SSO/sign-in home = `<handle>.impact-agent.me`; the agent's
+// Split (spec 232): SSO/sign-in home = `<label>.impact-agent.me`; the agent's
 // A2A endpoint is a separate domain `<handle>.impact-agent.io` (not demo-org's
-// concern). Names are claimed under the `demo.agent` permissionless subregistry.
+// concern). Names are claimed under the `.impact` permissionless subregistry.
 
 /** Where each person's Connect SSO home lives — relying sites send users here. */
 export const CONNECT_DOMAIN = 'impact-agent.me';
@@ -17,7 +17,7 @@ export const AGENT_NAME_PARENT = 'impact';
 export const PLATFORM_AUTH_ORIGIN =
   (import.meta.env?.VITE_CENTRAL_AUTH_ORIGIN as string | undefined) ?? `https://${CONNECT_DOMAIN}`;
 
-/** The label of a name (alice.demo.agent → alice; alice → alice). */
+/** The label of a name (alice.impact → alice; alice → alice). */
 export function nameLabel(name: string): string {
   return (
     name
@@ -29,7 +29,7 @@ export function nameLabel(name: string): string {
   );
 }
 
-/** Normalize any name/label to its full `<label>.demo.agent` form (stable storage keys). */
+/** Normalize any name/label to its full `<label>.impact` form (stable storage keys). */
 export function toAgentName(nameOrLabel: string): string {
   const n = nameOrLabel.trim().toLowerCase();
   return n.endsWith(`.${AGENT_NAME_PARENT}`) ? n : `${nameLabel(n)}.${AGENT_NAME_PARENT}`;

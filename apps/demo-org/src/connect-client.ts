@@ -13,6 +13,7 @@ import { connectWallet, personalSign } from './lib/wallet';
 import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from './lib/passkey';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
 import { CONTRACTS } from './lib/chain';
+import { AGENT_NAME_PARENT } from './lib/domain';
 import { nameLabel, personalAuthOrigin, PLATFORM_AUTH_ORIGIN } from './lib/domain';
 import { GATEWAY } from './lib/brand';
 
@@ -187,7 +188,7 @@ async function executeCall(
   return { ok: false, error: lastErr };
 }
 
-/** Claim a forced-unique `<base>[N].demo.agent` for the agent + set it as primary.
+/** Claim a forced-unique `<base>[N].impact` for the agent + set it as primary.
  *  register + setPrimaryName are BATCHED into one execute UserOp (one nonce, one signature):
  *  they must land together, and the batch avoids an inter-userOp race where the second op
  *  sees a stale view of the first's state. `minNonce` rides out the post-deploy nonce lag
@@ -619,7 +620,7 @@ export async function readPersonData(
   return { ok: false, error: b.detail ?? b.error ?? `PII read failed (HTTP ${r.status})` };
 }
 
-/** Sign up: create a workspace named `<base>.demo.agent` with a custody credential,
+/** Sign up: create a workspace named `<base>.impact` with a custody credential,
  *  and CLAIM the name for THAT credential's agent. Passkey → a FRESH passkey (a new
  *  workspace); wallet → the EOA's deterministic agent. */
 export async function signupWithName(
@@ -629,7 +630,7 @@ export async function signupWithName(
 ): Promise<{ ok: true; token: string; name: string } | { ok: false; error: string }> {
   if (via === 'passkey') {
     onStep?.('Creating your passkey…');
-    const pk = await registerPasskey(`${base}.demo.agent`); // FRESH passkey for this workspace
+    const pk = await registerPasskey(`${base}.${AGENT_NAME_PARENT}`); // FRESH passkey for this workspace
     const dep = await bootstrapWithPasskey(pk, onStep); // deploy passkey-direct
     if (!dep.ok) return { ok: false, error: dep.error };
     // Fresh deploy consumed nonce 0 → the claim op must be nonce ≥ 1 (gate out the lag).
