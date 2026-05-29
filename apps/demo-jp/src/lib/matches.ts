@@ -13,11 +13,17 @@
 // the JP delegation at the member's home empties this projection — the vaults
 // stay sealed.
 
+import type { Address } from '@agenticprimitives/types';
 import type { AdopterType, AdoptionDeclaration, FacilitatorCapacity, FacilitatorCoverage } from './vault';
+import { loadImpactProfile, loadJpAdopterRecord, loadJpFacilitatorRecord } from './vault';
 
 /** What an adopter sees about a facilitator JP introduced them to. Deliberately
  *  small — fields that go beyond this (e.g. raw email) need a stronger scope. */
 export interface MatchedFacilitator {
+  /** True iff this match is the viewer's OWN facilitator persona (same SA address
+   *  also has a JpFacilitatorRecord). Used to render a small "(you)" hint so the
+   *  demo doesn't look like a coincidence. */
+  isSelf?: boolean;
   /** Demo id (production = facilitator's canonical SA address). */
   id: string;
   /** Public — same as on the facilitator's published coverage. */
@@ -43,6 +49,8 @@ export interface MatchedFacilitator {
 
 /** What a facilitator sees about an adopter JP matched to them. Same pattern. */
 export interface MatchedAdopter {
+  /** True iff this is the viewer's OWN adopter persona. */
+  isSelf?: boolean;
   id: string;
   firstName: string;
   lastInitial: string;
@@ -181,21 +189,94 @@ function daysAgo(d: number): number {
 // The match is symmetric: facilitator must serve the adopter's FPG AND host the
 // adopter's type.
 
+/** Match facilitators for an adopter. Includes both the seeded counter-party pool
+ *  AND, if `viewerAddress` is provided, the viewer's OWN facilitator persona (read
+ *  from `JpFacilitatorRecord` + `ImpactProfile` at that address) — important when
+ *  the same person uses one browser to onboard as both adopter and facilitator,
+ *  so the demo doesn't silently drop their own persona out of the match pool. */
 export function matchFacilitatorsForAdopter(
   adoption: AdoptionDeclaration,
   adopterType: AdopterType,
+  viewerAddress?: Address,
 ): MatchedFacilitator[] {
-  return SEED_FACILITATORS.filter((f) =>
+  const seeded = SEED_FACILITATORS.filter((f) =>
     f.peopleGroupIds.includes(adoption.peopleGroupId)
     && f.capacity.adopterTypes.includes(adopterType),
   );
+  const own = viewerAddress ? ownFacilitatorAsMatched(viewerAddress) : null;
+  const ownFits = own
+    && own.peopleGroupIds.includes(adoption.peopleGroupId)
+    && own.capacity.adopterTypes.includes(adopterType);
+  return ownFits ? [own, ...seeded] : seeded;
 }
 
-export function matchAdoptersForFacilitator(coverage: FacilitatorCoverage): MatchedAdopter[] {
-  return SEED_ADOPTERS.filter((a) =>
+export function matchAdoptersForFacilitator(
+  coverage: FacilitatorCoverage,
+  viewerAddress?: Address,
+): MatchedAdopter[] {
+  const seeded = SEED_ADOPTERS.filter((a) =>
     coverage.peopleGroupIds.includes(a.peopleGroupId)
     && coverage.capacity.adopterTypes.includes(a.adopterType),
   );
+  const own = viewerAddress ? ownAdopterAsMatched(viewerAddress) : null;
+  const ownFits = own
+    && coverage.peopleGroupIds.includes(own.peopleGroupId)
+    && coverage.capacity.adopterTypes.includes(own.adopterType);
+  return ownFits ? [own, ...seeded] : seeded;
+}
+
+/** Build a `MatchedFacilitator` projection from the viewer's own facilitator
+ *  record + Impact profile. Returns null when they aren't (yet) a facilitator. */
+function ownFacilitatorAsMatched(addr: Address): MatchedFacilitator | null {
+  const record = loadJpFacilitatorRecord(addr);
+  if (!record.coverage) return null;
+  const impact = loadImpactProfile(addr, '');
+  const c = impact.contact ?? {};
+  const orgName = c.organizationName?.trim();
+  const orgCountry = c.organizationCountry?.trim();
+  if (!orgName) return null; // can't render an organization card without an org name
+  const firstName = c.firstName?.trim() ?? '—';
+  const lastInitial = (c.lastName ?? '').trim().charAt(0).toUpperCase();
+  return {
+    isSelf: true,
+    id: `fac-self-${addr.toLowerCase()}`,
+    orgName,
+    orgCountry: orgCountry ?? '—',
+    facilitatorFirstName: firstName,
+    facilitatorLastInitial: lastInitial ? `${lastInitial}.` : '',
+    peopleGroupIds: record.coverage.peopleGroupIds,
+    capacity: record.coverage.capacity,
+    description: record.coverage.description,
+    hasContact: !!c.email,
+    exchangeLastName: c.lastName?.trim() || undefined,
+    exchangeEmail: c.email?.trim() || undefined,
+    exchangePhone: c.phone?.trim() || undefined,
+  };
+}
+
+/** Build a `MatchedAdopter` projection from the viewer's own adopter record +
+ *  Impact profile. Returns null when they don't (yet) have a declared adoption. */
+function ownAdopterAsMatched(addr: Address): MatchedAdopter | null {
+  const record = loadJpAdopterRecord(addr);
+  if (!record.adoption || !record.adopterType) return null;
+  const impact = loadImpactProfile(addr, '');
+  const c = impact.contact ?? {};
+  const firstName = c.firstName?.trim() ?? '—';
+  const lastInitial = (c.lastName ?? '').trim().charAt(0).toUpperCase();
+  return {
+    isSelf: true,
+    id: `adp-self-${addr.toLowerCase()}`,
+    firstName,
+    lastInitial: lastInitial ? `${lastInitial}.` : '',
+    country: c.country?.trim() ?? '—',
+    adopterType: record.adopterType,
+    peopleGroupId: record.adoption.peopleGroupId,
+    declaredAt: record.adoption.declaredAt,
+    hasContact: !!c.email,
+    exchangeLastName: c.lastName?.trim() || undefined,
+    exchangeEmail: c.email?.trim() || undefined,
+    exchangePhone: c.phone?.trim() || undefined,
+  };
 }
 
 // ── Quarterly updates ────────────────────────────────────────────────────────

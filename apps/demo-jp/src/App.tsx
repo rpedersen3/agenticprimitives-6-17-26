@@ -137,6 +137,22 @@ function ShieldIcon() {
   );
 }
 
+/** "(you)" hint shown when a match card is the viewer's own dual persona. */
+function SelfBadge() {
+  return (
+    <span
+      title="This match is your own facilitator persona — you have a JpFacilitatorRecord at the same SA address. In production, multi-persona users see themselves the same way."
+      style={{
+        fontSize: '.6rem', fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase',
+        padding: '.12rem .45rem', borderRadius: 999,
+        background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+      }}
+    >
+      (you)
+    </span>
+  );
+}
+
 // ── App ─────────────────────────────────────────────────────────────────────
 
 export function App() {
@@ -1302,8 +1318,11 @@ function AdoptionSummary({ session, record, impact }: { session: Session; record
   const facilitators = useMemo(() => {
     if (!record.adoption || !record.adopterType) return [] as MatchedFacilitator[];
     if (!record.adoption.requestFacilitator) return [] as MatchedFacilitator[];
-    return matchFacilitatorsForAdopter(record.adoption, record.adopterType);
-  }, [record.adoption, record.adopterType]);
+    // Pass the viewer's own address so their own facilitator persona (if any) is
+    // included in the match pool — same-browser dual-persona case (your own
+    // declared coverage shows up alongside the seeded facilitators).
+    return matchFacilitatorsForAdopter(record.adoption, record.adopterType, session.address);
+  }, [record.adoption, record.adopterType, session.address]);
   return (
     <>
       <section className="hero" style={{ padding: '3rem 0 2rem' }}>
@@ -1430,7 +1449,10 @@ function MatchedFacilitatorCard({ f, sharedPgId, addr }: { f: MatchedFacilitator
     <div className="agreement" style={{ background: '#fff', borderColor: 'var(--c-primary-border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '.75rem', flexWrap: 'wrap' }}>
         <div>
-          <h3 style={{ fontSize: '1.2rem' }}>{f.orgName}</h3>
+          <h3 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '.5rem', flexWrap: 'wrap' }}>
+            {f.orgName}
+            {f.isSelf && <SelfBadge />}
+          </h3>
           <div style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.15rem' }}>
             {f.orgCountry} · partner: <b>{f.facilitatorFirstName} {f.facilitatorLastInitial}</b>
           </div>
@@ -2206,7 +2228,12 @@ function FacilitatorSummary({ session, record, impact, onUpdate }: { session: Se
   const displayName = displayNameFromImpact(impact, session.name);
   const orgName = impact.contact?.organizationName;
   // Adopters JP introduced to this facilitator — intersect on FPG + adopter type.
-  const matchedAdopters = useMemo(() => matchAdoptersForFacilitator(coverage), [coverage]);
+  // Pass the viewer's own address so their own adopter persona (if any) is
+  // included alongside the seeded adopters — same-browser dual-persona case.
+  const matchedAdopters = useMemo(
+    () => matchAdoptersForFacilitator(coverage, session.address),
+    [coverage, session.address],
+  );
 
   return (
     <>
@@ -2361,7 +2388,10 @@ function MatchedAdopterCard({ a, addr }: { a: MatchedAdopter; addr: Address }) {
       background: '#fff', border: '1px solid var(--c-g200)', borderRadius: 12, padding: '.85rem 1rem',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '.5rem' }}>
-        <div style={{ fontWeight: 700, color: 'var(--c-g900)' }}>{a.firstName} {a.lastInitial}</div>
+        <div style={{ fontWeight: 700, color: 'var(--c-g900)', display: 'flex', alignItems: 'center', gap: '.4rem', flexWrap: 'wrap' }}>
+          {a.firstName} {a.lastInitial}
+          {a.isSelf && <SelfBadge />}
+        </div>
         <span style={{
           fontSize: '.68rem', fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase',
           padding: '.1rem .5rem', borderRadius: 999,
