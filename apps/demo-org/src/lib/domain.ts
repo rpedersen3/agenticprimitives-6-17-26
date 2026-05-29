@@ -10,8 +10,8 @@
 
 /** Where each person's Connect SSO home lives — relying sites send users here. */
 export const CONNECT_DOMAIN = 'impact-agent.me';
-/** The `.agent` subregistry agent names live under. */
-export const AGENT_NAME_PARENT = 'demo.agent';
+/** The TLD agent names live under (the `.impact` permissionless subregistry). */
+export const AGENT_NAME_PARENT = 'impact';
 /** Platform (apex) Connect origin — the bootstrap default when a name has no agent.
  *  Overridable at build time with VITE_CENTRAL_AUTH_ORIGIN. */
 export const PLATFORM_AUTH_ORIGIN =
