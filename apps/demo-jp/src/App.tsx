@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Address } from '@agenticprimitives/types';
+import type { Address, Hex } from '@agenticprimitives/types';
 import { JP, GATEWAY } from './lib/brand';
 import { startSiteEnrollment, exchangeCode, verifyIdToken } from './connect-client';
 import { toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
@@ -11,6 +11,7 @@ import {
   saveImpactProfile, saveJpAdopterRecord,
 } from './lib/vault';
 import { MOU_DOC_ID, MOU_TEXT, attestDocConsentBound } from './lib/mou';
+import { WEA_AFFIRMATIONS as WEA_AFFIRMATIONS_LIB, verifyWeaHash } from './lib/wea';
 import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from './lib/people-groups';
 
 // JP-Adopt is a RELYING APP (spec 236). JP runs the program; the member's Impact Community
@@ -20,26 +21,22 @@ import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from '.
 // that split: passive "✓ on file" checks where Impact owns the data, interactive panels where
 // JP runs the ceremony.
 
-const WEA_AFFIRMATIONS = [
-  'The Holy Scriptures as originally given by God, divinely inspired, infallible, entirely trustworthy; and the supreme authority in all matters of faith and conduct.',
-  'One God, eternally existent in three persons, Father, Son and Holy Spirit.',
-  'Our Lord Jesus Christ, God manifest in the flesh, His virgin birth, His sinless human life, His divine miracles, His vicarious and atoning death, His bodily resurrection, His ascension, His mediatorial work, and His personal return in power and glory.',
-  'The Salvation of lost and sinful man through the shed blood of the Lord Jesus Christ by faith apart from works, and regeneration by the Holy Spirit.',
-  'The Holy Spirit by whose indwelling the believer is enabled to live a holy life, to witness and work for the Lord Jesus Christ.',
-  'The Unity of the Spirit of all true believers, the Church, the Body of Christ.',
-  'The Resurrection of both the saved and the lost; they that are saved unto the resurrection of life, they that are lost unto the resurrection of damnation.',
-];
+// WEA Statement of Faith affirmations — sourced from `lib/wea.ts` (shared canonical
+// bytes that demo-sso-next mirrors so hash verification works end-to-end).
+const WEA_AFFIRMATIONS = WEA_AFFIRMATIONS_LIB;
 
 type Kind = 'adopter' | 'facilitator';
 type Modal = null | { kind: Kind } | { kind: 'wea' };
 
 const SESSION_KEY = 'agenticprimitives:demo-jp:session';
 const ENROLL_KEY = 'agenticprimitives:demo-jp:enroll';
-/** A profile-edit handoff to the member's Impact home (`<name>.impact-agent.me/profile`).
- *  We send them there to fill in missing fields, then they redirect back here with the
- *  values as `?profile_<key>=...` query params. State binds the handoff to JP. */
+/** Handoff stashes for JP→Impact ceremonies (profile edit, WEA signing). We stash a
+ *  random state in sessionStorage before redirecting and verify on return — same
+ *  pattern as the OIDC enrollment state (audit F5: fail-closed on mismatch). */
 const PROFILE_HANDOFF_KEY = 'agenticprimitives:demo-jp:profile-handoff';
+const WEA_HANDOFF_KEY = 'agenticprimitives:demo-jp:wea-handoff';
 interface ProfileHandoffStash { state: string }
+interface WeaHandoffStash { state: string }
 
 function randomB64url(n: number): string {
   const a = new Uint8Array(n);
@@ -249,6 +246,68 @@ export function App() {
     window.location.href = u.toString();
   }, []);
 
+  /** Hand the member off to their Impact home's /wea-sign ceremony. On return we get
+   *  `?wea_state=&wea_docHash=&wea_signedAt=&wea_consentBoundTo=&wea_docId=`. */
+  const goSignWeaAtImpact = useCallback((name: string) => {
+    const homeOrigin = personalAuthOrigin(nameLabel(name));
+    const state = randomB64url(16);
+    try { sessionStorage.setItem(WEA_HANDOFF_KEY, JSON.stringify({ state })); } catch { /* ignore */ }
+    const returnUrl = window.location.origin + '/';
+    const u = new URL('/wea-sign', homeOrigin);
+    u.searchParams.set('app', 'demo-jp');
+    u.searchParams.set('return', returnUrl);
+    u.searchParams.set('state', state);
+    window.location.href = u.toString();
+  }, []);
+
+  // Return-from-Impact-WEA-signing: parse `?wea_state=&wea_docHash=&wea_signedAt=
+  // &wea_consentBoundTo=&wea_docId=`, validate state, verify the docHash matches our
+  // canonical bytes (`verifyWeaHash`), merge into ImpactProfile.attestations.wea, then
+  // strip params and bump `vaultBump`.
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const weaState = u.searchParams.get('wea_state');
+    if (!weaState) return;
+
+    let stash: WeaHandoffStash | null = null;
+    try { stash = JSON.parse(sessionStorage.getItem(WEA_HANDOFF_KEY) ?? 'null') as WeaHandoffStash | null; } catch { /* ignore */ }
+    const valid = !!stash && stash.state === weaState;
+
+    const docHash = u.searchParams.get('wea_docHash') ?? '';
+    const docId = u.searchParams.get('wea_docId') ?? '';
+    const signedAt = parseInt(u.searchParams.get('wea_signedAt') ?? '0', 10);
+    const consentBoundTo = u.searchParams.get('wea_consentBoundTo') ?? '';
+    for (const k of ['wea_state', 'wea_docHash', 'wea_docId', 'wea_signedAt', 'wea_consentBoundTo']) u.searchParams.delete(k);
+    window.history.replaceState({}, '', u.toString());
+
+    if (!valid) {
+      setError("We couldn't verify that WEA signing. Please try again from JP.");
+      return;
+    }
+    sessionStorage.removeItem(WEA_HANDOFF_KEY);
+
+    void (async () => {
+      const ok = await verifyWeaHash(docHash);
+      if (!ok) {
+        setError('The WEA attestation hash did not match our canonical document — please re-sign.');
+        return;
+      }
+      const restored = restoreSession();
+      if (!restored) return;
+      const existing = loadImpactProfile(restored.address, restored.name);
+      const nextProfile: ImpactProfile = {
+        ...existing,
+        attestations: {
+          ...existing.attestations,
+          wea: { docHash: docHash as Hex, docId, signedAt, consentBoundTo: consentBoundTo as Hex },
+        },
+      };
+      saveImpactProfile(restored.address, nextProfile);
+      setVaultBump((b) => b + 1);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const beginConnect = useCallback(async (name: string, kind: Kind) => {
     setError(null);
     try {
@@ -272,10 +331,20 @@ export function App() {
           onSignOut={signOut}
           onOpenWea={() => setModal({ kind: 'wea' })}
           onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
+          onGoSignWea={() => goSignWeaAtImpact(session.name)}
         />
       );
     }
-    return <FacilitatorIntranet session={session} onSignOut={signOut} onOpenWea={() => setModal({ kind: 'wea' })} />;
+    return (
+      <FacilitatorIntranet
+        key={vaultBump}
+        session={session}
+        onSignOut={signOut}
+        onOpenWea={() => setModal({ kind: 'wea' })}
+        onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
+        onGoSignWea={() => goSignWeaAtImpact(session.name)}
+      />
+    );
   }
 
   // ── Signed-out marketing page (unchanged from the user-approved version) ────
@@ -468,9 +537,10 @@ function OnboardPanel({ kind, busy, onClose, onConnect }: {
 // these ceremonies). Steps that Impact already satisfies show as "✓ on file";
 // JP-specific steps expand into inline forms when active.
 
-function AdopterIntranet({ session, onSignOut, onOpenWea, onGoEditProfile }: {
+function AdopterIntranet({ session, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
   session: Session; onSignOut: () => void; onOpenWea: () => void;
   onGoEditProfile: (missingKeys: string[]) => void;
+  onGoSignWea: () => void;
 }) {
   const [impact] = useState<ImpactProfile>(() => loadImpactProfile(session.address, session.name));
   const [record, setRecord] = useState<JpAdopterRecord>(() => loadJpAdopterRecord(session.address));
@@ -483,13 +553,19 @@ function AdopterIntranet({ session, onSignOut, onOpenWea, onGoEditProfile }: {
   const canDeclare = useMemo(() => canDeclareAdoption(impact, record), [impact, record]);
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
 
+  const displayName = displayNameFromImpact(impact, session.name);
   return (
     <>
-      <IntranetTopbar session={session} subtitle="Adopter dashboard" onSignOut={onSignOut} />
+      <IntranetTopbar session={session} subtitle="Adopter dashboard" onSignOut={onSignOut} impact={impact} />
+      <HeaderAlerts
+        impact={impact}
+        adopterType={record.adopterType}
+        onGoEditProfile={onGoEditProfile}
+      />
 
       {session.fresh && (
         <div style={{ background: 'var(--c-primary-subtle)', borderBottom: '1px solid var(--c-primary-border)', padding: '.75rem 1.25rem', textAlign: 'center', fontSize: '.9rem', color: 'var(--c-primary-active)' }}>
-          ✓ Connected via {JP.impactName} — welcome, <b>{session.name}</b>. Your home + vault are at{' '}
+          ✓ Connected via {JP.impactName} — welcome, <b>{displayName}</b>. Your home + vault are at{' '}
           <a href={homeUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--c-primary)' }}>{homeUrl}</a>.
         </div>
       )}
@@ -536,6 +612,7 @@ function AdopterIntranet({ session, onSignOut, onOpenWea, onGoEditProfile }: {
                   onUpdate={update}
                   onOpenWea={onOpenWea}
                   onGoEditProfile={onGoEditProfile}
+                  onGoSignWea={onGoSignWea}
                 />
               ))}
             </div>
@@ -550,8 +627,92 @@ function AdopterIntranet({ session, onSignOut, onOpenWea, onGoEditProfile }: {
   );
 }
 
-function IntranetTopbar({ session, subtitle, onSignOut }: { session: Session; subtitle: string; onSignOut: () => void }) {
+/** Header-level catch-all alert. Sticks under the topbar on every signed-in screen so
+ *  if a member arrived through any path (onboarding, returning to the summary, the
+ *  facilitator placeholder) and JP still needs something, the call-to-action is one
+ *  click away. Today: profile fields. Easy to add more bands (MOU pending, WEA pending,
+ *  declaration pending) — declare an alert in `pickAlert` and the rendering follows. */
+function HeaderAlerts({
+  impact,
+  adopterType,
+  onGoEditProfile,
+}: {
+  impact: ImpactProfile;
+  adopterType: AdopterType | undefined;
+  onGoEditProfile: (missingKeys: string[]) => void;
+}) {
+  const alert = pickHeaderAlert(impact, adopterType);
+  if (!alert) return null;
+  return (
+    <div role="alert" aria-live="polite" className={`header-alert${alert.severity === 'red' ? ' red' : ''}`}>
+      <div className="header-alert-inner">
+        <span className="header-alert-icon" aria-hidden="true">!</span>
+        <div className="header-alert-body">
+          <strong>{alert.title}</strong>
+          <span>{alert.body}</span>
+        </div>
+        <button
+          className="header-alert-action"
+          onClick={() => onGoEditProfile(alert.missingKeys)}
+        >
+          {alert.actionLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface HeaderAlert {
+  severity: 'amber' | 'red';
+  title: string;
+  body: string;
+  actionLabel: string;
+  missingKeys: string[];
+}
+
+function pickHeaderAlert(impact: ImpactProfile, adopterType: AdopterType | undefined): HeaderAlert | null {
+  const missing = impactProfileMissingFields(impact, adopterType);
+  if (missing.length > 0) {
+    return {
+      severity: 'amber',
+      title: `${missing.length === 1 ? '1 field' : `${missing.length} fields`} needed in your ${JP.impactName} profile`,
+      body: `${JP.org} needs ${missing.map((f) => f.label).join(', ')} — add it once at your home, re-used everywhere.`,
+      actionLabel: `Complete at my ${JP.impactName} home →`,
+      missingKeys: missing.map((f) => f.key),
+    };
+  }
+  // Hook point — future alerts (MOU pending, etc.) plug in here.
+  return null;
+}
+
+/** Compute a friendly display name from the Impact profile, falling back to the handle.
+ *  JP has read access to first/last via the held delegation, so the topbar can render
+ *  "Rich Pedersen" instead of "rich-pedersen". The handle stays as a small tooltip and
+ *  in the address pill so the canonical id is never hidden. */
+function displayNameFromImpact(impact: ImpactProfile | null, fallbackHandle: string): string {
+  const f = impact?.contact?.firstName?.trim();
+  const l = impact?.contact?.lastName?.trim();
+  if (f && l) return `${f} ${l}`;
+  if (f) return f;
+  if (l) return l;
+  return fallbackHandle;
+}
+
+function IntranetTopbar({
+  session,
+  subtitle,
+  onSignOut,
+  impact,
+}: {
+  session: Session;
+  subtitle: string;
+  onSignOut: () => void;
+  /** Optional — pass to render the friendly display name. */
+  impact?: ImpactProfile | null;
+}) {
   const short = `${session.address.slice(0, 6)}…${session.address.slice(-4)}`;
+  const displayName = displayNameFromImpact(impact ?? null, session.name);
+  const hasFriendly = displayName !== session.name;
   return (
     <header className="topbar">
       <div className="wrap">
@@ -560,7 +721,17 @@ function IntranetTopbar({ session, subtitle, onSignOut }: { session: Session; su
           <div>{JP.appName}<small>{JP.org} · {subtitle}</small></div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
-          <span className="powered" title={session.address}>{session.name} · {short}</span>
+          <div
+            title={`${session.name} · ${session.address}`}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1, maxWidth: 260, overflow: 'hidden' }}
+          >
+            <span style={{ fontWeight: 700, color: 'var(--c-g900)', fontSize: '.95rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' }}>
+              {displayName}
+            </span>
+            <span style={{ fontSize: '.7rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace", marginTop: '.15rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' }}>
+              {hasFriendly ? `${session.name} · ${short}` : short}
+            </span>
+          </div>
           <button className="btn btn-ghost" style={{ padding: '.5rem 1rem', fontSize: '.85rem' }} onClick={onSignOut}>Sign out</button>
         </div>
       </div>
@@ -582,12 +753,13 @@ function IntranetFooter() {
 // ── Step orchestration ──────────────────────────────────────────────────────
 
 function StepCard({
-  n, step, ownedBy, active, satisfied, impact, record, session, canDeclare, onUpdate, onOpenWea, onGoEditProfile,
+  n, step, ownedBy, active, satisfied, impact, record, session, canDeclare, onUpdate, onOpenWea, onGoEditProfile, onGoSignWea,
 }: {
   n: number; step: AdopterStep; ownedBy: 'impact' | 'jp'; active: boolean; satisfied: boolean;
   impact: ImpactProfile; record: JpAdopterRecord; session: Session; canDeclare: boolean;
   onUpdate: (next: JpAdopterRecord) => void; onOpenWea: () => void;
   onGoEditProfile: (missingKeys: string[]) => void;
+  onGoSignWea: () => void;
 }) {
   const meta = stepMeta(step);
   const status: 'done' | 'active' | 'pending' = satisfied ? 'done' : active ? 'active' : 'pending';
@@ -623,7 +795,7 @@ function StepCard({
               />
             )}
             {step === 'adopter-type' && <AdopterTypeForm record={record} onSave={onUpdate} />}
-            {step === 'wea-on-file' && <WeaOnFileMissing session={session} onOpenWea={onOpenWea} />}
+            {step === 'wea-on-file' && <WeaOnFileMissing onOpenWea={onOpenWea} onGoSignWea={onGoSignWea} />}
             {step === 'mou' && <MouSignForm session={session} record={record} onSave={onUpdate} />}
             {step === 'adoption' && (
               <DeclareAdoptionForm
@@ -632,6 +804,7 @@ function StepCard({
                 canDeclare={canDeclare}
                 onSave={onUpdate}
                 onGoEditProfile={onGoEditProfile}
+                onGoSignWea={onGoSignWea}
               />
             )}
           </div>
@@ -889,15 +1062,26 @@ function AdopterTypeForm({ record, onSave }: { record: JpAdopterRecord; onSave: 
   );
 }
 
-function WeaOnFileMissing({ session, onOpenWea }: { session: Session; onOpenWea: () => void }) {
-  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+function WeaOnFileMissing({ onOpenWea, onGoSignWea }: { onOpenWea: () => void; onGoSignWea: () => void }) {
   return (
-    <div className="soon" style={{ display: 'block' }}>
-      Church / organization / network adopters affirm the WEA Statement of Faith. Sign it once at your{' '}
-      <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{JP.impactName} home</b></a> — every community
-      app that needs it (including {JP.org}) will see “✓ on file.”
-      {' '}<button onClick={onOpenWea} style={{ background: 'none', border: 'none', color: 'var(--c-primary)', fontWeight: 700, cursor: 'pointer', padding: 0 }}>Read the statement →</button>
-    </div>
+    <>
+      <p style={{ fontSize: '.88rem', color: 'var(--c-g600)', marginBottom: '.75rem' }}>
+        Church, organization, and network adopters affirm the <b>WEA Statement of Faith</b>. Sign once at your{' '}
+        {JP.impactName} home — JP gets only the attestation receipt, and every other faith-aligned community app will
+        see “✓ on file.”
+      </p>
+      <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+        <button className="btn btn-primary" onClick={onGoSignWea} style={{ flex: '1 1 240px' }}>
+          <GlobeGlyph size={16} /> Sign WEA at my {JP.impactName} home →
+        </button>
+        <button className="btn btn-ghost" onClick={onOpenWea} style={{ flex: '0 0 auto' }}>
+          Read the statement
+        </button>
+      </div>
+      <p style={{ marginTop: '.6rem', fontSize: '.78rem', color: 'var(--c-g500)' }}>
+        We&apos;ll take you to your home to read &amp; affirm the statement, then send you straight back to {JP.org}.
+      </p>
+    </>
   );
 }
 
@@ -953,12 +1137,14 @@ function DeclareAdoptionForm({
   canDeclare,
   onSave,
   onGoEditProfile,
+  onGoSignWea,
 }: {
   impact: ImpactProfile;
   record: JpAdopterRecord;
   canDeclare: boolean;
   onSave: (next: JpAdopterRecord) => void;
   onGoEditProfile: (missingKeys: string[]) => void;
+  onGoSignWea: () => void;
 }) {
   const [picked, setPicked] = useState<string | undefined>(record.adoption?.peopleGroupId);
   const [requestFacilitator, setRequestFacilitator] = useState<boolean>(record.adoption?.requestFacilitator ?? true);
@@ -1019,17 +1205,30 @@ function DeclareAdoptionForm({
             {missingWea && <li>Sign the WEA Statement of Faith at your {JP.impactName} home (required for {ADOPTER_TYPE_LABEL[record.adopterType!] ?? 'your adopter type'}).</li>}
             {missingMou && <li>Sign the ADOPT MOU (above).</li>}
           </ul>
-          {missingFields.length > 0 && (
-            <button
-              onClick={() => onGoEditProfile(missingFields.map((f) => f.key))}
-              style={{
-                marginTop: '.85rem', background: '#dc2626', color: '#fff', border: 'none',
-                padding: '.6rem 1rem', borderRadius: 999, fontWeight: 700, fontSize: '.88rem', cursor: 'pointer',
-              }}
-            >
-              Complete profile at my {JP.impactName} home →
-            </button>
-          )}
+          <div style={{ marginTop: '.85rem', display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+            {missingFields.length > 0 && (
+              <button
+                onClick={() => onGoEditProfile(missingFields.map((f) => f.key))}
+                style={{
+                  background: '#dc2626', color: '#fff', border: 'none',
+                  padding: '.6rem 1rem', borderRadius: 999, fontWeight: 700, fontSize: '.88rem', cursor: 'pointer',
+                }}
+              >
+                Complete profile at my {JP.impactName} home →
+              </button>
+            )}
+            {missingWea && (
+              <button
+                onClick={onGoSignWea}
+                style={{
+                  background: '#dc2626', color: '#fff', border: 'none',
+                  padding: '.6rem 1rem', borderRadius: 999, fontWeight: 700, fontSize: '.88rem', cursor: 'pointer',
+                }}
+              >
+                Sign WEA at my {JP.impactName} home →
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -1071,13 +1270,14 @@ function FpgCard({ g, active, onPick }: { g: PeopleGroup; active: boolean; onPic
 function AdoptionSummary({ session, record, impact }: { session: Session; record: JpAdopterRecord; impact: ImpactProfile }) {
   const pg = record.adoption ? findPeopleGroup(record.adoption.peopleGroupId) : undefined;
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const displayName = displayNameFromImpact(impact, session.name);
   return (
     <>
       <section className="hero" style={{ padding: '3rem 0 2rem' }}>
         <div className="wrap">
           <div className="eyebrow" style={{ color: 'var(--c-primary)' }}>✓ Adoption declared</div>
           <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>
-            {session.name}, you’ve adopted <span style={{ color: 'var(--c-primary)' }}>{pg?.name ?? 'a Frontier People Group'}</span>.
+            {displayName}, you’ve adopted <span style={{ color: 'var(--c-primary)' }}>{pg?.name ?? 'a Frontier People Group'}</span>.
           </h1>
           {pg && (
             <p className="hero-sub" style={{ fontSize: '1rem' }}>
@@ -1151,16 +1351,29 @@ function ProjBox({ label, value, mono = false }: { label: string; value: string;
 
 // ── Facilitator Intranet (placeholder, wired next) ──────────────────────────
 
-function FacilitatorIntranet({ session, onSignOut, onOpenWea }: {
+function FacilitatorIntranet({ session, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
   session: Session; onSignOut: () => void; onOpenWea: () => void;
+  onGoEditProfile: (missingKeys: string[]) => void;
+  onGoSignWea: () => void;
 }) {
+  const [impact] = useState<ImpactProfile>(() => loadImpactProfile(session.address, session.name));
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const displayName = displayNameFromImpact(impact, session.name);
+  // Facilitators are always organizational — treat them as 'organization' for required
+  // fields (need org name + country in addition to base contact). Adopter type is
+  // unused on this path; this maps onto the same Impact profile schema.
+  const facilitatorAdopterType: AdopterType = 'organization';
   return (
     <>
-      <IntranetTopbar session={session} subtitle="Facilitator dashboard" onSignOut={onSignOut} />
+      <IntranetTopbar session={session} subtitle="Facilitator dashboard" onSignOut={onSignOut} impact={impact} />
+      <HeaderAlerts
+        impact={impact}
+        adopterType={facilitatorAdopterType}
+        onGoEditProfile={onGoEditProfile}
+      />
       {session.fresh && (
         <div style={{ background: 'var(--c-primary-subtle)', borderBottom: '1px solid var(--c-primary-border)', padding: '.75rem 1.25rem', textAlign: 'center', fontSize: '.9rem', color: 'var(--c-primary-active)' }}>
-          ✓ Connected via {JP.impactName} — welcome, <b>{session.name}</b>.
+          ✓ Connected via {JP.impactName} — welcome, <b>{displayName}</b>.
         </div>
       )}
       <section className="hero" style={{ padding: '3rem 0 2rem' }}>
@@ -1172,15 +1385,23 @@ function FacilitatorIntranet({ session, onSignOut, onOpenWea }: {
       </section>
       <section className="section wrap" style={{ paddingTop: 0 }}>
         <div className="agreement">
-          <h3>Facilitator onboarding — wiring next</h3>
+          <h3>Facilitator onboarding — full flow wiring next</h3>
           <p style={{ color: 'var(--c-g600)' }}>
             The facilitator flow (set up your facilitator organization at your {JP.impactName} home, declare
             people-group coverage + capacity, sign the ADOPT MOU + WEA Statement of Faith as a named
-            signatory) is the next phase. The adopter flow ships first.
+            signatory) is the next phase. Meanwhile, you can already sign the WEA at your home — every
+            faith-aligned community app reuses it.
           </p>
-          <p style={{ color: 'var(--c-g600)', marginTop: '.5rem' }}>
-            Your home: <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{homeUrl}</b></a>.{' '}
-            <button onClick={onOpenWea} style={{ background: 'none', border: 'none', color: 'var(--c-primary)', fontWeight: 700, cursor: 'pointer', padding: 0 }}>Read the WEA Statement →</button>
+          <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+            <button className="btn btn-primary" onClick={onGoSignWea}>
+              <GlobeGlyph size={16} /> Sign WEA at my {JP.impactName} home →
+            </button>
+            <button className="btn btn-ghost" onClick={onOpenWea}>
+              Read the WEA Statement
+            </button>
+          </div>
+          <p style={{ color: 'var(--c-g500)', fontSize: '.85rem', marginTop: '1rem' }}>
+            Your home: <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{homeUrl}</b></a>
           </p>
         </div>
       </section>

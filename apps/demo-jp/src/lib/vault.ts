@@ -19,6 +19,10 @@ import type { Address, Hex } from '@agenticprimitives/types';
 export type AdopterType = 'individual' | 'family' | 'group' | 'church' | 'organization' | 'network';
 
 export interface ContactProfile {
+  /** Display name — first/last let community apps render a friendly header ("Rich
+   *  Pedersen") instead of the handle. Identity-level; the handle remains canonical. */
+  firstName?: string;
+  lastName?: string;
   email?: string;
   phone?: string;
   country?: string;
@@ -154,6 +158,8 @@ export interface JpRequiredField {
 
 export function jpRequiredFields(type: AdopterType | undefined): JpRequiredField[] {
   const base: JpRequiredField[] = [
+    { key: 'firstName', label: 'First name', helperWhy: 'So JP can greet you by name across the program (instead of your handle).', inputType: 'text', placeholder: 'Rich' },
+    { key: 'lastName', label: 'Last name', helperWhy: 'Used with your first name to render your name on adopter records.', inputType: 'text', placeholder: 'Pedersen' },
     { key: 'email', label: 'Email', helperWhy: 'How JP sends you quarterly prayer updates and matches you with a facilitator.', inputType: 'email', placeholder: 'you@example.com' },
     { key: 'country', label: 'Country', helperWhy: 'Where you live — for context, not used publicly.', inputType: 'text', placeholder: 'United States' },
   ];

@@ -67,6 +67,39 @@
       /* Top bar */
       .topbar { position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,.9);
         backdrop-filter: blur(8px); border-bottom: 1px solid var(--c-g200); }
+
+      /* Header-level catch-all alert — sticks right under the topbar (top: 64px) so it
+         stays visible while the body scrolls. Visible on every signed-in screen, not
+         just the onboarding flow — so a returning member with a stale profile still
+         sees what JP needs. Amber = action required, red = blocking. */
+      .header-alert {
+        position: sticky; top: 64px; z-index: 35;
+        border-bottom: 2px solid var(--header-alert-edge, #b45309);
+        background: var(--header-alert-bg, linear-gradient(180deg, #fef3c7, #fde68a));
+        color: var(--header-alert-fg, #78350f);
+      }
+      .header-alert.red { --header-alert-edge: #b91c1c; --header-alert-bg: linear-gradient(180deg, #fee2e2, #fecaca); --header-alert-fg: #7f1d1d; }
+      .header-alert-inner {
+        max-width: var(--maxw); margin: 0 auto; padding: .65rem 1.25rem;
+        display: flex; align-items: center; gap: .85rem; flex-wrap: wrap;
+      }
+      .header-alert-icon {
+        width: 28px; height: 28px; border-radius: 999px; flex: 0 0 auto;
+        background: currentColor; color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 900; font-size: .9rem;
+        filter: brightness(.85);
+      }
+      .header-alert .header-alert-icon { color: var(--header-alert-edge, #b45309); }
+      .header-alert-body { flex: 1 1 240px; min-width: 0; }
+      .header-alert-body strong { display: block; font-weight: 800; font-size: .9rem; }
+      .header-alert-body span { display: block; font-size: .8rem; opacity: .85; margin-top: .1rem; }
+      .header-alert-action {
+        background: var(--header-alert-edge, #b45309); color: #fff; border: none;
+        padding: .5rem 1rem; border-radius: 999px; font-weight: 700; font-size: .82rem; cursor: pointer;
+        flex: 0 0 auto; white-space: nowrap;
+      }
+      .header-alert-action:hover { filter: brightness(1.05); }
       .topbar .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
       .brand { display: flex; align-items: center; gap: .6rem; font-weight: 800; color: var(--c-g900); }
       .brand-glyph { width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(150deg, var(--c-primary-mid), var(--c-primary-active));
