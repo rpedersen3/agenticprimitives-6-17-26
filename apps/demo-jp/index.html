@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Adopt a Frontier People Group · Joshua Project</title>
+    <title>Adopt a Frontier People Group · JP (demo)</title>
     <style>
       :root {
         /* demo-jp identity — a "global mission" teal, distinct from demo-org (emerald) +
@@ -43,6 +43,26 @@
       .btn-ghost { background: #fff; color: var(--c-primary); border: 1.5px solid var(--c-primary-border); }
       .btn-ghost:hover { background: var(--c-primary-subtle); }
       .btn-lg { padding: .95rem 1.7rem; font-size: 1rem; }
+
+      /* Demo-site disclaimer banner — UNMISSABLE. Lives outside #root in index.html so it
+         shows on first paint, before React hydrates. Stays visible across every screen.
+         Patterned bright amber (warning), high-contrast, with a JP-not-affiliated statement. */
+      .demo-banner {
+        position: relative; z-index: 50;
+        background: repeating-linear-gradient(
+          135deg, #fde68a 0 14px, #fcd34d 14px 28px
+        );
+        color: #78350f;
+        border-bottom: 3px solid #b45309;
+        padding: .7rem 1rem;
+        text-align: center;
+        font-weight: 800;
+        font-size: clamp(.85rem, 2.6vw, 1rem);
+        letter-spacing: .02em;
+        line-height: 1.35;
+      }
+      .demo-banner strong { display: inline-block; background: #b45309; color: #fff; padding: .12rem .6rem; border-radius: 4px; margin-right: .35rem; letter-spacing: .12em; }
+      .demo-banner small { display: block; font-weight: 600; font-size: .78rem; opacity: .85; margin-top: .15rem; }
 
       /* Top bar */
       .topbar { position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,.9);
@@ -155,6 +175,13 @@
     </style>
   </head>
   <body>
+    <!-- Demo-site disclaimer: visible from first paint, on every screen, NOT a React component.
+         This site is a prototype on agenticprimitives.dev — "JP" is a placeholder for the
+         underlying program; no affiliation or endorsement is implied. -->
+    <div class="demo-banner" role="alert" aria-live="polite">
+      <strong>DEMO</strong> Prototype only — <u>not affiliated with or endorsed by any real organization</u>. "JP" is a placeholder; this site demonstrates the self-sovereign onboarding pattern on agenticprimitives.dev.
+      <small>No real adoption is brokered here. This is a pattern demonstration only.</small>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

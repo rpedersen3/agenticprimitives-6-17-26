@@ -1,13 +1,15 @@
-// demo-jp's white-label / vertical content (ADR-0021): all Joshua Project + faith copy lives here,
-// never in packages. The generic primitives (person/org SA, delegation, attestation, custody) carry
-// none of this. Domains/wiring will move to lib/domain.ts when the connect lands (spec 236 P1-wire).
+// demo-jp's white-label / vertical content (ADR-0021): all JP + faith copy lives here, never in
+// packages. "JP" is used throughout as a placeholder for the underlying program; we do not name
+// the real organization on the live site (demo). The generic primitives (person/org SA,
+// delegation, attestation, custody) carry none of this. Domains/wiring will move to lib/domain.ts
+// when the connect lands (spec 236 P1-wire).
 
 /** Generic SSO-gateway labels consumed by the (shared with demo-org) connect-client machinery.
  *  For demo-jp the gateway IS Impact Community — JP is the program; Impact is the home that holds
  *  the data. Kept separate from `JP` so the JP-only marketing copy stays uncluttered. */
 export const GATEWAY = {
   /** What this relying app calls itself in SSO-return copy. */
-  appName: 'Joshua Project Adopt',
+  appName: 'JP Adopt',
   /** The trust home users connect to — Impact Community, in our model. */
   community: 'Impact Community',
 } as const;
@@ -21,7 +23,7 @@ export function gatewayCta(name: string, exists: boolean): string {
 
 export const JP = {
   appName: 'Adopt',
-  org: 'Joshua Project',
+  org: 'JP',
   /** The SSO / identity-and-data custodian — the member's own home. JP runs the adoption program;
    *  Impact Community is where the person's identity, data, and signed agreements live, in a vault
    *  only they can open. (spec 236.) */
@@ -29,13 +31,13 @@ export const JP = {
   /** The SSO step label (parallel to "Continue with Google") that appears inside JP onboarding. */
   ssoCta: 'Connect via Impact Community',
   hero: {
-    eyebrow: 'Joshua Project · Frontier People Groups',
+    eyebrow: 'JP · Frontier People Groups',
     title: 'Adopt a Frontier People Group',
     sub: 'A long-term commitment to one people group — to bless them through prayer and partnership until they have a thriving community of believers.',
     note: 'There is no fee. The commitment is your prayer and persistence.',
   },
   // Illustrative pilot figures (the live "X of N adopted" counter is reproducible from the graph in
-  // a later phase — spec 236 P3). N is Joshua Project's Frontier-People-Group total.
+  // a later phase — spec 236 P3). N is JP's Frontier-People-Group total.
   stats: [
     { value: '413', of: '3,215', label: 'Frontier People Groups adopted' },
     { value: '2,802', label: 'still waiting for an adopter' },

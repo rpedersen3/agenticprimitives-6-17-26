@@ -351,13 +351,16 @@ async function deployAgent(
 
 const CLIENT_ID = 'demo-jp';
 const redirectUri = (): string => window.location.origin + '/';
-// This relying site's fixed delegate identity — the demo-org backend account. The person's
-// secure home issues a scoped grant to THIS address; the backend presents it for reads (and
-// could redeem it on-chain later). Fixed + backend-controlled ⇒ the browser creates NO local
+// demo-jp's fixed delegate identity — the backend account JP grants are scoped TO. The person's
+// secure home (Impact) issues a scoped grant to THIS address; the backend presents it for reads
+// (and could redeem it on-chain later). Fixed + backend-controlled ⇒ the browser creates NO local
 // passkey or account, so sign-in fires zero prompts on this origin (they belong in the secure
-// home). spec 229/230. Configurable via VITE_DEMO_ORG_DELEGATE.
-const DEMO_ORG_DELEGATE: Address =
-  ((import.meta.env?.VITE_DEMO_ORG_DELEGATE as string | undefined) ??
+// home). spec 229/230. Configurable via VITE_DEMO_JP_DELEGATE.
+// NOTE: the fallback below is the *demo-org* default delegate SA — shared for the P1 demo. In
+// production demo-jp must have its OWN delegate SA so revoking one site's access doesn't revoke
+// the other's. P1-wire follow-up: deploy + configure the JP-specific delegate.
+const DEMO_JP_DELEGATE: Address =
+  ((import.meta.env?.VITE_DEMO_JP_DELEGATE as string | undefined) ??
     '0x89D13c596c45E4eE80Af5ae06C727FE9A820ffD0') as Address;
 
 function b64url(bytes: Uint8Array): string {
@@ -510,7 +513,7 @@ export async function startOrgCreation(
     nonce,
     codeChallenge: challenge,
     agentName: personName,
-    delegate: DEMO_ORG_DELEGATE,
+    delegate: DEMO_JP_DELEGATE,
     template: 'org-create',
     orgBase,
   });
@@ -520,7 +523,7 @@ export async function startOrgCreation(
 
 /** Build the OIDC `/authorize` request to the person's secure home (template=site-login).
  *  demo-org creates NOTHING locally — no passkey, no account, ZERO prompts on this origin.
- *  The delegate is the fixed backend identity (`DEMO_ORG_DELEGATE`); the person authenticates
+ *  The delegate is the fixed backend identity (`DEMO_JP_DELEGATE`); the person authenticates
  *  + approves at their secure home, which issues the id_token + the scoped `person → delegate`
  *  grant. The site is a DELEGATE, never a custodian. (Return sign-in is silent — `silentReauth`
  *  — so no local "for next time" credential is needed.) */
@@ -537,7 +540,7 @@ export async function startSiteEnrollment(
     nonce,
     codeChallenge: challenge,
     agentName: name,
-    delegate: DEMO_ORG_DELEGATE,
+    delegate: DEMO_JP_DELEGATE,
     template: 'site-login',
   });
   return { ok: true, url, state, authOrigin, codeVerifier: verifier, nonce };
