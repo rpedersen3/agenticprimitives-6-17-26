@@ -96,10 +96,10 @@ export interface AgentSession {
   /** Replay id. */
   jti: string;
   /**
-   * Optional per-subject derivation rotation (Google × KMS custody, spec 235 §5b). Bumping it
-   * derives a fresh per-subject custodian → a fresh agent ("a new home from the same Google
-   * account"). The broker mints it; the custody gate reads it to derive the matching key. Absent
-   * / 0 for every non-rotated session. NOT an authority field — purely a derivation input.
+   * Optional per-subject derivation rotation (Google custody; spec 235 §5b). Bumping it derives a
+   * fresh per-subject custodian → a fresh agent ("a new home from the same Google account"). The
+   * broker mints it; the custody gate reads it to derive the matching key. Absent / 0 for every
+   * non-rotated session. NOT an authority field — purely a derivation input.
    */
   rotation?: number;
 }
