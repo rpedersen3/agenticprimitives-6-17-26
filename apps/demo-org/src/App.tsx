@@ -778,7 +778,7 @@ export function App() {
                 <strong>Your home in the {GATEWAY.community}</strong>
                 <span>Sign in once, manage your Smart Agent, and approve connected apps from a page that belongs to you.</span>
               </div>
-              <label className="signin-label" htmlFor="connect-name-input">Agent name</label>
+              <label className="signin-label" htmlFor="connect-name-input">Your name</label>
               <div className="input-wrap">
                 <input
                   id="connect-name-input"
@@ -804,8 +804,10 @@ export function App() {
                 </div>
               )}
               {nameInfo.status === 'none' && connectName.trim() && (
-                <div className="field-hint none" role="status" aria-live="polite">
-                  New here? You'll create <strong>{fullName(connectName)}</strong> and join the {GATEWAY.community}.
+                <div className="name-preview" role="status" aria-live="polite">
+                  <span className="name-preview-label">New here — you'll create your home</span>
+                  <strong className="name-preview-handle">{fullName(connectName)}</strong>
+                  <span className="name-preview-sub">in the {GATEWAY.community}.</span>
                 </div>
               )}
 

@@ -722,6 +722,26 @@
       .field-hint.taken     { color: var(--c-danger); }
       .field-hint.found     { color: var(--c-success); font-weight: 700; }
       .field-hint.none      { color: var(--c-g400); }
+      /* New-member home preview — a clean centered card (NOT flex; the handle wraps cleanly). */
+      .name-preview {
+        margin-top: .5rem;
+        padding: .7rem .85rem;
+        border-radius: var(--r-md);
+        background: var(--c-primary-subtle);
+        border: 1px solid var(--c-primary-border);
+        text-align: center;
+        line-height: 1.45;
+      }
+      .name-preview-label { display: block; font-size: .72rem; color: var(--c-g500); }
+      .name-preview-handle {
+        display: block;
+        font-size: .95rem;
+        font-weight: 800;
+        color: var(--c-primary);
+        margin: .15rem 0;
+        word-break: break-all;
+      }
+      .name-preview-sub { display: block; font-size: .75rem; color: var(--c-g500); }
 
       /* ── Divider ─────────────────────────────────────────────────────── */
       .divider {
