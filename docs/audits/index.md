@@ -7,9 +7,10 @@
 | Doc | Owner | Purpose |
 | --- | --- | --- |
 | [`specs/214-production-audit-dossier.md`](../../specs/214-production-audit-dossier.md) | security + architect | **The master spec.** Closure gates + control list + continuous-update protocol. |
-| [`threat-model.md`](./threat-model.md) | security-auditor | STRIDE per trust boundary, mapped to packages. |
-| [`architecture-diagram.md`](./architecture-diagram.md) | technical-architect-auditor | System map, dependency graph, deployment topology, trust boundaries. |
-| [`evidence-checklist.md`](./evidence-checklist.md) | security + architect | Every security control → source + test + audit event + closure status. |
+| [`threat-model.md`](./threat-model.md) | security-auditor | STRIDE per trust boundary, mapped to packages. (Stale — does not yet cover `demo-jp`, `demo-sso-next`, or specs 232/234/235/236; refresh queued — see ARCH-005 in the pre-production audit below.) |
+| [`architecture-diagram.md`](./architecture-diagram.md) | technical-architect-auditor | System map, dependency graph, deployment topology, trust boundaries. (Same staleness — ARCH-005.) |
+| [`evidence-checklist.md`](./evidence-checklist.md) | security + architect | Every security control → source + test + audit event + closure status. (Same staleness — ARCH-005.) |
+| [`2026-05-pre-production-readiness.md`](./2026-05-pre-production-readiness.md) | security + architect (this audit) | **Pre-launch deep audit of `demo-jp` + `demo-sso-next` + consumed packages.** Living tracker — 23 security findings + 22 architectural findings + an 18-item self-catalog of demo shortcuts, mapped to a 7-wave remediation plan. The hard gate before a third-party review window opens. |
 
 ## Auditor agents (Claude Code subagents)
 
