@@ -20,7 +20,13 @@ export async function ensureCsrfToken(): Promise<string> {
   }
   const res = await fetch('/a2a/auth/csrf', { method: 'GET', credentials: 'include' });
   if (!res.ok) throw new Error(`csrf token fetch failed: HTTP ${res.status}`);
-  cached = ((await res.json()) as { token: string }).token;
+  // Guard the parse: if /a2a/auth/csrf returns HTML (proxy/route misconfigured) rather than
+  // JSON, surface a clear message instead of a cryptic "Unexpected token '<'".
+  const data = (await res.json().catch(() => null)) as { token?: string } | null;
+  if (!data?.token) {
+    throw new Error('Security token unavailable — the /a2a/auth/csrf endpoint did not return JSON (check the demo-a2a proxy/route).');
+  }
+  cached = data.token;
   return cached;
 }
 

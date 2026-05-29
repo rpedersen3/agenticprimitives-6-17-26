@@ -84,6 +84,12 @@ interface Deployments {
   quorumEnforcer?: string;
   /** Phase 6c.1 — v=1 signature path companion. */
   approvedHashRegistry?: string;
+  /** Naming service (spec 215). */
+  agentNameRegistry?: string;
+  agentNameUniversalResolver?: string;
+  /** Permissionless `.agent` subregistry (spec 234 W2) — relayer-sponsored name
+   *  registration during onboarding (secure-home, no user signature). */
+  permissionlessSubregistry?: string;
 }
 
 function run(cmd: string, opts: { cwd?: string } = {}): void {
@@ -190,6 +196,9 @@ if (d.approvedHashRegistry) contractVars.APPROVED_HASH_REGISTRY = d.approvedHash
 // exposes /name/reverse. Optional — endpoints degrade to no-name/503.
 if (d.agentNameRegistry)          contractVars.AGENT_NAME_REGISTRY           = d.agentNameRegistry;
 if (d.agentNameUniversalResolver) contractVars.AGENT_NAME_UNIVERSAL_RESOLVER = d.agentNameUniversalResolver;
+// Permissionless subregistry (spec 234 W2) — demo-a2a's /session/register-name registers a
+// name with owner = the new SA, sponsored by the relayer (no user signature).
+if (d.permissionlessSubregistry)  contractVars.PERMISSIONLESS_SUBREGISTRY     = d.permissionlessSubregistry;
 
 // 3. Deploy demo-mcp Worker (no external deps — deploy first so we can pass
 //    its URL into demo-a2a as MCP_URL)
