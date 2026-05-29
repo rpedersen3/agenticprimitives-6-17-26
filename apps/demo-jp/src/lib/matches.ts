@@ -198,6 +198,84 @@ export function matchAdoptersForFacilitator(coverage: FacilitatorCoverage): Matc
   );
 }
 
+// ── Quarterly updates ────────────────────────────────────────────────────────
+// Facilitators publish short updates tagged to a people group; matched adopters
+// see them on their dashboard scoped to the introduction's delegation. For the
+// demo we seed 1–2 plausible updates per (facilitator × FPG) so adopters always
+// have something to read. A facilitator's own published updates live in their
+// `JpFacilitatorRecord.publishedUpdates[]` (visible on their dashboard); in
+// production these flow to matched adopters via JP.
+
+export interface MatchedFacilitatorUpdate {
+  id: string;
+  facilitatorId: string;
+  peopleGroupId: string;
+  publishedAt: number;
+  title: string;
+  body: string;
+}
+
+export const SEED_FACILITATOR_UPDATES: MatchedFacilitatorUpdate[] = [
+  {
+    id: 'upd-frontier-najdi-1', facilitatorId: 'fac-frontier-path', peopleGroupId: 'fpg-najdi-sa', publishedAt: daysAgo(6),
+    title: 'Najdi prayer focus — month 4',
+    body: 'Quiet but real movement among a few extended families this month. Pray for the teachers we partnered with last fall — three are still hosting weekly conversations in their homes. Specific prayer: open doors for the literature partners we hope to bring through in early summer.',
+  },
+  {
+    id: 'upd-frontier-pashtun-1', facilitatorId: 'fac-frontier-path', peopleGroupId: 'fpg-pashtun-af', publishedAt: daysAgo(18),
+    title: 'Southern Pashtun — quarterly note',
+    body: 'A long quiet, then sudden openness in two villages this quarter. Pray for safety + clarity for the local partners who are walking with new seekers. Travel restrictions remain heavy; we are leaning into prayer + the long view.',
+  },
+  {
+    id: 'upd-east-asia-uyghur-1', facilitatorId: 'fac-east-asia-bridges', peopleGroupId: 'fpg-uyghur-cn', publishedAt: daysAgo(11),
+    title: 'Uyghur prayer note',
+    body: 'Pressure remains high but our diaspora partners report sustained interest in conversations across three cities. Pray for protection + for the small groups of believers worshipping quietly. We will send a more detailed update via the prayer channel.',
+  },
+  {
+    id: 'upd-east-asia-tibetan-1', facilitatorId: 'fac-east-asia-bridges', peopleGroupId: 'fpg-tibetan-cn', publishedAt: daysAgo(27),
+    title: 'Tibetan plateau — winter brief',
+    body: 'Winter is the quiet season for in-person work; our focus has shifted to translation review with a small team in-region. Pray for our translation partners + for the families they are walking with through grief this year.',
+  },
+  {
+    id: 'upd-horn-somali-1', facilitatorId: 'fac-horn-mission', peopleGroupId: 'fpg-somali-so', publishedAt: daysAgo(9),
+    title: 'Somali update — Q2 prayer + project briefing',
+    body: 'Maternal-health pilot in two coastal villages is moving from pilot to ongoing. Pray for the nurses we trained last year + for the partner church that has begun hosting prayer for the village leaders.',
+  },
+  {
+    id: 'upd-horn-wolof-1', facilitatorId: 'fac-horn-mission', peopleGroupId: 'fpg-wolof-sn', publishedAt: daysAgo(35),
+    title: 'Wolof regional note',
+    body: 'A small but consistent rhythm of weekly gatherings in two cities now. Our community-development teams in three villages have begun joint prayer with the Bible-translation partners — a long-awaited integration. Pray for unity + for fruit.',
+  },
+  {
+    id: 'upd-indian-sindhi-1', facilitatorId: 'fac-indian-ocean', peopleGroupId: 'fpg-sindhi-pk', publishedAt: daysAgo(14),
+    title: 'Sindhi monthly prayer note',
+    body: 'Our small team had to scale back travel this month, but local partners are stepping up. Pray for two new young leaders in the southern region we have been quietly walking with for almost three years.',
+  },
+  {
+    id: 'upd-indian-maldivian-1', facilitatorId: 'fac-indian-ocean', peopleGroupId: 'fpg-maldivian-mv', publishedAt: daysAgo(45),
+    title: 'Maldivian update — quarterly',
+    body: 'A heavy quiet this quarter — pray for patience + for the four families we have been corresponding with through diaspora channels. Specific prayer for safety + for clear direction over the coming months.',
+  },
+  {
+    id: 'upd-global-najdi-1', facilitatorId: 'fac-global-prayer', peopleGroupId: 'fpg-najdi-sa', publishedAt: daysAgo(4),
+    title: 'Global Prayer Network — weekly Najdi focus',
+    body: 'Three things this week: (1) Pray for the small group of seekers we heard about last month, (2) Pray for safe travel for two short-term workers crossing in early next week, (3) Pray for the field partners who are weary.',
+  },
+  {
+    id: 'upd-global-tibetan-1', facilitatorId: 'fac-global-prayer', peopleGroupId: 'fpg-tibetan-cn', publishedAt: daysAgo(13),
+    title: 'Tibetan focus — weekly',
+    body: 'Coordinated prayer on Saturday for the language partners working through tonal challenges in two regions. Pray for clarity + endurance + for the local conversation circles that have been meeting weekly all winter.',
+  },
+];
+
+/** Updates a matched adopter should see — filtered to the facilitator they're
+ *  matched with AND the FPG they declared. Sorted most-recent-first. */
+export function updatesForAdopter(facilitatorId: string, peopleGroupId: string): MatchedFacilitatorUpdate[] {
+  return SEED_FACILITATOR_UPDATES
+    .filter((u) => u.facilitatorId === facilitatorId && u.peopleGroupId === peopleGroupId)
+    .sort((a, b) => b.publishedAt - a.publishedAt);
+}
+
 // ── Disclosure manifests ─────────────────────────────────────────────────────
 // Shown next to each match. The "released" list is what flowed to this side via
 // the introduction's scoped delegation; "notReleased" is what JP held back —
@@ -211,6 +289,7 @@ export const DISCLOSURE_FACILITATOR_TO_ADOPTER = {
     'People groups served',
     'Capacity (adopter types, size bands, ministry areas)',
     '"How we engage" description',
+    'Quarterly updates tagged to your declared people group',
     'Contact channel presence (flag only — "you can be reached")',
     'WEA + MOU attestation receipts (hashes, not the documents)',
   ],

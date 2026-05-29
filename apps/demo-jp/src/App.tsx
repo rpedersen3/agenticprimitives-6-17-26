@@ -22,10 +22,11 @@ import {
   FACILITATOR_ADOPTER_TYPE_LABEL, MINISTRY_AREA_LABEL, SIZE_BAND_LABEL,
 } from './lib/capacity';
 import {
-  type MatchedAdopter, type MatchedFacilitator,
+  type MatchedAdopter, type MatchedFacilitator, type MatchedFacilitatorUpdate,
   DISCLOSURE_ADOPTER_TO_FACILITATOR, DISCLOSURE_FACILITATOR_TO_ADOPTER,
-  matchAdoptersForFacilitator, matchFacilitatorsForAdopter,
+  matchAdoptersForFacilitator, matchFacilitatorsForAdopter, updatesForAdopter,
 } from './lib/matches';
+import type { PublishedUpdate } from './lib/vault';
 import { MOU_DOC_ID, MOU_TEXT, attestDocConsentBound } from './lib/mou';
 import { WEA_AFFIRMATIONS as WEA_AFFIRMATIONS_LIB, verifyWeaHash } from './lib/wea';
 import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from './lib/people-groups';
@@ -1481,6 +1482,8 @@ function MatchedFacilitatorCard({ f, sharedPgId, addr }: { f: MatchedFacilitator
         </div>
       )}
 
+      {sharedPgId && <UpdatesFromFacilitator facilitatorId={f.id} peopleGroupId={sharedPgId} />}
+
       <ContactExchangeWidget
         addr={addr}
         matchId={f.id}
@@ -1607,6 +1610,64 @@ const dlKey: React.CSSProperties = {
   color: 'var(--c-g500)', alignSelf: 'center',
 };
 const dlVal: React.CSSProperties = { color: 'var(--c-g800)', alignSelf: 'center' };
+
+/** Quarterly updates from a matched facilitator about a specific FPG. Each
+ *  update flows via the introduction's existing scoped delegation (no new
+ *  scope required). Most-recent first; the latest expands inline, older ones
+ *  collapse behind a "show all" toggle. */
+function UpdatesFromFacilitator({ facilitatorId, peopleGroupId }: { facilitatorId: string; peopleGroupId: string }) {
+  const updates = useMemo(() => updatesForAdopter(facilitatorId, peopleGroupId), [facilitatorId, peopleGroupId]);
+  const [showAll, setShowAll] = useState(false);
+  if (updates.length === 0) return null;
+  const head = updates[0]!;
+  const rest = updates.slice(1);
+  return (
+    <div style={{
+      marginTop: '.95rem', borderRadius: 12, overflow: 'hidden',
+      border: '1px solid var(--c-primary-border)',
+      background: 'linear-gradient(180deg, var(--c-primary-subtle), #fff 70%)',
+    }}>
+      <div style={{ padding: '.7rem 1rem', borderBottom: '1px solid var(--c-primary-border)', display: 'flex', alignItems: 'center', gap: '.55rem', flexWrap: 'wrap' }}>
+        <span style={{
+          fontSize: '.66rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase',
+          padding: '.18rem .55rem', borderRadius: 999,
+          background: 'var(--c-primary)', color: '#fff',
+        }}>Updates</span>
+        <span style={{ fontSize: '.8rem', color: 'var(--c-primary-active)', fontWeight: 700 }}>
+          {updates.length === 1 ? '1 update' : `${updates.length} updates`} from this facilitator about your people group
+        </span>
+      </div>
+      <UpdateItem u={head} />
+      {showAll && rest.map((u) => <UpdateItem key={u.id} u={u} />)}
+      {rest.length > 0 && (
+        <div style={{ padding: '.5rem 1rem', borderTop: '1px solid var(--c-g200)' }}>
+          <button
+            onClick={() => setShowAll((s) => !s)}
+            style={{
+              background: 'none', border: 'none', color: 'var(--c-primary)', fontWeight: 700,
+              cursor: 'pointer', padding: 0, fontSize: '.82rem',
+            }}
+          >
+            {showAll ? 'Hide older updates' : `Show ${rest.length} older update${rest.length === 1 ? '' : 's'} →`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UpdateItem({ u }: { u: MatchedFacilitatorUpdate }) {
+  const date = new Date(u.publishedAt * 1000).toLocaleDateString();
+  return (
+    <div style={{ padding: '.85rem 1rem', borderBottom: '1px solid var(--c-g100)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '.5rem', flexWrap: 'wrap' }}>
+        <div style={{ fontWeight: 700, color: 'var(--c-g900)', fontSize: '.95rem' }}>{u.title}</div>
+        <span style={{ fontSize: '.74rem', color: 'var(--c-g500)' }}>{date}</span>
+      </div>
+      <p style={{ marginTop: '.35rem', fontSize: '.86rem', color: 'var(--c-g700)', lineHeight: 1.55 }}>{u.body}</p>
+    </div>
+  );
+}
 
 function DisclosureManifest({
   title,
@@ -1741,7 +1802,7 @@ function FacilitatorIntranet({ session, onSignOut, onOpenWea, onGoEditProfile, o
       )}
 
       {complete ? (
-        <FacilitatorSummary session={session} record={record} impact={impact} />
+        <FacilitatorSummary session={session} record={record} impact={impact} onUpdate={update} />
       ) : (
         <>
           <section className="hero" style={{ padding: '3rem 0 2rem' }}>
@@ -2138,7 +2199,7 @@ const redBtn: React.CSSProperties = {
 
 // ── Facilitator completion + projection ─────────────────────────────────────
 
-function FacilitatorSummary({ session, record, impact }: { session: Session; record: JpFacilitatorRecord; impact: ImpactProfile }) {
+function FacilitatorSummary({ session, record, impact, onUpdate }: { session: Session; record: JpFacilitatorRecord; impact: ImpactProfile; onUpdate: (next: JpFacilitatorRecord) => void }) {
   const coverage = record.coverage!;
   const groups = coverage.peopleGroupIds.map(findPeopleGroup).filter((g): g is NonNullable<typeof g> => !!g);
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
@@ -2215,6 +2276,8 @@ function FacilitatorSummary({ session, record, impact }: { session: Session; rec
           </div>
         </div>
       </section>
+
+      <PublishUpdatesPanel record={record} coverage={coverage} matchedAdopters={matchedAdopters} onUpdate={onUpdate} />
 
       <MatchedAdoptersPanel adopters={matchedAdopters} addr={session.address} />
 
@@ -2320,6 +2383,211 @@ function MatchedAdopterCard({ a, addr }: { a: MatchedAdopter; addr: Address }) {
     </div>
   );
 }
+
+/** Facilitator's publishing surface — compose new updates, see what you've shipped.
+ *  Each update tags a single FPG (limited to the facilitator's declared coverage) +
+ *  a short title + a body. The "Visible to: N adopters" count is computed live from
+ *  the matched-adopter list, so the facilitator sees the audience size before they
+ *  publish. The update flows to those adopters via the existing introduction's
+ *  scoped delegation — no new scope, no new consent, just durable relationship value. */
+function PublishUpdatesPanel({
+  record,
+  coverage,
+  matchedAdopters,
+  onUpdate,
+}: {
+  record: JpFacilitatorRecord;
+  coverage: import('./lib/vault').FacilitatorCoverage;
+  matchedAdopters: MatchedAdopter[];
+  onUpdate: (next: JpFacilitatorRecord) => void;
+}) {
+  const updates = useMemo(
+    () => [...(record.publishedUpdates ?? [])].sort((a, b) => b.publishedAt - a.publishedAt),
+    [record.publishedUpdates],
+  );
+  const audienceByFpg = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of matchedAdopters) m.set(a.peopleGroupId, (m.get(a.peopleGroupId) ?? 0) + 1);
+    return m;
+  }, [matchedAdopters]);
+
+  const remove = (id: string) => {
+    onUpdate({
+      ...record,
+      publishedUpdates: (record.publishedUpdates ?? []).filter((u) => u.id !== id),
+    });
+  };
+
+  return (
+    <section className="section wrap" style={{ paddingTop: 0 }}>
+      <div className="sec-head">
+        <div className="eyebrow">Stay in touch</div>
+        <h2>Publish an update</h2>
+        <p>
+          Send a short quarterly (or ad-hoc) update tagged to one of your declared people groups.
+          Matched adopters of that group see it on their dashboard over the same scoped delegation —
+          no new permission needed.
+        </p>
+      </div>
+
+      <PublishUpdateForm
+        record={record}
+        coverage={coverage}
+        audienceByFpg={audienceByFpg}
+        onPublish={(u) => onUpdate({ ...record, publishedUpdates: [...(record.publishedUpdates ?? []), u] })}
+      />
+
+      {updates.length > 0 && (
+        <div style={{ marginTop: '1.5rem' }}>
+          <h3 style={{ fontSize: '1rem', marginBottom: '.75rem' }}>
+            Your published updates ({updates.length})
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '.6rem' }}>
+            {updates.map((u) => (
+              <PublishedUpdateCard
+                key={u.id}
+                u={u}
+                audience={audienceByFpg.get(u.peopleGroupId) ?? 0}
+                onRemove={() => remove(u.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PublishUpdateForm({
+  coverage,
+  audienceByFpg,
+  onPublish,
+}: {
+  record: JpFacilitatorRecord;
+  coverage: import('./lib/vault').FacilitatorCoverage;
+  audienceByFpg: Map<string, number>;
+  onPublish: (u: PublishedUpdate) => void;
+}) {
+  const [pgId, setPgId] = useState<string>(coverage.peopleGroupIds[0] ?? '');
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [publishing, setPublishing] = useState(false);
+
+  const ready = !!pgId && title.trim().length > 2 && body.trim().length > 10;
+
+  const publish = () => {
+    if (!ready) return;
+    setPublishing(true);
+    const u: PublishedUpdate = {
+      id: `upd-self-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
+      peopleGroupId: pgId,
+      publishedAt: Math.floor(Date.now() / 1000),
+      title: title.trim(),
+      body: body.trim(),
+    };
+    // Brief beat so the action feels real — then commit + reset.
+    window.setTimeout(() => {
+      onPublish(u);
+      setTitle('');
+      setBody('');
+      setPublishing(false);
+    }, 500);
+  };
+
+  const audience = audienceByFpg.get(pgId) ?? 0;
+
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid var(--c-g200)', borderRadius: 14, padding: '1.1rem 1.25rem',
+      display: 'flex', flexDirection: 'column', gap: '.85rem',
+    }}>
+      <div>
+        <label style={publishLabel} htmlFor="upd-pg">People group</label>
+        <select
+          id="upd-pg" value={pgId} onChange={(e) => setPgId(e.target.value)}
+          style={publishInput}
+        >
+          {coverage.peopleGroupIds.map((id) => {
+            const g = findPeopleGroup(id);
+            return <option key={id} value={id}>{g?.name ?? id} ({g?.country ?? ''})</option>;
+          })}
+        </select>
+        <div style={{ marginTop: '.3rem', fontSize: '.78rem', color: 'var(--c-g500)' }}>
+          Visible to <b>{audience}</b> matched adopter{audience === 1 ? '' : 's'} of this group.
+        </div>
+      </div>
+
+      <div>
+        <label style={publishLabel} htmlFor="upd-title">Title</label>
+        <input
+          id="upd-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g. Quarterly Najdi prayer focus" maxLength={120}
+          style={publishInput}
+        />
+      </div>
+
+      <div>
+        <label style={publishLabel} htmlFor="upd-body">Body</label>
+        <textarea
+          id="upd-body" rows={5} value={body} onChange={(e) => setBody(e.target.value)}
+          placeholder="What you'd like your adopters to pray for + any recent context."
+          style={{ ...publishInput, resize: 'vertical', fontFamily: 'inherit' }}
+        />
+        <div style={{ marginTop: '.3rem', fontSize: '.76rem', color: 'var(--c-g500)' }}>
+          {body.length} characters — keep it focused; long updates lose readers.
+        </div>
+      </div>
+
+      <button
+        className="btn btn-primary"
+        disabled={!ready || publishing}
+        onClick={publish}
+        style={{ alignSelf: 'flex-start' }}
+        title={!ready ? 'Pick a people group and write a title + body before publishing.' : undefined}
+      >
+        {publishing ? 'Publishing…' : `Publish to ${audience} adopter${audience === 1 ? '' : 's'} →`}
+      </button>
+    </div>
+  );
+}
+
+function PublishedUpdateCard({ u, audience, onRemove }: { u: PublishedUpdate; audience: number; onRemove: () => void }) {
+  const pg = findPeopleGroup(u.peopleGroupId);
+  const date = new Date(u.publishedAt * 1000).toLocaleString();
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid var(--c-g200)', borderRadius: 12, padding: '.85rem 1rem',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '.5rem', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontWeight: 700, color: 'var(--c-g900)' }}>{u.title}</div>
+          <div style={{ fontSize: '.76rem', color: 'var(--c-g500)', marginTop: '.15rem' }}>
+            {pg?.name ?? u.peopleGroupId} · {date} · seen by {audience} adopter{audience === 1 ? '' : 's'}
+          </div>
+        </div>
+        <button
+          onClick={onRemove}
+          style={{
+            background: 'none', border: 'none', color: 'var(--c-g500)',
+            fontSize: '.78rem', cursor: 'pointer', textDecoration: 'underline', padding: 0,
+          }}
+          title="Retract this update — it disappears from matched adopters."
+        >
+          Retract
+        </button>
+      </div>
+      <p style={{ marginTop: '.55rem', fontSize: '.88rem', color: 'var(--c-g700)', lineHeight: 1.55 }}>{u.body}</p>
+    </div>
+  );
+}
+
+const publishLabel: React.CSSProperties = {
+  display: 'block', fontSize: '.78rem', fontWeight: 700, color: 'var(--c-g800)', marginBottom: '.35rem',
+};
+const publishInput: React.CSSProperties = {
+  width: '100%', padding: '.6rem .8rem', fontSize: '.92rem', borderRadius: 10,
+  border: '1.5px solid var(--c-g300)', background: '#fff',
+};
 
 function CapacityCard({ title, values }: { title: string; values: string[] }) {
   return (

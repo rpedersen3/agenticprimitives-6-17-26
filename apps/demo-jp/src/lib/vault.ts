@@ -302,12 +302,24 @@ export interface FacilitatorCoverage {
   declaredAt: number;
 }
 
+/** A quarterly (or ad-hoc) update the facilitator has published. Each update is
+ *  tagged to a single people group; JP fans it out to adopters matched on that
+ *  group via the existing introduction delegation (no new scope needed). */
+export interface PublishedUpdate {
+  id: string;
+  peopleGroupId: string;
+  publishedAt: number;
+  title: string;
+  body: string;
+}
+
 export interface JpFacilitatorRecord {
   v: 1;
   attestations: {
     mou?: Attestation;
   };
   coverage?: FacilitatorCoverage;
+  publishedUpdates?: PublishedUpdate[];
 }
 
 const FAC_KEY = (addr: Address): string => `agenticprimitives:demo-jp:facilitator-record:${addr.toLowerCase()}`;
