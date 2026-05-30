@@ -225,6 +225,26 @@ export function matchAdoptersForFacilitator(
   return ownFits ? [own, ...seeded] : seeded;
 }
 
+/** SEC-022 invariant: self-persona ids are derived ONLY from the lowercased SA
+ *  address; two distinct canonical agents (i.e. two distinct addresses) MUST never
+ *  collide on the same id. Production must keep facilitator and adopter SAs as
+ *  separate canonical agents (different salts) — this function holds the line in
+ *  code so a refactor that changes the id-derivation breaks loudly. */
+function selfFacilitatorId(addr: Address): string {
+  const lower = addr.toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(lower)) {
+    throw new Error(`selfFacilitatorId: address "${addr}" is not a canonical 20-byte hex (SEC-022)`);
+  }
+  return `fac-self-${lower}`;
+}
+function selfAdopterId(addr: Address): string {
+  const lower = addr.toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(lower)) {
+    throw new Error(`selfAdopterId: address "${addr}" is not a canonical 20-byte hex (SEC-022)`);
+  }
+  return `adp-self-${lower}`;
+}
+
 /** Build a `MatchedFacilitator` projection from the viewer's own facilitator
  *  record + Impact profile. Returns null when they aren't (yet) a facilitator. */
 function ownFacilitatorAsMatched(addr: Address): MatchedFacilitator | null {
@@ -239,7 +259,7 @@ function ownFacilitatorAsMatched(addr: Address): MatchedFacilitator | null {
   const lastInitial = (c.lastName ?? '').trim().charAt(0).toUpperCase();
   return {
     isSelf: true,
-    id: `fac-self-${addr.toLowerCase()}`,
+    id: selfFacilitatorId(addr),
     orgName,
     orgCountry: orgCountry ?? '—',
     facilitatorFirstName: firstName,
@@ -265,7 +285,7 @@ function ownAdopterAsMatched(addr: Address): MatchedAdopter | null {
   const lastInitial = (c.lastName ?? '').trim().charAt(0).toUpperCase();
   return {
     isSelf: true,
-    id: `adp-self-${addr.toLowerCase()}`,
+    id: selfAdopterId(addr),
     firstName,
     lastInitial: lastInitial ? `${lastInitial}.` : '',
     country: c.country?.trim() ?? '—',
@@ -368,7 +388,8 @@ export function updatesForAdopter(
 
   // Self-persona: if the matched facilitator is the viewer's own persona, fold in
   // their record's published updates filtered to the same FPG.
-  const selfPersonaId = viewerAddress ? `fac-self-${viewerAddress.toLowerCase()}` : null;
+  // SEC-022: derive via the central helper so the matching invariant holds.
+  const selfPersonaId = viewerAddress ? selfFacilitatorId(viewerAddress) : null;
   const own: MatchedFacilitatorUpdate[] = [];
   if (selfPersonaId === facilitatorId && viewerAddress) {
     const record = loadJpFacilitatorRecord(viewerAddress);

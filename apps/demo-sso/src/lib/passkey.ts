@@ -110,23 +110,34 @@ export async function registerPasskey(label: string): Promise<DemoPasskey> {
   return passkey;
 }
 
-/** Sign a 32-byte digest via WebAuthn → on-chain sig blob (0x01 || assertion). */
+/** Sign a 32-byte digest via WebAuthn → on-chain sig blob (0x01 || assertion).
+ *  SEC-015: even though allowCredentials gates which credential the platform may
+ *  offer, we ALSO compare the returned `credential.rawId` against the expected
+ *  bytes and reject mismatches before building the assertion — defensive against
+ *  a platform that violates allowCredentials (shouldn't happen, but we don't
+ *  trust the runtime to enforce it for us). */
 export async function signWithPasskey(digest: Hex): Promise<Hex> {
   const passkey = loadPasskey();
   if (!passkey) throw new Error('signWithPasskey: no registered passkey');
-  const credentialIdBytes = b64uDecode(passkey.credentialIdB64);
+  const expectedCredentialIdBytes = b64uDecode(passkey.credentialIdB64);
   const credential = (await navigator.credentials.get({
     publicKey: {
       challenge: hexToBytes(digest) as BufferSource,
-      allowCredentials: [{ id: credentialIdBytes as BufferSource, type: 'public-key' }],
+      allowCredentials: [{ id: expectedCredentialIdBytes as BufferSource, type: 'public-key' }],
       userVerification: 'required', // custody-grade signing — demand verification (F9)
       timeout: 60_000,
     },
   })) as PublicKeyCredential | null;
   if (!credential) throw new Error('passkey signing cancelled');
+  // SEC-015 defensive: even with allowCredentials, verify rawId matches expectation.
+  const offered = new Uint8Array(credential.rawId);
+  if (offered.length !== expectedCredentialIdBytes.length
+      || !offered.every((b, i) => b === expectedCredentialIdBytes[i])) {
+    throw new Error('passkey offered by the platform does not match the registered credential (SEC-015)');
+  }
   const response = credential.response as AuthenticatorAssertionResponse;
   const assertion = buildWebAuthnAssertion({
-    credentialIdBytes,
+    credentialIdBytes: offered, // use what the authenticator actually returned (verified above)
     authenticatorData: new Uint8Array(response.authenticatorData),
     clientDataJSON: new Uint8Array(response.clientDataJSON),
     derSignature: new Uint8Array(response.signature),

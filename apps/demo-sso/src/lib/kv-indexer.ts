@@ -22,7 +22,23 @@ const credKey = (kind: string, id: string): string => `facet:cred:${kind}:${id}`
 async function readLinks(kv: KvLike, key: string): Promise<EvidenceLink[]> {
   const raw = await kv.get(key);
   if (!raw) return []; // empty is terminal (ADR-0013) — no fallback
-  return [JSON.parse(raw) as EvidenceLink];
+  // SEC-009: facets are stored as an APPEND-ONLY array (legacy single-object entries
+  // read as a one-item list). Eliminates silent agent-bridging on credKey collision.
+  try {
+    const parsed = JSON.parse(raw) as EvidenceLink | EvidenceLink[];
+    if (Array.isArray(parsed)) return parsed;
+    return parsed && typeof parsed === 'object' && 'agent' in parsed ? [parsed] : [];
+  } catch {
+    return [];
+  }
+}
+
+async function appendLink(kv: KvLike, key: string, link: EvidenceLink): Promise<void> {
+  const existing = await readLinks(kv, key);
+  if (existing.some((e) => e.agent === link.agent && e.assurance === link.assurance && e.ref === link.ref)) {
+    return;
+  }
+  await kv.put(key, JSON.stringify([...existing, link]));
 }
 
 /** A persistent IndexerPort over KV. Proposes only; the directory confirms on-chain. */
@@ -37,28 +53,27 @@ export function createKvIndexer(kv: KvLike): IndexerPort {
  *  no on-chain presence, so it resolves from the indexer at `asserted`, NOT through
  *  the directory's on-chain confirmCandidates (which would drop it). spec 227 §5. */
 export async function readOidcFacet(kv: KvLike, iss: string, sub: string): Promise<CanonicalAgentId | null> {
-  const raw = await kv.get(oidcKey(iss, sub));
-  if (!raw) return null;
-  return (JSON.parse(raw) as EvidenceLink).agent;
+  const links = await readLinks(kv, oidcKey(iss, sub));
+  return links[0]?.agent ?? null;
 }
 
-/** Record an (iss,sub)->agent login facet (login-grade). Broker-authorized only (P0-C). */
+/** Record an (iss,sub)->agent login facet (login-grade). Broker-authorized only (P0-C).
+ *  SEC-009: append-only — overwrite eliminated. */
 export async function recordOidcFacet(
   kv: KvLike,
   iss: string,
   sub: string,
   agent: CanonicalAgentId,
 ): Promise<void> {
-  const link: EvidenceLink = { agent, assurance: 'asserted', ref: 'kv-oidc' };
-  await kv.put(oidcKey(iss, sub), JSON.stringify(link));
+  await appendLink(kv, oidcKey(iss, sub), { agent, assurance: 'asserted', ref: 'kv-oidc' });
 }
 
-/** Record a credential->agent link the indexer PROPOSES (the on-chain port confirms). */
+/** Record a credential->agent link the indexer PROPOSES (the on-chain port confirms).
+ *  SEC-009: append-only — no silent agent-bridging on credKey collision. */
 export async function recordCredentialFacet(
   kv: KvLike,
   p: CredentialPrincipal,
   agent: CanonicalAgentId,
 ): Promise<void> {
-  const link: EvidenceLink = { agent, assurance: 'asserted', ref: 'kv-cred' };
-  await kv.put(credKey(p.kind, p.id), JSON.stringify(link));
+  await appendLink(kv, credKey(p.kind, p.id), { agent, assurance: 'asserted', ref: 'kv-cred' });
 }
