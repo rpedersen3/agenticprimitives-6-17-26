@@ -6,7 +6,9 @@ import {
   mintAgentSession,
   verifyAgentSession,
   mintIdToken,
+  mintBoundIdToken,
   verifyIdToken,
+  verifyEnrollmentGrantBinding,
   verifyPkceS256,
   publishJwks,
   importJwks,
@@ -57,8 +59,29 @@ describe('token — mint / verify roundtrip', () => {
     const signer = await generateBrokerKeypair('EdDSA');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
     const keys = await importJwks(await publishJwks([signer]));
-    const r = await verifyAgentSession(token, { keys, now: () => NOW });
+    const r = await verifyAgentSession(token, { keys, expectedAud: 'rp-1', now: () => NOW });
     expect(r.ok).toBe(true);
+  });
+
+  it('H7-B.4: rejects when expectedAud is missing (PKG-CONNECT-001-sec)', async () => {
+    const signer = await generateBrokerKeypair('EdDSA');
+    const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await verifyAgentSession(token, { keys: [signer], now: () => NOW } as any);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain('expectedAud');
+  });
+
+  it('H7-B.4: rejects future-dated iat beyond clock skew (PKG-CONNECT-002)', async () => {
+    const signer = await generateBrokerKeypair('EdDSA');
+    const header = b64url(JSON.stringify({ alg: 'EdDSA', kid: signer.kid, typ: 'JWT' }));
+    const future = Math.floor(NOW / 1000) + 600; // 10 min in future
+    const payload = b64url(JSON.stringify({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', aud: 'rp-1', iss: mintArgs.iss, iat: future, exp: future + 300, jti: 'x' }));
+    const sigBytes = await globalThis.crypto.subtle.sign({ name: 'Ed25519' }, signer.privateKey, new TextEncoder().encode(`${header}.${payload}`));
+    const token = `${header}.${payload}.${Buffer.from(new Uint8Array(sigBytes)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
+    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', now: () => NOW });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain('iat');
   });
 });
 
@@ -67,7 +90,7 @@ describe('token — rejections (CN-4 + ADR-0016)', () => {
     const signer = await generateBrokerKeypair('EdDSA');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
     const other = await generateBrokerKeypair('EdDSA');
-    const r = await verifyAgentSession(token, { keys: [other], now: () => NOW });
+    const r = await verifyAgentSession(token, { keys: [other], expectedAud: 'rp-1', now: () => NOW });
     expect(r.ok).toBe(false);
   });
 
@@ -75,21 +98,21 @@ describe('token — rejections (CN-4 + ADR-0016)', () => {
     const signer = await generateBrokerKeypair('ES256');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
     // present the same key but claim its alg is EdDSA
-    const r = await verifyAgentSession(token, { keys: [{ ...signer, alg: 'EdDSA' }], now: () => NOW });
+    const r = await verifyAgentSession(token, { keys: [{ ...signer, alg: 'EdDSA' }], expectedAud: 'rp-1', now: () => NOW });
     expect(r.ok).toBe(false);
   });
 
   it('rejects a tampered signature', async () => {
     const signer = await generateBrokerKeypair('EdDSA');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
-    const r = await verifyAgentSession(token.slice(0, -4) + 'AAAA', { keys: [signer], now: () => NOW });
+    const r = await verifyAgentSession(token.slice(0, -4) + 'AAAA', { keys: [signer], expectedAud: 'rp-1', now: () => NOW });
     expect(r.ok).toBe(false);
   });
 
   it('rejects an expired token', async () => {
     const signer = await generateBrokerKeypair('EdDSA');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
-    const r = await verifyAgentSession(token, { keys: [signer], now: () => NOW + 10_000_000 });
+    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', now: () => NOW + 10_000_000 });
     expect(r).toMatchObject({ ok: false, reason: 'expired' });
   });
 
@@ -99,7 +122,7 @@ describe('token — rejections (CN-4 + ADR-0016)', () => {
     const payload = b64url(JSON.stringify({ sub: SUB, owner: SUB, aud: 'rp-1', iss: mintArgs.iss, iat: NOW / 1000, exp: NOW / 1000 + 300, jti: 'x' }));
     const sigBytes = await globalThis.crypto.subtle.sign({ name: 'Ed25519' }, signer.privateKey, new TextEncoder().encode(`${header}.${payload}`));
     const token = `${header}.${payload}.${Buffer.from(new Uint8Array(sigBytes)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
-    const r = await verifyAgentSession(token, { keys: [signer], now: () => NOW });
+    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', now: () => NOW });
     expect(r).toMatchObject({ ok: false });
     if (!r.ok) expect(r.reason).toContain('owner');
   });
@@ -154,7 +177,7 @@ describe('broker — issueForResolution', () => {
     const out = await issueForResolution({ resolution: res(agent(SUB, 'onchain-confirmed')), principal: PRINCIPAL, signer, ...mintArgs });
     expect(out.status).toBe('issued');
     if (out.status === 'issued') {
-      const v = await verifyAgentSession(out.token, { keys: [signer], now: () => NOW });
+      const v = await verifyAgentSession(out.token, { keys: [signer], expectedAud: 'rp-1', now: () => NOW });
       expect(v.ok).toBe(true);
     }
   });
@@ -233,6 +256,57 @@ describe('OIDC id_token (spec 230) — mint / verify', () => {
     const token = await mintIdToken({ sub: SUB, ...idArgs }, signer);
     const r = await verifyIdToken(token, { keys: [signer], expectedIss: idArgs.iss, expectedAud: 'demo-org', now: () => NOW + 601_000 });
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('H7-B.5 — BoundMintIdTokenInput + verifyEnrollmentGrantBinding', () => {
+  const idArgs2 = { iss: 'https://r-pedersen.impact-agent.io', aud: 'demo-org', ttlSeconds: 600, now: () => NOW };
+  const GRANT_ID = 'gr_01HQXXEXAMPLEGRANT';
+  const DELEG_HASH = '0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789' as `0x${string}`;
+
+  it('mintBoundIdToken + verifyEnrollmentGrantBinding round-trips on the happy path', async () => {
+    const signer = await generateBrokerKeypair('ES256');
+    const token = await mintBoundIdToken(
+      { sub: SUB, enrollmentGrantId: GRANT_ID, delegationHash: DELEG_HASH, ...idArgs2 },
+      signer,
+    );
+    const v = await verifyIdToken(token, { keys: [signer], expectedIss: idArgs2.iss, expectedAud: 'demo-org', now: () => NOW });
+    expect(v.ok).toBe(true);
+    const b = verifyEnrollmentGrantBinding(token, { enrollmentGrantId: GRANT_ID, delegationHash: DELEG_HASH });
+    expect(b.ok).toBe(true);
+  });
+
+  it('rejects when expected grant-id differs from token (SEC-001 replay vector)', async () => {
+    const signer = await generateBrokerKeypair('ES256');
+    const token = await mintBoundIdToken(
+      { sub: SUB, enrollmentGrantId: GRANT_ID, delegationHash: DELEG_HASH, ...idArgs2 },
+      signer,
+    );
+    const b = verifyEnrollmentGrantBinding(token, { enrollmentGrantId: 'gr_OTHER', delegationHash: DELEG_HASH });
+    expect(b.ok).toBe(false);
+    if (!b.ok) expect(b.reason).toBe('grant-id-mismatch');
+  });
+
+  it('rejects when delegation-hash differs (SEC-002 lateral-movement vector)', async () => {
+    const signer = await generateBrokerKeypair('ES256');
+    const token = await mintBoundIdToken(
+      { sub: SUB, enrollmentGrantId: GRANT_ID, delegationHash: DELEG_HASH, ...idArgs2 },
+      signer,
+    );
+    const b = verifyEnrollmentGrantBinding(token, {
+      enrollmentGrantId: GRANT_ID,
+      delegationHash: '0x1111111111111111111111111111111111111111111111111111111111111111' as `0x${string}`,
+    });
+    expect(b.ok).toBe(false);
+    if (!b.ok) expect(b.reason).toBe('delegation-hash-mismatch');
+  });
+
+  it('rejects an unbound id_token (mintIdToken — broker-internal) at verifyEnrollmentGrantBinding', async () => {
+    const signer = await generateBrokerKeypair('ES256');
+    const token = await mintIdToken({ sub: SUB, ...idArgs2 }, signer);
+    const b = verifyEnrollmentGrantBinding(token, { enrollmentGrantId: GRANT_ID, delegationHash: DELEG_HASH });
+    expect(b.ok).toBe(false);
+    if (!b.ok) expect(b.reason).toBe('missing-grant-id');
   });
 });
 

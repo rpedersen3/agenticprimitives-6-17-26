@@ -169,14 +169,29 @@ export function createMemoryAuditSink(opts?: {
 }
 
 /**
- * Combine multiple sinks into one. Each emit fans out to all sinks
- * sequentially; a failure in one sink does NOT short-circuit the
- * others — every sink gets a chance to record the event.
+ * Combine multiple sinks into one with **fail-soft** semantics — each
+ * emit fans out to all sinks sequentially; a failure in one sink does NOT
+ * short-circuit the others, AND does NOT propagate to the caller. The
+ * caller's `await write(event)` always resolves successfully, even if every
+ * sink failed. Best for telemetry / metrics-grade events where dropping
+ * one event is acceptable.
  *
- * Production wiring is typically `composeSinks(d1Sink, consoleSink)`
- * — durable storage plus a tail-friendly mirror.
+ * **H7-B.7 / PKG-AUDIT-001 closure** — security-critical events (authority
+ * changes, custody operations, signing-side actions) need durable-before-
+ * commit semantics; use {@link composeFailHardSinks} for those. The
+ * audit package stays domain-agnostic — emitting packages document which
+ * of their action names belong to the fail-hard class in their own docs.
+ *
+ * Production wiring is typically `composeSinks(d1Sink, consoleSink)` for
+ * non-critical events, and `composeFailHardSinks(d1Sink)` for events that
+ * MUST be persisted before the action commits.
  */
 export function composeSinks(...sinks: AuditSink[]): AuditSink {
+  return composeFailSoftSinks(...sinks);
+}
+
+/** Explicit alias of {@link composeSinks} — fail-soft, no propagation. */
+export function composeFailSoftSinks(...sinks: AuditSink[]): AuditSink {
   return {
     async write(event) {
       const errors: unknown[] = [];
@@ -194,6 +209,48 @@ export function composeSinks(...sinks: AuditSink[]): AuditSink {
         console.error(
           `[audit] ${errors.length} sink(s) failed for event ${event.id}:`,
           errors,
+        );
+      }
+    },
+  };
+}
+
+/**
+ * H7-B.7 — Combine multiple sinks with **fail-hard** semantics for
+ * security-critical events. The first sink failure THROWS the original
+ * error (after the remaining sinks have been attempted — every sink still
+ * gets a chance to record, but the caller's `await write(event)` rejects
+ * if any failed).
+ *
+ * Use for events whose absence from durable storage would be a security
+ * regression — the precise action vocabulary is each emitting package's
+ * responsibility to document. The caller's flow MUST treat a thrown audit
+ * as the action FAILING — do not commit the on-chain or off-chain effect
+ * if the audit didn't persist.
+ *
+ * Closure: PKG-AUDIT-001 / EXT-022 / CT-11.
+ */
+export function composeFailHardSinks(...sinks: AuditSink[]): AuditSink {
+  return {
+    async write(event) {
+      const errors: unknown[] = [];
+      for (const sink of sinks) {
+        try {
+          await sink.write(event);
+        } catch (e) {
+          errors.push(e);
+        }
+      }
+      if (errors.length > 0) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[audit:fail-hard] ${errors.length} sink(s) failed for event ${event.id}:`,
+          errors,
+        );
+        const err = errors[0];
+        if (err instanceof Error) throw err;
+        throw new Error(
+          `[audit:fail-hard] sink failure for event ${event.id}: ${String(err)}`,
         );
       }
     },

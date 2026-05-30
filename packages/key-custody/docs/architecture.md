@@ -20,7 +20,8 @@ The package has four jobs:
 | `signA2AAction()` | Signs an already-hashed 32-byte digest. | `createKmsAccount()`, `createKmsViemAccount()` |
 | `createKmsAccount()` | Adapts a backend to the `connect-auth` `KMSSigner` shape. | Identity/delegation callers that need message signing |
 | `createKmsViemAccount()` subpath | Adapts a backend to a viem `LocalAccount`. | Bundler/relayer transaction submission |
-| `buildToolExecutorBackend()` | Future per-tool signer selection. v0 routes to master backend. | Tool execution layers |
+| `buildToolExecutorBackend()` | **Deprecated** (H7-B.1 / PKG-KEY-CUSTODY-001). Throws with redirect. | — |
+| `buildToolExecutorBackendNoIsolation()` | Returns the master signer (NO per-tool isolation). Refused in production; gated by `AP_ALLOW_NO_TOOL_ISOLATION=true` in dev. Use `deriveSubjectSigner` for true isolation. | dev-only / test fixtures |
 | `buildMacProvider()` | Selects backend for service HMACs. | `mcp-runtime` and future `a2a-runtime` |
 | `canonicalContextBytes()` | Canonicalizes AAD records. | `delegation.SessionManager` |
 

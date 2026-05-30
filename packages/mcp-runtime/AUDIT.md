@@ -10,9 +10,12 @@
 The MCP server-side request boundary. Owns: the `withDelegation`
 middleware that wraps an MCP tool handler with delegation-token
 verification, JTI store adapters (`createMemoryJtiStore`,
-`createD1JtiStore`), the cross-delegation wrapper
-`withCrossDelegation` (stub), the `declareResource` metadata helper,
-and the `RequestContext` shape passed to wrapped handlers.
+`createD1JtiStore`), the `declareResource` metadata helper, and the
+`RequestContext` shape passed to wrapped handlers. **Cross-delegation
+(`withCrossDelegation`, `verifyCrossDelegationForResource`) was removed
+from the public surface in H7-B.8** (XPKG-002 / EXT-024 closure); it
+will resurface behind `./experimental` per spec 100 §6 when the
+cross-delegation work resumes.
 
 Per its `CLAUDE.md`: imports `types`, `delegation`, `key-custody` (for
 MAC primitives — not yet wired), `tool-policy`.
@@ -44,7 +47,7 @@ What this package does NOT own:
    incoming MCP request must carry a MAC envelope verified against
    audience + route family + nonce. Currently NOT enforced — system
    **C1** open.
-6. **`withCrossDelegation` is a stub.** Returns "not implemented"; do
+6. **`withCrossDelegation` was removed from the public surface (H7-B.8 / XPKG-002).** Returned "not implemented"; do
    not call it expecting the cross-delegation invariant. System **H5**.
 7. **Policy enforcement is required**, not optional, but currently NOT
    wired. The middleware should call `tool-policy.evaluatePolicy()` and
@@ -55,7 +58,7 @@ What this package does NOT own:
 | Symbol | Kind | Trust boundary |
 | --- | --- | --- |
 | `withDelegation` | function | The MCP-server request boundary; verifies delegation token. |
-| `withCrossDelegation`, `verifyCrossDelegationForResource` | function | **Stub** — cross-delegation flow (H5). |
+| ~~`withCrossDelegation`, `verifyCrossDelegationForResource`~~ | — | **Removed from public surface in H7-B.8** (XPKG-002 / EXT-024). Will resurface behind `./experimental` per spec 100 §6 when implemented. |
 | `declareResource` | function | Resource metadata helper (compile-time only). |
 | `createMemoryJtiStore`, `createD1JtiStore` | factory | JTI store adapters. |
 | `RequestContext` | type | Passed to wrapped handlers; carries principal address. |
@@ -78,7 +81,7 @@ What this package does NOT own:
 | **C1** (system) | P0 | Service-to-service MAC not load-bearing. | **CLOSED 2026-05-20** | `verifyServiceMac` + `generateServiceMac` shipped; demo-mcp Hono middleware verifies before delegation parse. 18 unit tests cover happy path + tamper + audience/route/body mismatch + clock skew + replay + wrong-key. Production must set `A2A_MAC_SECRET` (or swap to GCP HMAC key via `buildMacProvider`). |
 | **C3** (system) | P0 | No audit-event emission from `withDelegation`. | **CLOSED 2026-05-20 (pass 5f)** | `withDelegation` + `verifyServiceMac` accept an optional `auditSink` opt and emit `mcp-runtime.with-delegation.{accept,reject}` + `mcp-runtime.service-mac.{accept,reject}`. Accept-side for service-mac added in pass 5f for forensics symmetry — MAC and delegation are separate primitives with separate threat models, so anomaly-detection (accept rate per primitive, missing-pair detection) needs both as distinct rows. demo-mcp wires `composeSinks(console, d1)` with `X-Correlation-Id` stitching across the a2a boundary. |
 | **H2** (system) | P1 | `tool-policy.evaluatePolicy()` not called. | **CLOSED 2026-05-20** | `withDelegation` now accepts `opts.classification` and calls `evaluatePolicy` after delegation verify. Fail-closed on `deny` + `requires-consent` (this runtime doesn't host a consent loop). demo-mcp passes `GET_PROFILE_CLASSIFICATION`. |
-| **H5** (system) | P1 | `withCrossDelegation` is a stub. | Open | Returns not-implemented. |
+| **H5** (system) | P1 | `withCrossDelegation` was a public stub. | Mitigated H7-B.8 (XPKG-002 closure: removed from public surface). Re-implementation pending. | Returned not-implemented; now deleted from index.ts + manifest. |
 | **L2** (system) | P3 | Memory JTI store is not distributed-safe. | Documented | Test-only; production must use D1. |
 | ~~**N16** (system)~~ | ~~P2~~ | ~~Smart-account multi-sig + recovery policy not productized.~~ | **MOSTLY CLOSED 2026-05-20** (phase 6c.4) | This package's slice: `McpResourceVerifyConfig.quorumEnforcer?: Address` (consumer apps wire from deployments JSON); `withDelegation` reads `tool-policy.evaluateThresholdPolicy(classification)` and threads `requiresQuorum` / `requiresAcceptedOnChain` into `delegation.verifyDelegationToken` opts. H2 reconciliation: when `requiresAcceptedOnChain` is set + verify passes, the critical-risk `requires-consent` outcome is satisfied (the on-chain blessing IS the consent loop). `requiresUv` enforcement stays at signer time (UV is a WebAuthn signature flag the wallet sets at sign time; not re-checkable at verify without parsing the assertion). 4 new tests; 32 total in mcp-runtime. |
 | **MR-1** | P3 | No live load test for JTI atomic insert under concurrent writers. | Open | The pattern is correct but unverified under D1 contention. |
@@ -100,7 +103,7 @@ What this package does NOT own:
 - [ ] **(C1)** Add MAC envelope verification at the top of `withDelegation` before any delegation parse, calling `key-custody.buildMacProvider`. Fail-closed on missing/bad MAC. Tests for replay + audience drift.
 - [ ] **(H2)** Wire `tool-policy.evaluatePolicy()` after delegation verify; fail-closed on deny or unknown classification metadata. Tests.
 - [ ] **(C3)** Emit audit events (accept + reject) including JTI, delegation hash, principal, caveat decisions.
-- [ ] **(H5)** Implement `withCrossDelegation` once `delegation.verifyCrossDelegation` lands. Negative tests for delegate-binding + data-scope.
+- [ ] **(H5)** Implement `withCrossDelegation` behind `./experimental` (spec 100 §6) once `delegation.verifyCrossDelegation` lands. Negative tests for delegate-binding + data-scope.
 - [ ] **(MR-1)** Add a contention test for `createD1JtiStore` (multiple simultaneous inserts of the same JTI).
 
 ## 8. External audit readiness

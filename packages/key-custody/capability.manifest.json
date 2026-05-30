@@ -43,6 +43,7 @@
     "buildKeyProvider",
     "buildSignerBackend",
     "buildToolExecutorBackend",
+    "buildToolExecutorBackendNoIsolation",
     "buildMacProvider",
     "deriveSubjectSigner",
     "subjectCanonicalMessage",

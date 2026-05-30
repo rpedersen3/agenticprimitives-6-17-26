@@ -25,7 +25,11 @@ export { evaluateCaveats } from './evaluator';
 export { DelegationClient } from './client';
 export { SessionManager, createMemorySessionStore } from './session-manager';
 
-export { mintDelegationToken, verifyDelegationToken, verifyCrossDelegation } from './token';
+// H7-B.8: `verifyCrossDelegation` removed from the public surface (XPKG-002 /
+// EXT-024 closure). The stub unconditionally returned a "not implemented"
+// error string — a public symbol that lies about runtime capability. When the
+// work resumes it lands behind `./experimental` per spec 100 §6.
+export { mintDelegationToken, verifyDelegationToken } from './token';
 export { isRevoked, revokeDelegation } from './onchain';
 
 export type {
@@ -39,6 +43,7 @@ export type {
   DelegationClientOpts,
   DelegationTokenClaims,
   EnforcerAddressMap,
+  EvaluateOpts,
   JtiStore,
   SessionMeta,
   SessionPackage,

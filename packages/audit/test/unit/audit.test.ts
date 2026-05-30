@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   buildEvent,
   composeSinks,
+  composeFailSoftSinks,
+  composeFailHardSinks,
   createConsoleAuditSink,
   createMemoryAuditSink,
   createPiiGuardrailSink,
@@ -162,6 +164,53 @@ describe('composeSinks', () => {
     await expect(
       composed.write(buildEvent({ action: 'none', outcome: 'success' })),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('H7-B.7 — composeFailSoftSinks + composeFailHardSinks', () => {
+  it('composeSinks remains an alias for composeFailSoftSinks (no behavior change)', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failing: AuditSink = {
+      async write() {
+        throw new Error('soft-boom');
+      },
+    };
+    const ok = createMemoryAuditSink();
+    const a = composeSinks(failing, ok);
+    const b = composeFailSoftSinks(failing, ok);
+    await expect(a.write(buildEvent({ action: 'a', outcome: 'success' }))).resolves.toBeUndefined();
+    await expect(b.write(buildEvent({ action: 'b', outcome: 'success' }))).resolves.toBeUndefined();
+    expect(ok.events()).toHaveLength(2);
+    errorSpy.mockRestore();
+  });
+
+  it('composeFailHardSinks PROPAGATES the first sink failure to the caller', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failing: AuditSink = {
+      async write() {
+        throw new Error('durable-write-failed');
+      },
+    };
+    const ok = createMemoryAuditSink();
+    const composed = composeFailHardSinks(failing, ok);
+    await expect(
+      composed.write(buildEvent({ action: 'delegation.mint', outcome: 'success' })),
+    ).rejects.toThrow(/durable-write-failed/);
+    // The remaining sink still saw the event (every sink gets a chance to record).
+    expect(ok.events()).toHaveLength(1);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('composeFailHardSinks resolves when every sink succeeds (happy path)', async () => {
+    const a = createMemoryAuditSink();
+    const b = createMemoryAuditSink();
+    const composed = composeFailHardSinks(a, b);
+    await expect(
+      composed.write(buildEvent({ action: 'custody.apply', outcome: 'success' })),
+    ).resolves.toBeUndefined();
+    expect(a.events()).toHaveLength(1);
+    expect(b.events()).toHaveLength(1);
   });
 });
 

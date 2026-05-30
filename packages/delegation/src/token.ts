@@ -283,16 +283,15 @@ export interface VerifyOptsExt extends VerifyOpts {
   /**
    * Revocation read failure behavior. Audit finding H3.
    *
-   * - `'closed'` (default in production via NODE_ENV check below):
-   *   if `isRevoked()` RPC read throws, the whole verification fails
-   *   with `revocation check unavailable`. Safe under RPC outage:
-   *   a revoked delegation cannot be silently accepted.
-   * - `'open'`: tolerate the RPC failure and continue. This was the
-   *   pre-2026-05-20 behavior and is appropriate for explicit
-   *   demo/dev paths where RPC flakiness is expected.
-   *
-   * When omitted, defaults to `'closed'` if `process.env.NODE_ENV === 'production'`,
-   * `'open'` otherwise.
+   * - `'closed'` (DEFAULT — H7-B.9 / XPKG-005 closure): if `isRevoked()`
+   *   RPC read throws, the whole verification fails with
+   *   `revocation check unavailable`. Safe under RPC outage: a revoked
+   *   delegation cannot be silently accepted.
+   * - `'open'`: tolerate the RPC failure and continue. Appropriate ONLY
+   *   for explicit demo/dev paths where RPC flakiness is expected. Must
+   *   be set explicitly — the previous NODE_ENV-keyed default could
+   *   silently fall open on Cloudflare Workers / SES runtimes (where
+   *   `process.env.NODE_ENV` is undefined).
    */
   revocationFailMode?: 'closed' | 'open';
   /**
@@ -483,11 +482,11 @@ export async function verifyDelegationToken(
 
   // 3. on-chain checks
   const requireDeployed = opts.requireDeployed ?? true;
-  const revocationFailMode =
-    opts.revocationFailMode ??
-    (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production'
-      ? 'closed'
-      : 'open');
+  // H7-B.9 / XPKG-005: default fail-CLOSED regardless of runtime. The
+  // previous NODE_ENV-keyed default opened on Workers / SES where
+  // `process.env.NODE_ENV` is undefined. Callers who genuinely want the
+  // permissive behavior MUST set `revocationFailMode: 'open'` explicitly.
+  const revocationFailMode = opts.revocationFailMode ?? 'closed';
   const publicClient = createPublicClient({ transport: http(opts.rpcUrl) });
   try {
     const revoked = (await publicClient.readContract({
@@ -542,10 +541,19 @@ export async function verifyDelegationToken(
   }
 
   // 4. caveat evaluation
+  //
+  // H7-B.2 (PKG-DELEGATION-001 closure): verifyDelegationToken is an
+  // OFF-CHAIN gate (JTI / session-token / ERC-1271 / audit). It does NOT
+  // redeem the delegation on-chain, so on-chain-only caveats MUST stay
+  // strict — missing context for Value / AllowedTargets / AllowedMethods /
+  // inert sentinels denies with `'context-required'` rather than silently
+  // permitting. Callers who genuinely will redeem on-chain (a separate
+  // redeem path) call `evaluateCaveats` directly with `{ enforceOnChain: true }`.
   const verdicts = evaluateCaveats(
     claims.delegation.caveats,
     { timestamp: now, mcpTool: opts.toolName },
     opts.enforcerMap,
+    { enforceOnChain: opts.enforceOnChain === true },
   );
   for (const v of verdicts) {
     if (!v.allowed) {
@@ -665,14 +673,13 @@ export async function verifyDelegationToken(
   return { principal: claims.delegation.delegator };
 }
 
-export async function verifyCrossDelegation(
-  _delegation: Delegation,
-  _callerPrincipal: Address,
-  _targetServer: string,
-  _opts: VerifyOpts,
-): Promise<{ dataPrincipal: Address; grants: DataScopeGrant[] } | VerifyError> {
-  return {
-    error:
-      'verifyCrossDelegation: cross-delegation (DELEGATE_BINDING + DATA_SCOPE bridging) lands in v0.1; demo step 3 uses direct delegation only.',
-  };
-}
+// H7-B.8 (XPKG-002 / EXT-024 closure) — `verifyCrossDelegation` was a
+// public stub that unconditionally returned a "not implemented" error
+// string. Public symbols whose existence implies a capability the runtime
+// can't provide are an ADR-0013 violation (silent fallback in the type
+// system). Per spec 100 §6, experimental surface goes behind the
+// `./experimental` subpath. This implementation isn't ready for that
+// subpath either, so the function is DELETED from the public surface.
+// When the cross-delegation work resumes it lands under
+// `./experimental` per the doctrine. See PKG-delegation-001 in
+// docs/audits/2026-05-packages-contracts-production-readiness.md.

@@ -49,9 +49,12 @@ What this package does NOT own (per its `CLAUDE.md`):
    "no privateKeyToAccount in apps/".
 6. `**getRelayOnlySigner` is for tx broadcast only.** It must never be
   used to sign user-authority operations.
-7. **Per-tool executor isolation is the design.** `buildToolExecutorBackend(toolId)`
-  should select a per-tool key-IAM-scoped backend. Currently v0 routes
-   to master (system **M2** open).
+7. **Per-tool executor isolation is the design.** Was `buildToolExecutorBackend(toolId)` —
+   the v0 implementation routed to master silently (system **M2** open / PKG-KEY-CUSTODY-001).
+   H7-B.1 made the lie loud: the function now throws with a redirect. The transitional API is
+   `buildToolExecutorBackendNoIsolation(toolId, opts)` — refused in production; gated by
+   `AP_ALLOW_NO_TOOL_ISOLATION=true` in dev. The production answer is per-tool HKDF mirroring
+   `deriveSubjectSigner` (spec 235).
 
 ## 3. Public API surface (audit scope)
 
@@ -60,7 +63,9 @@ What this package does NOT own (per its `CLAUDE.md`):
 | ---------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------- |
 | `Address`, `Hex`                                                                         | types     | Re-export from `@agenticprimitives/types`.                                      |
 | `A2AKeyProvider`, `KmsAccountBackend`, `BuildOpts`, `KmsBackend`                         | types     | Backend contracts consumers (delegation, demo-a2a) depend on.                   |
-| `buildKeyProvider`, `buildSignerBackend`, `buildToolExecutorBackend`, `buildMacProvider` | factories | Select concrete backend by config; failure mode here = misrouted key authority. |
+| `buildKeyProvider`, `buildSignerBackend`, `buildMacProvider` | factories | Select concrete backend by config; failure mode here = misrouted key authority. |
+| `buildToolExecutorBackend` | factory (deprecated; throws) | Closed in H7-B.1 (PKG-KEY-CUSTODY-001). Returns nothing usable; redirects via error message. |
+| `buildToolExecutorBackendNoIsolation` | factory (dev-only) | Returns master signer (no isolation). Refused in production; opt-in flag required in dev. |
 | `getRelayOnlySigner`                                                                     | function  | EOA for broadcasting txs only; not for user-authority signing.                  |
 | `createKmsAccount`                                                                       | function  | Adapts `KmsAccountBackend` → viem-shaped account.                               |
 | `canonicalContextBytes`                                                                  | function  | AAD derivation — must be deterministic & domain-separated.                      |
@@ -91,7 +96,7 @@ What this package does NOT own (per its `CLAUDE.md`):
 | --------------- | -------- | ------------------------------------------------------------------------------------------------------------ | ---------- | -------------------------------------------------------------------------------------- |
 | **C1** (system) | P0       | Service-to-service HMAC not load-bearing; this package owns the MAC provider but it isn't enforced anywhere. | **CLOSED 2026-05-20** | `mcp-runtime.{generateServiceMac,verifyServiceMac}` now consume `buildMacProvider`. Wired into demo-a2a + demo-mcp; verified end-to-end in Playwright. Production swaps `local-aes` MAC for `gcp-kms` HMAC key via the same factory. |
 | **M1** (system) | P2       | AWS KMS backend is advertised but not implemented.                                                           | Open       | Either hide from public API or implement.                                              |
-| **M2** (system) | P2       | Per-tool executor keys not isolated.                                                                         | Open       | `buildToolExecutorBackend()` routes to master.                                         |
+| **M2** (system) | P2       | Per-tool executor keys not isolated.                                                                         | Mitigated H7-B.1; full closure pending  | `buildToolExecutorBackend()` now throws (PKG-KEY-CUSTODY-001 closure). Dev-only `buildToolExecutorBackendNoIsolation` is gated. True per-tool HKDF is the production answer (mirror `deriveSubjectSigner` from spec 235). |
 | **M5** (system) | P2       | Local fallback / dev secret names still in production-shaped paths.                                          | Open       | Production preflight (system **C4** top-5) covers part of this.                        |
 | **M6** (system) | P2       | Doc drift in `providers/gcp.ts` header (still claims "stub").                                                | Open       | Trivial fix.                                                                           |
 | **KC-1**        | P2       | No per-key-permission split between signing SA + encrypt SA.                                                 | Documented | The demo uses one SA for both; production must split per principle of least privilege. |
@@ -120,7 +125,7 @@ smoke test — hitting it proves GCP KMS signing works in production.
 - **(M6)** Fix stale `providers/gcp.ts` header comment that claims the provider is a stub.
 - **(C1)** Wire `buildMacProvider` into `mcp-runtime`'s `withDelegation` so MAC verification is load-bearing.
 - **(M1)** Decide: implement AWS KMS provider+signer OR remove from `src/index.ts` and `package.json` exports.
-- **(M2)** Implement per-tool KMS key selection in `buildToolExecutorBackend(toolId)`.
+- **(M2)** Implement per-tool HKDF (mirror `deriveSubjectSigner` from spec 235) and surface it as a non-throwing replacement for `buildToolExecutorBackend` / `buildToolExecutorBackendNoIsolation`.
 - **(KC-1)** Document the "split service accounts" requirement in `specs/203-key-custody.md` + CLAUDE.md.
 - **(C3)** **PARTIAL — 2026-05-20.** `LocalSecp256k1Signer` and `GcpKmsSigner` now accept `auditSink` via `BuildOpts.auditSink` and emit `key-custody.sign` on every `signA2AAction` call. Raw sessionId never logged — emit hashes it (`keccak256(sessionId).slice(0,18)`) and surfaces `toolId` / `actionId` from `auditContext`. Fail-soft: sink errors don't propagate. Envelope encrypt/decrypt emission (`LocalAesProvider`, `GcpKmsProvider`) is the remaining slice — tracked as **C3-leftover**.
 

@@ -86,12 +86,68 @@ export function buildSignerBackend(opts: BuildOpts): KmsAccountBackend {
   }
 }
 
-export function buildToolExecutorBackend(toolId: string, opts: BuildOpts): KmsAccountBackend {
-  // v0 demo returns the master signer (no per-tool isolation). Per-IDENTITY
-  // key derivation now exists as `deriveSubjectSigner` (HKDF from the master,
-  // bound to an OIDC subject — spec 235); per-TOOL isolation can reuse that
-  // same shape if/when a tool needs its own custodian key.
+/**
+ * @deprecated Renamed in H7-B.1 to make the lie loud. Use
+ * `buildToolExecutorBackendNoIsolation` (and read its JSDoc before you do).
+ * Closure of PKG-KEY-CUSTODY-001 / EXT-020.
+ */
+export function buildToolExecutorBackend(_toolId: string, _opts: BuildOpts): KmsAccountBackend {
+  throw new Error(
+    '[key-custody] buildToolExecutorBackend was removed in H7-B.1 (PKG-KEY-CUSTODY-001 closure). ' +
+      'The function ignored toolId and returned the master signer — every call signed with the ' +
+      'master key, which contradicted the JSDoc promise of per-tool isolation. ' +
+      'If you actually want master-signer fallback while per-tool HKDF is being built, use ' +
+      '`buildToolExecutorBackendNoIsolation(toolId, opts)` AND set ' +
+      '`AP_ALLOW_NO_TOOL_ISOLATION=true` (refused in production). ' +
+      'For per-OIDC-subject isolation, use `deriveSubjectSigner` (spec 235).',
+  );
+}
+
+/**
+ * **NO per-tool isolation.** Returns the master signer (or the resolved KMS
+ * backend) regardless of `toolId`. This is a deliberately ugly name so the
+ * caller cannot pretend it's "per-tool" — that capability is not yet built.
+ *
+ * Use cases (all transitional):
+ *   - test fixtures
+ *   - dev-mode demos where a single master signer is acceptable
+ *   - operator opt-in while per-tool HKDF lands
+ *
+ * Refuses to run unless `AP_ALLOW_NO_TOOL_ISOLATION=true` in env (or
+ * `opts.developmentMode === true` / `opts.environment === 'development'`),
+ * AND throws in production environments regardless of the opt-out flag.
+ *
+ * Closure of PKG-KEY-CUSTODY-001 / EXT-020 / CT-6.
+ *
+ * For per-OIDC-subject isolation, use {@link deriveSubjectSigner} (spec 235).
+ */
+export function buildToolExecutorBackendNoIsolation(
+  toolId: string,
+  opts: BuildOpts,
+): KmsAccountBackend {
   void toolId;
+  const env = inferEnvironment(opts);
+  if (env === 'production') {
+    throw new Error(
+      '[key-custody] buildToolExecutorBackendNoIsolation is refused in production. ' +
+        'Per-tool isolation is not implemented; the function would return the master signer. ' +
+        'Build the per-tool HKDF path (mirror `deriveSubjectSigner` from spec 235) before ' +
+        'wiring tool executors in production.',
+    );
+  }
+  let allowFlag = false;
+  try {
+    allowFlag = process.env?.AP_ALLOW_NO_TOOL_ISOLATION === 'true';
+  } catch {
+    /* SES / Workers may throw */
+  }
+  if (!allowFlag) {
+    throw new Error(
+      '[key-custody] buildToolExecutorBackendNoIsolation requires opt-in. ' +
+        'Set AP_ALLOW_NO_TOOL_ISOLATION=true (and ensure you are not in production). ' +
+        'This signer has NO per-tool isolation — every toolId resolves to the master signer.',
+    );
+  }
   return buildSignerBackend(opts);
 }
 

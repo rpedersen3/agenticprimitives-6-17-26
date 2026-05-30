@@ -84,7 +84,13 @@ Optional methods because not every backend implements every capability (e.g., `l
 // Provider factories (selected by env or explicit config)
 export function buildKeyProvider(opts: BuildOpts): A2AKeyProvider;
 export function buildSignerBackend(opts: BuildOpts): KmsAccountBackend;
+// DEPRECATED: throws at call. Use buildToolExecutorBackendNoIsolation OR
+// deriveSubjectSigner. Closure: PKG-KEY-CUSTODY-001 / H7-B.1.
 export function buildToolExecutorBackend(toolId: string, opts: BuildOpts): KmsAccountBackend;
+// Returns the master signer regardless of toolId. Refused in production;
+// requires AP_ALLOW_NO_TOOL_ISOLATION=true in dev. Per-tool isolation is
+// not implemented; for per-(iss,sub) isolation use deriveSubjectSigner.
+export function buildToolExecutorBackendNoIsolation(toolId: string, opts: BuildOpts): KmsAccountBackend;
 export function getRelayOnlySigner(opts: BuildOpts): KmsAccountBackend;
 
 // Per-subject custodian signer — a secp256k1 key bound to an OIDC subject,

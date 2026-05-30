@@ -1,7 +1,7 @@
 # @agenticprimitives/mcp-runtime — Claude guide
 
 ## What this package owns
-- `withDelegation()` and `withCrossDelegation()` tool-handler wrappers — the headline feature.
+- `withDelegation()` tool-handler wrapper — the headline feature. (`withCrossDelegation` removed from public surface in H7-B.8 / XPKG-002; resurfaces behind `./experimental` per spec 100 §6 when cross-delegation work resumes.)
 - JTI replay protection (sqlite/postgres/memory stores).
 - Bridge between `delegation`'s verification result + `tool-policy`'s decision → MCP tool error responses.
 - `declareResource()` that joins `tool-policy` classification with MCP resource metadata.
@@ -17,7 +17,7 @@
 - Tool registry — consumers use the MCP SDK's `registerTool`.
 
 ## Vocabulary
-**Owns:** `withDelegation`, `withCrossDelegation`, `McpResourceVerifyConfig`, `ResourceDefinition`, `declareResource`, `JtiStore` adapters (the implementations; interface is in `delegation`), `MockDelegationSigner`.
+**Owns:** `withDelegation`, `McpResourceVerifyConfig`, `ResourceDefinition`, `declareResource`, `JtiStore` adapters (the implementations; interface is in `delegation`), `MockDelegationSigner`.
 **Disambiguation:**
 - **"tool"** here = an MCP tool registered with `@modelcontextprotocol/sdk`. In [`tool-policy`](../tool-policy) "tool" is the abstract classified tool. We're the concrete one.
 - **"envelope"** here = the inter-service HTTP request envelope with HMAC. In [`key-custody`](../key-custody) "envelope" = AES-GCM envelope encryption. Different concepts.
@@ -33,10 +33,10 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 5. `src/with-delegation.ts` — the canonical wrapper
 
 ## Stable public exports
-**Wrappers:** `withDelegation`, `withCrossDelegation`
+**Wrappers:** `withDelegation`
 **Resources:** `declareResource`
 **JTI stores:** `createSqliteJtiStore`, `createPostgresJtiStore`, `createMemoryJtiStore`
-**Low-level:** `verifyDelegationForResource`, `verifyCrossDelegationForResource`
+**Low-level:** `verifyDelegationForResource`
 **Types:** `McpResourceVerifyConfig`, `ResourceDefinition`
 **Testing (`/testing`):** `MockDelegationSigner`, `createTestConfig`, `withMockedDelegationContext`
 **Lint (`/lint`):** `lintMcpClassification`
@@ -56,7 +56,7 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 - "Implement an auth flow (passkey, SIWE, OAuth)" — **STOP.** Belongs in [`connect-auth`](../connect-auth).
 
 ## Before you write code
-- [ ] Is the change in the wrapper layer (`withDelegation` / `withCrossDelegation` / JTI / classification bridge / MCP error mapping)?
+- [ ] Is the change in the wrapper layer (`withDelegation` / JTI / classification bridge / MCP error mapping)?
 - [ ] Am I about to **reimplement** verification rather than calling `delegation.verifyDelegationToken`? (If yes, wrong place.)
 - [ ] If I'm changing the decision-to-error mapping, did I preserve "no info-leak in error responses" (no distinguishing malformed vs expired vs revoked vs caveat-failed externally)?
 - [ ] Am I keeping the MCP SDK as a peer dep (not bundled, not vendored)?

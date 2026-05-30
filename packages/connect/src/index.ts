@@ -14,7 +14,9 @@ export {
   mintAgentSession,
   verifyAgentSession,
   mintIdToken,
+  mintBoundIdToken,
   verifyIdToken,
+  verifyEnrollmentGrantBinding,
   verifyPkceS256,
   exportPublicJwk,
   publishJwks,
@@ -27,6 +29,7 @@ export {
   type MintAgentSessionInput,
   type OidcIdToken,
   type MintIdTokenInput,
+  type BoundMintIdTokenInput,
   type VerifyIdTokenResult,
   type VerifyIdTokenOpts,
 } from './token';

@@ -62,7 +62,7 @@ export interface CaveatContext {
 }
 
 export type CaveatVerdict =
-  | { enforcer: Address; allowed: true }
+  | { enforcer: Address; allowed: true; reason?: string }
   | { enforcer: Address; allowed: false; reason: string };
 
 export type VerifyError = { error: string };
@@ -79,6 +79,26 @@ export interface VerifyOpts {
   enforcerMap: EnforcerAddressMap;
   jtiStore: JtiStore;
   now?: () => number;
+  /**
+   * Opt in to permissive caveat evaluation for on-chain-only caveats
+   * (Value / AllowedTargets / AllowedMethods / inert sentinels) when the
+   * caller can guarantee an on-chain redeem will follow (where the enforcer
+   * DOES fire). When `false`/omitted (default — H7-B.2 strict mode), those
+   * caveats deny missing-context with `'context-required'` so off-chain
+   * gates (MCP / A2A) can't silently permit a call that the on-chain
+   * enforcer would have caught.
+   *
+   * Off-chain JTI / session-token verify uses strict mode. Spec 202 §11.
+   */
+  enforceOnChain?: boolean;
+}
+
+/**
+ * H7-B.2 — options for `evaluateCaveats`. Mirrors the `enforceOnChain` flag
+ * on {@link VerifyOpts}. Strict by default.
+ */
+export interface EvaluateOpts {
+  enforceOnChain?: boolean;
 }
 
 export interface DelegationClientOpts {

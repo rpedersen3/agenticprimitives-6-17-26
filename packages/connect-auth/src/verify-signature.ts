@@ -97,23 +97,49 @@ export interface VerifyUserSignatureArgs {
 }
 
 /**
+ * Result of a signature verify call. H7-B.3 (PKG-CONNECT-AUTH-001 closure):
+ * the legacy boolean return conflated three very different outcomes that
+ * callers MUST distinguish:
+ *
+ *   - `{ ok: true }` — signature verified.
+ *   - `{ ok: false, reason: 'invalid' }` — chain answered, signature is bad.
+ *   - `{ ok: false, reason: 'rpc' }` — chain unreachable / call reverted /
+ *     RPC error. Caller may retry, fall back to a different RPC, or surface
+ *     a soft error. **Treating this as 'invalid' is a fail-open hazard**
+ *     (chain down → every verify returns false → caller gates on truthiness).
+ *   - `{ ok: false, reason: 'config' }` — the client doesn't expose the
+ *     verb required (e.g. `simulateContract` for state-tolerant verify).
+ *
+ * `details` carries the underlying error (when applicable) for telemetry.
+ */
+export type SignatureVerifyResult =
+  | { ok: true }
+  | { ok: false; reason: 'invalid' }
+  | { ok: false; reason: 'rpc'; details?: unknown }
+  | { ok: false; reason: 'config'; details?: string };
+
+/**
  * Read-only verification. Counterfactual signatures (6492-wrapped) for
- * not-yet-deployed accounts will return false here — use
- * `verifyUserSignature` (which performs the 6492 deploy via
- * `simulateContract`) instead.
+ * not-yet-deployed accounts will return `{ ok: false, reason: 'invalid' }`
+ * here — use `verifyUserSignature` (which performs the 6492 deploy via
+ * `simulateContract`) for the state-tolerant path.
+ *
+ * H7-B.3: typed result; chain errors propagate as `reason: 'rpc'` so the
+ * caller can distinguish a forged signature from a network/RPC fault.
  */
 export async function verifyUserSignatureView(
   args: VerifyUserSignatureArgs,
-): Promise<boolean> {
+): Promise<SignatureVerifyResult> {
   try {
-    return await args.client.readContract({
+    const ok = await args.client.readContract({
       address: args.universalValidator,
       abi: universalSignatureValidatorAbi,
       functionName: 'isValidSigView',
       args: [args.signer, args.hash, args.signature],
     });
-  } catch {
-    return false;
+    return ok ? { ok: true } : { ok: false, reason: 'invalid' };
+  } catch (e) {
+    return { ok: false, reason: 'rpc', details: e };
   }
 }
 
@@ -125,11 +151,11 @@ export async function verifyUserSignatureView(
  * simulation), so this is safe to call from read-only HTTP handlers.
  *
  * Falls back to the view path if the client doesn't expose
- * `simulateContract`.
+ * `simulateContract`. H7-B.3: typed result.
  */
 export async function verifyUserSignature(
   args: VerifyUserSignatureArgs,
-): Promise<boolean> {
+): Promise<SignatureVerifyResult> {
   if (!args.client.simulateContract) {
     return verifyUserSignatureView(args);
   }
@@ -140,9 +166,9 @@ export async function verifyUserSignature(
       functionName: 'isValidSig',
       args: [args.signer, args.hash, args.signature],
     });
-    return result;
-  } catch {
-    return false;
+    return result ? { ok: true } : { ok: false, reason: 'invalid' };
+  } catch (e) {
+    return { ok: false, reason: 'rpc', details: e };
   }
 }
 

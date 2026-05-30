@@ -112,9 +112,21 @@ export type VerifyResult = { ok: true; session: AgentSession } | { ok: false; re
 
 export interface VerifyOpts {
   keys: VerifyKey[];
+  /**
+   * Audience expected for this AgentSession. **Required** (H7-B.4 closure of
+   * PKG-CONNECT-001-sec). The legacy optional form let a caller verify any
+   * AgentSession against any audience-A token mistakenly accepted at
+   * audience-B. Aligns with `verifyIdToken` which already required this.
+   */
+  expectedAud: string;
   expectedIss?: string;
-  expectedAud?: string;
   now?: () => number;
+  /**
+   * H7-B.4: explicit `iat` clock-skew tolerance in seconds. Default 30.
+   * Tokens whose `iat` is more than `clockSkewSec` in the future are
+   * rejected (closes PKG-CONNECT-002 — future-dated tokens were accepted).
+   */
+  clockSkewSec?: number;
 }
 
 /** Verify an AgentSession. Alg is PINNED to the key (by kid), never the token's header. */
@@ -147,9 +159,20 @@ export async function verifyAgentSession(token: string, opts: VerifyOpts): Promi
   );
   if (!valid) return { ok: false, reason: 'signature invalid' };
 
-  if (opts.expectedAud && payload.aud !== opts.expectedAud) return { ok: false, reason: 'aud mismatch' };
+  // H7-B.4: expectedAud is required (PKG-CONNECT-001-sec closure). The legacy
+  // optional form let callers verify any AgentSession against any audience.
+  if (typeof opts.expectedAud !== 'string' || opts.expectedAud.length === 0) {
+    return { ok: false, reason: 'expectedAud is required (H7-B.4)' };
+  }
+  if (payload.aud !== opts.expectedAud) return { ok: false, reason: 'aud mismatch' };
   const nowSec = Math.floor((opts.now?.() ?? Date.now()) / 1000);
   if (typeof payload.exp !== 'number' || payload.exp <= nowSec) return { ok: false, reason: 'expired' };
+  // H7-B.4: reject future-dated `iat` beyond clock-skew tolerance (PKG-CONNECT-002).
+  const clockSkewSec = opts.clockSkewSec ?? 30;
+  if (typeof (payload as { iat?: unknown }).iat === 'number') {
+    const iat = (payload as { iat: number }).iat;
+    if (iat > nowSec + clockSkewSec) return { ok: false, reason: 'iat in future beyond clock skew' };
+  }
   if ((payload as { owner?: unknown }).owner !== undefined) return { ok: false, reason: 'AgentSession must not carry an owner field (ADR-0016)' };
 
   return { ok: true, session: payload as AgentSession };
@@ -176,6 +199,14 @@ export interface OidcIdToken {
   canonical_agent_id: CanonicalAgentId;
 }
 
+/**
+ * @internal — broker-internal mint shape. **Do not call from relying-app
+ * code** (app-level SEC-001/SEC-002 root cause). The bound surface is
+ * {@link BoundMintIdTokenInput} + {@link mintBoundIdToken} (H7-B.5 closure
+ * of PKG-connect-001-arch). The two-flow split keeps the broker's internal
+ * mint distinct from any cross-origin enrollment mint a relying app might
+ * attempt.
+ */
 export interface MintIdTokenInput {
   iss: string;
   sub: CanonicalAgentId;
@@ -186,7 +217,39 @@ export interface MintIdTokenInput {
   now?: () => number;
 }
 
-/** Mint an OIDC id_token (signed with the broker key). `canonical_agent_id` mirrors `sub`. */
+/**
+ * H7-B.5 (PKG-connect-001-arch closure) — the **bound** mint surface.
+ *
+ * Every id_token issued in response to a cross-origin enrollment grant MUST
+ * carry binding fields tying the token to:
+ *
+ *   - `enrollmentGrantId` — the server-minted grant the user authorized
+ *     (closes the SEC-001 app-level root cause: tokens issued without
+ *     reference to an in-flight grant can be replayed to any registered RP).
+ *   - `delegationHash` — keccak256 of the issued scoped delegation
+ *     (closes SEC-002 lateral-movement: tokens become tied to the exact
+ *     delegation, not just `{aud, sub}`).
+ *
+ * Relying apps verify these via {@link verifyEnrollmentGrantBinding} after
+ * a standard {@link verifyIdToken} pass.
+ */
+export interface BoundMintIdTokenInput extends MintIdTokenInput {
+  /** Server-minted grant id this mint is authorized by (spec 230 §4.2). */
+  enrollmentGrantId: string;
+  /** keccak256 of the scoped delegation accompanying this enrollment. */
+  delegationHash: `0x${string}`;
+}
+
+/**
+ * @internal — mints an OIDC id_token signed with the broker key. Used by
+ * the broker's own re-auth path where no enrollment grant exists.
+ *
+ * Cross-origin enrollment **MUST** use {@link mintBoundIdToken} which
+ * additionally encodes `enrollment_grant_id` + `delegation_hash` so the
+ * relying app can verify the bind via {@link verifyEnrollmentGrantBinding}.
+ *
+ * `canonical_agent_id` mirrors `sub`.
+ */
 export async function mintIdToken(input: MintIdTokenInput, signer: BrokerSigner): Promise<string> {
   const nowSec = Math.floor((input.now?.() ?? Date.now()) / 1000);
   const payload: OidcIdToken = {
@@ -204,6 +267,77 @@ export async function mintIdToken(input: MintIdTokenInput, signer: BrokerSigner)
   const signingInput = `${base64urlEncode(enc.encode(JSON.stringify(header)))}.${base64urlEncode(enc.encode(JSON.stringify(payload)))}`;
   const sig = await globalThis.crypto.subtle.sign(sigParams(signer.alg) as AlgorithmIdentifier, signer.privateKey, enc.encode(signingInput));
   return `${signingInput}.${base64urlEncode(new Uint8Array(sig))}`;
+}
+
+/**
+ * H7-B.5 — mint an id_token bound to a server-minted enrollment grant +
+ * a scoped delegation hash. The two fields land on the wire as
+ * `enrollment_grant_id` + `delegation_hash` claims. Closes the package-side
+ * gap that let app-level SEC-001/SEC-002 ship.
+ */
+export async function mintBoundIdToken(
+  input: BoundMintIdTokenInput,
+  signer: BrokerSigner,
+): Promise<string> {
+  const nowSec = Math.floor((input.now?.() ?? Date.now()) / 1000);
+  const payload: OidcIdToken & {
+    enrollment_grant_id: string;
+    delegation_hash: `0x${string}`;
+  } = {
+    iss: input.iss,
+    sub: input.sub,
+    aud: input.aud,
+    iat: nowSec,
+    exp: nowSec + input.ttlSeconds,
+    canonical_agent_id: input.sub,
+    enrollment_grant_id: input.enrollmentGrantId,
+    delegation_hash: input.delegationHash,
+    ...(input.nonce ? { nonce: input.nonce } : {}),
+    ...(input.agentName ? { agent_name: input.agentName } : {}),
+  };
+  const header = { alg: signer.alg, kid: signer.kid, typ: 'JWT' };
+  const enc = new TextEncoder();
+  const signingInput = `${base64urlEncode(enc.encode(JSON.stringify(header)))}.${base64urlEncode(enc.encode(JSON.stringify(payload)))}`;
+  const sig = await globalThis.crypto.subtle.sign(sigParams(signer.alg) as AlgorithmIdentifier, signer.privateKey, enc.encode(signingInput));
+  return `${signingInput}.${base64urlEncode(new Uint8Array(sig))}`;
+}
+
+/**
+ * H7-B.5 — relying-app helper. After a successful {@link verifyIdToken},
+ * pass the verified token + the expected binding (the grant id the app
+ * just consumed + the keccak256 of the scoped delegation it received).
+ *
+ * Returns `{ ok: true }` only when both bindings match. Off-chain replay
+ * of a token issued for a different grant or against a different delegation
+ * (the SEC-001 / SEC-002 vectors) fails with a precise reason.
+ */
+export function verifyEnrollmentGrantBinding(
+  token: string,
+  expected: { enrollmentGrantId: string; delegationHash: `0x${string}` },
+):
+  | { ok: true }
+  | { ok: false; reason: 'malformed' | 'missing-grant-id' | 'grant-id-mismatch' | 'missing-delegation-hash' | 'delegation-hash-mismatch' } {
+  const parts = token.split('.');
+  if (parts.length !== 3) return { ok: false, reason: 'malformed' };
+  let payload: { enrollment_grant_id?: unknown; delegation_hash?: unknown };
+  try {
+    payload = JSON.parse(new TextDecoder().decode(base64urlDecode(parts[1]!)));
+  } catch {
+    return { ok: false, reason: 'malformed' };
+  }
+  if (typeof payload.enrollment_grant_id !== 'string') {
+    return { ok: false, reason: 'missing-grant-id' };
+  }
+  if (payload.enrollment_grant_id !== expected.enrollmentGrantId) {
+    return { ok: false, reason: 'grant-id-mismatch' };
+  }
+  if (typeof payload.delegation_hash !== 'string') {
+    return { ok: false, reason: 'missing-delegation-hash' };
+  }
+  if ((payload.delegation_hash as string).toLowerCase() !== expected.delegationHash.toLowerCase()) {
+    return { ok: false, reason: 'delegation-hash-mismatch' };
+  }
+  return { ok: true };
 }
 
 export type VerifyIdTokenResult = { ok: true; claims: OidcIdToken } | { ok: false; reason: string };

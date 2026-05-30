@@ -31,8 +31,13 @@ const ctx: CaveatContext = {
   delegate: PERSON_AGENT,
 };
 
+// H7-B.2: DELEGATE_BINDING is an inert sentinel (the on-chain check is the
+// authority). In strict mode the off-chain evaluator denies it with
+// 'context-required' regardless of shape; the shape-check fuzz here belongs
+// to the on-chain-redeem path, so we pass enforceOnChain:true. The separate
+// strict-mode tests below cover the H7-B.2 boundary trap.
 function ev(c: Caveat) {
-  return evaluateCaveats([c], ctx, enforcerMap)[0]!;
+  return evaluateCaveats([c], ctx, enforcerMap, { enforceOnChain: true })[0]!;
 }
 
 describe('DELEGATE_BINDING caveat — adversarial shape fuzz', () => {
@@ -125,8 +130,33 @@ describe('DELEGATE_BINDING caveat — adversarial shape fuzz', () => {
     // the overall evaluator must report the binding rejection.
     const goodBinding = buildDelegateBindingCaveat(SMART_ACCOUNT, RANDOM_OTHER);
     const badBinding = buildDelegateBindingCaveat(ZERO_ADDR, RANDOM_OTHER);
-    const verdicts = evaluateCaveats([goodBinding, badBinding], ctx, enforcerMap);
+    const verdicts = evaluateCaveats([goodBinding, badBinding], ctx, enforcerMap, {
+      enforceOnChain: true,
+    });
     expect(verdicts[0]!.allowed).toBe(true);
     expect(verdicts[1]!.allowed).toBe(false);
+  });
+
+  it('H7-B.2 strict (default): even well-formed binding denies off-chain', () => {
+    // PKG-DELEGATION-001 closure — an off-chain gate cannot rely on the
+    // inert sentinel to be permissive. Shape was valid in the happy-path
+    // test above; here we pass strict mode (the default) and assert deny.
+    const c = buildDelegateBindingCaveat(SMART_ACCOUNT, PERSON_AGENT);
+    const v = evaluateCaveats([c], ctx, enforcerMap)[0]!;
+    expect(v.allowed).toBe(false);
+    if (!v.allowed) expect(v.reason).toContain('context-required');
+  });
+
+  it('H7-B.2 strict: malformed binding STILL rejects in strict mode (shape > strictness)', () => {
+    // Shape check fires before the strict-mode denial, so the reason
+    // surfaces the shape error rather than 'context-required'.
+    const truncated: Caveat = {
+      enforcer: DELEGATE_BINDING_ENFORCER,
+      terms: ('0x' + 'ab'.repeat(32)) as Hex,
+      args: '0x',
+    };
+    const v = evaluateCaveats([truncated], ctx, enforcerMap)[0]!;
+    expect(v.allowed).toBe(false);
+    if (!v.allowed) expect(v.reason).toMatch(/length|malformed/);
   });
 });

@@ -7,7 +7,7 @@ A delegation is **agent → agent** authority: SA A grants SA B the right to tak
 - `Delegation` struct, `Caveat` types, `DataScopeGrant`. EIP-712 hashing.
 - Caveat builders (8 on-chain enforcers + 3 off-chain sentinels) and the **fail-closed** evaluator.
 - `DelegationClient` (browser-side issuance via a `Signer`).
-- Token mint/verify: `mintDelegationToken`, `verifyDelegationToken`, `verifyCrossDelegation`.
+- Token mint/verify: `mintDelegationToken`, `verifyDelegationToken`. (Cross-delegation removed from public surface in H7-B.8; resurfaces under `./experimental` when implemented — spec 100 §6 / XPKG-002 closure.)
 - **Session lifecycle** — `SessionManager`, `SessionStore`, `SessionRow`, `SessionPackage`, `SessionMeta`. Absorbed from former kms scope per [ADR-0002](../../docs/architecture/decisions/0002-session-lifecycle-in-delegation.md).
 - On-chain revocation (`isRevoked`, `revokeDelegation`).
 - `JtiStore` interface (adapters live in `mcp-runtime`).
@@ -42,7 +42,7 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 **Hashing:** `hashDelegation`, `hashCaveats`, `evaluateCaveats`
 **Browser:** `DelegationClient`
 **Sessions:** `SessionManager`, `SessionStore`
-**Token:** `mintDelegationToken`, `verifyDelegationToken`, `verifyCrossDelegation`
+**Token:** `mintDelegationToken`, `verifyDelegationToken`
 **On-chain:** `isRevoked`, `revokeDelegation`
 **Types:** `Delegation`, `Caveat`, `DataScopeGrant`, `DelegationTokenClaims`, `EnforcerAddressMap`, `JtiStore`, `CaveatContext`, `VerifyOpts`, `VerifyError`, `SessionRow`, `SessionPackage`, `SessionMeta`
 

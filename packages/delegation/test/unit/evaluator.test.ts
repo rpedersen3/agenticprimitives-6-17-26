@@ -90,10 +90,18 @@ describe('evaluateCaveats — MCP_TOOL_SCOPE sentinel', () => {
 });
 
 describe('evaluateCaveats — value + allowedTargets', () => {
-  it('value: passes when ctx.value omitted (deferred to on-chain)', () => {
+  it('H7-B.2 strict (default): value caveat DENIES when ctx.value omitted', () => {
     const c = buildCaveat(ENFORCERS.value, encodeValueTerms(1_000_000n));
     const v = evaluateCaveats([c], { timestamp: 1 }, ENFORCERS);
+    expect(v[0]!.allowed).toBe(false);
+    if (!v[0]!.allowed) expect(v[0]!.reason).toContain('context-required');
+  });
+
+  it('H7-B.2: value caveat allows when ctx.value omitted AND enforceOnChain=true', () => {
+    const c = buildCaveat(ENFORCERS.value, encodeValueTerms(1_000_000n));
+    const v = evaluateCaveats([c], { timestamp: 1 }, ENFORCERS, { enforceOnChain: true });
     expect(v[0]!.allowed).toBe(true);
+    if (v[0]!.allowed) expect(v[0]!.reason).toBe('enforced-on-chain');
   });
 
   it('value: denies when ctx.value over cap', () => {

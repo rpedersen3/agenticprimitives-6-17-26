@@ -59,19 +59,22 @@
     "AuthCodeValue",
     "AuthCodeStore",
     "mintIdToken",
+    "mintBoundIdToken",
     "verifyIdToken",
+    "verifyEnrollmentGrantBinding",
     "verifyPkceS256",
     "OidcIdToken",
     "MintIdTokenInput",
+    "BoundMintIdTokenInput",
     "VerifyIdTokenResult",
     "VerifyIdTokenOpts"
   ],
   "forbiddenTerms": [
     {
       "term": "Delegation",
-      "reason": "Delegation primitive belongs in delegation; the broker issues sessions, not delegations. The 'delegation-issue' custody-class action LABEL (spec 224 §8) is a legitimate reference (the broker classifies it as step-up-requiring); the forbiddenImports boundary still prevents using the delegation API.",
+      "reason": "Delegation primitive belongs in delegation; the broker issues sessions, not delegations. The 'delegation-issue' custody-class action LABEL (spec 224 §8) is a legitimate reference (the broker classifies it as step-up-requiring); H7-B.5's BoundMintIdTokenInput / verifyEnrollmentGrantBinding bind to a `delegationHash` that the relying app passes in as an opaque bytes32 — connect verifies the hash binding, never imports the delegation API.",
       "owningPackage": "@agenticprimitives/delegation",
-      "allowInPaths": ["src/broker.ts"]
+      "allowInPaths": ["src/broker.ts", "src/token.ts"]
     },
     {
       "term": "Caveat",

@@ -339,21 +339,9 @@ export async function verifyDelegationForResource(
   });
 }
 
-export function withCrossDelegation<A extends Record<string, unknown>>(
-  _config: McpResourceVerifyConfig,
-  _handler: (args: A & {
-    callerPrincipal: Address;
-    dataPrincipal: Address;
-    grants: DataScopeGrant[];
-  }) => Promise<unknown>,
-): (args: A & { token: string; crossDelegationHash: Hex }) => Promise<unknown> {
-  return async () => {
-    throw new McpAuthError(
-      'withCrossDelegation not implemented in v0 (cross-delegation verify lands in v0.1)',
-    );
-  };
-}
-
-export async function verifyCrossDelegationForResource(): Promise<{ error: string }> {
-  return { error: 'verifyCrossDelegationForResource not implemented in v0' };
-}
+// H7-B.8 (XPKG-002 / EXT-024 closure) — `withCrossDelegation` +
+// `verifyCrossDelegationForResource` were public symbols that
+// unconditionally rejected. Removed from the public surface; will land
+// behind `./experimental` per spec 100 §6 when the cross-delegation work
+// resumes. See PKG-mcp-runtime-001 in
+// docs/audits/2026-05-packages-contracts-production-readiness.md.

@@ -7,7 +7,13 @@ import type { Address, Hex } from '@agenticprimitives/types';
 export type { Address, Hex };
 export type { A2AKeyProvider, KmsAccountBackend, BuildOpts, KmsBackend } from './types';
 
-export { buildKeyProvider, buildSignerBackend, buildToolExecutorBackend, buildMacProvider } from './factories';
+export {
+  buildKeyProvider,
+  buildSignerBackend,
+  buildToolExecutorBackend,
+  buildToolExecutorBackendNoIsolation,
+  buildMacProvider,
+} from './factories';
 // `deriveSubjectPrivateKeyHex` is intentionally NOT re-exported here — it returns
 // a per-subject raw private key (security-sensitive). It stays exported from
 // `./derive-subject` for in-package unit tests but is not part of the public API.

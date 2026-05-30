@@ -25,18 +25,40 @@ describe('salt derivation', () => {
     expect(() => deriveSaltFromLabel('')).toThrow(/non-empty string/);
   });
 
+  const SECRET = 'deployment-secret-fixture-32-bytes';
+
   it('deriveSaltFromEmail varies by rotation', () => {
-    const r0 = deriveSaltFromEmail('a@b.c', 0);
-    const r1 = deriveSaltFromEmail('a@b.c', 1);
-    const r2 = deriveSaltFromEmail('a@b.c', 2);
+    const r0 = deriveSaltFromEmail('a@b.c', 0, { secret: SECRET });
+    const r1 = deriveSaltFromEmail('a@b.c', 1, { secret: SECRET });
+    const r2 = deriveSaltFromEmail('a@b.c', 2, { secret: SECRET });
     expect(r0).not.toBe(r1);
     expect(r1).not.toBe(r2);
     expect(r0).not.toBe(r2);
   });
 
   it('deriveSaltFromEmail rejects invalid rotation', () => {
-    expect(() => deriveSaltFromEmail('a@b.c', -1)).toThrow(/non-negative integer/);
-    expect(() => deriveSaltFromEmail('a@b.c', 1.5)).toThrow(/non-negative integer/);
+    expect(() => deriveSaltFromEmail('a@b.c', -1, { secret: SECRET })).toThrow(/non-negative integer/);
+    expect(() => deriveSaltFromEmail('a@b.c', 1.5, { secret: SECRET })).toThrow(/non-negative integer/);
+  });
+
+  it('H7-B.10: deriveSaltFromEmail REQUIRES { secret } (PKG-CONNECT-AUTH-002 closure)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(() => (deriveSaltFromEmail as any)('a@b.c', 0)).toThrow(/secret \} is required/);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(() => (deriveSaltFromEmail as any)('a@b.c', 0, {})).toThrow(/secret \} is required/);
+    expect(() => deriveSaltFromEmail('a@b.c', 0, { secret: 'short' })).toThrow(/secret \} is required/);
+  });
+
+  it('H7-B.10: same email + different secrets → different salts (address-enumeration mitigation)', () => {
+    const a = deriveSaltFromEmail('victim@example.com', 0, { secret: 'deployment-A-secret-fixture' });
+    const b = deriveSaltFromEmail('victim@example.com', 0, { secret: 'deployment-B-secret-fixture' });
+    expect(a).not.toBe(b);
+  });
+
+  it('H7-B.10: same email + same secret → same salt (deterministic for the deployer)', () => {
+    const a = deriveSaltFromEmail('alice@example.com', 0, { secret: SECRET });
+    const b = deriveSaltFromEmail('alice@example.com', 0, { secret: SECRET });
+    expect(a).toBe(b);
   });
 
   it('golden values (regression-protect deterministic hash)', () => {

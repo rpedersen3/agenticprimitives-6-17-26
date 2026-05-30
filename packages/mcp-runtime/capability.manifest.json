@@ -5,7 +5,7 @@
   "agentEntry": "CLAUDE.md",
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/205-mcp-runtime.md",
-  "summary": "Delegation-aware authorization middleware around the official MCP SDK. withDelegation/withCrossDelegation wrappers, JTI replay protection, classification routing.",
+  "summary": "Authorization middleware around the official MCP SDK. withDelegation wrapper, JTI replay protection, classification routing. (withCrossDelegation removed in H7-B.8; resurfaces under ./experimental.)",
   "owns": {
     "source": ["src/**"],
     "tests": ["test/**"]
@@ -36,13 +36,12 @@
   ],
   "publicExports": [
     "withDelegation",
-    "withCrossDelegation",
     "declareResource",
     "createSqliteJtiStore",
     "createPostgresJtiStore",
     "createMemoryJtiStore",
+    "MigratableJtiStore",
     "verifyDelegationForResource",
-    "verifyCrossDelegationForResource",
     "McpResourceVerifyConfig",
     "ResourceDefinition",
     "BetterSqlite3DatabaseLike",

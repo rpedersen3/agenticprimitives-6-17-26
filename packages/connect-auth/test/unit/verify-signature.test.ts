@@ -51,7 +51,7 @@ describe('verifyUserSignatureView', () => {
       signature: SIG_EOA,
       client,
     });
-    expect(result).toBe(true);
+    expect(result).toEqual({ ok: true });
     expect(captured).toMatchObject({
       address: VALIDATOR,
       functionName: 'isValidSigView',
@@ -59,7 +59,7 @@ describe('verifyUserSignatureView', () => {
     });
   });
 
-  it('returns false when readContract throws', async () => {
+  it('H7-B.3: returns reason:rpc when readContract throws (not invalid)', async () => {
     const client = {
       async readContract(): Promise<boolean> {
         throw new Error('rpc-failed');
@@ -72,10 +72,14 @@ describe('verifyUserSignatureView', () => {
       signature: SIG_EOA,
       client,
     });
-    expect(result).toBe(false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('rpc');
+      expect((result.details as Error)?.message).toBe('rpc-failed');
+    }
   });
 
-  it('returns false when the validator reports invalid', async () => {
+  it('H7-B.3: returns reason:invalid when the validator reports invalid', async () => {
     const client = {
       async readContract(): Promise<boolean> {
         return false;
@@ -88,7 +92,8 @@ describe('verifyUserSignatureView', () => {
       signature: SIG_EOA,
       client,
     });
-    expect(result).toBe(false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('invalid');
   });
 });
 
@@ -105,14 +110,14 @@ describe('verifyUserSignature (state-changing simulate path)', () => {
         return { result: true };
       },
     };
-    const ok = await verifyUserSignature({
+    const result = await verifyUserSignature({
       universalValidator: VALIDATOR,
       signer: SIGNER,
       hash: HASH,
       signature: SIG_6492,
       client,
     });
-    expect(ok).toBe(true);
+    expect(result).toEqual({ ok: true });
     expect(captured).toMatchObject({
       address: VALIDATOR,
       functionName: 'isValidSig',
@@ -128,7 +133,7 @@ describe('verifyUserSignature (state-changing simulate path)', () => {
         return true;
       },
     };
-    const ok = await verifyUserSignature({
+    const result = await verifyUserSignature({
       universalValidator: VALIDATOR,
       signer: SIGNER,
       hash: HASH,
@@ -136,10 +141,10 @@ describe('verifyUserSignature (state-changing simulate path)', () => {
       client,
     });
     expect(hitView).toBe(true);
-    expect(ok).toBe(true);
+    expect(result).toEqual({ ok: true });
   });
 
-  it('returns false when simulateContract throws', async () => {
+  it('H7-B.3: returns reason:rpc when simulateContract throws (not invalid)', async () => {
     const client = {
       async readContract(): Promise<boolean> {
         return false;
@@ -148,14 +153,18 @@ describe('verifyUserSignature (state-changing simulate path)', () => {
         throw new Error('simulate-rejected');
       },
     };
-    const ok = await verifyUserSignature({
+    const result = await verifyUserSignature({
       universalValidator: VALIDATOR,
       signer: SIGNER,
       hash: HASH,
       signature: SIG_6492,
       client,
     });
-    expect(ok).toBe(false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('rpc');
+      expect((result.details as Error)?.message).toBe('simulate-rejected');
+    }
   });
 });
 

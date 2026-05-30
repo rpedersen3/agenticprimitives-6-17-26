@@ -36,19 +36,7 @@ The handler no longer touches auth. The wrapper performs: HMAC envelope check โ
 
 ## Cross-delegation
 
-```ts
-import { withCrossDelegation } from '@agenticprimitives/mcp-runtime';
-
-server.registerTool({
-  name: 'get_delegated_profile',
-  handler: withCrossDelegation(config, async ({ dataPrincipal, grants }) => {
-    // dataPrincipal = the user whose data is being read
-    // callerPrincipal = the agent reading it
-    // grants = DataScopeGrant[] filtered to this audience
-    return db.profiles.findUnique({ where: { ownerAddress: dataPrincipal } });
-  }),
-});
-```
+**Removed from the public surface in H7-B.8** (XPKG-002 / EXT-024 closure). The previous `withCrossDelegation` was a stub that unconditionally rejected. Per spec 100 ยง6, experimental capability lives behind a `./experimental` subpath; when cross-delegation work resumes it lands there. See [`docs/audits/2026-05-packages-contracts-production-readiness.md`](../../docs/audits/2026-05-packages-contracts-production-readiness.md) (PKG-mcp-runtime-001).
 
 ## Status
 

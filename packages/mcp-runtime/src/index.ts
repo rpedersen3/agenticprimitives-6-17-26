@@ -2,11 +2,13 @@
 //
 // See ../../specs/205-mcp-runtime.md for the full contract.
 
+// H7-B.8: `withCrossDelegation` + `verifyCrossDelegationForResource` removed
+// from the public surface (XPKG-002 / EXT-024 closure). Both were stubs that
+// unconditionally rejected. They will resurface behind `./experimental` per
+// spec 100 §6 when the cross-delegation work resumes.
 export {
   withDelegation,
-  withCrossDelegation,
   verifyDelegationForResource,
-  verifyCrossDelegationForResource,
   McpAuthError,
 } from './with-delegation';
 export { declareResource } from './declare-resource';
@@ -14,6 +16,7 @@ export {
   createMemoryJtiStore,
   createSqliteJtiStore,
   createPostgresJtiStore,
+  type MigratableJtiStore,
 } from './jti-stores';
 export {
   generateServiceMac,

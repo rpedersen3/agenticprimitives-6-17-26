@@ -24,7 +24,7 @@
 ## Stable public exports
 **Schema:** `AuditEvent`
 **Interfaces:** `AuditSink`, `MemoryAuditSink`
-**Sinks:** `createConsoleAuditSink`, `createMemoryAuditSink`, `composeSinks`
+**Sinks:** `createConsoleAuditSink`, `createMemoryAuditSink`, `composeSinks` (= `composeFailSoftSinks`), `composeFailHardSinks`
 **Helpers:** `generateEventId`, `nowIso`, `buildEvent`
 
 ## Allowed imports
@@ -48,7 +48,7 @@
 
 ## Security invariants (DO NOT BREAK)
 - **Append-only by interface.** The `AuditSink.write` method has no edit/delete counterpart. Persistent backend implementations MUST enforce this at the storage layer (immutable D1 table, log-stream-only Cloud Logging, etc.).
-- **Fail-soft emission.** Sinks absorb transient failures internally; the caller's `await write(event)` must NEVER reject the caller's request flow. (`composeSinks` enforces this for the multi-sink case.)
+- **Two failure contracts, picked per event class.** `composeSinks` / `composeFailSoftSinks` absorb transient failures internally — best for telemetry-grade events. **H7-B.7 (PKG-AUDIT-001 closure):** security-critical events (`delegation.mint`, `delegation.revoke`, `custody.{schedule,apply,cancel}`, `key-custody.{sign,rotate}`, `account-custody.credential-*`) MUST use `composeFailHardSinks` — first sink failure throws so the caller's flow refuses to commit if the audit didn't persist.
 - **No secret material in events.** Emitters MUST hash or omit raw secrets (session IDs, private keys, full delegation tokens). Each emitter package documents its redaction approach in its `AUDIT.md`.
 - **Deterministic IDs are not required, but timestamps are.** Every event has an ISO-8601 UTC timestamp.
 

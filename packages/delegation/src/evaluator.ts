@@ -3,6 +3,25 @@
 // Each Caveat has an `enforcer` address that selects an evaluator function.
 // Unknown enforcer addresses → reject (no permissive default). This is a
 // CORE security invariant per spec 202 §11. Verbatim from smart-agent.
+//
+// **H7-B.2 strict-mode (PKG-DELEGATION-001 closure).** Three caveat types
+// previously returned `allowed:true` when the context field they needed was
+// missing ("enforced on-chain"). That is a BOUNDARY TRAP: a consumer using
+// the evaluator off-chain (MCP gate, A2A pre-check, any non-redeem path)
+// would silently permit the call. The fix:
+//
+//   - **Strict mode is the default** (caller does NOT pass `enforceOnChain`):
+//     missing context for Value / AllowedTargets / AllowedMethods / inert
+//     on-chain-only enforcers → `{ allowed: false, reason: 'context-required' }`.
+//
+//   - **Permissive mode** is opt-in by callers who can prove the call WILL be
+//     redeemed on-chain (so the on-chain enforcer fires): pass
+//     `{ enforceOnChain: true }` in `EvaluateOpts`. Missing context for the
+//     same caveats then returns `allowed: true` with reason 'enforced-on-chain'.
+//
+// `verifyDelegationToken` requires the opt-in (off-chain JTI / session-token
+// gating is not an on-chain redeem). Off-chain pre-checks pass strict mode;
+// on-chain redeem flows pass `{ enforceOnChain: true }`.
 
 import { decodeAbiParameters, type Address } from 'viem';
 import type {
@@ -10,6 +29,7 @@ import type {
   CaveatContext,
   CaveatVerdict,
   EnforcerAddressMap,
+  EvaluateOpts,
 } from './types';
 import {
   MCP_TOOL_SCOPE_ENFORCER,
@@ -17,10 +37,22 @@ import {
   DELEGATE_BINDING_ENFORCER,
 } from './caveats';
 
-type EvalFn = (c: Caveat, ctx: CaveatContext) => CaveatVerdict;
+type EvalFn = (c: Caveat, ctx: CaveatContext, opts: EvaluateOpts) => CaveatVerdict;
 
 function lower(a?: Address): string | undefined {
   return a?.toLowerCase();
+}
+
+/** Permissive when caller has opted into on-chain redeem; strict otherwise. */
+function inertWhenAllowed(c: Caveat, opts: EvaluateOpts): CaveatVerdict {
+  if (opts.enforceOnChain) {
+    return { enforcer: c.enforcer, allowed: true, reason: 'enforced-on-chain' };
+  }
+  return {
+    enforcer: c.enforcer,
+    allowed: false,
+    reason: 'context-required (caveat type is on-chain-only; set EvaluateOpts.enforceOnChain to opt in)',
+  };
 }
 
 function evalTimestamp(c: Caveat, ctx: CaveatContext): CaveatVerdict {
@@ -38,8 +70,8 @@ function evalTimestamp(c: Caveat, ctx: CaveatContext): CaveatVerdict {
   }
 }
 
-function evalValue(c: Caveat, ctx: CaveatContext): CaveatVerdict {
-  if (ctx.value === undefined) return { enforcer: c.enforcer, allowed: true }; // context-less; enforced on-chain
+function evalValue(c: Caveat, ctx: CaveatContext, opts: EvaluateOpts): CaveatVerdict {
+  if (ctx.value === undefined) return inertWhenAllowed(c, opts);
   try {
     const [maxValue] = decodeAbiParameters([{ type: 'uint256' }], c.terms) as readonly [bigint];
     if (ctx.value > maxValue) return { enforcer: c.enforcer, allowed: false, reason: 'value over cap' };
@@ -49,8 +81,8 @@ function evalValue(c: Caveat, ctx: CaveatContext): CaveatVerdict {
   }
 }
 
-function evalAllowedTargets(c: Caveat, ctx: CaveatContext): CaveatVerdict {
-  if (!ctx.target) return { enforcer: c.enforcer, allowed: true }; // context-less; enforced on-chain
+function evalAllowedTargets(c: Caveat, ctx: CaveatContext, opts: EvaluateOpts): CaveatVerdict {
+  if (!ctx.target) return inertWhenAllowed(c, opts);
   try {
     const [targets] = decodeAbiParameters([{ type: 'address[]' }], c.terms) as readonly [Address[]];
     const target = ctx.target.toLowerCase();
@@ -61,8 +93,8 @@ function evalAllowedTargets(c: Caveat, ctx: CaveatContext): CaveatVerdict {
   }
 }
 
-function evalAllowedMethods(c: Caveat, ctx: CaveatContext): CaveatVerdict {
-  if (!ctx.selector) return { enforcer: c.enforcer, allowed: true };
+function evalAllowedMethods(c: Caveat, ctx: CaveatContext, opts: EvaluateOpts): CaveatVerdict {
+  if (!ctx.selector) return inertWhenAllowed(c, opts);
   try {
     const [selectors] = decodeAbiParameters([{ type: 'bytes4[]' }], c.terms) as readonly [`0x${string}`[]];
     const sel = ctx.selector.toLowerCase();
@@ -84,13 +116,17 @@ function evalMcpToolScope(c: Caveat, ctx: CaveatContext): CaveatVerdict {
   }
 }
 
-function evalInert(c: Caveat): CaveatVerdict {
-  // DATA_SCOPE + DELEGATE_BINDING + on-chain-only enforcers are
-  // evaluated outside this dispatcher (by verifyCrossDelegation or
-  // on-chain). We accept here as inert BUT sanity-check the term
-  // structure — malformed terms must reject at the closest layer to
-  // discovery to keep downstream verifiers from having to defend
-  // against garbage. Per spec 202 § 11: fail-closed on shape.
+function evalInert(c: Caveat, _ctx: CaveatContext, opts: EvaluateOpts): CaveatVerdict {
+  // DATA_SCOPE + DELEGATE_BINDING + on-chain-only enforcers (taskBinding,
+  // callDataHash, recovery, rateLimit) are evaluated outside this dispatcher
+  // (by verifyCrossDelegation or on-chain). In strict mode (H7-B.2) we refuse
+  // to give an "allowed" verdict unless the caller has opted into
+  // `enforceOnChain` — otherwise the verdict misleads any callsite that won't
+  // reach the on-chain enforcer (e.g. an MCP-only gate).
+  //
+  // Shape checks still run unconditionally — malformed terms must reject at
+  // the closest layer to discovery to keep downstream verifiers from having
+  // to defend against garbage. Per spec 202 § 11: fail-closed on shape.
   const enforcerLower = c.enforcer.toLowerCase();
   if (enforcerLower === DELEGATE_BINDING_ENFORCER.toLowerCase()) {
     try {
@@ -129,7 +165,8 @@ function evalInert(c: Caveat): CaveatVerdict {
       };
     }
   }
-  return { enforcer: c.enforcer, allowed: true };
+  // Shape valid; allow only if caller opted into on-chain redeem.
+  return inertWhenAllowed(c, opts);
 }
 
 /**
@@ -137,11 +174,18 @@ function evalInert(c: Caveat): CaveatVerdict {
  * in input order. Caller decides what to do on the first deny.
  *
  * Unknown enforcer addresses produce a deny verdict. No exceptions.
+ *
+ * **H7-B.2:** in strict mode (the default) caveats that need a context field
+ * the caller didn't supply return `{ allowed: false, reason: 'context-required ...' }`.
+ * Callers who will redeem the delegation on-chain (where the enforcer DOES
+ * fire) can opt into permissive evaluation via `opts.enforceOnChain = true`.
+ * Off-chain gates (MCP / A2A / session-token verify) MUST stay in strict mode.
  */
 export function evaluateCaveats(
   caveats: Caveat[],
   ctx: CaveatContext,
   enforcerMap: EnforcerAddressMap,
+  opts: EvaluateOpts = {},
 ): CaveatVerdict[] {
   // Build dispatch table keyed by lowercased enforcer address.
   const dispatch = new Map<string, EvalFn>();
@@ -166,7 +210,7 @@ export function evaluateCaveats(
       verdicts.push({ enforcer: c.enforcer, allowed: false, reason: 'unknown enforcer' });
       continue;
     }
-    verdicts.push(fn(c, ctx));
+    verdicts.push(fn(c, ctx, opts));
   }
   return verdicts;
 }

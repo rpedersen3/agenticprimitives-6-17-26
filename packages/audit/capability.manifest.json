@@ -37,6 +37,8 @@
     "createMemoryAuditSink",
     "createMemoryMetricsSink",
     "composeSinks",
+    "composeFailSoftSinks",
+    "composeFailHardSinks",
     "composeMetricsSinks",
     "createPiiGuardrailSink",
     "noopMetricsSink",

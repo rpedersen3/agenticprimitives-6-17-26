@@ -4,7 +4,7 @@
 
 export { mintSession, verifySession, SESSION_COOKIE, SESSION_TTL_SECONDS } from './sessions';
 export { csrfTokenFor, verifyCsrf } from './csrf';
-export { deriveSaltFromLabel, deriveSaltFromEmail } from './salt';
+export { deriveSaltFromLabel, deriveSaltFromEmail, type DeriveSaltFromEmailOpts } from './salt';
 export {
   ERC1271_MAGIC,
   ERC6492_MAGIC,
@@ -14,6 +14,7 @@ export {
   isErc6492Wrapped,
 } from './verify-signature';
 export type {
+  SignatureVerifyResult,
   VerifyUserSignatureArgs,
   UniversalValidatorClient,
 } from './verify-signature';

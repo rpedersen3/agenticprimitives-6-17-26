@@ -43,9 +43,36 @@ const SALT_BYTES = 16;
  *   wrap. Compromise = decrypt session keypairs at rest = forge delegations.
  */
 const warnedOptIns = new Set<string>();
+
+/**
+ * H7-B.9 / XPKG-005 — production guard. Previously keyed off
+ * `process.env.NODE_ENV !== 'production'` to SKIP — which silently
+ * allowed local providers on runtimes that don't set NODE_ENV
+ * (Cloudflare Workers, Deno, SES). Fix: inferred environment defaults
+ * to `'production'` when NODE_ENV is unreadable or missing, matching
+ * `inferEnvironment` in `factories.ts` / sibling-package inferEnvironment functions.
+ */
+function isProductionEnvironment(): boolean {
+  try {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV) {
+      return process.env.NODE_ENV === 'production';
+    }
+  } catch {
+    /* SES / Workers may throw on process access */
+  }
+  // Ambiguous runtime → assume production (fail-closed).
+  return true;
+}
+
 function assertLocalProviderAllowedInProduction(label: string, optInEnvVar: string): void {
-  if (process.env.NODE_ENV !== 'production') return;
-  if (process.env[optInEnvVar] === 'true') {
+  if (!isProductionEnvironment()) return;
+  let optIn = false;
+  try {
+    optIn = process.env?.[optInEnvVar] === 'true';
+  } catch {
+    /* SES / Workers — opt-in not readable, treat as not-set */
+  }
+  if (optIn) {
     if (!warnedOptIns.has(optInEnvVar)) {
       warnedOptIns.add(optInEnvVar);
       // eslint-disable-next-line no-console
@@ -57,7 +84,7 @@ function assertLocalProviderAllowedInProduction(label: string, optInEnvVar: stri
     return;
   }
   throw new Error(
-    `${label} refuses to start when NODE_ENV=production. ` +
+    `${label} refuses to start in production (or in a runtime where NODE_ENV is unset). ` +
       `Configure a managed KMS backend (gcp-kms / aws-kms), or set ` +
       `${optInEnvVar}=true to acknowledge running with local key material (demo / staging only).`,
   );

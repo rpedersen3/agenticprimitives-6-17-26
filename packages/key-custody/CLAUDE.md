@@ -34,12 +34,16 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 
 ## Stable public exports
 **Interface:** `A2AKeyProvider`, `KmsAccountBackend`, `KmsBackend`, `BuildOpts`
-**Factories:** `buildKeyProvider`, `buildSignerBackend`, `buildToolExecutorBackend`, `buildMacProvider`, `getRelayOnlySigner`
+**Factories:** `buildKeyProvider`, `buildSignerBackend`, `buildToolExecutorBackend` (deprecated; throws — see below), `buildToolExecutorBackendNoIsolation` (gated dev-only), `buildMacProvider`, `getRelayOnlySigner`
 **Per-subject (spec 235):** `deriveSubjectSigner`, `subjectCanonicalMessage`, `SubjectId`, `DeriveSubjectOpts`
 **viem adapter:** `createKmsAccount`
 **Built-ins:** `LocalAesProvider`, `LocalSecp256k1Signer`, `AwsKmsProvider`, `AwsKmsSigner`, `GcpKmsProvider`, `GcpKmsSigner`
 **AAD helpers:** `canonicalContextBytes`
 **NOT exported (intentional):** `deriveSubjectPrivateKeyHex` — returns the raw per-subject privkey as hex; module-internal so unit tests can verify the derivation, but never part of the public API. Closure of ARCH-006 / PKG-KEY-CUSTODY-002.
+
+**`buildToolExecutorBackend` is deprecated — it ignored `toolId` and returned the master signer.** H7-B.1 (PKG-KEY-CUSTODY-001 closure) made it throw with a clear redirect. The two replacements:
+- `buildToolExecutorBackendNoIsolation(toolId, opts)` — explicit "no isolation" name; refused in production; requires `AP_ALLOW_NO_TOOL_ISOLATION=true` in dev. Use as a transitional path.
+- `deriveSubjectSigner({ subject: { iss, sub } })` — true per-OIDC-subject signer derived via HKDF (spec 235). Use when isolation is needed.
 
 ## Allowed imports
 `@agenticprimitives/types`, `@agenticprimitives/connect-auth` (`KMSSigner` type), `viem`, `@noble/curves`, `@noble/hashes`, `@aws-sdk/client-kms`, `@google-cloud/kms`.
