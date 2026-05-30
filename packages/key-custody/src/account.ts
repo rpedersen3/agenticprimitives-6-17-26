@@ -1,5 +1,5 @@
 // createKmsAccount — viem adapter that turns a KmsAccountBackend into a
-// KMSSigner conforming to identity-auth's Signer interface contract.
+// KMSSigner conforming to connect-auth's Signer interface contract.
 
 import { keccak_256 } from '@noble/hashes/sha3';
 import { bytesToHex, hexToBytes, hashTypedData, type Hex, type Address } from 'viem';

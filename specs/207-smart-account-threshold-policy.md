@@ -13,7 +13,7 @@
 > - `agent-account` owns multi-owner state, `_guardians`, `_modeFlags`, threshold getters, admin actions, and recovery.
 > - `delegation` carries signer sets natively (threshold=1 is the trivial case), and `buildQuorumCaveat` is a peer of the existing caveat builders.
 > - `tool-policy` owns the risk-tier taxonomy (T1 Read / T2 Write / T3 Value / T4 Admin / T5 Critical / T6 Recovery) — risk tiers are already its domain per spec 204.
-> - `identity-auth` is unchanged — the `Signer` interface stays signer-shape-agnostic.
+> - `connect-auth` is unchanged — the `Signer` interface stays signer-shape-agnostic.
 > - `mcp-runtime` is unchanged — `withDelegation` calls verify; verify transparently handles n-of-m once delegation does.
 >
 > A consumer reading our docs should not have to "enable multi-sig" — they should always be dealing with `Delegation` objects that may have 1+ signers, gated by `threshold(tier)` on the account. The on-chain primitives shipped in 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`) stay where they landed in `apps/contracts/`; they're not getting wrapped in a new package boundary.
@@ -131,7 +131,7 @@ Per Rhinestone's modular-account model (validators / executors / hooks / fallbac
 
 | ERC-7579 module type | Our package | Owns |
 | --- | --- | --- |
-| **Validators** (who can approve) | `identity-auth` + on-chain signer state in `agent-account` | `Signer` interface, ERC-1271 verification, owner / passkey / guardian state |
+| **Validators** (who can approve) | `connect-auth` + on-chain signer state in `agent-account` | `Signer` interface, ERC-1271 verification, owner / passkey / guardian state |
 | **Executors** (what can act) | `delegation` | `Delegation`, sessions, caveat builders, redelegation chain |
 | **Hooks** (pre / post checks) | `tool-policy` + the caveat enforcer contracts in `apps/contracts/src/enforcers/` | Risk tiers, classification, `evaluatePolicy`, `beforeHook` / `afterHook` |
 | **Runtime adapters** | `mcp-runtime` (today); future `a2a-runtime` etc. | Wraps the validator → executor → hook pipeline behind a transport-specific surface |
@@ -352,7 +352,7 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
 | `agent-account` | Multi-owner state, mode, thresholds, admin actions, recovery, owner-signature aggregation | `_guardians` mapping, `_modeFlags`, `threshold(tier)` + `recoveryApprovals()` getters, propose / execute / cancel admin machinery, `CustodyAction` enum (incl. `RotateAllCustodians` / `ChangeValueCeiling` / `SetRecoveryApprovals`), recovery flow. SDK: `AgentAccountClient` gains `scheduleCustodyChange` / `applyCustodyChange` / `cancelScheduledChange` / `initiateRecovery` / `executeRecovery` / `preApproveHash(hash)`. Also **`packSafeSignatures(parts)`** — the Safe-compatible 65-byte-slot blob packer lives here because owners' signatures are aggregated by the account-side SDK, not the delegation builder. |
 | `delegation` | Signer-set + quorum-aware delegations and caveats | `Delegation` shape stays as-is (signer set is implicit in the caveats it carries). `buildQuorumCaveat({signers, threshold, approvedHashRegistry})` joins the existing caveat-builder peers (`buildCaveat`, `buildMcpToolScopeCaveat`, `buildDelegateBindingCaveat`, `buildDataScopeCaveat`). `verifyDelegationToken` gains an optional `requireQuorumForTier(tier)` opt (fail-closed when a tier requires quorum but the delegation lacks the caveat). |
 | `tool-policy` | Risk-tier taxonomy + policy decision | Risk-tier constants (`TIER_READ` ... `TIER_RECOVERY`) become first-class exports. `evaluatePolicy(classification)` returns a `{ tier, requiresQuorum, requiresUv, requiresAcceptedOnChain }` decision that the caller composes with `delegation.verifyDelegationToken`. The existing `@sa-risk-tier` classification metadata gains the tier IDs from this spec. |
-| `identity-auth` | (unchanged) | The `Signer` interface stays signer-shape-agnostic. Multi-sig is below this layer — `identity-auth` doesn't know whether the eventual signer set is 1-of-1 or 3-of-5. |
+| `connect-auth` | (unchanged) | The `Signer` interface stays signer-shape-agnostic. Multi-sig is below this layer — `connect-auth` doesn't know whether the eventual signer set is 1-of-1 or 3-of-5. |
 | `mcp-runtime` | (effectively unchanged) | `withDelegation` already calls `verifyDelegationToken`. It transparently handles n-of-m once `delegation` does. The only addition: the `tool-policy` decision (`requiresQuorum`, etc.) is threaded into the verify call. |
 | `audit` | (unchanged interface; new emitter actions) | Spec 206 vocabulary table grows: `agent-account.admin.{propose,execute,cancel}`, `agent-account.recovery.{propose,execute,cancel}`, `delegation.quorum.{accept,reject}`. |
 | `apps/contracts` | On-chain primitives | Already-shipped: `QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`. New: `AgentAccount` extended in place (no new contract); `AgentAccountFactory.createAccount*` signatures grow to take `mode + initial signers + initial guardians + thresholds`. |

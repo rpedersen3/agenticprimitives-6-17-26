@@ -8,7 +8,7 @@
 ## 1. Charter
 
 Provides concrete KMS backends behind the `Signer` interface from
-`identity-auth`. Owns: `A2AKeyProvider` (envelope-encryption of session
+`connect-auth`. Owns: `A2AKeyProvider` (envelope-encryption of session
 data keys), `KmsAccountBackend` (signer abstraction), `LocalAesProvider`
 
 - `LocalSecp256k1Signer` (dev-only), `GcpKmsProvider` + `GcpKmsSigner`
@@ -18,7 +18,7 @@ data keys), `KmsAccountBackend` (signer abstraction), `LocalAesProvider`
 
 What this package does NOT own (per its `CLAUDE.md`):
 
-- The `Signer` interface itself (lives in `identity-auth`).
+- The `Signer` interface itself (lives in `connect-auth`).
 - Session lifecycle (`delegation.SessionManager`).
 - HTTP routing or persistence; backends are stateless.
 - Tool-policy decisions or delegation logic.
@@ -137,7 +137,7 @@ An external auditor evaluating this package needs:
 
 ## 9. Accepted limitations / scope exclusions
 
-- Does NOT define the `Signer` interface (that's `identity-auth`).
+- Does NOT define the `Signer` interface (that's `connect-auth`).
 - Does NOT manage session lifecycles (`delegation`).
 - Does NOT define the tool-policy decision (that's `tool-policy`).
 - AWS KMS is exported but throws — see M1.

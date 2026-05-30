@@ -32,19 +32,19 @@ Card fails schema validation for its `type`. Confirm required sub-objects exist
 Expected in Phase 1. Use pure helpers (`canonicalProfileJson`,
 `profileContentHash`, `buildCaip10Address`) until client methods are wired.
 
-## Confused With `identity-auth` "Profile"
+## Confused With `connect-auth` "Profile"
 
-`identity-auth` JWT profile = session user metadata (private).
-`agent-identity` AgentCard = public agent manifest (facet).
+`connect-auth` JWT profile = session user metadata (private).
+`agent-profile` AgentCard = public agent manifest (facet).
 
-Route session claims to `identity-auth`; route AgentCard to this package.
+Route session claims to `connect-auth`; route AgentCard to this package.
 
 ## Confused With Naming
 
 | Need | Package |
 | --- | --- |
 | Resolve `alice.agent` → address | `agent-naming` |
-| Publish AgentCard for `0x…` | `agent-identity` |
+| Publish AgentCard for `0x…` | `agent-profile` |
 | Set `nativeId` on name records | `agent-naming/records` |
 
 Compose at the app: resolve name, then `fetchProfile(address)`.

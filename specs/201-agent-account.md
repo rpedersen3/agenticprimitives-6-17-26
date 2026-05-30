@@ -10,7 +10,7 @@
 
 Provide the smart-account substrate one layer below delegation: given a `Signer` (from `@agenticprimitives/connect-auth`), determine the user's deterministic ERC-4337 smart account address, deploy it lazily, sign as the account via ERC-1271, and build UserOps.
 
-This is **smaller** than my original `auth` spec because identity (passkey/SIWE/Google) is now `identity-auth`. The signer-vs-account split mirrors the four major AA SDKs: signer is pluggable.
+This is **smaller** than my original `auth` spec because identity (passkey/SIWE/Google) is now `connect-auth`. The signer-vs-account split mirrors the four major AA SDKs: signer is pluggable.
 
 ---
 
@@ -23,7 +23,7 @@ This is **smaller** than my original `auth` spec because identity (passkey/SIWE/
 
 ### Salt derivation per auth method
 
-The package consumes salt-derivation helpers from `identity-auth`:
+The package consumes salt-derivation helpers from `connect-auth`:
 - Passkey: `BigInt(keccak256(label).slice(0, 18))`
 - SIWE: `0n`
 - Google: `deriveSaltFromEmail(email, rotation)` (rotation enables "Start Fresh")
@@ -100,7 +100,7 @@ export type { UserOperation };
 
 ## 6. What the package does NOT own
 
-- Auth flows / identity / sessions → `identity-auth`.
+- Auth flows / identity / sessions → `connect-auth`.
 - The delegation primitive → `delegation`.
 - KMS backends → `key-custody`.
 - Solidity source — addresses-by-config only; contracts live in smart-agent (or future `@agenticprimitives/contracts`).

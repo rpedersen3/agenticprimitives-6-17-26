@@ -45,7 +45,7 @@ do not assert a present-tense "upstream of" edge that doesn't exist.
 - Delegation / Caveat / Enforcer / Steward types → `delegation`
 - Anything called `Owner` or `Guardian` (those are old agency-domain
   terms the vocabulary firewall replaces with `Custodian` / `Trustee`)
-- Auth-method UX (passkey enroll, SIWE) → `identity-auth`
+- Auth-method UX (passkey enroll, SIWE) → `connect-auth`
 - Account address derivation / factory calls → `agent-account`
 
 ## Security invariants

@@ -56,7 +56,7 @@ export interface Edge {
   objectRoles: Role[];
   /** Lifecycle status. */
   status: EdgeStatus;
-  /** Optional metadata URI (off-chain JSON; same content-hash discipline as agent-identity). */
+  /** Optional metadata URI (off-chain JSON; same content-hash discipline as agent-profile). */
   metadataUri?: string;
   /** keccak256 of canonical metadata JSON (if `metadataUri` set). */
   metadataHash?: Hex;

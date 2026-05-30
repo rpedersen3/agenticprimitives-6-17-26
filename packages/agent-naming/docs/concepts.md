@@ -14,8 +14,8 @@ facet registrations — useful for UX and discovery, never the root authority.
 | --- | --- | --- |
 | Canonical identity | `agent-account` | `0xabc…` / `eip155:84532:0xabc…` |
 | Naming facet | `agent-naming` | `alice.agent` → `addr` + `nativeId` records |
-| Profile facet | `agent-identity` | AgentCard at `metadata-uri` |
-| Control credentials | `identity-auth` + `custody` | Passkey / SIWE → custodian on the SA |
+| Profile facet | `agent-profile` | AgentCard at `metadata-uri` |
+| Control credentials | `connect-auth` + `custody` | Passkey / SIWE → custodian on the SA |
 
 Cross-package APIs use `Address` or CAIP-10 `nativeId`, not bare names.
 

@@ -12,12 +12,12 @@ canonical EIP-712 domain + types + hash, caveat builders + the
 deterministic evaluator, `SessionManager` lifecycle (session keypair
 generation → envelope-encryption via `key-custody` → AAD-bound storage →
 package + revocation), and the `DelegationToken` mint/verify path the
-A2A→MCP boundary depends on. Imports `types`, `identity-auth`,
+A2A→MCP boundary depends on. Imports `types`, `connect-auth`,
 `agent-account`, `key-custody`.
 
 What this package does NOT own (per its `CLAUDE.md`):
 
-- JWT session cookies (those live in `identity-auth`).
+- JWT session cookies (those live in `connect-auth`).
 - Concrete KMS backends (`key-custody`).
 - Tool execution / MCP transport (`mcp-runtime`).
 - The smart account itself (`agent-account`).
@@ -149,9 +149,9 @@ An external auditor evaluating this package needs:
 
 ## 9. Accepted limitations / scope exclusions
 
-- Does NOT implement KMS / signer concretions; consumes `Signer` interface from `identity-auth` and persistence backends from `key-custody`.
+- Does NOT implement KMS / signer concretions; consumes `Signer` interface from `connect-auth` and persistence backends from `key-custody`.
 - Does NOT define the wire format of MCP requests; that's `mcp-runtime`.
 - Does NOT enforce policy tiers — that's `tool-policy` (consumed inside `mcp-runtime`).
-- Does NOT issue JWT sessions for user identity; that's `identity-auth`.
+- Does NOT issue JWT sessions for user identity; that's `connect-auth`.
 - Forbidden imports: `apps/`*, `mcp-runtime`, `tool-policy` (would create back-edges).
 

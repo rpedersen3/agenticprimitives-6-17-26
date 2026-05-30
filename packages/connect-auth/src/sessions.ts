@@ -23,7 +23,7 @@ function loadKeys(): SigningKey[] {
   const env = process.env.SESSION_JWT_SECRETS;
   if (!env) {
     throw new Error(
-      'identity-auth: SESSION_JWT_SECRETS is required (format: kid1:hex,kid2:hex). Generate one: openssl rand -hex 32',
+      'connect-auth: SESSION_JWT_SECRETS is required (format: kid1:hex,kid2:hex). Generate one: openssl rand -hex 32',
     );
   }
   const out: SigningKey[] = [];
@@ -32,19 +32,19 @@ function loadKeys(): SigningKey[] {
     if (!trimmed) continue;
     const idx = trimmed.indexOf(':');
     if (idx <= 0) {
-      throw new Error(`identity-auth: malformed SESSION_JWT_SECRETS entry "${trimmed}" (expected "kid:hex")`);
+      throw new Error(`connect-auth: malformed SESSION_JWT_SECRETS entry "${trimmed}" (expected "kid:hex")`);
     }
     const kid = trimmed.slice(0, idx);
     let hex = trimmed.slice(idx + 1);
     if (!hex.startsWith('0x')) hex = '0x' + hex;
     const secret = hexToBytes(hex as `0x${string}`);
     if (secret.length < 16) {
-      throw new Error(`identity-auth: SESSION_JWT_SECRETS key "${kid}" too short (need ≥ 16 bytes)`);
+      throw new Error(`connect-auth: SESSION_JWT_SECRETS key "${kid}" too short (need ≥ 16 bytes)`);
     }
     out.push({ kid, secret });
   }
   if (out.length === 0) {
-    throw new Error('identity-auth: SESSION_JWT_SECRETS resolved to zero usable keys');
+    throw new Error('connect-auth: SESSION_JWT_SECRETS resolved to zero usable keys');
   }
   return out;
 }

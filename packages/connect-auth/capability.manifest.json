@@ -80,7 +80,7 @@
     { "term": "envelope encryption", "reason": "Crypto primitive; belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
     { "term": "A2AKeyProvider", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
     { "term": "JTI", "reason": "Belongs in delegation (semantics) and mcp-runtime (storage).", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "MCP", "reason": "Belongs in mcp-runtime; identity-auth is transport-free.", "owningPackage": "@agenticprimitives/mcp-runtime", "allowInPaths": ["spec.md", "README.md"] }
+    { "term": "MCP", "reason": "Belongs in mcp-runtime; connect-auth is transport-free.", "owningPackage": "@agenticprimitives/mcp-runtime", "allowInPaths": ["spec.md", "README.md"] }
   ],
   "ignoreForAgentContext": [
     "dist/**",

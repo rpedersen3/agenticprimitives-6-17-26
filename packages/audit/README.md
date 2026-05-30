@@ -36,7 +36,7 @@ await sink.write(
 ## Boundaries
 
 - Ships **in-band sinks only** (console + memory + composeSinks). Concrete persistent sinks (D1, Postgres, Cloud Logging) live in consumer apps.
-- Sits at the **base of the dep graph** alongside `@agenticprimitives/types`. Forbidden from importing identity-auth / agent-account / delegation / key-custody / tool-policy / mcp-runtime — those import us.
+- Sits at the **base of the dep graph** alongside `@agenticprimitives/types`. Forbidden from importing connect-auth / agent-account / delegation / key-custody / tool-policy / mcp-runtime — those import us.
 
 ## Invariants
 

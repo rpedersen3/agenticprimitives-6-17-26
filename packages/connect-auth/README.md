@@ -24,7 +24,7 @@ Custodian add/remove belongs to `custody`, not here.
 - Smart Agent deploy, UserOps, or ERC-1271 account logic → `agent-account`.
 - Enrolling / rotating custodians on an SA → `custody`.
 - `.agent` names → `agent-naming`.
-- Public AgentCard profiles → `agent-identity`.
+- Public AgentCard profiles → `agent-profile`.
 - Delegation tokens or encrypted session rows → `delegation`.
 - KMS backends → `key-custody` (implements `KMSSigner`).
 
@@ -91,7 +91,7 @@ See [`docs/security.md`](docs/security.md) and [`AUDIT.md`](AUDIT.md).
 ## Validation
 
 ```bash
-pnpm check:identity-auth
+pnpm check:connect-auth
 pnpm check:forbidden-terms
 ```
 

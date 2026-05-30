@@ -47,12 +47,12 @@ export class AgentIdentityClient {
   private readonly fetcher: typeof fetch;
 
   constructor(readonly opts: AgentIdentityClientOptsLive) {
-    if (!opts.rpcUrl) throw new Error('[agent-identity] rpcUrl required');
+    if (!opts.rpcUrl) throw new Error('[agent-profile] rpcUrl required');
     if (typeof opts.chainId !== 'number') {
-      throw new Error('[agent-identity] chainId required');
+      throw new Error('[agent-profile] chainId required');
     }
     if (!opts.profileResolver) {
-      throw new Error('[agent-identity] profileResolver address required');
+      throw new Error('[agent-profile] profileResolver address required');
     }
     this.publicClient = createPublicClient({ transport: http(opts.rpcUrl) });
     this.profileResolver = opts.profileResolver;
@@ -92,7 +92,7 @@ export class AgentIdentityClient {
     if (!uri || uri === '') return null;
     const response = await this.fetcher(uri);
     if (!response.ok) {
-      throw new Error(`[agent-identity] failed to fetch profile JSON: HTTP ${response.status}`);
+      throw new Error(`[agent-profile] failed to fetch profile JSON: HTTP ${response.status}`);
     }
     const body = await response.text();
     const parsed = JSON.parse(body) as AgentCard;
@@ -207,7 +207,7 @@ export class AgentIdentityClient {
   private async _submit(ctx: WriteContext, call: { to: Address; value: bigint; data: Hex }): Promise<Hex> {
     const { walletClient } = ctx;
     const account = (walletClient as { account?: { address: Address } }).account;
-    if (!account) throw new Error('[agent-identity] walletClient has no account');
+    if (!account) throw new Error('[agent-profile] walletClient has no account');
     let lastErr: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -235,6 +235,6 @@ export class AgentIdentityClient {
         throw err;
       }
     }
-    throw lastErr instanceof Error ? lastErr : new Error('[agent-identity] _submit: exceeded retries');
+    throw lastErr instanceof Error ? lastErr : new Error('[agent-profile] _submit: exceeded retries');
   }
 }

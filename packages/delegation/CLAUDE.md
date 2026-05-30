@@ -22,8 +22,8 @@ A delegation is **agent → agent** authority: SA A grants SA B the right to tak
 ## Vocabulary
 **Owns:** `Delegation`, `Caveat`, `Enforcer`, `DelegationToken`, `principal`, `SessionManager`, `SessionRow`, `SessionPackage`, `SessionMeta`, `JtiStore` (interface), `EnforcerAddressMap`.
 **Disambiguation (critical):**
-- **"session"** here = `SessionRow` binding a `Delegation` to a session-signing keypair. In [`identity-auth`](../connect-auth) "session" is a JWT-cookie session — completely different concept.
-- **"signer"** here = a `Signer` from `identity-auth`. We consume; we don't define the interface.
+- **"session"** here = `SessionRow` binding a `Delegation` to a session-signing keypair. In [`connect-auth`](../connect-auth) "session" is a JWT-cookie session — completely different concept.
+- **"signer"** here = a `Signer` from `connect-auth`. We consume; we don't define the interface.
 - **"AAD"** is named here at the shape level (what fields go in) but encoded by `key-custody.canonicalContextBytes`.
 - **"principal"** = the verified `delegator` address after verification. Used by `mcp-runtime` as `principal: Address` in handler args.
 See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-map.md).
@@ -58,13 +58,13 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 - "Implement AES-GCM, envelope encryption, or a KMS backend" — **STOP.** Belongs in [`key-custody`](../key-custody). Consume the `A2AKeyProvider` interface; don't reimplement primitives. [ADR-0002](../../docs/architecture/decisions/0002-session-lifecycle-in-delegation.md).
 - "Add an MCP-specific verify wrapper or HMAC envelope" — **STOP.** Belongs in [`mcp-runtime`](../mcp-runtime). [ADR-0004](../../docs/architecture/decisions/0004-mcp-runtime-as-middleware.md).
 - "Define a risk tier or classification taxonomy" — **STOP.** Belongs in [`tool-policy`](../tool-policy). [ADR-0003](../../docs/architecture/decisions/0003-tool-policy-protocol-agnostic.md).
-- "Implement a custom auth method or JWT session" — **STOP.** Belongs in [`identity-auth`](../connect-auth).
+- "Implement a custom auth method or JWT session" — **STOP.** Belongs in [`connect-auth`](../connect-auth).
 - "Add an `AgentAccountClient` method (deploy / getAddress / etc.)" — **STOP.** Belongs in [`agent-account`](../agent-account).
 - "Add a permissive default to the caveat evaluator" — **HARD STOP.** Fail-closed is a security invariant. Unknown enforcer → reject. No exceptions.
 
 ## Before you write code
 - [ ] Is the change about caveats, EIP-712 hashing, token envelope, session lifecycle, or on-chain revocation?
-- [ ] If "session" appears in my change, am I sure I mean **delegation's `SessionRow`** (right place) and not `identity-auth`'s JWT session?
+- [ ] If "session" appears in my change, am I sure I mean **delegation's `SessionRow`** (right place) and not `connect-auth`'s JWT session?
 - [ ] If I'm encrypting bytes, am I calling `key-custody` primitives — not reimplementing them here?
 - [ ] If I'm changing caveat eval, did I preserve fail-closed semantics? Unknown enforcer → reject.
 - [ ] Did I update `specs/202-delegation.md` if the public API or behavior changed?

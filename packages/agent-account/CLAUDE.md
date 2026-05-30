@@ -10,7 +10,7 @@ The canonical SA address MUST NOT change during credential recovery ([ADR-0011](
 - EntryPoint v0.8 + factory client wiring (addresses by config; no Solidity here).
 
 ## Does NOT own
-- Auth methods / signers → `identity-auth`
+- Auth methods / signers → `connect-auth`
 - Delegation primitive → `delegation`
 - KMS → `key-custody`
 - Solidity source → `apps/contracts/src/` (core) + `apps/contracts/src/custody/` (custody) + `apps/contracts/src/agency/` (agency)
@@ -29,7 +29,7 @@ The canonical SA address MUST NOT change during credential recovery ([ADR-0011](
 ## Drift triggers — STOP
 - Caveats / delegation / session manager → `delegation`
 - KMS / envelope encryption → `key-custody`
-- Auth UX / OAuth / passkey assertion → `identity-auth`
+- Auth UX / OAuth / passkey assertion → `connect-auth`
 - Risk tiers / tool classification → `tool-policy`
 - Custody-policy ABI / `CustodyAction` enum / `Custodian` / `Trustee` types → `@agenticprimitives/account-custody`
 - CustodyPolicy on-chain machinery → `apps/contracts/src/custody/CustodyPolicy.sol` (NOT this package; spec 213)

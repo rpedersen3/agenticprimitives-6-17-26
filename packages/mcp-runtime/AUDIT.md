@@ -122,4 +122,4 @@ An external auditor evaluating this package needs:
 - `withCrossDelegation` is a stub.
 - MAC envelope verification is not yet wired (C1).
 - Policy enforcement is not yet wired (H2).
-- Forbidden imports: `apps/*`, `identity-auth` (uses `delegation`'s `Signer` types via type re-export), `agent-account` (delegation handles ERC-1271).
+- Forbidden imports: `apps/*`, `connect-auth` (uses `delegation`'s `Signer` types via type re-export), `agent-account` (delegation handles ERC-1271).

@@ -12,11 +12,11 @@ const CSRF_VALIDITY_SECONDS = 60 * 60; // 1 hour
 function loadCsrfSecret(): Uint8Array {
   const hex = process.env.CSRF_SECRET;
   if (!hex) {
-    throw new Error('identity-auth: CSRF_SECRET (hex) is required. Generate one: openssl rand -hex 32');
+    throw new Error('connect-auth: CSRF_SECRET (hex) is required. Generate one: openssl rand -hex 32');
   }
   const bytes = hexToBytes(hex.startsWith('0x') ? (hex as `0x${string}`) : (`0x${hex}` as `0x${string}`));
   if (bytes.length < 16) {
-    throw new Error(`identity-auth: CSRF_SECRET too short (need ≥ 16 bytes)`);
+    throw new Error(`connect-auth: CSRF_SECRET too short (need ≥ 16 bytes)`);
   }
   return bytes;
 }

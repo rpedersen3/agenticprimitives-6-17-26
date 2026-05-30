@@ -22,7 +22,7 @@ on-chain authority paths, and demo integration land in Phase 3+.
 - `AgentNamingClient` (Phase 1 skeleton): MUST throw clearly when
   invoked before contract wiring, so a Phase-1 consumer can't
   silently get a no-op call.
-- Vocabulary firewall against `delegation`, `custody`, `mcp-runtime`,
+- Vocabulary firewall against `delegation`, `account-custody`, `mcp-runtime`,
   `tool-policy`, `key-custody`, `audit`, and MCP transport.
 
 ## Findings (Phase 1)

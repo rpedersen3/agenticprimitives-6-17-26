@@ -18,7 +18,7 @@ The package has four jobs:
 | `decryptSessionDataKey()` | Unwraps the encrypted data key when AAD matches. | `delegation.SessionManager.package()` and `.resolve()` |
 | `buildSignerBackend()` | Returns a KMS-backed `KmsAccountBackend`. | `apps/demo-a2a`, `agent-account` relay flows |
 | `signA2AAction()` | Signs an already-hashed 32-byte digest. | `createKmsAccount()`, `createKmsViemAccount()` |
-| `createKmsAccount()` | Adapts a backend to the `identity-auth` `KMSSigner` shape. | Identity/delegation callers that need message signing |
+| `createKmsAccount()` | Adapts a backend to the `connect-auth` `KMSSigner` shape. | Identity/delegation callers that need message signing |
 | `createKmsViemAccount()` subpath | Adapts a backend to a viem `LocalAccount`. | Bundler/relayer transaction submission |
 | `buildToolExecutorBackend()` | Future per-tool signer selection. v0 routes to master backend. | Tool execution layers |
 | `buildMacProvider()` | Selects backend for service HMACs. | `mcp-runtime` and future `a2a-runtime` |

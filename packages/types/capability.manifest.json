@@ -23,7 +23,7 @@
     },
     {
       "term": "Signer",
-      "reason": "Belongs in identity-auth.",
+      "reason": "Belongs in connect-auth.",
       "owningPackage": "@agenticprimitives/connect-auth"
     },
     {

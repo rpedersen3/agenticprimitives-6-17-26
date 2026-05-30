@@ -322,7 +322,7 @@ For each package, as it gets real implementation, it ALSO gets:
 3. Property tests for any security invariant in `CLAUDE.md`
 4. Integration tests in `test/integration/` for multi-method flows
 
-The implementation order is unchanged (`key-custody` first, then `identity-auth`, etc.), but each implementation commit lands WITH its tests, not before/after.
+The implementation order is unchanged (`key-custody` first, then `connect-auth`, etc.), but each implementation commit lands WITH its tests, not before/after.
 
 For E2E:
 - One Playwright spec per demo step as the step becomes real.

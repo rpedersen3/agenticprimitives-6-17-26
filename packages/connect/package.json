@@ -11,7 +11,12 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "spec.md", "README.md"],
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -21,12 +26,18 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["sso", "broker", "agentsession", "jwks", "agentic"],
-  "license": "UNLICENSED",
+  "keywords": [
+    "sso",
+    "broker",
+    "agentsession",
+    "jwks",
+    "agentic"
+  ],
+  "license": "MIT",
   "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
     "@agenticprimitives/connect-auth": "workspace:*",
-    "@agenticprimitives/identity-directory": "workspace:*"
+    "@agenticprimitives/identity-directory": "workspace:*",
+    "@agenticprimitives/types": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^2.1.0"

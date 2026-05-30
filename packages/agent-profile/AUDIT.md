@@ -64,9 +64,9 @@ findings in Phase 3+.
 
 | Action | When | Severity in audit context |
 | --- | --- | --- |
-| `agent-identity.profile.fetch.{accept,reject}` | profile pulled via metadata-uri | telemetry |
-| `agent-identity.profile.update` | on profile publication (metadata-hash record update) | forensic-critical |
-| `agent-identity.endpoint.verify.{success,failure}` | when a `VerificationMethod` runs | forensic-critical |
+| `agent-profile.profile.fetch.{accept,reject}` | profile pulled via metadata-uri | telemetry |
+| `agent-profile.profile.update` | on profile publication (metadata-hash record update) | forensic-critical |
+| `agent-profile.endpoint.verify.{success,failure}` | when a `VerificationMethod` runs | forensic-critical |
 
 Spec-declared in `specs/217-agent-profile.md` § 7. The client doesn't
 yet take an `auditSink`; Phase 2 will add the optional `opts.auditSink`

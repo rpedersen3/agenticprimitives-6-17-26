@@ -34,7 +34,7 @@ Profiles are a **facet registration** anchored at the canonical Smart Agent addr
 `VerificationMethod`, `Caip10Address`, `AgentIdentityClient`.
 **Disambiguation:**
 - **"profile"** here = HCS-11-aligned agent profile (typed JSON +
-  optional on-chain mirror). In `identity-auth` "profile" is the
+  optional on-chain mirror). In `connect-auth` "profile" is the
   user JWT-session profile — different concept, different layer.
 - **"verification"** here = endpoint-control verification (does
   this MCP URL really belong to this Smart Agent?). In `delegation`
@@ -148,8 +148,8 @@ pnpm check:forbidden-terms
   → address → profile → endpoints. Demos compose these at the app
   layer.
 - **Audit / forensics trail** — Phase 2+ emits (via consumer
-  `AuditSink`): `agent-identity.profile.fetch`,
-  `agent-identity.profile.update`, `agent-identity.endpoint.verify.{success,failure}`.
+  `AuditSink`): `agent-profile.profile.fetch`,
+  `agent-profile.profile.update`, `agent-profile.endpoint.verify.{success,failure}`.
 - Index: [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md).
 
 ## Documentation map

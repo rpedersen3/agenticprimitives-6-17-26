@@ -11,7 +11,7 @@ rules, [`specs/100-package-boundary-doctrine.md`](../../specs/100-package-bounda
 > **Naming note.** Three packages were renamed (commit `7861f4b`) to remove two
 > collisions (login-vs-profile, account-custody-vs-key-custody). The names below
 > are current; the `(was: …)` hints are only for migrating old imports:
-> `connect-auth` (was `identity-auth`), `agent-profile` (was `agent-identity`),
+> `connect-auth` (was `connect-auth`), `agent-profile` (was `agent-profile`),
 > `account-custody` (was `custody`).
 
 ## I need to…
@@ -40,11 +40,11 @@ Each package sits in one layer; dependencies only ever point *up* the list
 | Layer        | Package(s)                                   | Role                                                            |
 | ------------ | -------------------------------------------- | --------------------------------------------------------------- |
 | **Core**     | `types`, `agent-account`                     | The canonical identity **anchor** — the ERC-4337 Smart Agent address IS the identity. |
-| **Connect**  | `connect-auth` (was `identity-auth`)             | Connect a *human* to a Smart Agent: passkey, SIWE, JWT, `Signer`. |
+| **Connect**  | `connect-auth` (was `connect-auth`)             | Connect a *human* to a Smart Agent: passkey, SIWE, JWT, `Signer`. |
 | **Govern**   | `account-custody` (was `custody`)                | Who controls the account: custodians, trustees, quorum, `RecoverAccount`. |
 | **Authorize**| `delegation`, `tool-policy`                  | What an agent may do: delegation tokens + caveats; tool risk policy. |
 | **Operate**  | `mcp-runtime` (+ planned `a2a-runtime`)      | Enforce authorization at a transport boundary.                  |
-| **Discover** | `agent-naming`, `agent-profile` (was `agent-identity`), `agent-relationships` | **Facet** registries + the trust **graph** that point AT the canonical address. |
+| **Discover** | `agent-naming`, `agent-profile` (was `agent-profile`), `agent-relationships` | **Facet** registries + the trust **graph** that point AT the canonical address. |
 | **Secrets**  | `key-custody`                                | KMS / envelope encryption / HMAC. ("key" custody, *not* account custody.) |
 | **Observe**  | `audit`                                      | Audit-event schema + sinks (durable persistence wired by apps). |
 
@@ -55,7 +55,7 @@ Each package sits in one layer; dependencies only ever point *up* the list
 
 ## Two collisions this map exists to defuse
 
-- **`connect-auth` (was `identity-auth`) is login, `agent-profile` (was `agent-identity`) is the profile.** Need a JWT/passkey/SIWE session → `connect-auth`. Need an `AgentCard`/HCS-11 manifest → `agent-profile`. They are NOT the same "identity" (ADR-0007 split is intentional — do not merge).
+- **`connect-auth` (was `connect-auth`) is login, `agent-profile` (was `agent-profile`) is the profile.** Need a JWT/passkey/SIWE session → `connect-auth`. Need an `AgentCard`/HCS-11 manifest → `agent-profile`. They are NOT the same "identity" (ADR-0007 split is intentional — do not merge).
 - **`account-custody` (was `custody`) is the on-chain CustodyPolicy, `key-custody` is KMS.** Add a passkey / run recovery / change quorum → `account-custody`. Encrypt bytes / KMS-sign → `key-custody`.
 
 ## See also

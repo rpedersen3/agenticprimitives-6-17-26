@@ -3,7 +3,7 @@
 // anywhere a privateKeyToAccount(...) account would go.
 //
 // Why a separate file from src/account.ts (createKmsAccount):
-//   - createKmsAccount produces an identity-auth `Signer` shape
+//   - createKmsAccount produces an connect-auth `Signer` shape
 //     (signMessage / signTypedData only) for the identity layer.
 //   - createKmsViemAccount produces a viem `LocalAccount` (adds
 //     signTransaction) for the wallet/broadcast layer.

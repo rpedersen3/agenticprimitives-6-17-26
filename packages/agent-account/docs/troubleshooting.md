@@ -21,7 +21,7 @@ Common causes:
 - Passkey: ensure ceremony output is encoded with `encodeWebAuthnSignature` and
   the account expects `SIG_TYPE_WEBAUTHN`.
 - EOA: confirm the address is an enrolled custodian on the Smart Agent.
-- Use `verifyUserSignature` from `identity-auth` for universal validator paths.
+- Use `verifyUserSignature` from `connect-auth` for universal validator paths.
 
 ## UserOp Simulation / Submission Fails
 
@@ -34,9 +34,9 @@ Common causes:
 | Symptom | Route to |
 | --- | --- |
 | Need `.agent` name | `agent-naming` |
-| Need AgentCard profile | `agent-identity` |
-| Need login / JWT | `identity-auth` |
-| Need add/remove passkey on SA | `custody` |
+| Need AgentCard profile | `agent-profile` |
+| Need login / JWT | `connect-auth` |
+| Need add/remove passkey on SA | `account-custody` |
 | Need delegation token | `delegation` |
 
 This package only owns the Smart Agent address and account execution substrate.

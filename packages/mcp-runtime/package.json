@@ -19,7 +19,12 @@
       "import": "./dist/lint.js"
     }
   },
-  "files": ["dist", "spec.md", "README.md"],
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -29,8 +34,14 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["mcp", "model-context-protocol", "delegation", "authorization", "agentic"],
-  "license": "UNLICENSED",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "delegation",
+    "authorization",
+    "agentic"
+  ],
+  "license": "MIT",
   "peerDependencies": {
     "@agenticprimitives/audit": "workspace:*",
     "@agenticprimitives/delegation": "workspace:*",

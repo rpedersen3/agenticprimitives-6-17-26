@@ -1,13 +1,15 @@
 # Pre-Production Readiness Audit — `demo-jp` + `demo-sso-next`
 
+> **Scope split note (added 2026-05-30):** the user has asked for the package + contracts production-readiness lens to be carried separately so demo-app concerns can't dilute it. **Package + contract findings have been re-cast in a new dedicated tracker:** [`2026-05-packages-contracts-production-readiness.md`](./2026-05-packages-contracts-production-readiness.md). This doc continues to be the canonical tracker for app-layer findings (OIDC flow gaps, app handoffs, vocabulary drift, deploy substrate, app-level white-label work). Each row's package/contract counterpart (where one exists) is cross-referenced in §5 of the new doc. Closing a finding here that has a package/contract counterpart should also mark the counterpart row in the new doc.
+
 | Field | Value |
 |---|---|
 | **Date opened** | 2026-05-29 |
-| **Scope** | `apps/demo-jp` (JP Adopt pilot, spec 236), `apps/demo-sso-next` (Impact Community SSO / portal — the IdP), and the workspace packages they consume. |
+| **Scope** | `apps/demo-jp` (JP Adopt pilot, spec 236), `apps/demo-sso-next` (Impact Community SSO / portal — the IdP), and the workspace packages they consume. **Package + contract surface findings since re-cast under [`2026-05-packages-contracts-production-readiness.md`](./2026-05-packages-contracts-production-readiness.md).** |
 | **Trigger** | User-requested deep pre-launch audit to prepare for a third-party critical review before production. |
 | **Method** | Two specialist sub-audits run in parallel — `security-auditor` (STRIDE per boundary, source review of every routed handler, consumed-package security cores) + `technical-architect-auditor` (doctrine sweep against CLAUDE.md / ADRs 0010/0011/0013/0017/0019/0021 / specs 100/206/214/229/230/234/235/236) — plus a self-catalog of every deliberate demo shortcut shipped over the recent build sprint. |
 | **Status** | Open — this document is the living tracker. Update the Status column per finding as waves close; re-audit after each hardening wave. |
-| **Companion docs** | `docs/audits/threat-model.md`, `docs/audits/evidence-checklist.md`, `docs/audits/architecture-diagram.md` (all flagged stale by ARCH-005 — refresh as part of this work). |
+| **Companion docs** | `docs/audits/threat-model.md`, `docs/audits/evidence-checklist.md`, `docs/audits/architecture-diagram.md` (all flagged stale by ARCH-005 — refresh as part of this work); `docs/audits/2026-05-packages-contracts-production-readiness.md` (the focused package + contract lens — referenced above). |
 
 ---
 

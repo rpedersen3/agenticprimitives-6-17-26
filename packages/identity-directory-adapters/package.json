@@ -11,7 +11,12 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "spec.md", "README.md"],
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -21,12 +26,18 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["identity", "directory", "adapters", "ports", "agentic"],
-  "license": "UNLICENSED",
+  "keywords": [
+    "identity",
+    "directory",
+    "adapters",
+    "ports",
+    "agentic"
+  ],
+  "license": "MIT",
   "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/identity-directory": "workspace:*",
     "@agenticprimitives/agent-naming": "workspace:*",
+    "@agenticprimitives/identity-directory": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
     "viem": "^2.21.0"
   },
   "devDependencies": {

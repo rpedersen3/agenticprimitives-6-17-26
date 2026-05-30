@@ -66,7 +66,7 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-  Identity["identity-auth"]
+  Identity["connect-auth"]
   Account["agent-account"]
   KeyCustody["key-custody"]
   ToolPolicy["tool-policy"]

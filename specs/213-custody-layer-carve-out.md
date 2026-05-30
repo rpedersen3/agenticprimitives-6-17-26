@@ -261,7 +261,7 @@ After 6g.4 lands, phase 6f.1 (Treasury demo shell) starts with the new naming cl
 | Demo apps stop building | Two passes through the workspace: first rename contracts + types, then SDK + apps. Each pass keeps the WORLD compiling even if some surfaces are temporarily inconsistent. |
 | Live deployments orphaned | Existing accounts on `0x6Bb5...`, `0x994A26D...`, etc. won't be reachable through the new CustodyPolicy. Treat them as museum pieces; create fresh accounts via the renamed factory. |
 | Spec drift mid-rename | Lock the spec set during 6g.1-6g.3; only update specs in 6g.4 as a coherent batch. |
-| Cross-package import cycles | Custody package has NO downstream deps. Only upstream (`types`, `identity-auth` type-only). Documented in CLAUDE.md. |
+| Cross-package import cycles | Custody package has NO downstream deps. Only upstream (`types`, `connect-auth` type-only). Documented in CLAUDE.md. |
 | External consumers of `@agenticprimitives/agent-account` see breaking renames | Acceptable — we're pre-1.0. Document in CHANGELOG once we ship one. |
 
 ---

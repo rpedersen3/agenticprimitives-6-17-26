@@ -15,7 +15,12 @@
       "import": "./dist/taxonomy.js"
     }
   },
-  "files": ["dist", "spec.md", "README.md"],
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -23,12 +28,19 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["agent", "relationships", "trust-fabric", "edges", "roles", "agentic"],
-  "license": "UNLICENSED",
+  "keywords": [
+    "agent",
+    "relationships",
+    "trust-fabric",
+    "edges",
+    "roles",
+    "agentic"
+  ],
+  "license": "MIT",
   "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/agent-account": "workspace:*",
+    "@agenticprimitives/connect-auth": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
     "viem": "^2.21.0"
   },
   "devDependencies": {

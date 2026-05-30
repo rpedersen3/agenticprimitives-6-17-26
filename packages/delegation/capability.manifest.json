@@ -154,13 +154,13 @@
     },
     {
       "term": "passkey",
-      "reason": "Auth method internals belong in identity-auth.",
+      "reason": "Auth method internals belong in connect-auth.",
       "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"]
     },
     {
       "term": "SIWE",
-      "reason": "Auth method belongs in identity-auth.",
+      "reason": "Auth method belongs in connect-auth.",
       "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["spec.md", "README.md"]
     }

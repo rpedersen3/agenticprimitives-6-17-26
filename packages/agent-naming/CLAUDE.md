@@ -25,7 +25,7 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 - Custody policy, scheduling, quorum → [`custody`](../account-custody).
   We expose call builders only — never import.
 - Delegation / caveat / mint → [`delegation`](../delegation).
-- Passkey ceremonies → [`identity-auth`](../connect-auth).
+- Passkey ceremonies → [`connect-auth`](../connect-auth).
 - MCP / A2A transport → demo apps + future `a2a-runtime`.
 - Contract source — that lives in `apps/contracts/src/naming/`
   (Phase 3+); this package ships ABIs + client only.
@@ -42,7 +42,7 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 - **"registry"** here = `AgentNameRegistry` contract. Distinct from
   the factory deploy-registry in `agent-account`.
 - **"primary name"** = reverse-record on a Smart Agent address.
-  Distinct from `identity-auth.sessionId` and `delegation.SessionRow`.
+  Distinct from `connect-auth.sessionId` and `delegation.SessionRow`.
   **Does not use:** `Delegation`, `Caveat`, `Steward`, `Custodian`,
   `Trustee`, `KMS`, `RiskTier`, `JtiStore`, MCP / A2A transport.
   See `capability.manifest.json:forbiddenTerms`.
@@ -81,7 +81,7 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 
 - `apps/*`
 - `@agenticprimitives/delegation`, `mcp-runtime`, `tool-policy`,
-  `key-custody`, `audit`, `custody`
+  `key-custody`, `audit`, `account-custody`
 - `@modelcontextprotocol/sdk`
 
 ## Drift triggers — STOP and route
@@ -99,7 +99,7 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 - "Add a CustodyAction to gate name rotation" — **STOP.** Belongs
   in [`custody`](../account-custody). Compose via `agent-naming/custody`
   call builders here without importing.
-- "Add a passkey ceremony" — **STOP.** Belongs in [`identity-auth`](../connect-auth).
+- "Add a passkey ceremony" — **STOP.** Belongs in [`connect-auth`](../connect-auth).
 - "Reach for an MCP transport" — **STOP.** Out of scope.
 - "Auto-resolve name via a system-wide hook in the worker" — **STOP.**
   Demo-app integration only; the package itself is transport-agnostic.
@@ -111,7 +111,7 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 - Adding resolver reads? Start in `src/client.ts`.
 - Adding name rotation calls? Start in `src/custody.ts`; do not import
   `@agenticprimitives/account-custody`.
-- Adding passkey behavior? Stop. Route to `identity-auth`.
+- Adding passkey behavior? Stop. Route to `connect-auth`.
 - Adding delegation or caveat behavior? Stop. Route to `delegation`.
 - Adding MCP/A2A transport? Stop. Route to app/runtime packages.
 
@@ -119,7 +119,7 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 
 - [ ] Is the change in the resolver-records / namehash / normalize /
       client surface?
-- [ ] Did I avoid importing from `delegation`, `custody`,
+- [ ] Did I avoid importing from `delegation`, `account-custody`,
       `mcp-runtime`, `tool-policy`, `key-custody`, `audit`?
 - [ ] Did I keep `normalize` deterministic (NFC + lowercase + label
       validation)?

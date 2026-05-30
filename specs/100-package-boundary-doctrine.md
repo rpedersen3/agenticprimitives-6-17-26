@@ -71,21 +71,21 @@ Every person, org, service, treasury, or role agent has **one** canonical identi
 | Layer | Package(s) | Role |
 | --- | --- | --- |
 | **Anchor** | `agent-account` | Owns deployment, address derivation, UserOps, ERC-1271. The SA address is the identity. |
-| **Facet registries** | `agent-naming`, `agent-identity` | Parallel downstream registries: human-readable names and typed off-chain profiles. Neither is the identity. |
-| **Connection / bootstrap** | `identity-auth` | Passkey / SIWE / OAuth ceremonies, JWT sessions, `Signer` interfaces. Resolves **credential → canonical SA**; does not own the SA or mutate custodian sets. |
-| **Credential lifecycle** | `custody` (+ on-chain `CustodyPolicy`) | Enroll, rotate, recover control credentials on the **same** SA ([ADR-0011](../docs/architecture/decisions/0011-credential-recovery-and-re-association.md)). Not `identity-auth`, not `delegation`. |
+| **Facet registries** | `agent-naming`, `agent-profile` | Parallel downstream registries: human-readable names and typed off-chain profiles. Neither is the identity. |
+| **Connection / bootstrap** | `connect-auth` | Passkey / SIWE / OAuth ceremonies, JWT sessions, `Signer` interfaces. Resolves **credential → canonical SA**; does not own the SA or mutate custodian sets. |
+| **Credential lifecycle** | `custody` (+ on-chain `CustodyPolicy`) | Enroll, rotate, recover control credentials on the **same** SA ([ADR-0011](../docs/architecture/decisions/0011-credential-recovery-and-re-association.md)). Not `connect-auth`, not `delegation`. |
 | **Shared wire types** | `types` | `Address`, `NameContext` (display-only injection). Canonical-identity shapes (`CanonicalAgentIdentity`, facet records) belong here when ≥2 packages need them ([ADR-0010](../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)). |
 
 **Vocabulary firewall (do not conflate):**
 
-- **`identity-auth`** = authentication and signing interfaces. Despite the name, it is **not** the canonical identity owner.
-- **`agent-identity`** = profile / AgentCard facet registry (HCS-11-aligned JSON + endpoint verification). Not login, not naming.
+- **`connect-auth`** = authentication and signing interfaces. Despite the name, it is **not** the canonical identity owner.
+- **`agent-profile`** = profile / AgentCard facet registry (HCS-11-aligned JSON + endpoint verification). Not login, not naming.
 - **`agent-naming`** = `.agent` name facet registry (ENS-v2-style resolution). Not the root identifier.
 - **Cross-package APIs** key off `Address` or `canonicalAgentId` (CAIP-10), never a bare `.agent` name ([ADR-0006](../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md)).
 
 **Bootstrap** (spec 220) is composed at the **app** layer: deploy SA → register naming facet → enroll custodians → optional profile facet → optional external facets. No single package owns the full orchestration.
 
-**CREATE2 salt** derives from auth methods + stable user scope only — **never** from a chosen `.agent` name or profile label. `identity-auth`'s `deriveSaltFromLabel` is a user-scope input, not a name registration.
+**CREATE2 salt** derives from auth methods + stable user scope only — **never** from a chosen `.agent` name or profile label. `connect-auth`'s `deriveSaltFromLabel` is a user-scope input, not a name registration.
 
 ### RPC read discipline ([ADR-0012](../docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md))
 
@@ -209,7 +209,7 @@ For v0, prefer subpath exports unless the dep-bloat case is clear.
 | --- | --- | --- |
 | Scope | `@agenticprimitives/*` | npm-scoped, capability-named. Aligns with smart-agent's `@smart-agent/*` style. |
 | Repo dirs | `packages/<name>/` (no `@scope/` prefix in path) | Matches pnpm-workspace convention. |
-| Package names | **Noun-of-capability**, kebab-case: `agent-account`, `identity-auth`, `delegation`, `key-custody`, `tool-policy`, `mcp-runtime` | Discoverable from name alone — the 1claw test. |
+| Package names | **Noun-of-capability**, kebab-case: `agent-account`, `connect-auth`, `delegation`, `key-custody`, `tool-policy`, `mcp-runtime` | Discoverable from name alone — the 1claw test. |
 | Adapter packages | `adapter-<framework>`: `adapter-langchain`, `adapter-vercel-ai`, `adapter-mcp-transport-stdio` | Coinbase pattern; clarifies "this is glue, not core." |
 | Static-artifact packages | `<thing>-abis`, `<thing>-deployments`, `<thing>-spec` | MetaMask + 1claw pattern. |
 | Experimental | Behind `./experimental` subpath in the owning package, never a top-level export | MetaMask DTK pattern. |
@@ -241,7 +241,7 @@ A primitives library exposes the algorithms and types; the consumer app wires th
 
 Front door for consumers: [`docs/architecture/package-consumer-map.md`](../docs/architecture/package-consumer-map.md) — the "I need to do X → import this package" table + the layered story. Link it from every package `README.md` documentation map.
 
-Reference implementation: [`packages/agent-naming/`](../packages/agent-naming/). Identity-stack packages (`agent-account`, `agent-identity`, `identity-auth`) follow the same shape.
+Reference implementation: [`packages/agent-naming/`](../packages/agent-naming/). Identity-stack packages (`agent-account`, `agent-profile`, `connect-auth`) follow the same shape.
 
 Every capability package ships:
 
@@ -285,7 +285,7 @@ Comparing my original scaffold against this doctrine:
 
 | Original | Issue | Fix |
 | --- | --- | --- |
-| `auth` bundled smart-account + identity | Violates S1 (signer pluggable) and S2 (account-agnostic delegation) | Split into `identity-auth` + `agent-account` |
+| `auth` bundled smart-account + identity | Violates S1 (signer pluggable) and S2 (account-agnostic delegation) | Split into `connect-auth` + `agent-account` |
 | `kms` bundled session lifecycle, HMAC providers, envelope encryption | Violates S4 (sessions ≠ KMS) | Narrow to envelope+signers; session moves to `delegation`; HMAC stays as subpath |
 | `mcp-resources` bundled MCP middleware + policy taxonomy | Mixes protocol-specific with protocol-agnostic | Split into `mcp-runtime` (MCP-specific) + `tool-policy` (protocol-agnostic) |
 | 4 total | Too coarse for product-facing primitives library | 6 total at v0 |

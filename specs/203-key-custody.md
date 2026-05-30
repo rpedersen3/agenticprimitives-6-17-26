@@ -94,9 +94,11 @@ export function getRelayOnlySigner(opts: BuildOpts): KmsAccountBackend;
 //              wrapped in LocalSecp256k1Signer (production guard applies).
 //   gcp-kms / aws-kms: NOT YET BUILT — fail closed (no silent fallback, ADR-0013).
 export function deriveSubjectSigner(opts: BuildOpts & { subject: SubjectId }): KmsAccountBackend;
-export function deriveSubjectPrivateKeyHex(master: Uint8Array, subject: SubjectId): Hex; // pure (tested)
 export function subjectCanonicalMessage(subject: SubjectId): string;
 export interface SubjectId { iss: string; sub: string; rotation?: number }
+// `deriveSubjectPrivateKeyHex` is module-internal (test-only). It returns the
+// raw per-subject secp256k1 private key as hex and is intentionally NOT part of
+// the package's public API surface. Closure: ARCH-006 / PKG-KEY-CUSTODY-002.
 
 // Built-in implementations (also via subpaths)
 export { LocalAesProvider, LocalSecp256k1Signer } from './providers/local';

@@ -304,7 +304,7 @@ Audit events MUST NOT use the `delegation.*` action namespace.
 - Forbidden terms: any `recoverCredential`, `addCredential`,
   `rotatePasskey` API. Those belong in `custody`.
 
-### `@agenticprimitives/agent-naming` / `agent-identity` / `agent-relationships`
+### `@agenticprimitives/agent-naming` / `agent-profile` / `agent-relationships`
 - Records anchored at the SA address are unaffected by credential
   rotation. No re-registration. No record rewrite.
 

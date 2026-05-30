@@ -46,7 +46,7 @@ What this package does NOT own:
 5. **ISO-8601 UTC timestamps.** All events carry `timestamp` —
    downstream sinks may rewrite, but emitters never omit.
 6. **Zero runtime dependency on domain packages.** Reviewers MUST
-   reject any PR that adds a domain import (delegation, identity-auth,
+   reject any PR that adds a domain import (delegation, connect-auth,
    key-custody, tool-policy, mcp-runtime, agent-account).
 
 ## 3. Public API surface (audit scope)
@@ -81,7 +81,7 @@ What this package does NOT own:
 | **AUD-1** | P2 | No automated PII / secret-leak detector for emitted events. | **CLOSED 2026-05-20 (pass 5g)** | `createPiiGuardrailSink(inner, opts?)` shipped with three modes (`redact` / `drop` / `warn`), pattern detectors (long hex above configurable threshold, JWT shape, PEM blocks, secret-key substrings), built-in allowlists for known-safe positions (signerAddress, digest, keyId, nonceHash, sessionHash, jti; subject types sign-digest, tx-hash, jti, address, event-id), and an `onDetect` callback for alerting. demo-mcp wires the guardrail around its D1 sink in `redact` mode; console intentionally bypasses (ops debugging benefits from raw, logs roll off). 12 unit tests cover clean pass-through + redaction + allowlists + drop + warn + composition. **Defense-in-depth — emitter discipline (hash/omit raw secrets) is still the primary control.** |
 | **AUD-2** | P3 | Console sink does not pre-truncate over-1KB events. | Open | Cloudflare logs clip at 1KB; emitters should keep `context` flat (documented). A built-in `createConsoleAuditSink({maxBytes})` option would belt-and-braces. |
 | **AUD-3** | P3 | No spec at `specs/206-audit.md` yet. | **CLOSED 2026-05-20** | Spec drafted as part of pass 5b — see [`specs/206-audit.md`](../../specs/206-audit.md). |
-| **system C3** | P0 | Append-only audit trail. | **MOSTLY CLOSED 2026-05-20**: schema + sinks + mcp-runtime emission (pass 3a) + delegation.verifyDelegationToken (pass 3a) + D1 sink in demo-mcp (pass 3b) + delegation.mintDelegationToken + key-custody.signA2AAction (pass 5b). Remaining slice: envelope encrypt/decrypt emit (LocalAesProvider, GcpKmsProvider) and identity-auth emission — both are non-blocking follow-ups tracked in this AUDIT.md. |
+| **system C3** | P0 | Append-only audit trail. | **MOSTLY CLOSED 2026-05-20**: schema + sinks + mcp-runtime emission (pass 3a) + delegation.verifyDelegationToken (pass 3a) + D1 sink in demo-mcp (pass 3b) + delegation.mintDelegationToken + key-custody.signA2AAction (pass 5b). Remaining slice: envelope encrypt/decrypt emit (LocalAesProvider, GcpKmsProvider) and connect-auth emission — both are non-blocking follow-ups tracked in this AUDIT.md. |
 
 ## 6. Test posture
 
@@ -112,7 +112,7 @@ What this package does NOT own:
 - [x] **(C3 emit)** ~~Emit from `delegation.mintDelegationToken`~~ — done in pass 5b.
 - [x] **(C3 emit)** ~~Emit from `key-custody.{LocalSecp256k1Signer,GcpKmsSigner}.signA2AAction`~~ — done in pass 5b (wired via `BuildOpts.auditSink` + threaded through `buildSignerBackend`).
 - [ ] **(C3 emit)** Emit from `LocalAesProvider.{encrypt,decrypt}` + `GcpKmsProvider.{encrypt,decrypt}` (envelope-encryption side; the `auditContext` is already accepted on the interface). Tracked separately — non-blocking for C3 closure.
-- [ ] **(C3 emit)** Emit from `identity-auth.{mintSession,verifySession}` — caller-emits pattern (identity-auth itself is forbidden from importing audit per dep doctrine; the consuming app emits at the call site with `auditSink.write(buildEvent({...}))`).
+- [ ] **(C3 emit)** Emit from `connect-auth.{mintSession,verifySession}` — caller-emits pattern (connect-auth itself is forbidden from importing audit per dep doctrine; the consuming app emits at the call site with `auditSink.write(buildEvent({...}))`).
 - [x] **(C3 sink)** ~~Ship a `createD1AuditSink(db)` adapter~~ — landed in `apps/demo-mcp/src/db.ts` in pass 3b. Cross-app destination unification (demo-a2a → D1 too) is a future-spec item.
 
 ## 8. External audit readiness

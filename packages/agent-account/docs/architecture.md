@@ -43,7 +43,7 @@ The package knows how to shape and submit the operation. It does not decide whet
 
 ```mermaid
 flowchart LR
-  Identity["identity-auth"]
+  Identity["connect-auth"]
   Account["agent-account"]
   Delegation["delegation"]
   KeyCustody["key-custody"]

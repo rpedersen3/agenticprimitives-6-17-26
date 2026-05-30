@@ -228,7 +228,7 @@ Cloudflare deploy state: `cloudflare-urls.json` (gitignored).
 | Package | Owns | Does NOT own | Top consumers |
 | --- | --- | --- | --- |
 | `types` | branded primitives (Address, Hex) | anything else | all other packages |
-| `identity-auth` | SIWE / passkey / JWT / CSRF | smart-account logic | agent-account, delegation |
+| `connect-auth` | SIWE / passkey / JWT / CSRF | smart-account logic | agent-account, delegation |
 | `agent-account` | AgentAccountClient, addressing, UserOp build, ERC-1271 sign | KMS, caveats, delegation, MCP transport | delegation, demo apps |
 | `delegation` | Caveats, EIP-712, token mint/verify, session lifecycle | tier taxonomy, transport, KMS implementations | mcp-runtime, demo apps |
 | `key-custody` | KMS providers, envelope encryption (AAD-bound), MAC, viem signer adapter | session lifecycle (moved to delegation), policy | delegation, mcp-runtime, demo-a2a |

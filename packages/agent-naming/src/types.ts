@@ -44,7 +44,7 @@ export interface AgentNameRecords {
   custodyPolicy?: Address;
   /**
    * Off-chain JSON profile content-hash
-   * (matches `agent-identity.profileContentHash(profile)`). Stored
+   * (matches `agent-profile.profileContentHash(profile)`). Stored
    * as `bytes32` via the `atl:metadataHash` predicate. Pairs with
    * `metadataUri` for the standard URI + content-hash anchoring
    * pattern (ADR-0009 / NS Phase 3 pivot).

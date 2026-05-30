@@ -15,7 +15,12 @@
       "import": "./dist/lint.js"
     }
   },
-  "files": ["dist", "spec.md", "README.md"],
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -25,8 +30,15 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["policy", "classification", "risk-tier", "exact-call", "agentic", "tool-policy"],
-  "license": "UNLICENSED",
+  "keywords": [
+    "policy",
+    "classification",
+    "risk-tier",
+    "exact-call",
+    "agentic",
+    "tool-policy"
+  ],
+  "license": "MIT",
   "dependencies": {
     "@noble/hashes": "^1.5.0"
   },

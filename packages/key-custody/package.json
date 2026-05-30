@@ -31,7 +31,12 @@
       "import": "./dist/kms-viem-account.js"
     }
   },
-  "files": ["dist", "spec.md", "README.md"],
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -41,8 +46,16 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["kms", "aws-kms", "gcp-kms", "envelope-encryption", "secp256k1", "hmac", "agentic"],
-  "license": "UNLICENSED",
+  "keywords": [
+    "kms",
+    "aws-kms",
+    "gcp-kms",
+    "envelope-encryption",
+    "secp256k1",
+    "hmac",
+    "agentic"
+  ],
+  "license": "MIT",
   "dependencies": {
     "@noble/curves": "^1.6.0",
     "@noble/hashes": "^1.5.0"

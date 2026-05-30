@@ -5,7 +5,7 @@
 **Architecture commitment:** [ADR-0006 — agent-naming is a resolution
 layer](../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md)
 documents the package-boundary + integration-pattern decisions
-(refused: names in CREATE2, names in EIP-712 typed-data, identity-auth
+(refused: names in CREATE2, names in EIP-712 typed-data, connect-auth
 auto-registration, every-package import, OpenZeppelin
 AccessControl/TimelockController on the registry).
 **Adapted from:** `smart-agent` branch `003-intent-marketplace-proposal`
@@ -44,7 +44,7 @@ ceremony. No parallel RBAC or TimelockController on the registry.
 | `tool-policy` | `evaluatePolicy(classification, { callerName?, callerAgentType? })`. | no | NS Phase 2 |
 | `delegation` | Off-chain claims `context?: { delegatorName?, delegateName? }`. NOT in EIP-712. | no | NS Phase 2 |
 | `mcp-runtime` | `withDelegation` opts `nameContext?: NameContext`. | no | NS Phase 2 |
-| `identity-auth` | JWT claim `agentName?: string`. Signs whatever app supplies; does not resolve. | no | NS Phase 2 |
+| `connect-auth` | JWT claim `agentName?: string`. Signs whatever app supplies; does not resolve. | no | NS Phase 2 |
 | `agent-account` | Unchanged. CREATE2 stays address-deterministic. | no | n/a |
 | `key-custody` | `canonicalContextBytes` already accepts arbitrary AAD; callers can include `agent-name` when desired. | no | n/a |
 | `custody` | Unchanged. Recovery is trustee-governed. | no | n/a |
@@ -88,7 +88,7 @@ This package speaks **naming-domain vocabulary only**.
   different concept). Naming-domain only.
 - **"primary name"** = the reverse-record on a Smart Agent address
   pointing back to its canonical name. Distinct from
-  `identity-auth.sessionId`.
+  `connect-auth.sessionId`.
 
 **Does not use:** `Delegation`, `Caveat`, `Enforcer`, `Steward`,
 `Custodian`, `Trustee`, `KMS`, `RiskTier`, MCP / A2A transport,
@@ -102,7 +102,7 @@ passkey internals. See `capability.manifest.json:forbiddenTerms`.
 original plan):**
 
 ```
-types ← identity-auth ← agent-account ← agent-naming
+types ← connect-auth ← agent-account ← agent-naming
                               custody  ─ (no edge; subpath helpers compose without import)
                               delegation, mcp-runtime, tool-policy, key-custody, audit ─ (no edge)
 ```
@@ -262,7 +262,7 @@ Reserved for later:
 | Phase | Scope | Status |
 | --- | --- | --- |
 | **Phase 1** | Spec + scaffold + pure SDK (helpers, types, API skeleton, tests). Plus ADR-0006 architecture lock-in + `NameContext` / `AgentType` added to `@agenticprimitives/types`. | shipped 2026-05-23 |
-| **Phase 2** | **Cross-package integration sweep.** Add (a) contract ABIs + wire `AgentNamingClient.resolveName / reverseResolve / getRecords` against a fixture deployment; (b) `audit.buildEvent` accepts `actor.name?`; (c) `tool-policy.evaluatePolicy` accepts `{ callerName?, callerAgentType? }`; (d) `delegation` claims envelope accepts `context?: { delegatorName?, delegateName? }` (off-chain, NOT EIP-712); (e) `mcp-runtime.withDelegation` accepts `nameContext?`; (f) `identity-auth` JWT accepts `agentName?` claim. Each integration is additive (optional fields) — no breakage. | next |
+| **Phase 2** | **Cross-package integration sweep.** Add (a) contract ABIs + wire `AgentNamingClient.resolveName / reverseResolve / getRecords` against a fixture deployment; (b) `audit.buildEvent` accepts `actor.name?`; (c) `tool-policy.evaluatePolicy` accepts `{ callerName?, callerAgentType? }`; (d) `delegation` claims envelope accepts `context?: { delegatorName?, delegateName? }` (off-chain, NOT EIP-712); (e) `mcp-runtime.withDelegation` accepts `nameContext?`; (f) `connect-auth` JWT accepts `agentName?` claim. Each integration is additive (optional fields) — no breakage. | next |
 | **Phase 3** | Port `AgentNameRegistry`, `AgentNameAttributeResolver`, `AgentNameUniversalResolver` to `apps/contracts/src/naming/`, AND port the shared ontology stack (`OntologyTermRegistry`, `AttributeStorage`, `ShapeRegistry`) to `apps/contracts/src/ontology/` per [ADR-0009](../docs/architecture/decisions/0009-on-chain-ontology-shacl-naming.md). Resolver inherits `AttributeStorage`; predicates are governance-registered + active-checked at write. `AgentName` shape defined in `ShapeRegistry`. Simplifications kept: no `AgentRelationship` dependency (parent-pointer encoded directly in registry node), no OpenZeppelin `AccessControl` / `TimelockController` (the owner Smart Agent's CustodyPolicy IS the timelock + RBAC; msg.sender-based auth via the CustodyPolicy execute path). Forge tests. Deploy + persist addresses. | **shipped 2026-05-23 (pivot via ADR-0009)** |
 | **Phase 4** | Wire write methods (`registerSubname`, `setPrimaryName`, `setAgentRecords`, `setSubregistry`). Each goes through the owner Smart Agent's `isValidSignature` (which routes through CustodyPolicy for mode>0 accounts). `agent-naming/custody` subpath ships the call builders. | after Phase 3 |
 | **Phase 5** | Demo integration in this order: demo-web-pro → demo-web-recovery → demo-a2a → demo-mcp. Auditor packet refreshed. | after Phase 4 |

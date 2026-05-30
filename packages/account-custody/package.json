@@ -11,7 +11,12 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "spec.md", "README.md"],
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -19,8 +24,14 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["custody", "multi-sig", "trustee", "recovery", "agentic"],
-  "license": "UNLICENSED",
+  "keywords": [
+    "custody",
+    "multi-sig",
+    "trustee",
+    "recovery",
+    "agentic"
+  ],
+  "license": "MIT",
   "peerDependencies": {
     "@agenticprimitives/types": "workspace:*",
     "viem": "^2.21.0"

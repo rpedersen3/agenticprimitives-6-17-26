@@ -111,7 +111,7 @@ Naming convention: `<pkg>.<primitive>[.<outcome>]`. The outcome suffix is omitte
 
 ```
 types ←┐
-       ├─ identity-auth ← agent-account ← delegation ← mcp-runtime
+       ├─ connect-auth ← agent-account ← delegation ← mcp-runtime
 audit ←┤                                       ↑              ↑
        └────────────── key-custody ────────────┘              │
                                                        tool-policy ─┘
@@ -119,7 +119,7 @@ audit ←┤                                       ↑              ↑
 
 `audit` imports `@agenticprimitives/types` only. Everything else imports `audit`. This is by design — `audit` is the ground truth schema, so it cannot depend on the things it observes.
 
-Forbidden imports (per `capability.manifest.json`): `identity-auth`, `agent-account`, `delegation`, `key-custody`, `tool-policy`, `mcp-runtime`, `apps/*`.
+Forbidden imports (per `capability.manifest.json`): `connect-auth`, `agent-account`, `delegation`, `key-custody`, `tool-policy`, `mcp-runtime`, `apps/*`.
 
 ## 8. Reference: smart-agent patterns to port
 

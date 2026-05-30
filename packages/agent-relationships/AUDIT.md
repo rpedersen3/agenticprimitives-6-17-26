@@ -24,7 +24,7 @@ demo-integration findings in Phase 4+.
   every well-known type so resolvers can rely on it.
 - `AgentRelationshipsClient` (Phase 1 skeleton): MUST throw clearly
   when invoked before contract wiring.
-- Vocabulary firewall against `agent-naming`, `agent-identity`,
+- Vocabulary firewall against `agent-naming`, `agent-profile`,
   `delegation`, `custody`, `mcp-runtime`, `tool-policy`, `key-custody`,
   `audit`, and MCP transport. `NAMESPACE_CONTAINS` is intentionally
   absent per ADR-0006.

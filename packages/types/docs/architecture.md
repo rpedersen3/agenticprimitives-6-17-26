@@ -20,7 +20,7 @@ Current exports:
 ```mermaid
 flowchart TD
   Types["@agenticprimitives/types"]
-  Identity["identity-auth"]
+  Identity["connect-auth"]
   Account["agent-account"]
   Delegation["delegation"]
   KeyCustody["key-custody"]

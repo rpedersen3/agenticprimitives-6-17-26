@@ -20,10 +20,10 @@ packages.
 
 ## Do Not Use This For
 
-- Passkey ceremonies, SIWE, OAuth, or JWT sessions → `identity-auth`.
+- Passkey ceremonies, SIWE, OAuth, or JWT sessions → `connect-auth`.
 - `.agent` name registration or resolution → `agent-naming`.
-- AgentCard profiles or endpoint verification → `agent-identity`.
-- Custodian enrollment, credential recovery, or quorum scheduling → `custody`.
+- AgentCard profiles or endpoint verification → `agent-profile`.
+- Custodian enrollment, credential recovery, or quorum scheduling → `account-custody`.
 - Delegation tokens or session authority → `delegation`.
 
 ## Install
@@ -66,7 +66,7 @@ if (!(await account.isDeployed(address))) {
   rotation ([ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md)).
 - **CREATE2 salt**: from auth methods + user scope only — never from `.agent`
   names ([spec 220](../../specs/220-agent-identity-bootstrap.md)).
-- **Signer**: pluggable interface from `identity-auth`; this package consumes it.
+- **Signer**: pluggable interface from `connect-auth`; this package consumes it.
 - **UserOperation**: ERC-4337 v0.8 UserOp build path via `buildUserOp`.
 
 See [`docs/concepts.md`](docs/concepts.md).
@@ -84,7 +84,7 @@ const executeData = buildExecuteCallData(calls);
 
 ```ts
 import { encodeWebAuthnSignature, SIG_TYPE_WEBAUTHN } from '@agenticprimitives/agent-account';
-// WebAuthn ceremony output is produced by identity-auth; on-chain wire format here.
+// WebAuthn ceremony output is produced by connect-auth; on-chain wire format here.
 ```
 
 ## Runtime Support

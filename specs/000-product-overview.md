@@ -37,7 +37,7 @@ Each package is a **product boundary**: a separately publishable, independently 
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          BROWSER (web app)                              │
 │                                                                         │
-│   identity-auth                                                         │
+│   connect-auth                                                         │
 │   ─ user signs in (passkey / SIWE / Google) → JWT session               │
 │   ─ exposes Signer (passkey/EOA/KMS)                                    │
 │                                                                         │
@@ -89,13 +89,13 @@ Each package is a **product boundary**: a separately publishable, independently 
 ```
 types        (leaf; no @ap/* deps)
   ↑
-identity-auth (uses types)
+connect-auth (uses types)
   ↑
-agent-account (uses identity-auth, types)
+agent-account (uses connect-auth, types)
   ↑
-key-custody   (uses identity-auth, types) ──┐
+key-custody   (uses connect-auth, types) ──┐
                                             │
-delegation    (uses agent-account, key-custody, identity-auth, types)
+delegation    (uses agent-account, key-custody, connect-auth, types)
   ↑
 tool-policy   (uses types only; protocol-agnostic)
   ↑
@@ -126,7 +126,7 @@ Hard rules:
 ```
 agenticprimitives/
 ├── packages/
-│   ├── identity-auth/         (Privy-style auth + Signer interfaces)
+│   ├── connect-auth/         (Privy-style auth + Signer interfaces)
 │   ├── agent-account/         (ERC-4337 substrate)
 │   ├── delegation/            (delegations + session lifecycle)
 │   ├── key-custody/           (KMS primitives, narrower)

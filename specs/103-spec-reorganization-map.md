@@ -119,7 +119,7 @@ Numbering: existing 000-004 stay (with 000 updated). New per-package specs use t
 
 Replace the package map table with the new 7-package set. Update the runtime composition diagram to show:
 
-- Browser: `identity-auth` + `agent-account` + `delegation`.
+- Browser: `connect-auth` + `agent-account` + `delegation`.
 - A2A agent: `delegation` (session lifecycle) + `key-custody` (raw signing) + `tool-policy` (decision engine).
 - MCP server: `mcp-runtime` (middleware) + `delegation` (verification) + `tool-policy` (classification).
 
@@ -151,7 +151,7 @@ When you approve, the rescaffold does:
 2. Write new `specs/200-205-*.md` per the mapping above.
 3. Update `specs/000-product-overview.md` per §6.
 4. Delete `packages/{auth,delegation,kms,mcp-resources}/`.
-5. Scaffold `packages/{identity-auth,agent-account,delegation,key-custody,tool-policy,mcp-runtime,types}/`, each with:
+5. Scaffold `packages/{connect-auth,agent-account,delegation,key-custody,tool-policy,mcp-runtime,types}/`, each with:
    - `package.json` per the public-exports lists in 101.
    - `capability.manifest.json` per the schema in 102.
    - `CLAUDE.md` per the template in 102.

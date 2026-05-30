@@ -44,7 +44,7 @@ Typical methods (see `src/client.ts`):
 
 ## WebAuthn On-Chain Wire Format
 
-Ceremony types live in `identity-auth`. This package ships the encoder consumed
+Ceremony types live in `connect-auth`. This package ships the encoder consumed
 by `AgentAccount._validateSig`:
 
 - `SIG_TYPE_WEBAUTHN`

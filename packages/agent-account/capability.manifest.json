@@ -80,7 +80,7 @@
     },
     {
       "term": "A2AKeyProvider",
-      "reason": "Belongs in key-custody. agent-account consumes signers via identity-auth's Signer interface only.",
+      "reason": "Belongs in key-custody. agent-account consumes signers via connect-auth's Signer interface only.",
       "owningPackage": "@agenticprimitives/key-custody"
     },
     {
@@ -106,7 +106,7 @@
     },
     {
       "term": "passkey",
-      "reason": "Auth method internals belong in identity-auth. The on-chain factory methods (createAccountWithPasskey / getAddressForPasskey) and the signature dispatch ABI are agent-account's contract surface; the WebAuthn signature encoder may reference identity-auth's subpath URL.",
+      "reason": "Auth method internals belong in connect-auth. The on-chain factory methods (createAccountWithPasskey / getAddressForPasskey) and the signature dispatch ABI are agent-account's contract surface; the WebAuthn signature encoder may reference connect-auth's subpath URL.",
       "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": [
         "spec.md",
@@ -120,7 +120,7 @@
     },
     {
       "term": "OAuth",
-      "reason": "Auth method internals belong in identity-auth.",
+      "reason": "Auth method internals belong in connect-auth.",
       "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["spec.md", "README.md"]
     }

@@ -69,9 +69,9 @@
     { "term": "A2AKeyProvider", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
     { "term": "envelope encryption", "reason": "Belongs in key-custody.", "owningPackage": "@agenticprimitives/key-custody" },
     { "term": "JTI", "reason": "Belongs in delegation/mcp-runtime.", "owningPackage": "@agenticprimitives/delegation" },
-    { "term": "passkey", "reason": "Auth method; belongs in identity-auth. tool-policy may reference the term in cross-cutting-capability docs for spec 207 mappings (UV gate, multi-passkey recovery).", "owningPackage": "@agenticprimitives/connect-auth", "allowInPaths": ["src/types.ts", "src/risk-tier.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"] },
-    { "term": "JWT", "reason": "Session mechanism; belongs in identity-auth.", "owningPackage": "@agenticprimitives/connect-auth", "allowInPaths": ["spec.md", "README.md"] },
-    { "term": "OAuth", "reason": "Auth method; belongs in identity-auth.", "owningPackage": "@agenticprimitives/connect-auth" }
+    { "term": "passkey", "reason": "Auth method; belongs in connect-auth. tool-policy may reference the term in cross-cutting-capability docs for spec 207 mappings (UV gate, multi-passkey recovery).", "owningPackage": "@agenticprimitives/connect-auth", "allowInPaths": ["src/types.ts", "src/risk-tier.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"] },
+    { "term": "JWT", "reason": "Session mechanism; belongs in connect-auth.", "owningPackage": "@agenticprimitives/connect-auth", "allowInPaths": ["spec.md", "README.md"] },
+    { "term": "OAuth", "reason": "Auth method; belongs in connect-auth.", "owningPackage": "@agenticprimitives/connect-auth" }
   ],
   "ignoreForAgentContext": [
     "dist/**",

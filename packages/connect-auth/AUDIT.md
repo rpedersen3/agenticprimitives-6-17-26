@@ -2,7 +2,7 @@
 
 **Status:** alpha
 **Last refreshed:** 2026-05-20
-**Owners:** identity-auth package CODEOWNERS
+**Owners:** connect-auth package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
 
 ## 1. Charter

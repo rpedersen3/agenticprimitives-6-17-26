@@ -26,7 +26,7 @@ maps addresses → typed profiles and optional endpoint-control proofs.
 
 - `.agent` names or namehash → `agent-naming`.
 - Smart Agent deploy / UserOps → `agent-account`.
-- Passkey / SIWE / JWT → `identity-auth`.
+- Passkey / SIWE / JWT → `connect-auth`.
 - Trust-fabric edges → `agent-relationships`.
 - UAID string generation → refused ([ADR-0008](../../docs/architecture/decisions/0008-caip10-nativeid-record-predicate.md)).
 
@@ -104,7 +104,7 @@ See [`docs/security.md`](docs/security.md) and [`AUDIT.md`](AUDIT.md).
 ## Validation
 
 ```bash
-pnpm check:agent-identity
+pnpm check:agent-profile
 pnpm check:forbidden-terms
 ```
 

@@ -53,7 +53,7 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 - "Mint a delegation token here" — **STOP.** Belongs in [`delegation`](../delegation).
 - "Add MCP SDK transport or registration logic" — **STOP.** Use the official `@modelcontextprotocol/sdk`. [ADR-0004](../../docs/architecture/decisions/0004-mcp-runtime-as-middleware.md).
 - "Encrypt a session payload or generate a data key" — **STOP.** Belongs in [`key-custody`](../key-custody).
-- "Implement an auth flow (passkey, SIWE, OAuth)" — **STOP.** Belongs in [`identity-auth`](../connect-auth).
+- "Implement an auth flow (passkey, SIWE, OAuth)" — **STOP.** Belongs in [`connect-auth`](../connect-auth).
 
 ## Before you write code
 - [ ] Is the change in the wrapper layer (`withDelegation` / `withCrossDelegation` / JTI / classification bridge / MCP error mapping)?

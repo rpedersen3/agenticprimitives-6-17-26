@@ -8,8 +8,8 @@
 > shipped roster has since grown to **twelve** — the identity-stack split
 > (`agent-naming`, `agent-profile`, `agent-relationships` per ADR-0007), the
 > custody-layer carve-out (`account-custody` per spec 213), and `audit`. Three
-> packages were also **renamed** (commit `7861f4b`): `identity-auth → connect-auth`,
-> `agent-identity → agent-profile`, `custody → account-custody`. §1 below reflects
+> packages were also **renamed** (commit `7861f4b`): `connect-auth → connect-auth`,
+> `agent-profile → agent-profile`, `custody → account-custody`. §1 below reflects
 > the current twelve; the per-package detail in §2 covers the original seven (the
 > five additions are documented in their own `README.md` / `CLAUDE.md`). The
 > authoritative, always-current roster + "which package do I import" map is
@@ -27,13 +27,13 @@ twelve. `types` is the one shared leaf.
 | --- | --- | --- | --- | --- |
 | 1 | `@agenticprimitives/types` | Core | Cross-cutting shared types | shipped |
 | 2 | `@agenticprimitives/agent-account` | Core | Canonical identity anchor (ERC-4337 SA) | shipped |
-| 3 | `@agenticprimitives/connect-auth` | Connect | Passkey / SIWE / JWT / `Signer` *(was `identity-auth`)* | shipped |
+| 3 | `@agenticprimitives/connect-auth` | Connect | Passkey / SIWE / JWT / `Signer` *(was `connect-auth`)* | shipped |
 | 4 | `@agenticprimitives/account-custody` | Govern | CustodyPolicy / quorum / recovery *(was `custody`)* | shipped |
 | 5 | `@agenticprimitives/delegation` | Authorize | Delegation tokens + caveats + session rows | shipped |
 | 6 | `@agenticprimitives/tool-policy` | Authorize | Tool classification + risk tiers | shipped |
 | 7 | `@agenticprimitives/mcp-runtime` | Operate | Delegation-aware MCP middleware | shipped |
 | 8 | `@agenticprimitives/agent-naming` | Discover | `.agent` names → address (facet) | shipped |
-| 9 | `@agenticprimitives/agent-profile` | Discover | `AgentCard` / HCS-11 profile (facet) *(was `agent-identity`)* | shipped |
+| 9 | `@agenticprimitives/agent-profile` | Discover | `AgentCard` / HCS-11 profile (facet) *(was `agent-profile`)* | shipped |
 | 10 | `@agenticprimitives/agent-relationships` | Discover | Trust-fabric edges (graph) | shipped |
 | 11 | `@agenticprimitives/key-custody` | Secrets | KMS / envelope encryption / HMAC | shipped |
 | 12 | `@agenticprimitives/audit` | Observe | Audit-event schema + sinks | shipped |
@@ -134,7 +134,7 @@ export type JwtClaims, AuthenticatedUser, AuthMethod
 
 **Owns:**
 - `AgentAccountClient` — `.getAddress()`, `.createAccount()`, `.isDeployed()`, `.isOwner()`.
-- UserOp building/signing helpers (delegates to a signer from `identity-auth`).
+- UserOp building/signing helpers (delegates to a signer from `connect-auth`).
 - ERC-1271 signature verification utilities (`isValidSignature()` round-trip).
 - EntryPoint v0.8 client.
 - Factory client (CREATE2 address derivation per salt).
@@ -143,8 +143,8 @@ export type JwtClaims, AuthenticatedUser, AuthMethod
 **Does NOT own:**
 - The delegation primitive (that's `delegation`).
 - Smart contract source (those live in smart-agent or future `@agenticprimitives/contracts`).
-- Auth/identity flows (`identity-auth`).
-- KMS/signing backends (consumers pass a `Signer` from `identity-auth`).
+- Auth/identity flows (`connect-auth`).
+- KMS/signing backends (consumers pass a `Signer` from `connect-auth`).
 - Paymaster policy ("which paymaster to use when" — defer until needed).
 
 **Smart-agent provenance:**
@@ -173,7 +173,7 @@ export function deriveSaltFromLabel(label: string): bigint;
 export function deriveSaltFromEmail(email: string, rotation: number): bigint;
 ```
 
-**Dependencies (within agenticprimitives):** `identity-auth` (for `Signer` interface).
+**Dependencies (within agenticprimitives):** `connect-auth` (for `Signer` interface).
 
 ---
 
@@ -186,7 +186,7 @@ export function deriveSaltFromEmail(email: string, rotation: number): bigint;
 - Caveat builders (on-chain enforcers + off-chain sentinels).
 - EIP-712 hashing (`hashDelegation`, `hashCaveats`).
 - Caveat evaluator (fail-closed dispatcher).
-- `DelegationClient` (browser-side issuance via signer from `identity-auth`).
+- `DelegationClient` (browser-side issuance via signer from `connect-auth`).
 - `mintDelegationToken` / `verifyDelegationToken` (node-side).
 - `verifyCrossDelegation` (the on-behalf-of pattern).
 - **Session lifecycle** (was in `kms`): create session (signer + delegation pair), persist encrypted, expire, revoke. The encryption layer is delegated to `key-custody`.
@@ -530,7 +530,7 @@ wired — see spec 213).
 
 | Package | Discoverable from name? | Doctrine violation? |
 | --- | --- | --- |
-| `connect-auth` | ✓ (connect a human — passkey/SIWE/JWT) — renamed from `identity-auth` to stop colliding with `agent-profile` | None |
+| `connect-auth` | ✓ (connect a human — passkey/SIWE/JWT) — renamed from `connect-auth` to stop colliding with `agent-profile` | None |
 | `agent-account` | ✓ (the agent's account) | None |
 | `account-custody` | ✓ (custody policy *of the account*) — renamed from `custody` to disambiguate from `key-custody` | None |
 | `delegation` | ✓ | None |
@@ -538,7 +538,7 @@ wired — see spec 213).
 | `mcp-runtime` | ✓ (runtime layer for MCP servers) | None |
 | `key-custody` | ✓ (keys custodied by KMS) | None |
 | `agent-naming` | ✓ (`.agent` names) | None |
-| `agent-profile` | ✓ (the agent's profile/AgentCard) — renamed from `agent-identity` (login lives in `connect-auth`) | None |
+| `agent-profile` | ✓ (the agent's profile/AgentCard) — renamed from `agent-profile` (login lives in `connect-auth`) | None |
 | `agent-relationships` | ✓ (trust edges) | None |
 | `audit` | ✓ | None |
 | `types` | weak (generic) — but smart-agent uses it, and convention is strong | Acceptable |

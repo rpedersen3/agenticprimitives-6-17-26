@@ -10,7 +10,7 @@
  * factoryCalldata embedded in the signature, then ERC-1271).
  *
  * Doctrine — see [[feedback-demo-a2a-is-signer-agnostic]] memory and
- * spec 130 §7: identity-auth ships the verifier helper; demo-a2a calls
+ * spec 130 §7: connect-auth ships the verifier helper; demo-a2a calls
  * it; passkey internals stay out of demo-a2a entirely.
  *
  * Two modes:
@@ -23,7 +23,7 @@
  *     Suitable for cheap pre-checks.
  *
  * The function signature intentionally takes the validator address as a
- * parameter — identity-auth is transport- and deployment-agnostic; the
+ * parameter — connect-auth is transport- and deployment-agnostic; the
  * caller wires in the deployed contract address from its config.
  */
 

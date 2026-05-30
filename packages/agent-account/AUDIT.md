@@ -16,12 +16,12 @@ submission), the EntryPoint + Factory ABI fragments, and the on-chain
 `webauthn-signature.ts`).
 
 Account-agnostic of which signer signs — consumers pass an
-`identity-auth.Signer` (EOA via viem, KMS via key-custody, or
+`connect-auth.Signer` (EOA via viem, KMS via key-custody, or
 PasskeySigner from demo-web) and this package builds the wire format
 the on-chain `AgentAccount._validateSig` dispatch consumes.
 
 What this package does NOT own (per its `CLAUDE.md`):
-- Auth methods or signer concretions (`identity-auth`).
+- Auth methods or signer concretions (`connect-auth`).
 - KMS backends (`key-custody`).
 - Delegation primitives (`delegation`).
 - Paymaster policy ("which paymaster when").
@@ -132,7 +132,7 @@ An external auditor evaluating this package needs:
 ## 9. Accepted limitations / scope exclusions
 
 - Does NOT own paymaster policy — `paymaster` is a parameter on `buildDeployUserOp*`.
-- Does NOT own auth methods — consumes `Signer` interface from `identity-auth`.
+- Does NOT own auth methods — consumes `Signer` interface from `connect-auth`.
 - Does NOT own delegation. Forbidden imports: `delegation`, `key-custody`, `tool-policy`, `mcp-runtime`.
 - Does NOT ship Solidity source — addresses are provided by config (the demo contracts live in `apps/contracts/`).
 - v0 demo arbitrary-call `buildUserOp` is unimplemented (AA-1).

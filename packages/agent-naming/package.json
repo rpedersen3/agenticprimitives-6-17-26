@@ -20,6 +20,7 @@
     }
   },
   "files": [
+    "LICENSE",
     "dist",
     "docs",
     "examples",
@@ -44,11 +45,11 @@
     "smart-agent",
     "agentic"
   ],
-  "license": "UNLICENSED",
+  "license": "MIT",
   "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/agent-account": "workspace:*",
+    "@agenticprimitives/connect-auth": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
     "viem": "^2.21.0"
   },
   "devDependencies": {

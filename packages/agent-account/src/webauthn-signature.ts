@@ -12,7 +12,7 @@
  *
  * Doctrine: this is the agent-account substrate's signature dispatch.
  * The auth-method ceremony (DER parsing, COSE attestation, challenge
- * encoding) lives in identity-auth. agent-account ships only the
+ * encoding) lives in connect-auth. agent-account ships only the
  * on-chain wire-format encoder.
  */
 

@@ -38,7 +38,7 @@
 
 ## Forbidden imports
 - `apps/*`
-- `identity-auth`, `agent-account`, `key-custody`, `mcp-runtime`
+- `connect-auth`, `agent-account`, `key-custody`, `mcp-runtime`
 - `@modelcontextprotocol/sdk`, `@a2aproject/a2a-js`, `langchain`, `@langchain/*`, `ai`, `@vercel/ai`
 - Type-only import of `Delegation` from `delegation` is permitted, but it MUST be `import type` (not runtime).
 
@@ -47,7 +47,7 @@
 - "Add a delegation primitive, builder, or verifier" — **STOP.** Belongs in [`delegation`](../delegation). We consume `Delegation` as a type.
 - "Implement transport — write to a response, set a header" — **STOP.** We return decisions; consumers enforce.
 - "Add KMS, envelope encryption, or HMAC" — **STOP.** Belongs in [`key-custody`](../key-custody).
-- "Add an auth method, session, or JWT" — **STOP.** Belongs in [`identity-auth`](../connect-auth).
+- "Add an auth method, session, or JWT" — **STOP.** Belongs in [`connect-auth`](../connect-auth).
 
 ## Before you write code
 - [ ] Is the change about classification taxonomy, risk tiers, the decision engine, or exact-call policy?

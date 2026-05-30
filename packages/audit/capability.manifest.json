@@ -77,7 +77,7 @@
     },
     {
       "term": "passkey",
-      "reason": "Belongs in identity-auth.",
+      "reason": "Belongs in connect-auth.",
       "owningPackage": "@agenticprimitives/connect-auth",
       "allowInPaths": ["spec.md", "README.md", "AUDIT.md", "CLAUDE.md"]
     },

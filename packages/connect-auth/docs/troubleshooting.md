@@ -27,11 +27,11 @@ user to pick; session primary subject must be the chosen SA address.
 Ensure salt uses `deriveSaltFromEmail` or `deriveSaltFromLabel` — not namehash,
 not profile hash. If salt source changed, counterfactual address will change.
 
-## Confused `identity-auth` With `agent-identity`
+## Confused `connect-auth` With `agent-profile`
 
 | Symptom | Fix |
 | --- | --- |
-| Putting AgentCard in JWT | Public profile → `agent-identity`; JWT carries SA + optional display name |
+| Putting AgentCard in JWT | Public profile → `agent-profile`; JWT carries SA + optional display name |
 | "Profile" in session | Use `AuthenticatedUser` for app session; AgentCard is separate |
 
 ## Confused Auth With Custody

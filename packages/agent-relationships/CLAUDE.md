@@ -22,7 +22,7 @@
   relationships-edge-based, in our model. The relationship-type
   `NAMESPACE_CONTAINS` from smart-agent is intentionally NOT
   included.
-- Profile / `AgentCard` → [`agent-identity`](../agent-profile).
+- Profile / `AgentCard` → [`agent-profile`](../agent-profile).
 - Naming registry / resolver → [`agent-naming`](../agent-naming).
 - Delegation / mint / verify → [`delegation`](../delegation).
 - Custody / quorum / recovery → [`custody`](../account-custody).
@@ -37,7 +37,7 @@
 constants.
 **Disambiguation:**
 - **"edge"** here = trust-fabric relationship triple. In
-  `delegation` / `agent-naming` / `agent-identity` "edge" doesn't
+  `delegation` / `agent-naming` / `agent-profile` "edge" doesn't
   exist.
 - **"role"** here = a label attached to one side of a relationship
   edge (`ROLE_BOARD_MEMBER`, `ROLE_OPERATOR`, etc.). In `custody`
@@ -79,7 +79,7 @@ constants.
 - `apps/*`
 - `@agenticprimitives/delegation`, `mcp-runtime`, `tool-policy`,
   `key-custody`, `audit`, `custody`, `agent-naming`,
-  `agent-identity`
+  `agent-profile`
 - `@modelcontextprotocol/sdk`
 
 ## Drift triggers — STOP and route
@@ -92,7 +92,7 @@ constants.
 - "Add a name resolver" — **STOP.** Belongs in
   [`agent-naming`](../agent-naming).
 - "Add a profile schema" — **STOP.** Belongs in
-  [`agent-identity`](../agent-profile).
+  [`agent-profile`](../agent-profile).
 - "Add CustodyPolicy enforcement of relationship rules" — **STOP.**
   Authorization to write an edge goes through the actor's Smart
   Agent ERC-1271 → its CustodyPolicy quorum. The relationships
@@ -100,7 +100,7 @@ constants.
 
 ## Before you write code
 - [ ] Is the change in the edge / type / role / client surface?
-- [ ] Did I avoid importing from `agent-naming`, `agent-identity`,
+- [ ] Did I avoid importing from `agent-naming`, `agent-profile`,
       `delegation`, `custody`, `mcp-runtime`, `tool-policy`,
       `key-custody`, `audit`?
 - [ ] If I'm adding a relationship type, did I add it to

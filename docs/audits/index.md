@@ -1,6 +1,6 @@
 # Security & Architecture Audit Index
 
-**Last refreshed:** 2026-05-23 (post-Wave H1-H4 + auditor packet + agent-identity / agent-relationships Phase 1 scaffolds landed)
+**Last refreshed:** 2026-05-30 (added the dedicated packages+contracts audit doc — `2026-05-packages-contracts-production-readiness.md` — under a focused production-library lens; existing app-audit doc unchanged).
 
 ## Auditor packet (the third-party-audit-ready dossier)
 
@@ -10,7 +10,8 @@
 | [`threat-model.md`](./threat-model.md) | security-auditor | STRIDE per trust boundary, mapped to packages. (Stale — does not yet cover `demo-jp`, `demo-sso-next`, or specs 232/234/235/236; refresh queued — see ARCH-005 in the pre-production audit below.) |
 | [`architecture-diagram.md`](./architecture-diagram.md) | technical-architect-auditor | System map, dependency graph, deployment topology, trust boundaries. (Same staleness — ARCH-005.) |
 | [`evidence-checklist.md`](./evidence-checklist.md) | security + architect | Every security control → source + test + audit event + closure status. (Same staleness — ARCH-005.) |
-| [`2026-05-pre-production-readiness.md`](./2026-05-pre-production-readiness.md) | security + architect (this audit) | **Pre-launch deep audit of `demo-jp` + `demo-sso-next` + consumed packages.** Living tracker — 23 security findings + 22 architectural findings + an 18-item self-catalog of demo shortcuts, mapped to a 7-wave remediation plan. The hard gate before a third-party review window opens. |
+| [`2026-05-packages-contracts-production-readiness.md`](./2026-05-packages-contracts-production-readiness.md) | security + architect (2026-05-30) | **NEW — focused production-library audit.** Scope = `packages/*` + `apps/contracts/*` ONLY (demos + app-integration explicitly out of scope). 25+ in-scope findings reclassified from prior dossier + ~30 NEW package-/contract-layer findings + per-package + per-contract scorecards + a 6-wave plan. **This is the doc a third-party reviewer of the production library suite reads first.** |
+| [`2026-05-pre-production-readiness.md`](./2026-05-pre-production-readiness.md) | security + architect (2026-05-29) | App-focused pre-launch audit of `demo-jp` + `demo-sso-next` + consumed packages. 23 SEC + 22 ARCH + 18 D + 37 EXT rows. **The package-/contract-layer subset is now re-cast in the new doc above**; this one remains the tracker for demo-app + deploy-substrate findings (OIDC flows, app handoffs, app vocabulary drift). |
 
 ## Auditor agents (Claude Code subagents)
 

@@ -16,10 +16,10 @@ Per [ADR-0007](../../../docs/architecture/decisions/0007-agent-identity-stack-th
 | --- | --- |
 | `agent-account` | Canonical SA address |
 | `agent-naming` | Human-readable `.agent` name + resolver records |
-| `agent-identity` | AgentCard profile + endpoint verification |
+| `agent-profile` | AgentCard profile + endpoint verification |
 | `agent-relationships` | Trust edges between **addresses** (not names) |
 
-`agent-naming` and `agent-identity` are **siblings**. Neither imports the other.
+`agent-naming` and `agent-profile` are **siblings**. Neither imports the other.
 Apps compose: name → address → profile.
 
 ## AgentCard
@@ -70,7 +70,7 @@ Methods include `dns-txt`, `signed-url`, `http-challenge`,
 
 | Package | Meaning of "profile" |
 | --- | --- |
-| `agent-identity` | Public AgentCard manifest about an SA |
-| `identity-auth` | JWT session user profile (private, app-specific) |
+| `agent-profile` | Public AgentCard manifest about an SA |
+| `connect-auth` | JWT session user profile (private, app-specific) |
 
 Do not merge these concepts in APIs or storage.

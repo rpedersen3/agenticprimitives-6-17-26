@@ -107,7 +107,7 @@ export interface AgentSession {
 // ─── Agent identity shape ─────────────────────────────────────────────
 //
 // Cross-cutting shape so downstream packages (audit, tool-policy,
-// delegation, mcp-runtime, identity-auth) can accept name + type as
+// delegation, mcp-runtime, connect-auth) can accept name + type as
 // optional context WITHOUT importing @agenticprimitives/agent-naming.
 //
 // See ADR-0006 ("agent-naming is a resolution layer"). Naming is the

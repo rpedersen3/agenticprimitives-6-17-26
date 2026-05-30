@@ -6,11 +6,12 @@
  *   - capability.manifest.json
  *   - CLAUDE.md
  *   - README.md
+ *   - AUDIT.md          ← required per spec 100 §8 + H7-A.4 closure
  *   - spec.md
  *   - tsconfig.json
  *   - src/index.ts
  *
- * Per spec 102 §1.
+ * Per spec 102 §1 + spec 100 §8.
  */
 
 import { readdirSync, statSync, existsSync } from 'node:fs';
@@ -24,6 +25,7 @@ const REQUIRED_FILES = [
   'capability.manifest.json',
   'CLAUDE.md',
   'README.md',
+  'AUDIT.md',
   'spec.md',
   'tsconfig.json',
   'src/index.ts',

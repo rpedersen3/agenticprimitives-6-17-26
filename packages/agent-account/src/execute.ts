@@ -3,7 +3,7 @@
  * calldata for `AgentAccount.execute(target, value, data)`.
  *
  * This bridges the Phase-4 call builders in agent-naming /
- * agent-relationships / agent-identity (which all return
+ * agent-relationships / agent-profile (which all return
  * `{ to, value, data }`) to the user's AgentAccount execute path —
  * the canonical way for a Smart Agent to dispatch ANY on-chain
  * write through its custody-gated authority.

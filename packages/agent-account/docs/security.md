@@ -18,7 +18,7 @@ CREATE2 salt MUST NOT embed credential material that can rotate.
 Acceptable salt sources:
 
 - `deriveSaltFromEmail(email, rotation)` — stable user scope
-- `deriveSaltFromLabel(label)` — stable auth-scope label from `identity-auth`
+- `deriveSaltFromLabel(label)` — stable auth-scope label from `connect-auth`
 
 Unacceptable salt sources:
 
@@ -29,7 +29,7 @@ Unacceptable salt sources:
 ## Signer Boundaries
 
 - This package verifies signatures via ERC-1271 and configured validators.
-- WebAuthn **ceremonies** belong in `identity-auth`.
+- WebAuthn **ceremonies** belong in `connect-auth`.
 - KMS key material belongs in `key-custody`.
 
 ## EntryPoint Version
@@ -46,6 +46,6 @@ Document which signer is authoritative after bootstrap completes.
 
 - That a human-readable name maps to this address (use `agent-naming` +
   round-trip reverse resolution).
-- That an MCP endpoint is controlled by this agent (use `agent-identity`
+- That an MCP endpoint is controlled by this agent (use `agent-profile`
   verification methods).
 - That a delegation or tool grant is valid (use `delegation` / `mcp-runtime`).

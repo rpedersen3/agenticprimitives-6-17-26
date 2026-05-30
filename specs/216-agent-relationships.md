@@ -67,9 +67,9 @@ is scaffolded).
 **Dependency direction:**
 
 ```
-types ← identity-auth ← agent-account ← agent-relationships
+types ← connect-auth ← agent-account ← agent-relationships
                                         agent-naming   ─ (no edge to/from agent-relationships)
-                                        agent-identity ─ (no edge to/from agent-relationships)
+                                        agent-profile ─ (no edge to/from agent-relationships)
                                         delegation / mcp-runtime / tool-policy / key-custody / audit / custody ─ (no edge)
 ```
 
@@ -88,7 +88,7 @@ No back-edges. No coupling to naming or identity.
 **Forbidden imports:**
 - `apps/*`
 - `@agenticprimitives/delegation`, `mcp-runtime`, `tool-policy`,
-  `key-custody`, `audit`, `custody`, `agent-naming`, `agent-identity`
+  `key-custody`, `audit`, `custody`, `agent-naming`, `agent-profile`
 
 ## 4. Edge model (Phase 1 — MVP)
 

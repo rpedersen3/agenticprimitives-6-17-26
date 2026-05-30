@@ -11,7 +11,12 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "spec.md", "README.md"],
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -21,8 +26,13 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["audit", "forensics", "observability", "agentic"],
-  "license": "UNLICENSED",
+  "keywords": [
+    "audit",
+    "forensics",
+    "observability",
+    "agentic"
+  ],
+  "license": "MIT",
   "peerDependencies": {
     "@agenticprimitives/types": "workspace:*"
   },

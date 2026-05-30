@@ -2,7 +2,7 @@
 
 **Status:** v0 (2026-05-24).
 **Owner:** cross-package — touches `agent-account`, `agent-naming`,
-`agent-identity`, `identity-auth`, `custody`, and downstream demos.
+`agent-profile`, `connect-auth`, `custody`, and downstream demos.
 **Architecture commitment:**
 [ADR-0010 — Smart Agent address is the canonical identifier](../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md).
 **Related ADRs:** 0006 (naming as resolution), 0007 (identity stack
@@ -54,7 +54,7 @@ Other identity layers are **facets** that point AT the canonical SA:
 | Facet | Identifier | Backlink to canonical SA |
 | --- | --- | --- |
 | `.agent` name (agent-naming) | namehash node | `addr` record + `setPrimaryName` |
-| AgentCard (agent-identity) | `metadata-hash` + URI | `metadata-uri` record + on-chain anchor at the SA's subject |
+| AgentCard (agent-profile) | `metadata-hash` + URI | `metadata-uri` record + on-chain anchor at the SA's subject |
 | ERC-8004 trustless agent | registry-issued id | `agent_address` field |
 | GoDaddy ANS handle | handle string | resolver `addr` |
 | HCS-10 channel / HCS-11 profile | Hedera topic id | `accountId` field (CAIP-10) |
@@ -118,7 +118,7 @@ identity. Steps 5, 6 are optional and may be deferred.
 
 ### Step 5 — Publish profile (optional)
 
-- `agent-identity` package + `AgentProfileResolver` contract.
+- `agent-profile` package + `AgentProfileResolver` contract.
 - Subject = `bytes32(uint256(uint160(canonicalAddr)))`.
 - The profile JSON's canonical-JSON content hash is anchored on chain
   at the SA's subject under the `atl:metadataHash` predicate, with
@@ -213,10 +213,10 @@ no facet has to know about it.
   that implements the forced-unique algorithm in § 5. The
   `claimPsaName`-style high-level helper MUST take a base label and
   return the registered (possibly suffixed) full name.
-- **agent-identity**: profile-publish helpers MUST refuse to set
+- **agent-profile**: profile-publish helpers MUST refuse to set
   `metadata-uri` without a corresponding `metadata-hash` (anti-mutation
   invariant). The SA address is the subject — never the name.
-- **identity-auth**: session JWTs MUST include the canonical SA
+- **connect-auth**: session JWTs MUST include the canonical SA
   address as the primary subject; the passkey credentialId / EOA
   appears as a signer principal claim only.
 - **custody**: unchanged — authority lives here; this spec only
@@ -255,8 +255,8 @@ no facet has to know about it.
 | Phase | Scope | Status |
 | --- | --- | --- |
 | **P1** | ADR-0010 + this spec land. Demos refactored to use the number-suffix algorithm. CLAUDE.md docs reference the principle. | **shipped 2026-05-24** |
-| **P2** | identity-auth: emit canonical SA address in JWT claims; demo apps consume that. SDK helper `findUniqueLabel` exposed from agent-naming. | next |
-| **P3** | Off-chain custodian-to-SA reverse index (worker route + cache). Used by identity-auth Phase 2 + demo a2a. | after P2 |
+| **P2** | connect-auth: emit canonical SA address in JWT claims; demo apps consume that. SDK helper `findUniqueLabel` exposed from agent-naming. | next |
+| **P3** | Off-chain custodian-to-SA reverse index (worker route + cache). Used by connect-auth Phase 2 + demo a2a. | after P2 |
 | **P4** | Facet integrations — ERC-8004, HCS-10/11, ANS — each documented separately + wired into demos that need them. | per-facet, on demand |
 
 ## 11. Out of scope

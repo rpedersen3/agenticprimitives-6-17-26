@@ -20,7 +20,7 @@ Main capabilities:
 sequenceDiagram
   participant Browser
   participant App as Consumer app / demo-a2a
-  participant Auth as identity-auth
+  participant Auth as connect-auth
   participant Account as agent-account
 
   Browser->>App: auth proof (SIWE/passkey/OAuth callback)
@@ -33,13 +33,13 @@ sequenceDiagram
   Auth-->>App: JWT cookie value
 ```
 
-`identity-auth` produces values. The consuming app writes cookies, stores nonce state, and chooses routing.
+`connect-auth` produces values. The consuming app writes cookies, stores nonce state, and chooses routing.
 
 ## Package Interactions
 
 ```mermaid
 flowchart LR
-  Identity["identity-auth"]
+  Identity["connect-auth"]
   Account["agent-account"]
   Delegation["delegation"]
   KeyCustody["key-custody"]
@@ -53,11 +53,11 @@ flowchart LR
 
 `delegation` consumes signer types for browser-side EIP-712 issuance and for token/session signing surfaces.
 
-`key-custody` provides concrete KMS-backed implementations of signer-like interfaces; `identity-auth` only defines the shape.
+`key-custody` provides concrete KMS-backed implementations of signer-like interfaces; `connect-auth` only defines the shape.
 
 ## Boundary
 
-`identity-auth` owns JWT-cookie sessions only. A JWT session says "this browser request is authenticated as this user." That is different from a `delegation.SessionRow`, which binds a delegation to a session-signing keypair and is owned by `delegation`.
+`connect-auth` owns JWT-cookie sessions only. A JWT session says "this browser request is authenticated as this user." That is different from a `delegation.SessionRow`, which binds a delegation to a session-signing keypair and is owned by `delegation`.
 
 This package must not:
 

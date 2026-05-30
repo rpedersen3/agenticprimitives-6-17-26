@@ -9,13 +9,13 @@ actual design in specs and package docs; this file is only a routing map.
 >
 > **Renamed (commit `7861f4b`)** to remove the login-vs-profile and
 > account-custody-vs-key-custody collisions — update old imports:
-> `connect-auth` (was `identity-auth`), `account-custody` (was `custody`),
-> `agent-profile` (was `agent-identity`).
+> `connect-auth` (was `connect-auth`), `account-custody` (was `custody`),
+> `agent-profile` (was `agent-profile`).
 
 | Task                                                       | Start Here                                    | Notes                                             |
 | ---------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------- |
 | Passkey ceremony, SIWE, sessions, signer interfaces        | `packages/connect-auth/CLAUDE.md`            | No smart-account deployment logic here.           |
-| Smart Agent deployment, UserOps, ERC-1271, factory clients | `packages/agent-account/CLAUDE.md`            | Consumes signers from `identity-auth`.            |
+| Smart Agent deployment, UserOps, ERC-1271, factory clients | `packages/agent-account/CLAUDE.md`            | Consumes signers from `connect-auth`.            |
 | Custody policy, recovery, quorum signatures, admin actions | `packages/account-custody/CLAUDE.md`                  | Keep custody vocabulary out of delegation.        |
 | Delegation tokens, caveats, session authority              | `packages/delegation/CLAUDE.md`               | Authority/session layer, not KMS.                 |
 | Envelope encryption, KMS providers, HMAC/MAC helpers       | `packages/key-custody/CLAUDE.md`              | No session lifecycle.                             |
@@ -41,7 +41,7 @@ Prefer the narrowest root script before `pnpm check:all`:
 
 ```bash
 pnpm check:agent-naming
-pnpm check:agent-identity
+pnpm check:agent-profile
 pnpm check:agent-relationships
 pnpm check:custody
 ```

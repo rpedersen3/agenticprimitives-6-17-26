@@ -2,7 +2,7 @@
 
 **Status:** v0 (architecture locked; Phase 1 implementation pending).
 **Owner:** `@agenticprimitives/agent-profile` package (renamed from
-`agent-identity`, 2026-05-25 — "profile facet", distinct from login which
+`agent-profile`, 2026-05-25 — "profile facet", distinct from login which
 lives in `connect-auth`).
 **Architecture commitment:** [ADR-0006](../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md)
 + [ADR-0007](../docs/architecture/decisions/0007-agent-identity-stack-three-packages.md)
@@ -23,7 +23,7 @@ blob (the "agent card") describing what kind of agent it is, what
 capabilities it offers, where its services live, and how callers can
 verify those services.
 
-The agent-identity package owns:
+The agent-profile package owns:
 
 1. **The typed profile schema** (HCS-11-aligned, EVM-native).
 2. **The `metadata-uri` + `metadata-hash` record predicates** (the
@@ -63,7 +63,7 @@ to be? what can it do? how do I verify it?).
 
 **Disambiguation:**
 - **"profile"** here = HCS-11-aligned agent profile (typed JSON +
-  optional on-chain mirror). In `identity-auth` "profile" doesn't
+  optional on-chain mirror). In `connect-auth` "profile" doesn't
   exist (auth deals with sessions, not agent identity).
 - **"verification"** here = endpoint-control verification (does this
   MCP URL actually belong to this Smart Agent?). In `delegation`
@@ -82,14 +82,14 @@ to be? what can it do? how do I verify it?).
 **Dependency direction:**
 
 ```
-types ← identity-auth ← agent-account ← agent-identity
+types ← connect-auth ← agent-account ← agent-profile
                                         agent-naming   ─ (no edge)
                                         agent-relationships ─ (no edge)
                                         delegation, mcp-runtime, tool-policy,
                                         key-custody, audit, custody ─ (no edge)
 ```
 
-Per ADR-0007: agent-identity is a sibling to agent-naming +
+Per ADR-0007: agent-profile is a sibling to agent-naming +
 agent-relationships, not a consumer of either. Demo apps compose:
 they resolve a name → fetch the profile → query relationships, in
 that order, in the demo layer.
@@ -228,7 +228,7 @@ the agent address.
 
 ### 5.3 `http-challenge`
 
-The agent serves `/.well-known/agent-identity` returning
+The agent serves `/.well-known/agent-profile` returning
 `{ agentAddress, timestamp, signature }`. Caller hits the URL,
 verifies the signature (ERC-1271) is recent + matches the agent.
 
@@ -256,7 +256,7 @@ migration path.
 
 ## 7. Cross-package consumption pattern
 
-Other packages don't import `agent-identity`. The demo layer composes:
+Other packages don't import `agent-profile`. The demo layer composes:
 
 ```ts
 // Demo worker, NOT inside any @agenticprimitives/* package:
@@ -284,11 +284,11 @@ NS Phase 2. No back-edges.
 
 Emitted via consumer-supplied `AuditSink`:
 
-- `agent-identity.profile.fetch` — on metadata-uri fetch + hash verify.
-- `agent-identity.profile.update` — on mirror update via ERC-1271.
-- `agent-identity.endpoint.verify.{success,failure}` — per
+- `agent-profile.profile.fetch` — on metadata-uri fetch + hash verify.
+- `agent-profile.profile.update` — on mirror update via ERC-1271.
+- `agent-profile.endpoint.verify.{success,failure}` — per
   verification attempt with the method tag.
-- `agent-identity.endpoint.verify.method-not-supported` — for
+- `agent-profile.endpoint.verify.method-not-supported` — for
   `verifiable-presentation` until v2.
 
 ## 9. Security invariants

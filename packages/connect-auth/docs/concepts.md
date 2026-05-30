@@ -9,13 +9,13 @@ connects users to Smart Agents; it does **not** own canonical identity
 | | Credential | Canonical Smart Agent |
 | --- | --- | --- |
 | Examples | Passkey, SIWE EOA, Google subject | ERC-4337 SA `Address` |
-| Package | `identity-auth` (ceremony + session) | `agent-account` (deploy + UserOps) |
+| Package | `connect-auth` (ceremony + session) | `agent-account` (deploy + UserOps) |
 | Rotates? | Yes, via `custody` recovery | No — same address across rotation |
 | JWT role | Signer claim | **Primary subject** |
 
 Flow ([spec 220 § 6](../../../specs/220-agent-identity-bootstrap.md)):
 
-1. User completes passkey or SIWE ceremony (`identity-auth`).
+1. User completes passkey or SIWE ceremony (`connect-auth`).
 2. App looks up which Smart Agents list that credential as custodian.
 3. If multiple matches, user picks the active SA.
 4. Session is keyed by canonical SA address.
@@ -37,7 +37,7 @@ auth and execution:
 These inputs represent **stable user / auth scope**, not:
 
 - `.agent` registered names (`agent-naming`)
-- AgentCard content (`agent-identity`)
+- AgentCard content (`agent-profile`)
 
 Mixing name into salt would couple identity to a facet that can change.
 
@@ -45,7 +45,7 @@ Mixing name into salt would couple identity to a facet that can change.
 
 | Term | Package | Meaning |
 | --- | --- | --- |
-| JWT session | `identity-auth` | Signed cookie bound to authenticated user + SA |
+| JWT session | `connect-auth` | Signed cookie bound to authenticated user + SA |
 | `SessionRow` | `delegation` | Delegation-bound session signing key lifecycle |
 
 See [vocabulary-map](../../../docs/architecture/vocabulary-map.md).

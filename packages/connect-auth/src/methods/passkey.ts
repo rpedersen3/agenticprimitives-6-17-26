@@ -11,7 +11,7 @@
  *   - COSE attestation parsing → P-256 (x, y) public key for on-chain
  *     credential registration via `AgentAccountFactory.createAccountWithPasskey`
  *
- * Doctrine: passkey ceremony belongs in identity-auth per the package's
+ * Doctrine: passkey ceremony belongs in connect-auth per the package's
  * CLAUDE.md. Downstream packages (`agent-account`) consume the
  * `WebAuthnAssertion` struct produced here and encode it into the
  * smart-account signature wire format (`0x01 || abi.encode(...)`).
@@ -243,19 +243,19 @@ export interface PasskeySignupInput {
 }
 
 export async function beginSignup(_input: { label: string }): Promise<never> {
-  throw new Error('identity-auth/passkey: beginSignup not implemented yet.');
+  throw new Error('connect-auth/passkey: beginSignup not implemented yet.');
 }
 
 export async function completeSignup(_req: unknown): Promise<never> {
-  throw new Error('identity-auth/passkey: completeSignup not implemented yet.');
+  throw new Error('connect-auth/passkey: completeSignup not implemented yet.');
 }
 
 export async function beginLogin(_input: { credentialId: string }): Promise<never> {
-  throw new Error('identity-auth/passkey: beginLogin not implemented yet.');
+  throw new Error('connect-auth/passkey: beginLogin not implemented yet.');
 }
 
 export async function completeLogin(_req: unknown): Promise<never> {
-  throw new Error('identity-auth/passkey: completeLogin not implemented yet.');
+  throw new Error('connect-auth/passkey: completeLogin not implemented yet.');
 }
 
 // ─── Private helpers ─────────────────────────────────────────────────

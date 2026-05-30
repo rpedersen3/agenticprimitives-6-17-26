@@ -63,7 +63,7 @@ that affects how this package's exports are consumed in production").
 
 Reference the system audit's finding IDs (C1, H3, N2, etc.) for items
 that this package owns. Add package-local findings prefixed with the
-package's short name (e.g. `IA-1` for identity-auth's first local
+package's short name (e.g. `IA-1` for connect-auth's first local
 finding) for issues that are too narrow to surface at the system level.
 
 | ID | Severity | Finding | Status | Notes |

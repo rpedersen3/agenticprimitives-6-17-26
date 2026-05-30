@@ -99,7 +99,7 @@ Smart-agent ref: `packages/sdk/src/delegation-token.ts:67-152`, `apps/a2a-agent/
 ## 5. The session-delegation lifecycle (absorbed from former kms spec)
 
 ```
-1. User logs in (identity-auth).
+1. User logs in (connect-auth).
 2. A2A: POST /session/init
    ├─ generates session keypair (sk, pk_sessionKey)
    └─ stores encrypted {sk} with status=pending (via key-custody)

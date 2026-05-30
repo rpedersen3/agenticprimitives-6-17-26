@@ -11,7 +11,12 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "spec.md", "README.md"],
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -21,8 +26,16 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["delegation", "eip-712", "erc-7710", "erc-1271", "caveat", "session", "agentic"],
-  "license": "UNLICENSED",
+  "keywords": [
+    "delegation",
+    "eip-712",
+    "erc-7710",
+    "erc-1271",
+    "caveat",
+    "session",
+    "agentic"
+  ],
+  "license": "MIT",
   "dependencies": {
     "@noble/curves": "^1.6.0",
     "@noble/hashes": "^1.5.0"
