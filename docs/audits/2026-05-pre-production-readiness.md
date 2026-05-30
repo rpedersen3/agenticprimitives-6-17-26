@@ -60,7 +60,7 @@ Update the **Status** + **Wave / target** columns over time. Add a remediation r
 | SEC-003 | 🔴 P0 | `apps/demo-{jp,org}/src/connect-client.ts` + `apps/demo-a2a/wrangler.toml` | Shared default delegate SA + paymaster signer collision. | Yes (partial) | ⚪ ACCEPTED | Deferred per user direction ("not worried about single wallets/funder at this point") | ARCH-004 — config-only change to split; broker now enforces "delegate must match registered" so a future per-app split is one config edit |
 | SEC-004 | 🟠 P1 | `app/(portal)/{profile,wea-sign}/page.tsx` ↔ `apps/demo-jp/src/App.tsx` | PII rides `?profile_<key>=…` URL params on return. | Yes | 🔴 OPEN | H8 Handoff hardening | ARCH-002, ADR-0019 |
 | SEC-005 | 🟠 P1 | `src/components/onboarding/useEnrollReq.ts` + `src/whitelabel/config.ts` | `ALLOWED_RELYING_ORIGINS` hardcoded + out of sync with `relyingApps[].redirect_uris`. | No | 🟢 CLOSED | H6 | Derived from `whitelabel.relyingApps[].redirect_uris` via `isAllowedRelyingOrigin` in `oidc-clients.ts`; hardcoded array deleted from `useEnrollReq.ts` |
-| SEC-006 | 🟠 P1 | `server/_lib/origin.ts` | `iss` derived from attacker-controlled `Host` header; no issuer allowlist at broker or RP. | No | 🟢 CLOSED | H6 | `ALLOWED_ISSUER_HOSTS` env at broker; default `impact-agent.me + *.impact-agent.me`; foreign Host → `IssuerHostNotAllowedError` |
+| SEC-006 | 🟠 P1 | `server/_lib/origin.ts` | `iss` derived from attacker-controlled `Host` header; no issuer allowlist at broker or RP. | No | 🟢 CLOSED (extended) | H6 + follow-up | `ALLOWED_ISSUER_HOSTS` env at broker; default `impact-agent.me + *.impact-agent.me`; foreign Host → `IssuerHostNotAllowedError`. **Follow-up re-audit (SEC-024) extended this to `/connect/{passkey,with-name,stepup}` + `/oidc/google/{callback,rotate}` — every endpoint that mints signed material now gates `iss` through `resolveOrigin`.** |
 | SEC-007 | 🟠 P1 | `apps/demo-jp/src/lib/mou.ts` + `apps/demo-sso-next/src/wea-doc.ts` | "Attestation" is `{docHash, consentBoundTo}` — no signature. | Yes | 🔴 OPEN | R/N follow-up | ARCH-003, spec 236 P2 |
 | SEC-008 | 🟠 P1 | demo-jp `vault.ts` + `matches.ts` + `App.tsx` ContactExchangeWidget | Every record in browser localStorage; revocation + match + handshake are theatrical. | Yes | 🔴 OPEN | R/N follow-up (substrate) | ARCH-001 |
 | SEC-009 | 🟡 P2 | `server/connect/enroll.ts` + `src/lib/kv-indexer.ts` | No rate limit; `kv.put` overwrites prior facet (silent agent bridging on credKey collision). | No | 🟢 CLOSED (append-only) / ⚪ DEFERRED (rate-limit) | H6 (architectural) + operational lane (rate-limit) | `appendLink()` + dedupe by (agent, assurance, ref); rate-limit needs infrastructure choice |
@@ -75,9 +75,28 @@ Update the **Status** + **Wave / target** columns over time. Add a remediation r
 | SEC-018 | 🟢 P3 | `apps/demo-jp/src/connect-client.ts:443-447` | Silent re-auth pins `iss` to user-typed name; no issuer allowlist at RP. | No | 🟢 CLOSED | H6 | `isAllowedIssuerOrigin(origin)` in `lib/domain.ts`; `verifyIdToken` gates both `authOrigin` AND `claims.iss` |
 | SEC-019 | 🟢 P3 | `apps/demo-jp/src/App.tsx:83-114` `restoreSession` | Session restore reads localStorage + decodes JWT without re-verifying signature. | No | 🟢 CLOSED | H6 | New mount-effect re-fetches JWKS + re-verifies signature via `verifyIdToken`; signature failure → drop session + force fresh sign-in |
 | SEC-020 | 🟢 P3 / ℹ️ | `apps/demo-jp/src/lib/domain.ts:21-46` | `personalAuthOrigin` doesn't hard-validate label character set; bounded today, regression-prone. | No | 🟢 CLOSED | H6 | `LABEL_RE = /^[a-z0-9][a-z0-9-]{0,62}$/` positive gate; `personalAuthOrigin` throws on mismatch |
-| SEC-021 | ℹ️ | `apps/demo-jp/functions/jwks.ts` + `functions/connect/*` | demo-jp Pages Functions broker is dead code (SPA never calls it); attack surface for no benefit. | No | 🟢 CLOSED | H6 | All dead routes deleted; only the `/a2a/[[path]].ts` proxy is preserved |
+| SEC-021 | ℹ️ | `apps/demo-jp/functions/jwks.ts` + `functions/connect/*` | demo-jp Pages Functions broker is dead code (SPA never calls it); attack surface for no benefit. | No | 🟢 CLOSED (extended) | H6 + follow-up | Server-side routes deleted; only `/a2a/[[path]].ts` preserved. **Follow-up (SEC-032 / ARCH-034) extended to delete the parallel ~250 LoC of dead `/connect/*` callers from `apps/demo-jp/src/connect-client.ts` + the unused `lib/passkey.ts`, `lib/wallet.ts`, `lib/central-auth.ts`, `lib/chain.ts`.** |
 | SEC-022 | ℹ️ | `apps/demo-jp/src/lib/matches.ts:230-280` | Dual-persona's `fac-self-<addr>` invites cross-record collision; production needs separate SAs. | Yes (demo) | 🟢 CLOSED | H6 | `selfFacilitatorId()` / `selfAdopterId()` helpers with address-format invariant; throw on malformed address |
 | SEC-023 | ℹ️ | `apps/demo-sso-next/src/whitelabel/config.ts` + `wea-doc.ts` | Faith vocabulary in apps is correct per ADR-0021 but worth pre-empting in reviewer materials. | No | 📝 DOC | Reviewer materials | ADR-0021 |
+
+### Follow-up re-audit (2026-05-29) — new SEC findings
+
+Run after Wave H6 closures landed. The security-auditor verified 13/15 closed findings as clean, 2 closed-incomplete (extended above), and surfaced 12 new items.
+
+| ID | Severity | Component | One-line | Demo-cut? | Status | Wave / target | Cross-refs |
+|---|---|---|---|---|---|---|---|
+| SEC-024 | 🔴 P0 | `server/connect/{passkey,with-name,stepup}.ts` + `server/oidc/google/{callback,rotate}.ts` | SEC-006 Host allowlist applied only on the OIDC code path; Connect-auth endpoints still derived `iss` from raw `request.url`. **Closes the SEC-006 gap fully — every signing endpoint now routes through `resolveOrigin`.** | No | 🟢 CLOSED | Follow-up | SEC-006 |
+| SEC-025 | 🟠 P1 | `apps/demo-a2a/src/index.ts:74-98` (`getInMemoryNonceStore`) | Bridge HMAC nonce store is in-memory per Worker instance; cross-instance replay possible within 60s window. KV-backed adapter `nonceStoreFromKv` already exists in `bridge-hmac.ts` but is unused. | Partial (in-code TODO) | ⚪ DEFERRED | Wave H7 — needs KV namespace or DO method in demo-a2a | SEC-010, ARCH-029 |
+| SEC-026 | 🟡 P2 | `server/oidc/authorize-grant.ts` | No rate-limit; leaks registered relying-app delegate address to any caller with a spoofed Origin header. | No | ⚪ DEFERRED | Operational lane | Bundle with SEC-009 rate-limit half |
+| SEC-027 | 🟢 P3 | `src/lib/kv-indexer.ts` `appendLink` | Dedup by `(agent, assurance, ref)` ignores `observedAt`/`blockNumber`; future provenance fields silently dropped. | No | 🔴 OPEN | Operational lane (preventive) | SEC-009 |
+| SEC-028 | 🟢 P3 | `apps/demo-{sso-next,sso,jp,org}/src/csrf.ts` | Cookie parser ignores duplicate/domain-scoped cookie variants; `decodeURIComponent` may throw on stray `%`. | No | 🔴 OPEN | Operational lane | SEC-012, SEC-016 |
+| SEC-029 | 🟠 P2 | `apps/demo-jp/src/App.tsx` + `apps/demo-org/src/App.tsx` (SEC-019 effect) | Session re-verify can't distinguish "JWKS unreachable (transient)" from "signature failed"; drops valid sessions on network blip. | No | 🔴 OPEN | Operational lane | SEC-019 |
+| SEC-030 | 🟢 P3 | `apps/demo-{jp,org}/src/lib/domain.ts` callers | `personalAuthOrigin` throws on invalid label; render-path callers without error boundary would crash UI. | No | 🔴 OPEN | Operational lane | SEC-020 |
+| SEC-031 | 🟠 P2 | `apps/demo-sso-next/server/_lib/verify-delegation.ts` | `verifyDelegation` only checks the timestamp caveat — does NOT call `DelegationManager.disabled(digest)`. A revoked delegation continues to mint id_tokens (silent reauth) until `validUntil`. **Undermines ADR-0019 revocation guarantee.** | No | 🔴 OPEN | Wave H7 (highest priority of the new ones) | ADR-0019 |
+| SEC-032 | 🟢 P3 | `apps/demo-jp/src/connect-client.ts` | Dead `/connect/*` callers in client code; would 404 if any future caller wires them. | No | 🟢 CLOSED | Follow-up | SEC-021, ARCH-034 |
+| SEC-033 | 🟢 P3 | `_lib/origin.ts` + RP `verifyIdToken` | `iss` port-handling fragility in dev/preview deployments (`:443` mismatch). | No | 🔴 OPEN | Operational lane | SEC-006, SEC-018 |
+| SEC-034 | 🟠 P2 | `server/oidc/authorize-grant.ts` + `grant.ts` | `agent_name` is client-asserted into the id_token without server-side verification that it forward-resolves to the eventual `delegation.delegator`. RP display-label impersonation. | No | 🔴 OPEN | Wave H7 | spec 222 reverseResolve |
+| SEC-035 | ℹ️ | `server/_lib/server-broker.ts` `corsHeaders` | Non-registered origins get opaque CORS errors instead of clean 4xx — debugging/operational only. | No | 📝 DOC | Runbook | — |
 
 ### Architectural findings (from `technical-architect-auditor`)
 
@@ -105,6 +124,33 @@ Update the **Status** + **Wave / target** columns over time. Add a remediation r
 | ARCH-020 | ℹ️ | white-label config + portal nav + stewardship | Spec 234 W2/W3 wired; W4 deferred per spec; `ALLOWED_RELYING_ORIGINS` doesn't read config (see ARCH-002). | Partial | 🔴 OPEN | (subsumed by ARCH-002) | spec 234 |
 | ARCH-021 | ℹ️ | demo-jp `lib/*.ts` | Spec 236 §1–§5 modeling is clean; gaps are downstream (P2 signatures = ARCH-003; substrate = ARCH-001). | Partial | 🔴 OPEN | (subsumed) | spec 236 |
 | ARCH-022 | ℹ️ | both apps `delegation.ts` | ADR-0019 honored: relying-site key is always a delegate, never a custodian. | No | 🟢 CLOSED | — | ADR-0019 |
+
+### Follow-up re-audit (2026-05-29) — new ARCH findings
+
+The technical-architect-auditor evaluated the new structural shapes from Wave H6 (server-minted grant table, HMAC envelope, append-only facets, RP-side primitives) and looked for new issues. Result: most shapes are sound but four belong as packages, two ship without specs, and the duplication smell got LARGER on demo-jp's connect-client.
+
+| ID | Severity | Component | One-line | Demo-cut? | Status | Wave / target | Cross-refs |
+|---|---|---|---|---|---|---|---|
+| ARCH-023 | 🟠 High | `specs/230-…` | Spec 230 §4.2/§4.3 out of sync with running OP — the new `authorize-grant` + `grant` + `oidc-deleg` KV binding aren't in the architect-of-record doc. | No | 🔴 OPEN | Pre-review docs lane | spec 100 |
+| ARCH-024 | 🟠 High | `whitelabel/config.ts` + 2× `connect-client.ts` + `wrangler.toml` | Relying-site delegate SA duplicated 4 places; SEC-003 future split = 4 edits. | Partial | 🔴 OPEN | Bundle with SEC-003 | SEC-003 |
+| ARCH-025 | 🟢 Low | `whitelabel/schema.ts` + `oidc-clients.ts` | No boot-time presence/format check on `RelyingApp.delegate`. | No | 🔴 OPEN | Operational lane | — |
+| ARCH-026 | 🟡 Medium | `server/{grant,token}.ts` | `oidc-deleg:` side-store is mechanism that should be an `AllowedClientCaveat` on the delegation itself (or becomes redundant once SEC-003 splits per-app delegates). | No | 🔴 OPEN | Re-eval after SEC-003 | SEC-002, SEC-031 |
+| ARCH-027 | 🟠 High | `apps/demo-{sso-next,a2a}/bridge-hmac.ts` | HMAC envelope code duplicated across two apps; drift hazard on the wire format. | No | 🔴 OPEN | Wave H7 (lift to package) | ARCH-028 |
+| ARCH-028 | 🟠 High | `bridge-hmac` vs `packages/mcp-runtime/src/service-mac.ts` | Two parallel HMAC envelope primitives — bridge-hmac is a strictly weaker re-implementation of what mcp-runtime already owns. | No | 🔴 OPEN | Wave H7 — unify (lift `serviceMac` to `packages/service-mac` or extend `audience` field) | SEC-010 |
+| ARCH-029 | 🟡 Medium | `apps/demo-a2a/src/index.ts:74-98` | In-memory nonce store on Workers despite KV adapter shipped in verifier. | Yes (TODO) | 🔴 OPEN | Wave H7 (one-line fix once KV/DO binding added) | SEC-025 |
+| ARCH-030 | 🟠 High | (proposed spec / ADR) | Bridge HMAC wire format unspecced — same shape as ARCH-002 (`/profile` handoff). | No | 🔴 OPEN | Pre-review docs lane | ARCH-002 |
+| ARCH-031 | 🟡 Medium | `apps/demo-{sso,sso-next}/src/lib/kv-indexer.ts` | KvIndexer duplicated; belongs in `packages/identity-directory-adapters`. | No | 🔴 OPEN | Operational lane | spec 100 |
+| ARCH-032 | 🟡 Medium | `src/lib/kv-indexer.ts` `readOidcFacet` | First-entry reader on append-only writer collides with spec 235 rotation story; needs rotation-namespaced keys OR rotation-aware reader. | No | 🔴 OPEN | R/N follow-up | spec 235 §5b |
+| ARCH-033 | 🔴 Critical | `apps/demo-{jp,org}/src/{connect-client.ts,lib/domain.ts,App.tsx}` | OIDC relying-app primitive (~200 LoC) duplicated character-for-character across two apps; **grows with every new relying app**. Needs `@agenticprimitives/connect/relying-app` subpath. | No | 🔴 OPEN | R/N follow-up (highest-priority new ARCH item) | spec 100, ADR-0014, ARCH-014 |
+| ARCH-034 | 🟠 High | `apps/demo-jp/src/connect-client.ts` | ~250 LoC of dead `/connect/*` callers after SEC-021 deleted the routes — misleading code. | No | 🟢 CLOSED | Follow-up | Slimmed connect-client.ts + deleted `lib/{passkey,wallet,central-auth,chain}.ts`; commit `<TBD>` |
+| ARCH-035 | 🟡 Medium | `apps/demo-sso` vs `apps/demo-sso-next` | Parallel maintenance with no deprecation marker; H6 patches landed twice. | No | 🔴 OPEN | Pre-review (decide deprecate) | — |
+| ARCH-036 | 🟢 Low | `RelyingApp.delegate` vs `IncomingDelegation.delegate` vs `DEMO_*_DELEGATE` | Three meanings of `delegate` in close contact; rename `RelyingApp.delegate → delegateSa` or brand. | No | 🔴 OPEN | Operational lane | vocabulary-map |
+| ARCH-037 | 🟢 Low | `bridge-hmac.ts` + custody routes | "bridge" + "envelope" new vocabulary not in `vocabulary-map.md`. | No | 🔴 OPEN | Operational lane | ARCH-030 |
+| ARCH-038 | 🟠 High | `packages/key-custody` (manifest vs index) | `check:public-exports` STILL fails (was ARCH-006); H6 didn't touch it; `check:all` not green. | No | 🔴 OPEN | Operational lane | ARCH-006 (re-flagged) |
+| ARCH-039 | 🟡 Medium | `server/authorize.ts` + `app/authorize/route.ts` | Legacy `POST /authorize` self-login route still reachable and would mint sessions NOT bound to a client_id. | No | 🟢 CLOSED | Follow-up | Deleted route + handler; commit `<TBD>` |
+| ARCH-040 | 🟡 Medium | `server/_lib/origin.ts` defaults | `ALLOWED_ISSUER_HOSTS` default disconnected from `whitelabel.domains.connect` — three places assert the same fact. | No | 🔴 OPEN | Operational lane | ADR-0021 |
+| ARCH-041 | 🟡 Medium | `apps/demo-jp/src/App.tsx` `openSession` | SEC-014 namespace re-assertion not applied on RP-side `addrFromSub` derivation. | No | 🔴 OPEN | Bundle with ARCH-033 | SEC-014 |
+| ARCH-042 | 🟢 Low | per-app `package.json` | No `pnpm test` story in any app; SEC-022 closure landed without a regression test. | No | 🔴 OPEN | Operational lane | spec 100 |
 
 ---
 
