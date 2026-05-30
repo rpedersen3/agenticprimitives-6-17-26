@@ -107,6 +107,9 @@ function restoreSession(): Session | null {
       localStorage.removeItem(SESSION_KEY);
       return null;
     }
+    // SEC-019: localStorage gives us a tentative session (we still gate exp here so a
+    // visibly-stale token never opens the dashboard). A useEffect at mount re-verifies
+    // the JWT signature against the home's JWKS — if it fails, the session is dropped.
     return { token: s.token, name: s.name, address: addr, kind: s.kind, fresh: false };
   } catch {
     return null;
@@ -164,6 +167,32 @@ export function App() {
    *  member's /profile editor at their Impact home). Used as the `key` on AdopterIntranet
    *  so it re-mounts and reloads the vault from localStorage. */
   const [vaultBump, setVaultBump] = useState(0);
+
+  // SEC-019: re-verify the restored JWT's signature against the home's JWKS. If we
+  // can't fetch the JWKS OR the signature doesn't verify, drop the session. Runs once
+  // per mount when there's a restored token; the OIDC return path mints a fresh token
+  // that has already been verified inside `completeAuth`, so we skip re-verify when
+  // `session.fresh === true`.
+  useEffect(() => {
+    if (!session || session.fresh) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const authOrigin = personalAuthOrigin(nameLabel(session.name));
+        // Empty `expectedNonce` — session restore can't replay the original; signature
+        // + exp + iss are the load-bearing checks here.
+        await verifyIdToken(authOrigin, session.token, '');
+      } catch (e) {
+        if (cancelled) return;
+        // Restored token failed signature/iss/exp/allowlist; force a fresh sign-in.
+        setSession(null);
+        try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
+        setError(`Saved sign-in could not be re-verified (${e instanceof Error ? e.message : 'unknown'}). Please sign in again.`);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openSession = useCallback((token: string, name: string, kind: Kind, fresh: boolean) => {
     const addr = addrFromSub(decodeToken(token)?.sub);

@@ -35,9 +35,37 @@ export function toAgentName(nameOrLabel: string): string {
   return n.endsWith(`.${AGENT_NAME_PARENT}`) ? n : `${nameLabel(n)}.${AGENT_NAME_PARENT}`;
 }
 
-/** A person's secure-home origin for a label (alice → https://alice.impact-agent.me). */
+/** SEC-020: positive label-charset gate — names live in the `.impact` subregistry
+ *  (`[a-z0-9-]+`); any other character is a sign upstream callers stopped sanitizing. */
+const LABEL_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+/** A person's secure-home origin for a label (alice → https://alice.impact-agent.me).
+ *  Throws if `label` is not a valid `.impact` subregistry label — SEC-020 closure. */
 export function personalAuthOrigin(label: string): string {
+  if (!LABEL_RE.test(label)) {
+    throw new Error(`personalAuthOrigin: label "${label}" is not a valid .impact subregistry label (${LABEL_RE.source})`);
+  }
   return `https://${label}.${CONNECT_DOMAIN}`;
+}
+
+/** SEC-018: RP-side issuer allowlist. An id_token's `iss` claim is only accepted if
+ *  it's a well-formed Connect origin under our deployment's CONNECT_DOMAIN. */
+export function isAllowedIssuerOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== 'https:' && !(u.hostname === 'localhost' || u.hostname === '127.0.0.1')) return false;
+    if (u.pathname !== '/' && u.pathname !== '') return false;
+    if (u.search || u.hash) return false;
+    const h = u.hostname.toLowerCase();
+    if (h === CONNECT_DOMAIN) return true;
+    if (h.endsWith(`.${CONNECT_DOMAIN}`)) {
+      const head = h.slice(0, -(CONNECT_DOMAIN.length + 1));
+      return LABEL_RE.test(head);
+    }
+    return h === 'localhost' || h === '127.0.0.1';
+  } catch {
+    return false;
+  }
 }
 
 /** Display host (no scheme) for the secure home of a name. */

@@ -14,7 +14,7 @@ import { registerPasskey, signWithPasskey, loadPasskey, type DemoPasskey } from 
 import { ensureCsrfToken, csrfHeaders } from './csrf';
 import { CONTRACTS } from './lib/chain';
 import { AGENT_NAME_PARENT } from './lib/domain';
-import { nameLabel, personalAuthOrigin, PLATFORM_AUTH_ORIGIN } from './lib/domain';
+import { isAllowedIssuerOrigin, nameLabel, personalAuthOrigin, PLATFORM_AUTH_ORIGIN } from './lib/domain';
 import { GATEWAY } from './lib/brand';
 
 /** A function that signs a 32-byte hash (EOA personal_sign or WebAuthn). */
@@ -469,8 +469,15 @@ export interface IdTokenClaims {
   canonical_agent_id?: string;
 }
 /** Verify the OIDC id_token against the OP's JWKS — ES256 alg-pinned to the key, iss/aud
- *  exact-match, nonce binding, exp. The relying-site half of spec 230 (no connect import). */
+ *  exact-match, nonce binding, exp. The relying-site half of spec 230 (no connect import).
+ *  SEC-018: `authOrigin` is hard-validated as a well-formed Connect origin (single-label
+ *  subdomain under our connect domain, or the apex). The id_token's `iss` MUST be the same
+ *  validated value — so a user-typed name pointing at an attacker domain can't slip
+ *  through even before the signature check. */
 export async function verifyIdToken(authOrigin: string, idToken: string, expectedNonce: string): Promise<IdTokenClaims> {
+  if (!isAllowedIssuerOrigin(authOrigin)) {
+    throw new Error(`refusing to verify id_token: issuer "${authOrigin}" not in allowlist`);
+  }
   const parts = idToken.split('.');
   if (parts.length !== 3) throw new Error('id_token malformed');
   const [h, p, s] = parts as [string, string, string];
@@ -486,6 +493,7 @@ export async function verifyIdToken(authOrigin: string, idToken: string, expecte
   const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, fromB64url(s), new TextEncoder().encode(`${h}.${p}`));
   if (!ok) throw new Error('id_token signature invalid');
   if (claims.iss !== authOrigin) throw new Error('id_token iss mismatch');
+  if (!isAllowedIssuerOrigin(claims.iss)) throw new Error('id_token iss not in allowlist');
   if (claims.aud !== CLIENT_ID) throw new Error('id_token aud mismatch');
   if (expectedNonce && claims.nonce !== expectedNonce) throw new Error('id_token nonce mismatch');
   if (typeof claims.exp !== 'number' || claims.exp * 1000 <= Date.now()) throw new Error('id_token expired');

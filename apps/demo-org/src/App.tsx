@@ -217,6 +217,28 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // SEC-019: re-verify any restored id_token against the home's JWKS. The synchronous
+  // restoreSession() only checks exp (cheap, non-blocking); the SIGNATURE check is
+  // unsafe to do synchronously (needs a network fetch). If it fails we drop the
+  // session and force a fresh sign-in.
+  useEffect(() => {
+    if (!session || session.fresh) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const authOrigin = personalAuthOrigin(nameLabel(session.name));
+        await verifyIdToken(authOrigin, session.token, '');
+      } catch (e) {
+        if (cancelled) return;
+        setSession(null);
+        try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
+        setError(`Saved sign-in could not be re-verified (${e instanceof Error ? e.message : 'unknown'}). Please sign in again.`);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Connect-by-name — pre-filled with the last name connected on this device (one-tap return).
   const [connectName, setConnectName] = useState(loadLastName);
   const [connectErr, setConnectErr] = useState<string | null>(null);
