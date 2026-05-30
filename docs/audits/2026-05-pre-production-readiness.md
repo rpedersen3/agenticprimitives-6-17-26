@@ -197,6 +197,204 @@ These are the deliberate corner-cuts I shipped during the recent JP build sprint
 
 ---
 
+## External senior review — 2026-05-29
+
+A third-party senior architectural & security reviewer evaluated the repo end-to-end
+on the `master` branch (post Wave H6 + follow-up). The full review is preserved
+verbatim below; the structured EXT-* tracker that follows it captures the new findings
+and cross-references existing rows.
+
+### Reviewer TL;DR
+
+> This is a disciplined, specs-driven monorepo with genuinely thoughtful Web3/agentic
+> primitives and impressive CI guardrails for its size (1-star repo, heavy Claude/AI-assisted
+> dev). The package boundary doctrine and check scripts are senior-level hygiene most
+> startups lack.
+>
+> However — it is not production-viable in its current state, and I would reject it in a
+> vendor/arch review for any customer-facing or high-value agentic deployment. Multiple
+> P0/P1 self-admitted risks (leaked governance keys, historical fail-open policy eval,
+> incomplete audit trails), amateur security hygiene in the demos, over-fragmented
+> packaging, and missing production-grade hardening make it a high-risk prototype at best.
+> Use it only for internal PoCs on isolated testnets, with heavy forking/hardening. Expect
+> 4–8 weeks of remediation before even internal beta.
+
+### Reviewer — Overall Repo & Monorepo Architecture (Strong Foundation, Brittle Execution)
+
+> - pnpm workspaces (`packages/*, apps/*, tests/*`) + `packageManager: pnpm@9.15.0` + Node >=20:
+>   Correct modern choice. No hoisting nightmares visible.
+> - Root package.json scripts are excellent on paper: `check:all` (supply-chain audit,
+>   forbidden terms, no app private keys, dependency graph, public exports, Claude context
+>   budget, etc.), parallel `test:*`, targeted typechecks per package, clean, contract
+>   forge tests, etc. This level of sentinel enforcement is rare and senior-engineer approved.
+> - Reality check: 370 commits, pre-alpha, UNLICENSED everywhere, extracted from a prior
+>   smart-agent repo. The `specs/` + `docs/architecture/` + per-package spec.md +
+>   `capability.manifest.json` + `AUDIT.md` pattern shows heavy process, but the code hasn't
+>   caught up.
+>
+> **Critical Architectural Flaws:**
+> - Package proliferation gone wild: README claims "eight + types"; tree shows 16 under
+>   `packages/` (connect-auth, key-custody, tool-policy, delegation, agent-account,
+>   account-custody, audit, types, plus agent-naming/profile/relationships, connect,
+>   identity-directory + adapters, ontology, mcp-runtime, etc.). Many are thin wrappers
+>   (e.g., tool-policy is basically @noble/hashes + types). This creates version
+>   synchronization hell, import bloat, and "where does this live?" cognitive load.
+> - Transpilation lists in Next apps for 10+ workspace packages: indicates ESM/CommonJS
+>   mismatches and will explode bundle sizes or cause hydration issues in prod.
+> - Demos mixed into `apps/*` alongside real primitives — pollutes the workspace and makes
+>   "production extraction" painful.
+
+### Reviewer — Packages Review (Core Strength, But Uneven & Immature)
+
+> Overall pattern: delightfully lean (noble-curves/hashes + viem peers + internal workspace
+> only in most). No bloated next-auth/privy/wagmi monoliths — this is a green flag for
+> security surface area.
+>
+> **Highlights (Positive):**
+> - `connect-auth`: Subpath exports (/passkey, /siwe, /google), JWT + pluggable signers,
+>   WebAuthn one-shot, CSRF origin exact-match claims in README, dedicated security.md.
+>   Minimal deps. Good.
+> - `key-custody`: Envelope encryption, pluggable local/AWS/GCP + viem-KMS adapter + MAC.
+>   Pure crypto — exactly what agentic apps need. Peer-wires audit & auth. Solid design.
+> - `tool-policy`, `audit`, etc.: Protocol-agnostic DSL/risk tiers + PII guardrails + sinks.
+>   Self-documenting via manifests.
+> - Shared types + EIP-712/ERC-4337/ERC-1271 throughout: Consistent threat model.
+>
+> **Harsh Criticisms:**
+> - No real external deps is double-edged — you're reinventing wheels that have battle-tested
+>   audits (e.g., full Privy/Lit/Safe SDKs have undergone multiple third-party reviews).
+>   Your noble + viem is fine, but missing formal audit = liability.
+> - PeerDep version pinning loose (viem ^2.21 in pkgs vs 2.50 in demos) → silent breakage
+>   risk on upgrade.
+> - Every package has its own AUDIT.md/spec but the central product-readiness-audit.md lists
+>   ongoing P0s. This screams "we document risks better than we fix them."
+> - Many packages still have `--passWithNoTests` integration stubs — not confidence-inspiring.
+
+### Reviewer — Demo Apps Audit (where it falls apart)
+
+> **demo-sso-next (Next 14.2 + React 18 + Upstash Redis + heavy primitives):**
+> - Good: Uses most primitives correctly for SSO → smart account → delegation flow.
+> - Disastrous: `next.config.mjs` has reactStrictMode + rewrites to external Cloudflare
+>   worker (`DEMO_A2A_URL` fallback hardcoded-ish), ZERO security headers, no CSP, no
+>   `headers()` function, no image domains, no `output: 'standalone'` optimization. This
+>   is 2023-era Next.js negligence in 2026. Open to clickjacking, XSS, MIME sniffing.
+> - `.env.example` ships `BROKER_PRIVATE_JWK` (full ES256 private key JSON with "d" value
+>   placeholder) + KV token + RPC. Teaching terrible secret hygiene. Production would be
+>   instant compromise vector.
+> - Upstash for sessions with no visible rate-limiting or token rotation.
+>
+> **demo-jp (Vite + React + wrangler.toml + functions/):**
+> - Description reveals it's a "relying-app prototype for FPG adoption brokerage" connecting
+>   to demo-sso — cute domain-specific pilot, not a generic demo.
+> - Architecture: Vite frontend + Cloudflare functions + primitives. Lighter than Next demo.
+> - Still: No visible CSP, input validation layers, or prod build hardening (standard Vite
+>   issues + wrangler secrets exposure risk). "JP" placeholder with real-sounding MOU/WEA
+>   delegation — smells like demo shortcuts that leak into real code.
+>
+> Both demos hard-depend on `workspace:*` — fine for monorepo, terrible for external
+> consumers (the stated value prop).
+
+### Reviewer — Security Deep Dive
+
+> Self-audit (`product-readiness-audit.md`) is brutally honest and the best part of the
+> repo. Active/Recent P0/P1 Risks (as of late May 2026):
+> - Leaked deployer EOA with full governance, bundler, paymaster, sessionIssuer control on
+>   live demo contracts (N1). "Accepted for internal demo" — unacceptable excuse.
+> - `tool-policy` historically failed open (empty objects, unknown tags allowed) — "closed"
+>   days ago but pattern of fail-open in auth/policy is toxic for agents.
+> - Incomplete audit trail (missing key-custody & identity events).
+> - Weak preflight deploy checks that let dev keys/KMS skips through.
+> - Past CORS reflection, untrusted BigInt parsing DoS vectors, session storage on failed
+>   ERC-1271 — all "fixed" recently. Indicates systemic input validation and boundary
+>   enforcement gaps that were only caught late.
+>
+> Additional Senior Observations:
+> - Private JWK in env + no mention of secret scanning in CI beyond "check" script.
+> - No rate limiting, bot protection, or WAF patterns visible in demos.
+> - Web3 classics unaddressed: RPC poisoning (single `RPC_URL`), no bundler reputation,
+>   deterministic salts good but envelope key derivation un-audited here.
+> - Upstash/Redis sessions in SSO demo without rotation/expiry hardening.
+> - License UNLICENSED + pre-alpha + live demo with governance keys = massive
+>   supply-chain/legal risk if anyone copies.
+
+### Reviewer — Recommendations
+
+> 1. **Immediate:** Rotate all demo keys, add full Next security headers + CSP
+>    (strict-dynamic + nonce), remove private keys from any `.env.example`, enforce
+>    `ALLOWED_ORIGINS` everywhere.
+> 2. **Short-term (2 weeks):** Third-party audit (at minimum Halborn/Certik light review on
+>    key-custody + policy + contracts). Fix all remaining P0s with proof.
+> 3. **Arch Refactor:** Collapse thin packages; extract demos to separate consumer examples
+>    repo; add proper Nx/Turbo task caching + changesets for versioning.
+> 4. **Prod Path:** Implement zero-trust preflight (GCP KMS mandatory, audit sink required,
+>    policy strict-fail), full e2e with Playwright + secret scanning (Trivy/Gitleaks),
+>    SBOM generation.
+>
+> **My Vote: Prototype-grade 7/10 on vision & discipline; 3/10 on executable security/arch
+> for real use. Fork it, strip the demos, and treat the core primitives as inspiration —
+> do not `npm install` blindly.**
+
+---
+
+### EXT-* findings — tracker rows
+
+Items from the external review, mapped to existing rows where they overlap and given a
+fresh ID where they don't. Closed items are marked inline.
+
+| ID | Severity | Component | One-line | Demo-cut? | Status | Wave / target | Cross-refs |
+|---|---|---|---|---|---|---|---|
+| EXT-001 | 🟠 P1 | `apps/demo-sso-next/next.config.mjs` + `apps/demo-{jp,org,sso}/public/_headers` | Next.js + all three Pages apps had no `X-Content-Type-Options`, `Permissions-Policy`, `HSTS`, `X-DNS-Prefetch-Control`, `Cross-Origin-Opener-Policy`. Strict CSP with nonces still pending. | No | 🟢 CLOSED (baseline) | Pre-review (this commit) | Strict CSP follow-up still open |
+| EXT-002 | 🟠 P1 | `apps/demo-sso-next/.env.example` + `apps/demo-sso/.dev.vars.example` | `BROKER_PRIVATE_JWK` template shipped the JWK shape with `"d":"REPLACE"` placeholders — a known footgun (paste-over leaks). | No | 🟢 CLOSED | Pre-review (this commit) | JWK shape removed; both files now point at the generator script with explicit "never commit" copy |
+| EXT-003 | 🟡 Medium | `packages/*` (16 packages, several thin) | Package proliferation; some are essentially `@noble/hashes + types` wrappers — version-sync hell + import bloat. | No | 🔴 OPEN | Arch Refactor wave | spec 100 §3 |
+| EXT-004 | 🟡 Medium | `apps/demo-sso-next/next.config.mjs:transpilePackages[]` | 10+ workspace packages in the transpile list — signals ESM/CommonJS mismatches + bundle bloat. | No | 🔴 OPEN | Arch Refactor wave (shrinks naturally with EXT-003) | EXT-003 |
+| EXT-005 | 🟢 Low | `packages/*/package.json` vs `apps/*/package.json` | peer-dep version pinning loose (`viem ^2.21` in packages vs `2.50` in demos) — silent upgrade-breakage risk. | No | 🔴 OPEN | Operational lane | — |
+| EXT-006 | 🟢 Low | per-package `package.json` test scripts | Many packages run `--passWithNoTests` integration stubs — not confidence-inspiring. | No | 🔴 OPEN | Operational lane | ARCH-042 |
+| EXT-007 | 🟡 Medium | `.github/workflows/*` (or absence thereof) | No CI secret scanning (Trivy/Gitleaks); no SBOM generation. The repo's own `check:no-app-private-keys` catches one class but not credentials in dependencies / history. | No | 🔴 OPEN | Operational lane | — |
+| EXT-008 | 🟡 Medium | all demo Connect-auth endpoints + handoffs | No rate limiting / bot protection / WAF in demos beyond the in-app gates. Broader than SEC-009/-017/-026 which are per-endpoint. | No | 🔴 OPEN | Operational lane | SEC-009, SEC-017, SEC-026 |
+| EXT-009 | 🟢 Low | `apps/demo-sso-next/next.config.mjs:2` | Hardcoded `DEMO_A2A_URL` fallback at module init hits a worker owned by an individual contributor. | No | 🟢 CLOSED (documented) | Pre-review (this commit) | Comment added documenting "production deployments MUST set the env explicitly; fallback is solo-dev only" |
+| EXT-010 | 🟡 Medium | Upstash / Vercel KV session adapter | Sessions on Upstash with no visible token rotation / TTL hardening / per-IP rate-limit. | No | 🔴 OPEN | Wave H7 | SEC-016 |
+| EXT-011 | 🟠 P1 | repo root | No LICENSE file; package.json doesn't declare a license → effectively UNLICENSED. Supply-chain / legal exposure if anyone copies. | No | 🟢 CLOSED | Pre-review (this commit) | MIT LICENSE added at repo root |
+| EXT-012 | 🟡 Medium | `apps/*` mix | Demos mixed with primitives in `apps/*`; pollutes workspace + makes "production extraction" painful. | No | 🔴 OPEN | Arch Refactor wave (extract demos to consumer-examples repo OR a `demos/` directory) | — |
+| EXT-013 | 🟡 Medium | `packages/{key-custody,delegation,connect-auth,connect,agent-account}` | No formal third-party audit on the security-critical packages. Halborn/Certik/Spearbit light review before customer-grade use. | No | 🔴 OPEN | Pre-launch gate | spec 214 |
+| EXT-014 | 🟡 Medium | `RPC_URL` single-endpoint pattern | RPC poisoning risk (single RPC); no bundler reputation strategy; envelope key derivation has no third-party audit. | No | 🔴 OPEN | Operational lane | — |
+| EXT-015 | 🟢 Low | `apps/demo-sso-next/next.config.mjs` | No `images.remotePatterns` config; default is restrictive but explicit is better. | No | 🔴 OPEN | Operational lane | — |
+| EXT-016 | 🟢 Low | `apps/demo-sso-next/next.config.mjs` | No `output: 'standalone'` — bundle is bigger than needed for serverless. | No | 🔴 OPEN | Operational lane | — |
+| EXT-017 | 🟢 Low | `apps/demo-sso-next/.env.example` `REDIRECT_URI_ALLOWLIST` | The example pointed at the concrete `demo-org.pages.dev` URL; after SEC-005 the env is no longer the source of truth (whitelabel registry is). | No | 🟢 CLOSED | Pre-review (this commit) | Example replaced with a "preferred source: whitelabel.relyingApps" pointer + new ALLOWED_ISSUER_HOSTS + A2A_CUSTODY_BRIDGE_SECRET entries |
+| EXT-018 | 🟡 Medium | (reviewer overall framing) | Reviewer flagged Web3 classics (single RPC, no bundler reputation, un-audited envelope KDF) as a cluster — track as a "Web3 substrate hardening" wave so the items don't get lost individually. | No | 🔴 OPEN | Wave W2 (proposed) | EXT-014 + spec 235 §G-1 + ARCH-013 |
+
+### Wave plan — external review's "Immediate" lane delta
+
+The reviewer's "Immediate" recommendations slot into the existing waves with the following
+adjustments (closed items marked):
+
+- ✅ **EXT-001** — Next + Pages security headers baseline (this commit).
+- ✅ **EXT-002** — strip JWK shape from `.env.example` / `.dev.vars.example` (this commit).
+- ✅ **EXT-011** — add MIT LICENSE at repo root (this commit).
+- ✅ **EXT-017** — sanitize stale `REDIRECT_URI_ALLOWLIST` example (this commit).
+- ✅ **EXT-009** — document the `DEMO_A2A_URL` fallback as solo-dev-only (this commit).
+- ⏳ **Strict CSP with `strict-dynamic` + nonce** — requires careful audit of inline event
+  handlers in the OIDC SPA before tightening. Track as **EXT-001 follow-up** in Wave H7.
+- ⏳ **Rotate all demo keys** — operational task. Once the bridge HMAC + per-app delegate
+  splits land, rotate everything as part of the same operational change.
+- ⏳ **Enforce `ALLOWED_ORIGINS` everywhere** — partially closed by SEC-005 + SEC-006 +
+  SEC-024 (host + relying-app allowlists). Remaining: the `_lib/origin.ts` default no
+  longer drift-prone source (see ARCH-040).
+
+The reviewer's **Short-term (2 weeks)** lane (third-party audit + remaining P0s) maps
+to spec 214 closure + the in-flight SEC-001..-003 cluster.
+
+The reviewer's **Arch Refactor** lane is captured by EXT-003 + EXT-004 + EXT-012 +
+ARCH-014 + ARCH-027 + ARCH-028 + ARCH-031 + ARCH-033 — collectively a "consolidate
+duplicated primitives into packages and extract demos" wave. The natural sequencing is to
+land ARCH-033 (the relying-app primitive) FIRST since it has the highest leverage; the
+other consolidations follow with less risk.
+
+The reviewer's **Prod Path** lane is the production-substrate work (ARCH-001 spec 237 +
+ARCH-011 audit sinks + ARCH-013 key rotation + Playwright + Trivy/Gitleaks + SBOM). Track
+as Wave R1 in the dossier roadmap.
+
+---
+
 ## Re-audit policy
 
 - Each wave produces a hardening commit log; reference the SHA(s) in this file's row Status column when moving to 🟢 CLOSED.

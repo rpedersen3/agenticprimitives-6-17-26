@@ -1,4 +1,13 @@
+# EXT-001 — Cloudflare Pages headers baseline. Closes the cheap clickjacking /
+# MIME-sniff / referrer-leak / permissions-API surfaces. A strict CSP with nonces
+# lands in a follow-up wave.
+
 /*
   X-Frame-Options: DENY
   Content-Security-Policy: frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=63072000; includeSubDomains
+  X-DNS-Prefetch-Control: off
+  Cross-Origin-Opener-Policy: same-origin-allow-popups

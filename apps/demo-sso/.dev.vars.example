@@ -3,8 +3,11 @@
 # NEVER put real secrets in THIS file — it is tracked. See OIDC-SETUP.md.
 
 # Broker signing key — ES256 (ECDSA P-256) private JWK + its kid.
-# Generate with:  node scripts/gen-broker-key.mjs
-BROKER_PRIVATE_JWK={"kty":"EC","crv":"P-256","d":"...","x":"...","y":"..."}
+# EXT-002: the JWK SHAPE was removed because pasting a generated key over the
+# placeholder is a known footgun. Generate the key, set it in `.dev.vars`
+# (gitignored), and NEVER commit a populated value.
+# Generation script: node scripts/gen-broker-key.mjs
+BROKER_PRIVATE_JWK=<local-only — generate with gen-broker-key.mjs, never commit>
 BROKER_KID=broker-xxxxxxxx
 
 # Exact-match relying-site redirect URIs (CN-1), comma-separated. Optional.
