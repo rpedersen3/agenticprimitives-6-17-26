@@ -395,6 +395,357 @@ as Wave R1 in the dossier roadmap.
 
 ---
 
+## External senior review — JP/GC fit (2026-05-29)
+
+A second external senior reviewer evaluated the repo with a JP / Global Church
+production lens — much sharper than the first external pass. The reviewer's verdict
+is *"not approved for JP/GC production use yet; approved as a strong research /
+prototype codebase and a useful source of patterns."* The single biggest new finding
+is **the Privacy Fork (EXT-019)** — the public on-chain relationship graph in
+`packages/agent-relationships` is incompatible with JP's confidentiality requirements
+and forces a core architecture decision before any JP customer-grade work.
+
+The full review is preserved verbatim below. The structured EXT-* tracker that
+follows it captures the new findings; the scorecard at the end is the reviewer's
+quantitative read.
+
+### Reviewer executive verdict
+
+> I would not approve agenticprimitives for JP/GC production use yet. I would
+> approve it as a strong research/prototype codebase and a useful source of
+> patterns, especially around smart-agent identity, ERC-1271 validation, MCP
+> authorization, service MACs, EIP-712 delegation, and policy-gated tool calls.
+>
+> The repository itself is honest about this: the root README describes the repo
+> as pre-alpha … and explicitly labels it *"Not production-ready."* The in-repo
+> product-readiness audit is also blunt: it says the architecture is credible
+> pre-production work, but real funds, org authority, and PII are blocked until
+> contract audit, durable A2A audit, off-chain quorum semantics, and key
+> rotation/governance are addressed.
+>
+> For JP Adopt-a-People-Group, the bar is higher than a generic web3 demo. The JP
+> scoping doc treats person contact data as confidential, adopter/FPG links as
+> confidential by default, and worker names/locations as top-secret and out of
+> scope for platform storage. That means public on-chain identity anchors are
+> acceptable, but on-chain relationship edges, person-agent relationships, org
+> membership, PGS delegations, adoption transactions, introductions, and agent
+> memory are **not** acceptable as public graph data.
+>
+> **My senior-architecture recommendation: Use agenticprimitives as a reference
+> architecture and package source for controlled primitives, not as a direct
+> production dependency for JP until the package APIs, contracts, audit story,
+> privacy boundaries, and operational controls mature.**
+
+### Reviewer — what is architecturally strong
+
+> - Delegation is treated as a first-class security object, not just an app role
+>   string. EIP-712 smart-account delegations spanning web app → agent → MCP,
+>   with session lifecycle handled through key custody.
+> - MCP tool access is not treated as "just an API call." The MCP runtime wraps
+>   tool invocation with a verification pipeline: HMAC envelope check, session-key
+>   signature, EIP-712 hash, on-chain revocation check, ERC-1271 verification,
+>   caveat evaluation, JTI tracking, and tool-policy evaluation.
+> - Tool policy is explicit and risk-tiered. The tool-policy package supports
+>   protocol-agnostic classification, risk tiers, exact-call policies.
+> - The connect package gets several OIDC/JWT basics right: asymmetric
+>   AgentSession tokens, alg pinned to the key resolved by kid, rejects alg:none /
+>   algorithm confusion, enforces iss/aud, keeps authority out of the ID token.
+> - The newer demo-sso-next flow is much better than a naïve SSO demo. Exact-match
+>   redirect URI checks, single-use short-TTL authorization codes, PKCE
+>   verification, avoids returning bearer tokens in redirect URLs.
+> - Service-to-service MAC design is directionally strong. Binds audience,
+>   service, route, nonce, timestamp, body digest; verifies clock skew + replay
+>   through nonce/JTI tracking.
+> - The audit package has the right intent. Append-only event primitives + a sink
+>   interface while intentionally avoiding secret material in events.
+
+### Reviewer — Major production blockers
+
+> **P0 — Public relationship edges are incompatible with JP privacy.** The
+> `agent-relationships` package is designed around a public trust-fabric edge
+> model: (subject, object, relationshipType) with status lifecycle + optional
+> off-chain metadata hash. Its README explicitly says the package owns the
+> relationship layer as an on-chain graph of who-knows-whom, including org
+> membership and governance assertions.
+>
+> That is a hard mismatch with JP/GC privacy requirements. For JP, these
+> relationships are sensitive: Person→Org membership, Person→Org signatory role,
+> Org→PeopleGroup adoption, Org→PeopleGroup facilitator coverage, Adopter
+> Org→Facilitator Org introduction, Person→agent delegation, Agent→tool/session
+> history. Publishing those as deterministic on-chain edges would leak the very
+> associations the JP model says must remain confidential. **Recommendation: For
+> JP, do not use agent-relationships as an on-chain relationship graph.** Reuse
+> its vocabulary concepts privately, but implement a private relationship store.
+>
+> **This is not a minor configuration choice. It is a core architecture fork.**
+>
+> **P0 — The repo's own audit says production use is blocked.** Remaining
+> blockers include durable A2A audit, off-chain quorum semantics, a contract
+> dossier, leaked deployer key controlling live demo governance.
+>
+> **P0 — Custom ERC-4337 infra creates a large security/ops surface.** The
+> `agent-account` package is the bundler because public bundlers don't support
+> the custom EntryPoint, and `sendUserOps` calls `EntryPoint.handleOps`
+> directly. Running your own AA stack means you own: bundler correctness,
+> simulation correctness, mempool, gas estimation, paymaster abuse controls,
+> DoS/backpressure, chain-reorg, nonce, EntryPoint compatibility, monitoring,
+> contract upgrade governance. **For JP, prefer Privy + Safe / proven
+> smart-account provider first.** Use agenticprimitives delegation/tool-policy
+> ideas above that, not its full custom EntryPoint/bundler stack.
+>
+> **P0 — Key custody has an unsafe abstraction for tool execution.** The
+> key-custody factory has a `buildToolExecutorBackend` path that returns a
+> master signer, and the source comment says there is no per-tool isolation in
+> v0. That is not acceptable for agents. In an agentic system, the difference
+> between "tool can call exactly one whitelisted method" and "tool can use the
+> master signer" is the difference between scoped delegation and catastrophic
+> compromise. **The master key must not be in the tool execution path.** Need:
+> Person/Org master authority → delegation grant → session key → exact-call
+> policy → MCP tool call.
+
+### Reviewer — P1 findings
+
+> - **Audit is architecturally right but operationally too soft.** Fail-soft is
+>   defensible for observability. It is dangerous when audit is part of a
+>   compliance or forensic boundary. For JP, some events must be
+>   decision-coupled: SignAgreementActivity, DelegationGrant
+>   issuance/revocation, Introduction approval, DisclosureGrant creation,
+>   Contact release, Agent tool invocation touching confidential data. If those
+>   can't be durably audited, the action should not complete. **Split audit
+>   into Security-critical (durable write required before commit) vs
+>   Telemetry (fail-soft permitted).**
+> - **Delegation verification is strong, but some fail-open/context gaps remain.**
+>   Some caveat evaluators accept missing context because the check is assumed
+>   to be on-chain (e.g. value/target evaluation can return accepted when the
+>   off-chain context lacks value or target). That is a boundary trap. **Strict
+>   mode: missing context = deny, unknown caveat = deny, unsupported caveat =
+>   deny, revocation unavailable = deny, cross-delegation unsupported = deny.**
+>   Cross-delegation verification is explicitly not implemented.
+> - **MCP runtime exposes an error-leak footgun.** `McpAuthError` carries a
+>   `reason` field that may serialize to client-facing responses. **Split into
+>   `PublicMcpAuthError` (generic message) vs `PrivateAuthFailureContext`
+>   (internal correlation id + reason).**
+> - **Replay/JTI store is directionally good but runtime migration is an
+>   anti-pattern.** Creates tables at runtime; table name interpolated from
+>   configuration. **Schema migration outside request path; hardcoded /
+>   validated table identifiers; explicit unique constraint on jti;
+>   monitoring; no runtime DDL in security hot path.**
+> - **Same-origin JWTs are thin.** `connect-auth` HS256 lacks issuer/audience
+>   binding + server-side revocation. **For JP: HTTP-only Secure SameSite
+>   cookies; session JWTs include aud/iss/session id; high-risk authority is
+>   delegation-token based, not app-session based.**
+> - **CSRF token is not strong enough for high-risk org actions.** Current is
+>   HMAC(origin + timestamp). **High-risk CSRF should bind: session id,
+>   route/action, HTTP method, nonce, short TTL, possibly request body hash.**
+> - **Deterministic salt from email is a privacy risk.** `connect-auth` derives
+>   salt from label/email rotation + first 8 bytes keccak. **For JP: no
+>   email-derived public identifiers; use random stable subject IDs; store
+>   email only in encrypted confidential profile store; never put email-derived
+>   salts on-chain.**
+
+### Reviewer — Package-by-package senior review
+
+| Package | Verdict | Headline | JP recommendation |
+|---|---|---|---|
+| `connect` | Strong concept, decent posture, not enough operational maturity alone | Broker becomes root of trust; private JWK compromise → session minting; JWKS rotation needs first-class runbook | Use ideas; keep JP app sessions separate from delegation authority; treat broker as critical infrastructure |
+| `connect-auth` | Useful low-level; not sufficient as JP authority layer | Same-origin JWTs thin; CSRF not action/session/body bound; email-derived salts privacy issue | Behind hardened app-layer session management only; no email-derived public identity material |
+| `agent-account` | Ambitious, risky to adopt wholesale | Custom bundler/EntryPoint is a production operational burden; quorum/signature packing complex; un-audited | **Do not start here.** Use Safe/Privy/proven providers. Use agent-account for isolated experiments only |
+| `account-custody` | Important primitive; security review should be contract-heavy | Threshold/owner/recovery/module-upgrade safety needs audit | **Use audited Safe-style org custody for JP pilot/v1.5.** No new custody contracts without external audit |
+| `delegation` | One of the strongest packages | Missing-context caveat acceptance becomes severe bug if callers misunderstand; cross-delegation not implemented; off-chain quorum unresolved | JP-specific caveat set: `PGSScopeCaveat`, `AgreementVersionCaveat`, `OrgRoleCaveat`, `DisclosurePurposeCaveat`, `CounterpartyCaveat`, `NoWorkerDataCaveat`, `ExactCallCaveat`. Strictly deny missing context. **No on-chain Person→Org or Org→PGS delegations** |
+| `tool-policy` | Good primitive; needs stronger default-deny ergonomics | Classification registry is the load-bearing piece — unclassified tool MUST fail closed | JP tool tiers: Tier 0 (public read-only PG data) → Tier 4 (forbidden worker identity). Tier 3 (introduction/contact disclosure) requires explicit human approval + durable audit. **Tier 4 must be impossible in code, not merely forbidden by policy text** |
+| `mcp-runtime` | Strong direction; must be hardened | Error reason leakage; JTI stores need production-grade storage/migration/monitoring; MCP tools can become confused deputies over confidential data | Allow MCP only against a JP tool façade, not raw DB/GraphDB access. Every MCP tool calls a policy decision point. All confidential data access mediated through DisclosureGrant / DelegationGrant / AccessPolicy |
+| `key-custody` | **Do not use for production JP custody without major hardening** | Tool-executor backend returning master signer; GCP SA JSON in env has large blast radius; doc drift around GCP provider status; no rotation/escrow/recovery/break-glass story | Prefer Privy/Safe custody for person/org identities. KMS only for service-side signing. **Never let KMS master authority sign arbitrary agent tool calls** |
+| `audit` | Good foundation; not sufficient as production layer | Fail-soft unacceptable for security-critical JP actions; free-string action values drift; no tamper evidence; no PROV-O correlation | Add audit action registry: `gc.registration.create`, `gc.delegation.grant`, `gc.delegation.revoke`, `gc.agreement.sign`, `gc.adoption.declare`, `gc.coverage.declare`, `gc.match.approve`, `gc.disclosure.release`, `gc.agent.tool.invoke`. Security-critical events: durable write before commit. Project events into GraphDB as prov:Activity records |
+| `agent-relationships` | Useful for public trust fabric; **dangerous for JP unless privatized** | On-chain who-knows-whom graph is a privacy leak; deterministic edge IDs are linkable; metadata hashes can leak correlation | **Fork the concept into `gc-private-relationships`. Store edges privately. Publish only salted commitments / revocation nullifiers if needed** |
+
+### Reviewer — demo-jp + demo-sso-next reviews
+
+> **demo-jp** is correctly framed as a relying-app prototype. Architecture
+> direction is good: JP should not receive more data than its delegated scope
+> allows. But the implementation is not production-grade:
+> - Browser storage is not a secure vault — XSS compromises everything in
+>   localStorage/sessionStorage.
+> - Confidential profile data is still client-resident — the user's browser
+>   becomes the weak point even when JP receives only a "can reach you" flag.
+> - Fixed `DEMO_JP_DELEGATE` is a production blocker (already flagged SEC-003 /
+>   ARCH-024).
+> - OIDC verification is better than typical demos — ES256 JWKS, iss/aud/nonce/
+>   expiry, code+PKCE. Directionally good.
+>
+> JP production should move to: HTTP-only session cookies; server-side
+> confidential profile store; RLS / ReBAC for org data; short-lived scoped
+> delegation grants; no contact/profile data in localStorage; no fixed demo
+> delegates; CSP with nonce/hash; no inline scripts.
+>
+> **demo-sso-next** is materially better than many SSO demos.
+>
+> Strengths: Token delivery avoids URL bearer tokens; PKCE enforced + auth-code
+> deletion regardless of outcome; exact-match redirect URIs; CORS allowlisted by
+> registered client origins; identity in id_token vs authority in delegation
+> sidecar.
+>
+> Concerns: Stale package description (V1 scaffold vs route handlers existing
+> in V2); broker private key env-secret based (production should be KMS/HSM);
+> silent re-auth from delegation can mint fresh id_token without passkey
+> ceremony — in JP must be scoped tightly and never grant contact-disclosure or
+> org-custody authority without fresh step-up; demo directory catch-all (any
+> verified Google login resolves to Alice — must never survive into
+> production); delegation verification returns detailed reasons (risky if
+> propagated to client responses).
+
+### Reviewer — JP/GC architectural recommendation
+
+```
+Public on-chain:
+  - Person smart account address
+  - Organization smart account address
+  - optional public org attestation
+  - optional agreement-version existence attestation
+  - no Person→Org edge
+  - no Org→PGS adoption edge
+  - no Introduction edge
+  - no contact-disclosure edge
+  - no agent-session trace
+
+Private operational store:
+  - Person profile
+  - Org membership
+  - DelegationGrant
+  - AdoptionCommitment
+  - FacilitatorCoverage
+  - Introduction
+  - DisclosureGrant
+  - CapabilityDescription
+  - agent memory / person-agent relationship
+  - audit details
+
+GraphDB / PROV-O:
+  - project private provenance into private named graphs
+  - public graph receives anchors and aggregates only
+```
+
+### Reviewer — Phased remediation plan
+
+> **Phase 0 — Do not ship beyond demo.** Freeze production claims until: no
+> leaked/test keys in any deployed governance path; external contract audit
+> complete; durable audit path implemented; revocation fail-closed tested;
+> off-chain quorum semantics finalized; no localStorage for confidential data;
+> no demo identity catch-all; no fixed delegate fallback.
+>
+> **Phase 1 — Create a JP-safe profile.** Build a JP-specific adapter layer:
+> `@globalchurch/jp-agentic-privacy-adapter` that wraps `delegation.verify` in
+> strict mode, denies missing caveat context, disallows on-chain relationship
+> writes, maps agentic events to PROV-O Activity records, writes confidential
+> relationships to private Postgres/GraphDB, exposes only public anchors/
+> aggregates.
+>
+> **Phase 2 — Replace public relationship graph for JP.** Do not use
+> `agent-relationships` on-chain. Use private `private_relationship_edges`
+> table (subject_anchor, object_anchor, relationship_type, role, status,
+> access_policy_id, created_by_activity_id, revoked_by_activity_id,
+> encrypted_metadata). Optionally publish only `commitment = H(salt || subject
+> || object || relationship_type || version)` + `revocation_nullifier`.
+>
+> **Phase 3 — Harden delegation and MCP.** All JP caveats strict-mode; no
+> missing context acceptance; exact-call policy mandatory; no raw execute; no
+> master signer in tool runtime; durable JTI store; durable audit before
+> sensitive commit; tool data-tier registry.
+>
+> **Phase 4 — Align with PROV-O.** Every mutation emits both an audit event
+> and a provenance event: `SignAgreementActivity`, `DeclareAdoptionActivity`,
+> `DeclareCoverageActivity`, `ApproveIntroductionActivity`,
+> `ReleaseDisclosureActivity`, `RevokeDelegationActivity`,
+> `WithdrawAdoptionActivity`, `AgentToolInvocationActivity`. GraphDB
+> projection receives activities, not raw form state.
+
+### Reviewer — Senior architecture scorecard
+
+| Area | Rating | Comments |
+|---|---|---|
+| Conceptual architecture | **8/10** | Strong decomposition and serious security intent |
+| Package boundaries | **7.5/10** | Good split, but too many primitives are still pre-alpha or skeletal |
+| Smart-account maturity | **5/10** | Ambitious, but custom EntryPoint/bundler/paymaster path is a big risk |
+| Delegation model | **8/10** | Strongest part, but strict-mode and context semantics need tightening |
+| MCP/tool security | **7/10** | Good pipeline; still dangerous without exact JP tool façade |
+| Key custody | **4.5/10** | Production-unsafe until per-tool isolation and KMS/governance mature |
+| Audit/compliance | **5/10** | Good schema, but fail-soft and non-durable defaults are not enough |
+| Demo app security | **4/10** | Good patterns, but localStorage / demo shortcuts make them non-production |
+| **JP privacy fit** | **3/10 as-is; 8/10 with private relationship fork** | **Public relationship graph is the major mismatch** |
+| Production readiness | **4/10** | Internal demo / testnet only today |
+
+### Reviewer — blunt recommendation
+
+> For JP/GC, I would not adopt the repository wholesale.
+>
+> **Adopt these ideas:** EIP-712 delegation shape; strict delegation token
+> verification; tool-policy exact-call model; MCP runtime wrapper pattern;
+> audit event schema as a starting point; public smart-account anchors;
+> private PROV-O projection.
+>
+> **Don't adopt as-is:** public on-chain relationship graph; localStorage
+> profile/session vault; demo identity catch-all; fixed demo delegates; custom
+> bundler/EntryPoint in production; tool executor master signer; fail-soft
+> audit for security-critical actions; email-derived public identity salts.
+>
+> For JP Adopt-a-People-Group, the safe version is: public on-chain identity
+> anchors; private relationships, delegations, introductions, and agent
+> transactions; strict delegation caveats; no worker data; no public
+> relationship graph; PROV-O activity projection into private GraphDB named
+> graphs; public graph exposes only anchors and aggregates.
+
+---
+
+### EXT-* findings from the JP-fit review — tracker rows
+
+| ID | Severity | Component | One-line | Demo-cut? | Status | Wave / target | Cross-refs |
+|---|---|---|---|---|---|---|---|
+| **EXT-019** | 🔴 **P0 (the Privacy Fork)** | `packages/agent-relationships` (entire package's on-chain edge model) | Public on-chain relationship graph is fundamentally incompatible with JP confidentiality (Person→Org membership, Org→PGS adoption, introductions, contact-disclosure). **A core architecture fork for any JP customer-grade work.** | No | 🔴 OPEN | **Phase 1 / Phase 2 — JP-safe profile + private-relationship store** | spec 236, ARCH-001 |
+| EXT-020 | 🔴 P0 | `packages/key-custody/src/factories.ts` `buildToolExecutorBackend` | Tool-execution path can be a master signer; no per-tool isolation in v0. "Master key must not be in the tool execution path." | No | 🔴 OPEN | Phase 3 / Wave H7 | spec 235 §G-1 |
+| EXT-021 | 🔴 P0 | `packages/agent-account` (custom EntryPoint + own bundler) | Self-hosted AA stack creates production-grade operational burden (bundler/simulation/paymaster/mempool/DoS/reorg/EntryPoint compatibility). For JP, prefer Privy+Safe / proven providers first. | No | 🔴 OPEN | Phase 0 / pre-launch decision | — |
+| EXT-022 | 🟠 P1 | `packages/audit/src/sink.ts` `composeSinks` fail-soft | Fail-soft swallows sink failures + writes to console; security-critical events (DelegationGrant, DisclosureGrant, Contact release, Tool invocation on confidential data) must be durable-write-before-commit. Split classes: Security-critical (durable required) vs Telemetry (fail-soft permitted). | Partial | 🔴 OPEN | Phase 3 + ARCH-011 | ARCH-011 |
+| EXT-023 | 🟠 P1 | `packages/delegation/src/caveats/*` | Missing-context caveat evaluators accept by default (rationale: "on-chain enforces") — boundary trap if a caller relies on off-chain enforcement for a data/API/tool action. Need strict mode: missing context = deny, unknown caveat = deny, unsupported = deny, revocation unavailable = deny. | No | 🔴 OPEN | Phase 3 | SEC-031, ADR-0019 |
+| EXT-024 | 🟠 P1 | `packages/delegation/src/token.ts` `verifyCrossDelegation` | Returns "not implemented" — chain-of-delegation verification gap. | No | 🔴 OPEN | Phase 3 | EXT-023 |
+| EXT-025 | 🟠 P1 | `packages/delegation` revocation eval | Dev-mode can be fail-open on revocation lookup failure; production should be enforced regardless of NODE_ENV (serverless env-misconfigs are easy). | Partial | 🔴 OPEN | Phase 3 | SEC-031 |
+| EXT-026 | 🟠 P1 | `packages/mcp-runtime/src/auth-error.ts` (or equivalent) | `McpAuthError.reason` can serialize to client via middleware / logs. Split: `PublicMcpAuthError` (generic) vs `PrivateAuthFailureContext` (internal id + reason). | No | 🔴 OPEN | Phase 3 / Wave H7 | EXT-032 |
+| EXT-027 | 🟠 P1 | `packages/mcp-runtime` JTI store (SQLite/Postgres adapter) | Runtime table creation + interpolated table name; schema migration in security hot path. Move DDL outside request path; hardcoded/validated identifiers; explicit unique constraint on jti; insert-failure monitoring. | No | 🔴 OPEN | Phase 3 | — |
+| EXT-028 | 🟠 P1 | `packages/connect-auth` same-origin session JWT | HS256 with key rotation but no iss/aud binding + no server-side revocation. JP web sessions: HTTP-only Secure SameSite cookies; session JWTs include aud/iss/session id; high-risk authority delegation-token based not app-session. | No | 🔴 OPEN | Wave H7 | SEC-016, EXT-010 |
+| EXT-029 | 🟠 P1 | `apps/demo-*/src/csrf.ts` + broker `csrf` package | CSRF = HMAC(origin + timestamp). High-risk actions (org signatory, introduction approval, contact release, delegation issuance, custody policy change) should bind session id + route/action + HTTP method + nonce + short TTL + body hash. | No | 🔴 OPEN | Wave H7 + JP-specific | SEC-012 |
+| EXT-030 | 🟠 P1 | `packages/connect-auth/src/methods/*` salt derivation | Email-derived salt (first 8 bytes keccak of label/email/rotation) — linkability + dictionary risk. JP: no email-derived public identifiers; random stable subject IDs; email in encrypted confidential profile store only. | No | 🔴 OPEN | Phase 1 (JP adapter) | — |
+| EXT-031 | 🟡 Medium | `apps/demo-sso-next/src/lib/broker-core.ts` demo directory | "Any verified Google login resolves to Alice" demo convenience. Must NEVER survive into production configuration. | Yes (demo) | 🔴 OPEN | Pre-launch gate | spec 235 §G-1 |
+| EXT-032 | 🟠 P1 | `packages/delegation/src/token.ts` verification | Detailed denial reasons returned in `{ ok: false, reason }`. Useful for debugging, risky if propagated to client. Pair with EXT-026 fix shape — split public/private error surfaces uniformly. | No | 🔴 OPEN | Wave H7 (same shape as EXT-026) | EXT-026 |
+| EXT-033 | 🟠 P1 | `BROKER_PRIVATE_JWK` env-secret pattern (both demo-sso-next + demo-sso) | Acceptable for demo; production should use KMS/HSM-backed signing + rotation runbook. (Beyond EXT-002 / SEC-016 — this is about the signing substrate, not the example file.) | Partial | 🔴 OPEN | Wave R1 (prod substrate) | ARCH-013, EXT-002 |
+| EXT-034 | 🟡 Medium | `packages/tool-policy` registry | Classification registry is load-bearing; unclassified tool MUST fail closed. JP needs concrete tier registry (Tier 0 public read-only PG data → Tier 4 forbidden worker identity). Tier 3 requires human approval + durable audit; Tier 4 forbidden in code, not just policy text. | No | 🔴 OPEN | Phase 3 / JP adapter | — |
+| EXT-035 | 🟠 P1 | `apps/demo-jp` localStorage / sessionStorage vault | Browser storage is not a secure vault — XSS compromises everything. Production: HTTP-only session cookies; server-side confidential profile store; RLS / ReBAC for org data; no contact / profile data in localStorage. | Yes (demo) | 🔴 OPEN | Wave R1 / spec 237 | SEC-008, ARCH-001 |
+| EXT-036 | 🟠 P1 | `apps/demo-sso-next/server/token.ts` silent reauth | Silent re-auth from delegation can mint fresh id_token without passkey ceremony. In JP must be scoped tightly and **never grant contact-disclosure or org-custody authority without fresh step-up**. | No | 🔴 OPEN | Phase 3 + JP integration | SEC-002, EXT-029 |
+| EXT-037 | 🟡 Medium | `packages/audit` action vocabulary | Free-string `action` will drift. Need registry aligned with PROV-O: `gc.registration.create`, `gc.delegation.grant`, `gc.delegation.revoke`, `gc.agreement.sign`, `gc.adoption.declare`, `gc.coverage.declare`, `gc.match.approve`, `gc.disclosure.release`, `gc.agent.tool.invoke`. Project audit events into GraphDB as `prov:Activity` records. | No | 🔴 OPEN | Phase 4 | spec 206 |
+
+### Wave-plan delta — JP-fit review's phases vs existing waves
+
+The reviewer's 4-phase remediation plan maps onto the dossier as follows. **Phase 0 is
+already aligned with our existing audit posture** ("Pre-alpha; not production-ready"
+header in CLAUDE.md, the open SEC/ARCH P0s, and the `Not production-ready` README
+banner). Phases 1–4 are new structural lanes the dossier roadmap needs to absorb:
+
+| Reviewer phase | Maps onto existing dossier | New work the dossier needs to track |
+|---|---|---|
+| **Phase 0** — Don't ship beyond demo | Existing audit posture (CLAUDE.md, README banner, SEC/ARCH P0s) | Already aligned — pin Phase 0 gates to spec 214 closure |
+| **Phase 1** — JP-safe profile adapter | New: `specs/238-jp-privacy-adapter.md` (proposed) | New `@globalchurch/jp-agentic-privacy-adapter` package — wraps `delegation.verify` in strict mode; denies missing caveat context; disallows on-chain relationship writes; maps agentic events to PROV-O; writes confidential edges to private store; exposes public anchors only. Closes EXT-019 + EXT-023 + EXT-025 + EXT-030 + EXT-034. |
+| **Phase 2** — Replace public relationship graph | spec 237 (vault MCP) + new `specs/239-private-relationship-store.md` (proposed) | `private_relationship_edges` table schema; salted commitments + revocation nullifiers as the only public projection. Forks `agent-relationships`'s vocabulary into `gc-private-relationships`. Closes EXT-019 (the core fork). |
+| **Phase 3** — Harden delegation + MCP | Wave H7 + ARCH-026 + SEC-031 + EXT-020 cluster | Strict-mode caveats (EXT-023), cross-delegation impl or fail-closed (EXT-024), no master signer in tool runtime (EXT-020), durable JTI store + schema migration outside request path (EXT-027), durable audit before sensitive commit (EXT-022), tool data-tier registry (EXT-034), public/private MCP error split (EXT-026 + EXT-032). |
+| **Phase 4** — PROV-O alignment | New: extend `specs/206-audit.md` + `packages/audit` action registry | Action registry (EXT-037); GraphDB projection into private named graphs as `prov:Activity` records; public graph receives anchors+aggregates only. |
+
+The **single highest-leverage move** from this review is **Phase 1 (the JP-safe
+profile adapter package)** — it forks the vocabulary cleanly, keeps the existing
+generic packages alive for non-JP consumers, and gives JP a privacy-safe consumer
+surface without forcing a rewrite of `agent-relationships`, `agent-account`,
+`key-custody`, etc. Without this fork, the JP product cannot ship to production
+even after every existing SEC/ARCH closure lands.
+
+The **Privacy Fork (EXT-019)** is the gate. Until it's specced + implemented, JP
+should not adopt `agent-relationships` as an on-chain relationship store.
+
+---
+
 ## Re-audit policy
 
 - Each wave produces a hardening commit log; reference the SHA(s) in this file's row Status column when moving to 🟢 CLOSED.
