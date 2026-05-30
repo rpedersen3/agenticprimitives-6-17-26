@@ -1,7 +1,7 @@
 /**
  * Build-time deployment config sourced from Vite env vars.
  *
- * The `deploy-cloudflare.ts` script reads `apps/contracts/deployments-<NETWORK>.json`
+ * The `deploy-cloudflare.ts` script reads `packages/contracts/deployments-<NETWORK>.json`
  * and injects the addresses below into `vite build` as `VITE_*` vars.
  * Vite inlines them into the bundle at build time — the deployed Pages app
  * carries one chain's addresses; redeploy to rotate.

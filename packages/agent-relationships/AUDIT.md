@@ -74,7 +74,7 @@ Spec-declared in `specs/216-agent-relationships.md` § 8.
 
 ## Out-of-scope (won't audit here)
 
-- Contract source — `apps/contracts/src/relationships/AgentRelationship.sol`
+- Contract source — `packages/contracts/src/relationships/AgentRelationship.sol`
   + `RelationshipTypeRegistry.sol` land in Phase 3.
 - On-chain authority paths (ERC-1271 actor verification, two-side
   confirmation enforcement) — Phase 3 Forge tests.

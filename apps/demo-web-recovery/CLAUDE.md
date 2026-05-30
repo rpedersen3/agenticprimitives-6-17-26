@@ -20,7 +20,7 @@ Headline doctrine the UI must teach:
 ## What this app does not own
 
 - Treasury onboarding story → `apps/demo-web-pro`.
-- Contract custody semantics → `apps/contracts` + `specs/207` / `specs/213`.
+- Contract custody semantics → `packages/contracts` + `specs/207` / `specs/213`.
 - Passkey ceremony primitives → `packages/connect-auth`.
 - Custody encoding and quorum helpers → `packages/account-custody`.
 

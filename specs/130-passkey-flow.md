@@ -396,7 +396,7 @@ Per `CLAUDE.md` principle "Pull patterns, not code. Cross-reference smart-agent 
 | `apps/web/src/app/passkey-enroll/PasskeyEnrollClient.tsx` | Registration UI pattern (challenge → create → store credential) | reference for `apps/demo-web/src/passkey-flow.ts` + App.tsx |
 | `apps/web/src/hooks/use-a2a-session.ts` | Passkey-driven session shape | reference for our flow |
 | `apps/web/src/lib/sign-wallet-action-client.ts` | Signing-via-passkey pattern | reference for delegation + UserOp signing |
-| `packages/contracts/src/AgentAccount.sol` (in particular `_verifyWebAuthn`, `PasskeyStorage`, `addPasskey`) | Already imported during the contract vendoring step | already present in `apps/contracts/src/AgentAccount.sol` |
+| `packages/contracts/src/AgentAccount.sol` (in particular `_verifyWebAuthn`, `PasskeyStorage`, `addPasskey`) | Already imported during the contract vendoring step | already present in `packages/contracts/src/AgentAccount.sol` |
 
 Doctrine: we adapt the smart-agent patterns to **agenticprimitives package boundaries** — passkey helpers live in `agent-account` (where ERC-4337 substrate already lives) rather than smart-agent's monolithic SDK. The contract surface is identical.
 

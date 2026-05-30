@@ -57,7 +57,7 @@ Dependencies only ever point *up* this list (strict, no cycles — doctrine §4)
 
 - `@agenticprimitives/a2a-runtime` — A2A adapters (mirror of `mcp-runtime`; depends on `a2aproject/a2a-js`).
 - `@agenticprimitives/adapter-langchain`, `adapter-vercel-ai`, `adapter-mcp-transport-stdio` — framework adapters.
-- `@agenticprimitives/contracts-abis`, `contracts-deployments` — when we publish our own contract artifacts (today consumers read `apps/contracts/deployments-*.json`).
+- `@agenticprimitives/contracts-abis`, `contracts-deployments` — when we publish our own contract artifacts (today consumers read `packages/contracts/deployments-*.json`).
 - `@agenticprimitives/agent-credentials` — VCs / AnonCreds / skill + credential registries (ADR-0007 "deferred to v2").
 - `@agenticprimitives/smart-agent` facade — wait for ≥3 consumers asking for "one import" (doctrine §7).
 - Domain packages (`treasury-controls`, `wallet-actions`, etc.) — product surface, not primitives.

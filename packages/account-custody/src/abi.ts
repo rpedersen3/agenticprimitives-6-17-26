@@ -1,4 +1,4 @@
-// CustodyPolicy ABI — source of truth: apps/contracts/src/custody/CustodyPolicy.sol
+// CustodyPolicy ABI — source of truth: packages/contracts/src/custody/CustodyPolicy.sol
 // (spec 207 / 209 / 213).
 //
 // This is the typed-data + chain-call surface a custody UI needs. All

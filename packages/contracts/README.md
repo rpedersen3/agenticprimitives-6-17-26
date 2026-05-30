@@ -1,4 +1,4 @@
-# apps/contracts — demo contracts
+# packages/contracts — demo contracts
 
 Solidity contracts for the agenticprimitives demo. **Vendored minimum** from [`smart-agent/packages/contracts/`](https://github.com/agentictrustlabs/smart-agent/tree/003-intent-marketplace-proposal/packages/contracts). Just the contracts needed to demonstrate the end-to-end flow:
 

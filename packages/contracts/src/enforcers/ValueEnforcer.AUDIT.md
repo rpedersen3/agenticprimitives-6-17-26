@@ -35,7 +35,7 @@ Does NOT do: cumulative-across-redemptions value caps (DTK splits this into a se
 
 ## 5. Test posture
 
-Forge tests: `apps/contracts/test/Enforcers.t.sol` covers value=maxValue / value<maxValue / value>maxValue / value=0 cases (4 tests).
+Forge tests: `packages/contracts/test/Enforcers.t.sol` covers value=maxValue / value<maxValue / value>maxValue / value=0 cases (4 tests).
 
 ## 6. Open findings
 

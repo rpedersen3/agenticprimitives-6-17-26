@@ -345,7 +345,7 @@ Known gaps in advance (port from smart-agent or design fresh):
 
 Surfaces that should stay UNCHANGED across this work:
 - `@agenticprimitives/agent-account` — Treasury IS an AgentAccount; no new methods needed.
-- `apps/contracts/*` — no contract changes; existing factory + validator + enforcers are sufficient.
+- `packages/contracts/*` — no contract changes; existing factory + validator + enforcers are sufficient.
 - `@agenticprimitives/connect-auth` — passkey ceremony already there.
 
 ---

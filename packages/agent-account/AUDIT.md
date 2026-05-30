@@ -91,7 +91,7 @@ Subpath imports allowed by manifest:
 | **N4** (system) | P2 | `verificationGasLimit: 1.2M` ceiling is wasteful on RIP-7212 chains. | Open | Per-chain config: 400-500k on Base, 1.2M on anvil. |
 | **AA-1** | P3 | `buildUserOp()` for arbitrary calls throws. | Open | Documented "out-of-scope for v0 demo"; only deploy + ERC-1271 implemented. Tracks original audit's `agent-account` "gaps". |
 | **AA-2** | P3 | `walletFromSigner` is a placeholder. | Open | `createAccount` path uses raw private key; `createAccountFromAccount` is the real production path (viem account). |
-| **AA-3** | P3 | No spec for the `WebAuthnAssertion` ABI shape outside of source comments + `apps/contracts/src/libraries/WebAuthnLib.sol`. | Open | Reference: `webauthn-signature.ts:8-15`. Should land in `specs/201-agent-account.md`. |
+| **AA-3** | P3 | No spec for the `WebAuthnAssertion` ABI shape outside of source comments + `packages/contracts/src/libraries/WebAuthnLib.sol`. | Open | Reference: `webauthn-signature.ts:8-15`. Should land in `specs/201-agent-account.md`. |
 | ~~**N16** (system)~~ | ~~P2~~ | ~~Smart-account multi-sig + recovery policy not productized.~~ | **MOSTLY CLOSED 2026-05-20** (phase 6c) | This package's slice: contract surface (`_modeFlags`, `threshold(tier)` / `recoveryThreshold()` getters, propose/execute/cancel admin machinery, 14-action `AdminAction` enum, T6 recovery with 48h timelock + 24h primary-owner cancel window, spec § 5.1 default threshold matrix). Factory extension `createAccountWithMode(params, salt)` ships in `AgentAccountFactory` with per-mode guardian-count minima. SDK ships `packSafeSignatures`, `computeAdminPayloadHash`, admin/recovery ABIs + `ApprovedHashRegistry` ABI. AgentAccountClient admin wrapper methods (`proposeAdmin` / `executeAdmin` / `cancelAdmin` / `initiateRecovery` / `executeRecovery` / `preApproveHash`) deferred to phase 6c follow-up (see spec 207 § 10). 181/181 Forge + 50 agent-account SDK tests green. |
 
 ## 6. Test posture
@@ -100,7 +100,7 @@ Subpath imports allowed by manifest:
   `abis.test.ts` (4), `agent-account-client.test.ts` (8),
   `bundler-client.test.ts` (9), `create-account-from-pk.test.ts` (3),
   `deploy-via-paymaster.test.ts` (10), `webauthn-signature.test.ts` (6).
-- **Forge tests (on-chain cross-checks):** `apps/contracts/test/AgentAccount.t.sol` (16), `AgentAccountFactory.t.sol` (24),
+- **Forge tests (on-chain cross-checks):** `packages/contracts/test/AgentAccount.t.sol` (16), `AgentAccountFactory.t.sol` (24),
   `UniversalSignatureValidator.t.sol` (9), `SmartAgentPaymaster.t.sol`. These prove the TS wire format + addressing match Solidity.
 - **E2E:** Playwright `02-siwe-login.spec.ts` exercises ERC-1271 verification through the universal validator; `05-passkey-login.spec.ts` exercises `buildDeployUserOpWithPasskey` + `encodeWebAuthnSignature` end-to-end against anvil.
 - **Live smoke:** demo-a2a `/health` returns the live factory address. Manually verified after each `pnpm deploy:cloudflare`.
@@ -122,17 +122,17 @@ Subpath imports allowed by manifest:
 An external auditor evaluating this package needs:
 
 - `pnpm build` + `pnpm test` (40 tests)
-- `forge test` against `apps/contracts/test/AgentAccount*` (proves Solidity↔TS cross-check)
+- `forge test` against `packages/contracts/test/AgentAccount*` (proves Solidity↔TS cross-check)
 - `specs/201-agent-account.md`
 - This audit doc + system audit
 - Source: `client.ts` (deploy + ERC-1271), `bundler-client.ts` (UserOp submission), `webauthn-signature.ts` (wire format), `abis.ts` (EntryPoint + Factory + Account ABI fragments + FailedOp error decoding)
 - Live deployment addresses (current `cloudflare-urls.json`)
-- Cross-reference: `apps/contracts/src/AgentAccount.sol` (the actual Solidity dispatch logic)
+- Cross-reference: `packages/contracts/src/AgentAccount.sol` (the actual Solidity dispatch logic)
 
 ## 9. Accepted limitations / scope exclusions
 
 - Does NOT own paymaster policy — `paymaster` is a parameter on `buildDeployUserOp*`.
 - Does NOT own auth methods — consumes `Signer` interface from `connect-auth`.
 - Does NOT own delegation. Forbidden imports: `delegation`, `key-custody`, `tool-policy`, `mcp-runtime`.
-- Does NOT ship Solidity source — addresses are provided by config (the demo contracts live in `apps/contracts/`).
+- Does NOT ship Solidity source — addresses are provided by config (the demo contracts live in `packages/contracts/`).
 - v0 demo arbitrary-call `buildUserOp` is unimplemented (AA-1).

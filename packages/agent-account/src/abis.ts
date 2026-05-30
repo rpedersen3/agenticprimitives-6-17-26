@@ -1,5 +1,5 @@
 // Minimal ABI fragments for the on-chain calls AgentAccountClient makes.
-// Source of truth: apps/contracts/src/AgentAccountFactory.sol + AgentAccount.sol.
+// Source of truth: packages/contracts/src/AgentAccountFactory.sol + AgentAccount.sol.
 // Wave R0 — unified factory surface: a single `createAgentAccount` entry
 // replaces the legacy `createPersonAgent` + `createMultiSigSmartAgent` pair.
 // `mode` on the init params picks the shape (0=simple, 1-3=CustodyPolicy
@@ -147,7 +147,7 @@ export const agentAccountAbi = [
 // spec 213 § 2.6 (phase 6g.3). Source of truth lives there now.
 
 /**
- * ApprovedHashRegistry (apps/contracts/src/ApprovedHashRegistry.sol).
+ * ApprovedHashRegistry (packages/contracts/src/ApprovedHashRegistry.sol).
  * The v=1 path companion — passkey-only or hardware-wallet signers
  * pre-approve a hash with one tx instead of producing an off-chain
  * ECDSA sig. `QuorumEnforcer.beforeHook` (and the

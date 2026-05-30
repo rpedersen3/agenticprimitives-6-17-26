@@ -2,7 +2,7 @@
  * merge-paymaster-deployment.ts
  *
  * The incremental paymaster deploy script writes a sidecar JSON at
- *   apps/contracts/deployments-paymaster-<network>.json
+ *   packages/contracts/deployments-paymaster-<network>.json
  * with the paymaster address + stake + deposit. This helper reads it
  * and merges the address into the main deployments-<network>.json so
  * downstream code (gen-dev-vars.ts, deploy-cloudflare.ts) sees a

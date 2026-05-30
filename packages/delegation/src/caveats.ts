@@ -103,7 +103,7 @@ export function buildDelegateBindingCaveat(
 
 // ─── Spec 207 — QuorumEnforcer caveat builder ────────────────────────
 //
-// On-chain enforcer at `apps/contracts/src/enforcers/QuorumEnforcer.sol`
+// On-chain enforcer at `packages/contracts/src/enforcers/QuorumEnforcer.sol`
 // (shipped in pass 6c.1). Caveat terms bind the signer set + threshold +
 // ApprovedHashRegistry at delegation issuance; redeem-time `args` carry
 // the payload hash + Safe-compatible packed signature blob. See

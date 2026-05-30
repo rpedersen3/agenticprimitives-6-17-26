@@ -7,7 +7,7 @@ const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
 /**
  * Deterministic edge-ID derivation. Matches the on-chain port that
- * will land in `apps/contracts/src/relationships/AgentRelationship.sol`
+ * will land in `packages/contracts/src/relationships/AgentRelationship.sol`
  * (Phase 3): `keccak256(abi.encodePacked(subject, object, relType))`.
  *
  * Solidity `address` is a 20-byte value with no casing — we lowercase

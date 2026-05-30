@@ -21,7 +21,7 @@
   This package names the IRIs; types owns the TS shapes. They mirror each other.
 - The **live A-box graph** → projected by `identity-directory` (spec 223) onto a
   SPARQL store (GraphDB reference); this package ships only fixtures.
-- On-chain enforcement (`OntologyTermRegistry`/`ShapeRegistry`) → `apps/contracts`
+- On-chain enforcement (`OntologyTermRegistry`/`ShapeRegistry`) → `packages/contracts`
   (ADR-0009). This package is the off-chain source of truth it instantiates.
 
 ## Vocabulary

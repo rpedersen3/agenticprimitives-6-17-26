@@ -14,7 +14,7 @@ Owns the off-chain ontology context + SHACL shape artifacts (spec 226 family):
 - Zero `@agenticprimitives/*` deps; pure static-artifact + helper package.
 
 What this package does NOT own:
-- The on-chain ontology registries (`OntologyTermRegistry`, `ShapeRegistry`) — those live in `apps/contracts/src/ontology/`.
+- The on-chain ontology registries (`OntologyTermRegistry`, `ShapeRegistry`) — those live in `packages/contracts/src/ontology/`.
 - Vocabulary tagging at the runtime layer → app config.
 
 ## 2. Security invariants (DO NOT BREAK)

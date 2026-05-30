@@ -62,9 +62,9 @@ jobs:
           version: stable
 
       - name: Build contract dependencies (forge-std + account-abstraction + OZ)
-        working-directory: apps/contracts
+        working-directory: packages/contracts
         run: bash setup.sh
 
       - name: Forge contract tests (test pyramid Layer 4)
-        working-directory: apps/contracts
+        working-directory: packages/contracts
         run: forge test -vv

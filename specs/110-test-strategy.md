@@ -37,7 +37,7 @@ We adapt smart-agent's structure but **swap Node native test runner for Vitest**
 Layer 1  Per-package unit tests           < 1s      Vitest      packages/X/test/unit/
 Layer 2  Per-package integration tests    < 5s      Vitest      packages/X/test/integration/
 Layer 3  Cross-package integration        < 30s     Vitest      tests/integration/
-Layer 4  Solidity contract tests          < 30s     Forge       apps/contracts/test/
+Layer 4  Solidity contract tests          < 30s     Forge       packages/contracts/test/
 Layer 5  System tests (Anvil)             < 1min    Vitest      tests/system/
 Layer 6  E2E tests (UI flows)             < 3min    Playwright  tests/e2e/
 Layer 7  Smoke tests (deployed env)       < 30s     Playwright  tests/smoke/    (optional)
@@ -108,14 +108,14 @@ pnpm test:integration
 
 ### Layer 4 — Solidity contract tests
 
-**Tests:** the on-chain code in `apps/contracts/`. Forge invariants, fuzz tests, unit tests.
+**Tests:** the on-chain code in `packages/contracts/`. Forge invariants, fuzz tests, unit tests.
 
 **Examples:**
 - `AgentAccount.t.sol` — ERC-1271 `isValidSignature` round trips for all owner / passkey paths.
 - `DelegationManager.t.sol` — `redeemDelegation` rejects revoked, accepts well-formed.
 - `TimestampEnforcer.t.sol` — fuzz with random `validAfter` / `validUntil` combinations.
 
-**Layout:** `apps/contracts/test/*.t.sol`. Smart-agent has ~30 forge test files; we can selectively port the ones for our vendored contracts.
+**Layout:** `packages/contracts/test/*.t.sol`. Smart-agent has ~30 forge test files; we can selectively port the ones for our vendored contracts.
 
 **Invocation:**
 ```bash

@@ -154,7 +154,7 @@ When you close a finding, the Status cell becomes `closed-YYYY-MM-DD — see <co
 
 ```bash
 pnpm -r typecheck && pnpm -r test
-cd apps/contracts && forge test
+cd packages/contracts && forge test
 pnpm check:forbidden-terms
 ```
 

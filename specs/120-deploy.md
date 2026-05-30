@@ -19,7 +19,7 @@ This drives the rest of the document: §3 deploys contracts, §4 sets secrets, �
 
 ```bash
 # One-time: install Foundry libs + build contracts
-cd apps/contracts && bash setup.sh && pnpm build && cd ../..
+cd packages/contracts && bash setup.sh && pnpm build && cd ../..
 
 # Each session:
 pnpm dev   # starts anvil + deploys contracts + 3 workers + vite web
@@ -28,7 +28,7 @@ pnpm dev   # starts anvil + deploys contracts + 3 workers + vite web
 `pnpm dev` orchestrates:
 
 1. `anvil --port 8545` (local chain).
-2. `forge script Deploy.s.sol` → writes `apps/contracts/deployments-anvil.json`.
+2. `forge script Deploy.s.sol` → writes `packages/contracts/deployments-anvil.json`.
 3. `tsx scripts/gen-dev-vars.ts` → writes `apps/demo-{a2a,mcp}/.dev.vars` with contract addresses + dev secrets.
 4. `wrangler d1 migrations apply demo-mcp --local` → applies the SQL schema to the local D1.
 5. `wrangler dev` for demo-a2a (port 8787) and demo-mcp (port 8788).
@@ -64,7 +64,7 @@ The DO for `demo-a2a` is created automatically on first `wrangler deploy` (per t
 export BASE_SEPOLIA_RPC=https://sepolia.base.org
 export PRIVATE_KEY=0x...   # funded with ~0.05 ETH on Base Sepolia
 
-cd apps/contracts
+cd packages/contracts
 forge script script/Deploy.s.sol \
   --rpc-url $BASE_SEPOLIA_RPC \
   --broadcast \
@@ -296,7 +296,7 @@ Add `.github/workflows/ci.yml` (deferred — not part of v0 commit). Recommended
 - pnpm test:unit
 - pnpm test:integration:packages
 # Forge tests:
-- cd apps/contracts && forge test
+- cd packages/contracts && forge test
 # E2E (needs anvil + wrangler dev — slower, run on main only):
 - if: github.ref == 'refs/heads/main'
   run: pnpm test:e2e

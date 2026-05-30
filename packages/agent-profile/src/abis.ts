@@ -1,5 +1,5 @@
 // Identity-contract ABIs — source of truth:
-// apps/contracts/src/identity/*.sol (spec 217 / ID Phase 3).
+// packages/contracts/src/identity/*.sol (spec 217 / ID Phase 3).
 // AgentProfileResolver inherits the shared AttributeStorage from the
 // NS Phase 3 ontology stack; predicates registered in
 // OntologyTermRegistry govern what can be written.

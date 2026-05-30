@@ -90,7 +90,7 @@ export function packSafeSignatures(slots: SafeSignatureSlot[]): Hex {
 // ─── Admin payload-hash derivation ───────────────────────────────────
 
 /**
- * Verbs used in `AgentAccount._adminPayloadHash` (apps/contracts/src/
+ * Verbs used in `AgentAccount._adminPayloadHash` (packages/contracts/src/
  * AgentAccount.sol). Bound to the payload alongside (proposalId,
  * action, args, eta, address, chainid) so a propose sig can't be
  * replayed as an execute sig + sigs don't cross-replay between

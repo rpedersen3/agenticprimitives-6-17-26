@@ -38,7 +38,7 @@ The **Smart Agent address never changes** — credentials rotate, the identity
 | Deploy / address / ERC-1271 quorum verification | `@agenticprimitives/agent-account` |
 | Audit events for every schedule/apply | `@agenticprimitives/audit` |
 
-The on-chain enforcement lives in `apps/contracts/src/custody/CustodyPolicy.sol`
+The on-chain enforcement lives in `packages/contracts/src/custody/CustodyPolicy.sol`
 + the `QuorumEnforcer` / `ApprovedHashRegistry` (Base Sepolia). The
 custody/agency vocabulary firewall ([spec 213](../../../../specs/213-custody-layer-carve-out.md))
 keeps `account-custody` (account control) distinct from `delegation` (agent

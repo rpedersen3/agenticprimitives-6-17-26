@@ -26,6 +26,7 @@ const PACKAGES_DIR = join(REPO_ROOT, 'packages');
 
 interface Manifest {
   name: string;
+  kind?: 'capability' | 'shared' | 'adapter' | 'contracts';
   publicEntry: string;
   publicExports: string[];
 }
@@ -99,6 +100,10 @@ function main() {
     const manifestPath = join(dir, 'capability.manifest.json');
     if (!existsSync(manifestPath)) continue;
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Manifest;
+    // Solidity-only packages (kind: "contracts") publish JSON ABIs, not TS
+    // symbols. No `src/index.ts` to scan; the publicExports list is the
+    // ABI manifest itself, and `check:capability-manifests` validates it.
+    if (manifest.kind === 'contracts') continue;
     const indexPath = join(dir, manifest.publicEntry);
     if (!existsSync(indexPath)) continue;
     pkgCount += 1;

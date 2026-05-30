@@ -44,7 +44,7 @@ This is the **agenticprimitives-only** enforcer — DTK does not have an equival
 
 ## 5. Test posture
 
-Forge tests: `apps/contracts/test/QuorumEnforcer.t.sol` covers:
+Forge tests: `packages/contracts/test/QuorumEnforcer.t.sol` covers:
 - single-sig (threshold=1)
 - multi-sig threshold=2 of 3
 - unsorted sig rejection
@@ -67,5 +67,5 @@ Property tests: none yet. Phase 7 should add fuzz over signer permutations.
 
 - [Registry entry](../../../../docs/architecture/enforcer-registry/enforcers.json)
 - [`specs/207-smart-account-threshold-policy.md`](../../../../specs/207-smart-account-threshold-policy.md) — the doctrine motivating this enforcer's existence.
-- Shared library: `apps/contracts/src/libraries/SignatureSlotRecovery.sol` — used by both this enforcer AND `ThresholdValidator`'s admin-action `_verifyQuorum`. Audit changes here affect both.
+- Shared library: `packages/contracts/src/libraries/SignatureSlotRecovery.sol` — used by both this enforcer AND `ThresholdValidator`'s admin-action `_verifyQuorum`. Audit changes here affect both.
 - Companion contract: [`ApprovedHashRegistry`](../ApprovedHashRegistry.sol) — required for the v=1 path.

@@ -27,10 +27,10 @@ Companion docs: [`threat-model.md`](./threat-model.md) ·
 
 | ID | Control | Status | Source | Test | Audit event |
 | --- | --- | --- | --- | --- | --- |
-| **AC-1** | `setDelegationManager`, `installModule`, `uninstallModule`, `upgradeToWithAuthorization` are `onlySelf` (factory-init one-shot for installModule). | closed-2026-05-21 — Wave 2A C-1/C-2/C-3 | `apps/contracts/src/AgentAccount.sol:975-984` | `apps/contracts/test/AuthorityClosureWave2A.t.sol` (12 tests) | — (revert path, no event) |
-| **AC-2** | Factory-init exception spent exactly once. | closed-2026-05-21 — Wave 2A | `apps/contracts/src/AgentAccount.sol` `_factoryInitConsumed` bool | `test_C2_factory_init_exception_is_one_shot` | — |
-| **AC-3** | `upgradeToWithAuthorization` permanently disabled. | closed-2026-05-21 — Wave 2A | `apps/contracts/src/AgentAccount.sol` (revert `LegacyUpgradePathDisabled`) | `test_C3_upgradeToWithAuthorization_always_reverts` | — |
-| **AC-4** | CustodyPolicy reinstall forbidden post-uninstall. | closed-2026-05-22 — Wave 2C C-11 | `apps/contracts/src/custody/CustodyPolicy.sol` `permanentlyUninstalled` flag | `test_C11_reinstall_after_uninstall_forbidden` | `CustodyPolicyPermanentlyUninstalled` event |
+| **AC-1** | `setDelegationManager`, `installModule`, `uninstallModule`, `upgradeToWithAuthorization` are `onlySelf` (factory-init one-shot for installModule). | closed-2026-05-21 — Wave 2A C-1/C-2/C-3 | `packages/contracts/src/AgentAccount.sol:975-984` | `packages/contracts/test/AuthorityClosureWave2A.t.sol` (12 tests) | — (revert path, no event) |
+| **AC-2** | Factory-init exception spent exactly once. | closed-2026-05-21 — Wave 2A | `packages/contracts/src/AgentAccount.sol` `_factoryInitConsumed` bool | `test_C2_factory_init_exception_is_one_shot` | — |
+| **AC-3** | `upgradeToWithAuthorization` permanently disabled. | closed-2026-05-21 — Wave 2A | `packages/contracts/src/AgentAccount.sol` (revert `LegacyUpgradePathDisabled`) | `test_C3_upgradeToWithAuthorization_always_reverts` | — |
+| **AC-4** | CustodyPolicy reinstall forbidden post-uninstall. | closed-2026-05-22 — Wave 2C C-11 | `packages/contracts/src/custody/CustodyPolicy.sol` `permanentlyUninstalled` flag | `test_C11_reinstall_after_uninstall_forbidden` | `CustodyPolicyPermanentlyUninstalled` event |
 
 ---
 
@@ -38,10 +38,10 @@ Companion docs: [`threat-model.md`](./threat-model.md) ·
 
 | ID | Control | Status | Source | Test | Audit event |
 | --- | --- | --- | --- | --- | --- |
-| **SB-1** | QuorumEnforcer signatures bind chainId + enforcer + delegation hash + delegator + redeemer + target + value + keccak(callData). | closed-2026-05-22 — Wave 2B C-4 | `apps/contracts/src/enforcers/QuorumEnforcer.sol` `computeQuorumPayloadHash` | `apps/contracts/test/QuorumEnforcerBindingWave2B.t.sol` (6 tests) | — |
+| **SB-1** | QuorumEnforcer signatures bind chainId + enforcer + delegation hash + delegator + redeemer + target + value + keccak(callData). | closed-2026-05-22 — Wave 2B C-4 | `packages/contracts/src/enforcers/QuorumEnforcer.sol` `computeQuorumPayloadHash` | `packages/contracts/test/QuorumEnforcerBindingWave2B.t.sol` (6 tests) | — |
 | **SB-2** | ECDSA `s` value low-half-normalized for all paths. | partial | `packages/key-custody/src/providers/gcp.ts` (low-s normalization documented). Other paths use viem. | — | — |
-| **SB-3** | WebAuthn assertion decodes via try/catch → false (not revert). | closed-2026-05-22 — Wave 2C C-7 | `apps/contracts/src/AgentAccount.sol` `_verifyWebAuthn` external `decodeWebAuthnAssertion` + try/catch | `test_C7_malformed_webauthn_payload_does_not_revert` + truncated/empty variants | — |
-| **SB-4** | ERC-1271 + ERC-6492 dispatched through `UniversalSignatureValidator`. | closed | `apps/contracts/src/UniversalSignatureValidator.sol` | `apps/contracts/test/UniversalSignatureValidator.t.sol` | — |
+| **SB-3** | WebAuthn assertion decodes via try/catch → false (not revert). | closed-2026-05-22 — Wave 2C C-7 | `packages/contracts/src/AgentAccount.sol` `_verifyWebAuthn` external `decodeWebAuthnAssertion` + try/catch | `test_C7_malformed_webauthn_payload_does_not_revert` + truncated/empty variants | — |
+| **SB-4** | ERC-1271 + ERC-6492 dispatched through `UniversalSignatureValidator`. | closed | `packages/contracts/src/UniversalSignatureValidator.sol` | `packages/contracts/test/UniversalSignatureValidator.t.sol` | — |
 
 ---
 
@@ -49,11 +49,11 @@ Companion docs: [`threat-model.md`](./threat-model.md) ·
 
 | ID | Control | Status | Source | Test | Audit event |
 | --- | --- | --- | --- | --- | --- |
-| **CR-1** | Zero credentialIdDigest rejected at `initialize`, `addPasskey`, and inside RecoverAccount. | closed-2026-05-22 — Wave 2C C-6 + H2 (`buildRecoverAccountArgs`) | `apps/contracts/src/AgentAccount.sol` `InvalidCredentialIdDigest`; `packages/account-custody/src/actions.ts` C-6 echo | `test_C6_*` + `buildRecoverAccountArgs > rejects zero credentialIdDigest in addPasskeys` | — |
-| **CR-2** | `SetRecoveryApprovals(0)` rejected at apply. | closed-2026-05-22 — Wave 2C C-9 | `apps/contracts/src/custody/CustodyPolicy.sol` `_applySetRecoveryThreshold` | (locked at source; full ceremony exercised by `AdminFlowsViaValidator`) | — |
-| **CR-3** | `RotateAllCustodians(add, remove)` actually removes old set. | closed-2026-05-22 — Wave 2C C-10 | `apps/contracts/src/custody/CustodyPolicy.sol` `_applyRotateAllOwners`; `packages/account-custody/src/actions.ts:buildRotateAllCustodiansArgs` | `buildRotateAllCustodiansArgs > encodes add+remove together` | `CustodiansRemovedDuringRotation` event |
-| **CR-4** | `ChangeApprovalsRequired` tier-escalates reductions to T5. | closed-2026-05-22 — Wave 2C C-8 | `apps/contracts/src/custody/CustodyPolicy.sol` `_effectiveTierFor` | `test_admin_changeApprovalsRequired_revertsOnZero` | — |
-| **CR-5** | T6 timelock bounded by `timelockOverrides[6]` (default 48h). | closed-2026-05-23 — Wave H1.5 | `apps/contracts/src/AgentAccountFactory.sol` `_buildValidatorInitData` | `AgentAccountFactoryModeTest` + recovery-demo Act 1 with `timelockOverrides: [0,0,0,0,1,0,10]` | — |
+| **CR-1** | Zero credentialIdDigest rejected at `initialize`, `addPasskey`, and inside RecoverAccount. | closed-2026-05-22 — Wave 2C C-6 + H2 (`buildRecoverAccountArgs`) | `packages/contracts/src/AgentAccount.sol` `InvalidCredentialIdDigest`; `packages/account-custody/src/actions.ts` C-6 echo | `test_C6_*` + `buildRecoverAccountArgs > rejects zero credentialIdDigest in addPasskeys` | — |
+| **CR-2** | `SetRecoveryApprovals(0)` rejected at apply. | closed-2026-05-22 — Wave 2C C-9 | `packages/contracts/src/custody/CustodyPolicy.sol` `_applySetRecoveryThreshold` | (locked at source; full ceremony exercised by `AdminFlowsViaValidator`) | — |
+| **CR-3** | `RotateAllCustodians(add, remove)` actually removes old set. | closed-2026-05-22 — Wave 2C C-10 | `packages/contracts/src/custody/CustodyPolicy.sol` `_applyRotateAllOwners`; `packages/account-custody/src/actions.ts:buildRotateAllCustodiansArgs` | `buildRotateAllCustodiansArgs > encodes add+remove together` | `CustodiansRemovedDuringRotation` event |
+| **CR-4** | `ChangeApprovalsRequired` tier-escalates reductions to T5. | closed-2026-05-22 — Wave 2C C-8 | `packages/contracts/src/custody/CustodyPolicy.sol` `_effectiveTierFor` | `test_admin_changeApprovalsRequired_revertsOnZero` | — |
+| **CR-5** | T6 timelock bounded by `timelockOverrides[6]` (default 48h). | closed-2026-05-23 — Wave H1.5 | `packages/contracts/src/AgentAccountFactory.sol` `_buildValidatorInitData` | `AgentAccountFactoryModeTest` + recovery-demo Act 1 with `timelockOverrides: [0,0,0,0,1,0,10]` | — |
 
 ---
 
@@ -140,7 +140,7 @@ Phase status:
 | **NM-10** | `mcp-runtime.withDelegation` threads `nameContext` into audit + policy decision. | open — NS Phase 2 | spec 215 § 7 Phase 2 row | — | — |
 | **NM-11** | `connect-auth` JWT claim `agentName?: string` accepted, signed, NOT resolved by connect-auth. | open — NS Phase 2 | spec 215 § 7 Phase 2 row + ADR-0006 § "Refused: name registration as passkey-enrolment side-effect" | — | — |
 | **NM-12** | Registry contract uses owner Smart Agent's `IERC1271.isValidSignature` for authorization. No OpenZeppelin `AccessControl` / `TimelockController` on the registry. | open — NS Phase 3 | ADR-0006 § "Refused: OpenZeppelin AccessControl + TimelockController" | Phase 3 Forge test required | — |
-| **NM-13** | CREATE2 address derivation does NOT include name. Name transfers do not change Smart Agent addresses. | closed (invariant — by absence) | `apps/contracts/src/AgentAccountFactory.sol` (no name parameter); ADR-0006 § "Refused: names in CREATE2" | `apps/contracts/test/AgentAccountFactory.t.sol` | — |
+| **NM-13** | CREATE2 address derivation does NOT include name. Name transfers do not change Smart Agent addresses. | closed (invariant — by absence) | `packages/contracts/src/AgentAccountFactory.sol` (no name parameter); ADR-0006 § "Refused: names in CREATE2" | `packages/contracts/test/AgentAccountFactory.t.sol` | — |
 | **NM-14** | CAIP-10 `nativeId` predicate validates grammar at encode + restricts namespace allowlist (Phase 1: eip155 / hedera / solana); decode is permissive (forward-compatible). | closed-2026-05-23 — ADR-0008 + spec 215 records extension | `packages/agent-naming/src/records.ts` (nativeId encoder + `CAIP10_NAMESPACE_ALLOWLIST`) | `packages/agent-naming/test/records.test.ts` "nativeId predicate" describe (7 tests) | — |
 | **NM-15** | No UAID derivation logic in any shipped package (ADR-0008 refused full HCS-14 UAID generation). Consumers who want UAIDs derive them locally from `nativeId` + their own canonical-JSON context. | closed (invariant — by absence) | ADR-0008 § "Refused: full HCS-14 UAID derivation" | — | — |
 | **NM-16** | Agent-identity package (spec 217) ships typed profile schema + CAIP-10 helpers + endpoint verification (DNS TXT / signed URL / HTTP challenge / VP). Architecture locked 2026-05-23; Phase 1 scaffold pending. | open — Phase 1 pending | spec 217, ADR-0007 | — | — |

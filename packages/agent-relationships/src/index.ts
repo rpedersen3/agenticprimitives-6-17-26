@@ -41,7 +41,7 @@ export {
 export { AgentRelationshipsClient, type WriteContext } from './client';
 
 // Phase 3 contract ABIs (live at deployed addresses recorded in
-// apps/contracts/deployments-<network>.json).
+// packages/contracts/deployments-<network>.json).
 export {
   agentRelationshipAbi,
   relationshipTypeRegistryAbi,

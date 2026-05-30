@@ -27,7 +27,7 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 - Delegation / caveat / mint → [`delegation`](../delegation).
 - Passkey ceremonies → [`connect-auth`](../connect-auth).
 - MCP / A2A transport → demo apps + future `a2a-runtime`.
-- Contract source — that lives in `apps/contracts/src/naming/`
+- Contract source — that lives in `packages/contracts/src/naming/`
   (Phase 3+); this package ships ABIs + client only.
 
 ## Vocabulary

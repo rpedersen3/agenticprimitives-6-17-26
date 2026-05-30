@@ -35,7 +35,7 @@ Does NOT do: block-number windows (DTK has a separate `BlockNumberEnforcer`; we 
 
 ## 5. Test posture
 
-Forge tests: `apps/contracts/test/Enforcers.t.sol` covers the validAfter / validUntil / 0-bound / equal-bound cases (4 tests). No property tests yet.
+Forge tests: `packages/contracts/test/Enforcers.t.sol` covers the validAfter / validUntil / 0-bound / equal-bound cases (4 tests). No property tests yet.
 
 ## 6. Open findings
 

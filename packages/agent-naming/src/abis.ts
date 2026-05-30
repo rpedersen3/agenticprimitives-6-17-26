@@ -1,5 +1,5 @@
-// Naming-contract ABIs — source of truth: apps/contracts/src/naming/*.sol
-// and apps/contracts/src/ontology/*.sol (spec 215 / NS Phase 3,
+// Naming-contract ABIs — source of truth: packages/contracts/src/naming/*.sol
+// and packages/contracts/src/ontology/*.sol (spec 215 / NS Phase 3,
 // ADR-0009 ontology pivot). Hand-typed against `forge inspect` output
 // so callers get full viem type-inference without runtime JSON loads.
 //

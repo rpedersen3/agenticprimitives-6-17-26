@@ -4,12 +4,12 @@
  *
  * Subpath: `@agenticprimitives/agent-naming/records`.
  *
- * The `AgentNameAttributeResolver` (apps/contracts/src/naming/) inherits
+ * The `AgentNameAttributeResolver` (packages/contracts/src/naming/) inherits
  * `AttributeStorage` and validates every write against the
  * `OntologyTermRegistry`. Predicate keys are `bytes32` ids
  * (`keccak256("atl:displayName")` etc.), not strings; this module is
  * the canonical TS mirror of those ids — kept in lockstep with
- * `apps/contracts/src/naming/AgentNamePredicates.sol`.
+ * `packages/contracts/src/naming/AgentNamePredicates.sol`.
  *
  * Datatype binding:
  *   - `addr`, `custodyPolicy`                 → on-chain `address`

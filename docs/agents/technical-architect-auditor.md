@@ -98,15 +98,15 @@ feature X?":
 
 | Feature | Right package | Wrong package |
 | --- | --- | --- |
-| New caveat enforcer | `delegation` + `apps/contracts/src/enforcers` | `mcp-runtime` |
+| New caveat enforcer | `delegation` + `packages/contracts/src/enforcers` | `mcp-runtime` |
 | New risk tier or `@sa-tool` value | `tool-policy` | `delegation` |
 | New KMS backend | `key-custody/src/providers/` | `delegation` |
 | New auth flow (OIDC, WebAuthn-with-attestation) | `connect-auth` | `agent-account` |
-| New `CustodyAction` variant | `account-custody` + `apps/contracts/src/custody/CustodyPolicy.sol` | `agent-account` |
+| New `CustodyAction` variant | `account-custody` + `packages/contracts/src/custody/CustodyPolicy.sol` | `agent-account` |
 | New MCP transport adapter | `mcp-runtime/src/sdk-adapter.ts` | `delegation` |
 | New audit sink (Cloud Logging) | `audit` | `mcp-runtime` |
 | Session-lifecycle change | `delegation/src/sessions.ts` (ADR-0002) | `key-custody` or `connect-auth` |
-| Contract-address rotation policy | `apps/contracts/script/Deploy.s.sol` + `apps/contracts/deployments-<network>.json` | inside any package |
+| Contract-address rotation policy | `packages/contracts/script/Deploy.s.sol` + `packages/contracts/deployments-<network>.json` | inside any package |
 
 Whenever a PR adds a concept to the wrong package, the audit fires a
 finding routed to the right package owner.

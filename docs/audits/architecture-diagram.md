@@ -218,7 +218,7 @@ flowchart TB
 | AgentAccountFactory | `0x24045061dc2dd6FfdE1218F27C79637eCe5e7ec7` |
 | QuorumEnforcer | `0x044D099Ed5B31E782002167Bb699e0FE2f901B56` |
 
-Authoritative source: `apps/contracts/deployments-base-sepolia.json`.
+Authoritative source: `packages/contracts/deployments-base-sepolia.json`.
 Cloudflare deploy state: `cloudflare-urls.json` (gitignored).
 
 ---

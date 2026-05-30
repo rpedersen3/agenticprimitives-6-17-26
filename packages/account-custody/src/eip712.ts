@@ -1,5 +1,5 @@
 // EIP-712 typed-data shapes for the CustodyPolicy schedule/apply/cancel
-// surface. Mirrors apps/contracts/src/custody/CustodyPolicy.sol § "EIP-712"
+// surface. Mirrors packages/contracts/src/custody/CustodyPolicy.sol § "EIP-712"
 // (spec 207 § 15, renamed per spec 213 § 2.2).
 //
 // Domain `name` is "agenticprimitives.CustodyPolicy", version "1". Caller

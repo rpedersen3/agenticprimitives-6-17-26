@@ -41,7 +41,7 @@ export {
 } from './custody';
 
 // Phase 3 contract ABIs (live at deployed addresses recorded in
-// apps/contracts/deployments-<network>.json). ADR-0009 pivot: the
+// packages/contracts/deployments-<network>.json). ADR-0009 pivot: the
 // resolver inherits the shared `AttributeStorage` + ontology stack.
 export {
   agentNameRegistryAbi,

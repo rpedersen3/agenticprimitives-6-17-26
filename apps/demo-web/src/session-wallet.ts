@@ -9,7 +9,7 @@
 //  - signMessage  : EIP-191 message (SIWE login statement).
 //  - signHash     : 32-byte digest (userOp hash for ERC-4337 deploy).
 //                   Implementations may produce raw ECDSA or EIP-191-wrapped
-//                   bytes — AgentAccount accepts both (see apps/contracts/
+//                   bytes — AgentAccount accepts both (see packages/contracts/
 //                   src/AgentAccount.sol around line 956).
 //  - signTypedData: EIP-712 (Delegation).
 //
@@ -67,7 +67,7 @@ export function demoUserSessionWallet(user: DemoUser): SessionWallet {
  * Routes signHash through `signMessage({ raw })` so MetaMask /
  * Rainbow / Coinbase / etc. produce an EIP-191-wrapped signature.
  * AgentAccount._verifyEcdsa tries raw recovery first, then falls back
- * to EIP-191 — both formats validate (apps/contracts/src/AgentAccount.sol
+ * to EIP-191 — both formats validate (packages/contracts/src/AgentAccount.sol
  * around line 956), so userOp signing works without any contract
  * changes when the user switches between the test wallet and an
  * injected wallet.

@@ -13,7 +13,7 @@ The canonical SA address MUST NOT change during credential recovery ([ADR-0011](
 - Auth methods / signers → `connect-auth`
 - Delegation primitive → `delegation`
 - KMS → `key-custody`
-- Solidity source → `apps/contracts/src/` (core) + `apps/contracts/src/custody/` (custody) + `apps/contracts/src/agency/` (agency)
+- Solidity source → `packages/contracts/src/` (core) + `packages/contracts/src/custody/` (custody) + `packages/contracts/src/agency/` (agency)
 - Custody-policy ABI / `CustodyAction` enum / typed-data helpers → `@agenticprimitives/account-custody` (spec 213 § 2.6)
 - Custody / recovery / approvals machinery → `CustodyPolicy` module (NOT this package — see [spec 209](../../specs/209-erc7579-module-taxonomy.md) + [spec 213](../../specs/213-custody-layer-carve-out.md))
 
@@ -32,7 +32,7 @@ The canonical SA address MUST NOT change during credential recovery ([ADR-0011](
 - Auth UX / OAuth / passkey assertion → `connect-auth`
 - Risk tiers / tool classification → `tool-policy`
 - Custody-policy ABI / `CustodyAction` enum / `Custodian` / `Trustee` types → `@agenticprimitives/account-custody`
-- CustodyPolicy on-chain machinery → `apps/contracts/src/custody/CustodyPolicy.sol` (NOT this package; spec 213)
+- CustodyPolicy on-chain machinery → `packages/contracts/src/custody/CustodyPolicy.sol` (NOT this package; spec 213)
 
 ## Security invariants
 - Salt derives from stable IDs via keccak; no raw user-supplied salt.
@@ -50,5 +50,5 @@ pnpm check:forbidden-terms
 [`README.md`](README.md) · [`docs/concepts.md`](docs/concepts.md) · [`docs/api.md`](docs/api.md) · [`docs/security.md`](docs/security.md) · [`docs/troubleshooting.md`](docs/troubleshooting.md) · [`docs/migration.md`](docs/migration.md)
 
 ## Capabilities (cross-cutting)
-- **Multi-sig + custody policy** — see [spec 207](../../specs/207-smart-account-threshold-policy.md) (product) + [spec 209](../../specs/209-erc7579-module-taxonomy.md) (impl) + [spec 213](../../specs/213-custody-layer-carve-out.md) (vocabulary firewall). Phase 6c.5-d.1 moved the custody machinery to `apps/contracts/src/custody/CustodyPolicy.sol`; phase 6g.3 moved the SDK surface to `@agenticprimitives/account-custody`. This package now exposes only the AgentAccount-side SDK helpers (address derivation, sign/verify, userOp build).
+- **Multi-sig + custody policy** — see [spec 207](../../specs/207-smart-account-threshold-policy.md) (product) + [spec 209](../../specs/209-erc7579-module-taxonomy.md) (impl) + [spec 213](../../specs/213-custody-layer-carve-out.md) (vocabulary firewall). Phase 6c.5-d.1 moved the custody machinery to `packages/contracts/src/custody/CustodyPolicy.sol`; phase 6g.3 moved the SDK surface to `@agenticprimitives/account-custody`. This package now exposes only the AgentAccount-side SDK helpers (address derivation, sign/verify, userOp build).
 - Index: [`docs/architecture/cross-cutting-capabilities.md`](../../docs/architecture/cross-cutting-capabilities.md)

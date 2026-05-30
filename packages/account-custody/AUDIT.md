@@ -13,7 +13,7 @@ Owns the off-chain SDK surface for the on-chain `CustodyPolicy` module:
 - Per-tier threshold + cancel-window encoding.
 - Custodian / trustee / guardian role types.
 
-Spec 213 carve-out: this package owns custody vocabulary; `agent-account` consumes via type-only imports. The on-chain machinery lives in `apps/contracts/src/custody/CustodyPolicy.sol` (Phase 6c.5-d.1) — this package ships ABI helpers + arg builders only.
+Spec 213 carve-out: this package owns custody vocabulary; `agent-account` consumes via type-only imports. The on-chain machinery lives in `packages/contracts/src/custody/CustodyPolicy.sol` (Phase 6c.5-d.1) — this package ships ABI helpers + arg builders only.
 
 What this package does NOT own:
 - The `CustodyPolicy.sol` contract itself.

@@ -21,7 +21,7 @@
   ],
   "properties": {
     "name": { "type": "string", "pattern": "^@agenticprimitives/[a-z][a-z0-9-]*$" },
-    "kind": { "enum": ["capability", "shared", "adapter"] },
+    "kind": { "enum": ["capability", "shared", "adapter", "contracts"] },
     "stability": { "enum": ["experimental", "beta", "stable"] },
     "agentEntry": { "const": "CLAUDE.md" },
     "publicEntry": { "type": "string" },

@@ -19,7 +19,7 @@ const PACKAGES_DIR = join(REPO_ROOT, 'packages');
 
 interface Manifest {
   name: string;
-  kind: 'capability' | 'shared' | 'adapter';
+  kind: 'capability' | 'shared' | 'adapter' | 'contracts';
   stability: 'experimental' | 'beta' | 'stable';
   agentEntry: string;
   publicEntry: string;
@@ -59,7 +59,7 @@ const REQUIRED_TOP_FIELDS: Array<keyof Manifest> = [
 
 const REQUIRED_CONTEXT_BUDGET_FIELDS = ['claudeMdMaxWords', 'readmeMaxWords', 'architectureMaxWords'] as const;
 
-const KIND_VALUES = new Set(['capability', 'shared', 'adapter']);
+const KIND_VALUES = new Set(['capability', 'shared', 'adapter', 'contracts']);
 const STABILITY_VALUES = new Set(['experimental', 'beta', 'stable']);
 
 function loadPackages(): Array<{ dir: string; manifest: Manifest; pkgJson: PackageJson }> {

@@ -26,7 +26,7 @@ actual design in specs and package docs; this file is only a routing map.
 | AgentCard/profile JSON, CAIP-10 native IDs                 | `packages/agent-profile/CLAUDE.md`           | Off-chain profile schema and verification.        |
 | Trust-fabric edges and relationship roles                  | `packages/agent-relationships/CLAUDE.md`      | Do not model naming hierarchy here.               |
 | Shared branded chain/domain types                          | `packages/types/CLAUDE.md`                    | Base package; no runtime policy.                  |
-| Solidity contracts                                         | `apps/contracts/` + relevant `specs/2XX-*.md` | Check the package spec before changing contracts. |
+| Solidity contracts                                         | `packages/contracts/` + relevant `specs/2XX-*.md` | Check the package spec before changing contracts. |
 | Demo UX flows                                              | `apps/demo-web-pro/CLAUDE.md`                 | App wiring, local state, and tutorials.           |
 
 ## Cross-Cutting Work

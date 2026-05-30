@@ -29,7 +29,7 @@ The architectural rule (spec 212): UI surfaces use custody-layer terms; SDK / co
 ### 2.1 Contracts
 
 ```
-apps/contracts/src/
+packages/contracts/src/
 ├── AgentAccount.sol            ← unchanged shape, custodian-renamed state
 ├── AgentAccountFactory.sol     ← unchanged shape, custodian-renamed call signatures
 ├── DelegationManager.sol       ← agency layer, untouched
@@ -243,7 +243,7 @@ The vocabulary firewall is canonized in memory:
 | --- | --- | --- | --- |
 | **6g.0 (this spec)** | Spec 213 + ontology turtle file + memory entries. NO code changes. | n/a — docs only | ~2-3 hours |
 | **6g.1** | Contract rename: CustodyPolicy + CustodyAction + scheduleCustodyChange + state vars + AgentAccount custodian-renames + factory custodian-renames. All Forge tests adapted. Redeploy CustodyPolicy + AgentAccount impl + Factory. | 172 Forge tests + 191 workspace tests must still pass | ~5-7 hours |
-| **6g.2** | Directory restructure: `apps/contracts/src/{custody,agency,enforcers}/`. Import paths updated. Deploy.s.sol paths updated. | Tests still pass post-restructure | ~1-2 hours |
+| **6g.2** | Directory restructure: `packages/contracts/src/{custody,agency,enforcers}/`. Import paths updated. Deploy.s.sol paths updated. | Tests still pass post-restructure | ~1-2 hours |
 | **6g.3** | New `@agenticprimitives/account-custody` package. Pull custody-related SDK surfaces in. CLAUDE.md + AUDIT.md. Workspace dependencies updated. | Workspace builds + typechecks | ~3-5 hours |
 | **6g.4** | Specs 207/209/210/211 updated to custody vocabulary. Cross-references + memories refreshed. | All `pnpm check:*` rails pass | ~2-3 hours |
 

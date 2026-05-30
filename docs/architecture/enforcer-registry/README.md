@@ -46,11 +46,11 @@ DO NOT edit by hand — edit `enforcers.json` instead.
 ## How to add a new enforcer
 
 1. Land the spec (`specs/2XX-<feature>.md`) describing the new caveat shape + threat model.
-2. Implement `apps/contracts/src/enforcers/<Name>Enforcer.sol`.
-3. Write `apps/contracts/src/enforcers/<Name>Enforcer.AUDIT.md` (per-enforcer audit page; see template at bottom of this doc).
+2. Implement `packages/contracts/src/enforcers/<Name>Enforcer.sol`.
+3. Write `packages/contracts/src/enforcers/<Name>Enforcer.AUDIT.md` (per-enforcer audit page; see template at bottom of this doc).
 4. Add SDK builder in `packages/delegation/src/caveats.ts` + export.
 5. Add entry to `enforcers.json` with status `planned` (during impl) → `shipped` (after deploy + audit landed).
-6. Update `apps/contracts/deployments-<network>.json` with the deployed address.
+6. Update `packages/contracts/deployments-<network>.json` with the deployed address.
 7. Run `pnpm check:enforcer-registry` — catches drift between source / SDK / manifest / deployments JSON / audit pages.
 8. Run `pnpm check:sentinel-enforcers` — catches any sentinel-only exports that would revert at redeem.
 
@@ -62,7 +62,7 @@ This prevents a regression where someone adds a new sentinel-only enforcer witho
 
 ## Per-enforcer audit pages
 
-Each `shipped` enforcer has an `AUDIT.md` co-located with the source: `apps/contracts/src/enforcers/<Name>.AUDIT.md`. The page covers:
+Each `shipped` enforcer has an `AUDIT.md` co-located with the source: `packages/contracts/src/enforcers/<Name>.AUDIT.md`. The page covers:
 
 - charter (what THIS enforcer does, what it doesn't)
 - security invariants
@@ -79,7 +79,7 @@ This mirrors the per-package `AUDIT.md` convention. The registry's `auditPath` f
 
 **Status:** alpha | beta | shipped
 **Last refreshed:** YYYY-MM-DD
-**Owners:** delegation package CODEOWNERS + apps/contracts CODEOWNERS
+**Owners:** delegation package CODEOWNERS + packages/contracts CODEOWNERS
 **Registry entry:** `docs/architecture/enforcer-registry/enforcers.json` (entry: `<Name>Enforcer`)
 **Spec reference:** `specs/2XX-…`
 

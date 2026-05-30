@@ -250,7 +250,7 @@ migration path.
 | **Architecture** | This spec + ADR-0007 + ADR-0008. | done 2026-05-23 |
 | **Phase 1** | Package scaffold. Profile + AgentCard types + ProfileType discriminator. CAIP-10 encoder/decoder + grammar validation. AgentCard JSON serialization + content-hash helper. Unit tests for the pure helpers. | pending |
 | **Phase 2** | `AgentIdentityClient.getProfile(name)` reads metadata-uri + verifies metadata-hash. `verifyEndpoint(profile, method)` dispatches to the chosen verification method. Tests against fixtures. | pending |
-| **Phase 3** | Port `AgentAccountResolver.sol` (or equivalent simplified shape) to `apps/contracts/src/identity/AgentProfileResolver.sol`. Forge tests for mirror writes + ERC-1271 authorization. Deploy. | pending |
+| **Phase 3** | Port `AgentAccountResolver.sol` (or equivalent simplified shape) to `packages/contracts/src/identity/AgentProfileResolver.sol`. Forge tests for mirror writes + ERC-1271 authorization. Deploy. | pending |
 | **Phase 4** | Wire `AgentIdentityClient.setProfile(...)` + `verifyEndpoint` writes through the owner Smart Agent's ERC-1271. | pending |
 | **Phase 5** | Demo integration: demo-web-pro shows agent cards instead of address strings; demo-mcp verifies its own MCP endpoint via `signed-url` and includes the verification in audit context. | pending |
 

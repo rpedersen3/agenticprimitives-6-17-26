@@ -28,7 +28,7 @@ The dossier has three parts:
    audit row.
 
 External reviewer should be able to run `pnpm check:all && pnpm -r
-test && cd apps/contracts && forge test`, read the dossier, and
+test && cd packages/contracts && forge test`, read the dossier, and
 issue findings.
 
 ---

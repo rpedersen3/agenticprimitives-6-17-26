@@ -16,7 +16,7 @@
 > - `connect-auth` is unchanged — the `Signer` interface stays signer-shape-agnostic.
 > - `mcp-runtime` is unchanged — `withDelegation` calls verify; verify transparently handles n-of-m once delegation does.
 >
-> A consumer reading our docs should not have to "enable multi-sig" — they should always be dealing with `Delegation` objects that may have 1+ signers, gated by `threshold(tier)` on the account. The on-chain primitives shipped in 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`) stay where they landed in `apps/contracts/`; they're not getting wrapped in a new package boundary.
+> A consumer reading our docs should not have to "enable multi-sig" — they should always be dealing with `Delegation` objects that may have 1+ signers, gated by `threshold(tier)` on the account. The on-chain primitives shipped in 6c.1 (`QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`) stay where they landed in `packages/contracts/`; they're not getting wrapped in a new package boundary.
 >
 > **Substrate independence.** agenticprimitives ships its own multi-sig end-to-end. We do NOT integrate Gnosis Safe Singleton, Safe{Wallet}, or any other third-party multi-sig contract as a runtime dependency. We DO port battle-tested patterns from Safe (signature packing format, owner+threshold+module architecture) and from MetaMask's account-mode taxonomy — patterns are public goods; runtime deps are not. The "Safe-compatible" framing throughout this spec refers exclusively to the **on-chain signature packing format** so external Safe-shaped tooling can sign for our accounts. Safe contracts themselves never appear in our deploy.
 
@@ -133,7 +133,7 @@ Per Rhinestone's modular-account model (validators / executors / hooks / fallbac
 | --- | --- | --- |
 | **Validators** (who can approve) | `connect-auth` + on-chain signer state in `agent-account` | `Signer` interface, ERC-1271 verification, owner / passkey / guardian state |
 | **Executors** (what can act) | `delegation` | `Delegation`, sessions, caveat builders, redelegation chain |
-| **Hooks** (pre / post checks) | `tool-policy` + the caveat enforcer contracts in `apps/contracts/src/enforcers/` | Risk tiers, classification, `evaluatePolicy`, `beforeHook` / `afterHook` |
+| **Hooks** (pre / post checks) | `tool-policy` + the caveat enforcer contracts in `packages/contracts/src/enforcers/` | Risk tiers, classification, `evaluatePolicy`, `beforeHook` / `afterHook` |
 | **Runtime adapters** | `mcp-runtime` (today); future `a2a-runtime` etc. | Wraps the validator → executor → hook pipeline behind a transport-specific surface |
 
 This validates the existing package-boundary doctrine. Spec 207 doesn't change any boundary; it deepens the integration along this already-correct architecture.
@@ -151,7 +151,7 @@ The current substrate is closest to "MetaMask Hybrid + Delegation Toolkit." Spec
 | Safe Guards (pre/post checks) | `tool-policy.evaluatePolicy` + `ICaveatEnforcer.beforeHook/afterHook` | Present (T1 read enforcers shipped) | § 5 + spec 208 (argument-level caveats) |
 | Safe Modules (scoped execution paths) | Sessions + redelegation in `delegation` | Present (single-tier) | § 6 high-risk gate + § 5.1 threshold matrix |
 | Delegation Toolkit | `@agenticprimitives/delegation` + `DelegationManager.sol` | Present | DTK alignment audit pass (task #89) |
-| Caveat enforcers | `apps/contracts/src/enforcers/*` + caveat builders in `delegation` | Present, needs parameter-level parity | Spec 208 |
+| Caveat enforcers | `packages/contracts/src/enforcers/*` + caveat builders in `delegation` | Present, needs parameter-level parity | Spec 208 |
 | Advanced Permissions / permission cards | demo-web consent / authorize flow | Early | § 1 bullet "Permission UX as security" + phase 7 UI |
 | Paymaster / verifying paymaster | `SmartAgentPaymaster.sol` verifying mode | Present | (closed by pass 4 / audit C2) |
 | Account recovery (multi-passkey + guardian) | passkey + guardian + timelock + cancel | **Missing** | § 8 |
@@ -221,7 +221,7 @@ For N >= 5, factory issues a warning: "large signer sets risk coordination failu
 
 ## 6. High-risk delegation approval
 
-Builds on the existing `acceptSessionDelegation(hash)` hook on `AgentAccount` (see `apps/contracts/src/AgentAccount.sol`). That function already serves as a "this delegation hash has been blessed on-chain" signal; we extend the off-chain delegation verifier to check it conditionally based on tier:
+Builds on the existing `acceptSessionDelegation(hash)` hook on `AgentAccount` (see `packages/contracts/src/AgentAccount.sol`). That function already serves as a "this delegation hash has been blessed on-chain" signal; we extend the off-chain delegation verifier to check it conditionally based on tier:
 
 | Tier | Off-chain delegation signature alone? | On-chain `acceptSessionDelegation` required? |
 | --- | --- | --- |
@@ -355,7 +355,7 @@ The "integration, not bolt-on" doctrine maps the surface across existing package
 | `connect-auth` | (unchanged) | The `Signer` interface stays signer-shape-agnostic. Multi-sig is below this layer — `connect-auth` doesn't know whether the eventual signer set is 1-of-1 or 3-of-5. |
 | `mcp-runtime` | (effectively unchanged) | `withDelegation` already calls `verifyDelegationToken`. It transparently handles n-of-m once `delegation` does. The only addition: the `tool-policy` decision (`requiresQuorum`, etc.) is threaded into the verify call. |
 | `audit` | (unchanged interface; new emitter actions) | Spec 206 vocabulary table grows: `agent-account.admin.{propose,execute,cancel}`, `agent-account.recovery.{propose,execute,cancel}`, `delegation.quorum.{accept,reject}`. |
-| `apps/contracts` | On-chain primitives | Already-shipped: `QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`. New: `AgentAccount` extended in place (no new contract); `AgentAccountFactory.createAccount*` signatures grow to take `mode + initial signers + initial guardians + thresholds`. |
+| `packages/contracts` | On-chain primitives | Already-shipped: `QuorumEnforcer`, `ApprovedHashRegistry`, `MultiSendCallOnly`. New: `AgentAccount` extended in place (no new contract); `AgentAccountFactory.createAccount*` signatures grow to take `mode + initial signers + initial guardians + thresholds`. |
 
 ### Phase 6c.2 — AgentAccount extension (Solidity)
 
@@ -710,7 +710,7 @@ through the existing `single`-mode owner self-call path on the
 account, just not via the validator's propose/execute/cancel
 surface. Demo recommendation: create a fresh account post-redeploy.
 
-`apps/contracts/deployments-base-sepolia.json` pins the new validator
+`packages/contracts/deployments-base-sepolia.json` pins the new validator
 address as `thresholdValidator`; the old one moves to
 `thresholdValidatorLegacy` for the deployment trail.
 

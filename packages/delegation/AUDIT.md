@@ -100,7 +100,7 @@ What this package does NOT own (per its `CLAUDE.md`):
 | **DEL-1**       | P2       | No automated cross-language hash check.                                          | Open       | Need a Forge test or Anvil helper that derives `hashDelegation` from Solidity and compares to a TS golden. Prevents domain drift. |
 | **DEL-2**       | P3       | `verifyDelegationToken` error messages may leak chain state to external callers. | Open       | E.g. `"delegator smart account ... is not deployed"` reveals address state. Consider opaque external error + internal log.        |
 | **DEL-3**       | P3       | Memory session store is process-local.                                           | Documented | `createMemorySessionStore()` is test-only; production must use Durable Object or D1. Linked to system L2.                         |
-| **DEL-4**       | P2       | MetaMask DTK alignment audit + caveat parity inventoried 2026-05-21.             | **MOSTLY CLOSED** | [`docs/architecture/dtk-alignment-audit.md`](../../docs/architecture/dtk-alignment-audit.md) ships the parity inventory. [`docs/architecture/enforcer-registry/enforcers.json`](../../docs/architecture/enforcer-registry/enforcers.json) is the machine-readable registry CI walks. Per-enforcer audits at `apps/contracts/src/enforcers/<Name>.AUDIT.md`. Remaining work: spec 208 ArgumentRuleEnforcer (planned), RateLimitEnforcer port (phase 7), interop fixture corpus (phase 7). |
+| **DEL-4**       | P2       | MetaMask DTK alignment audit + caveat parity inventoried 2026-05-21.             | **MOSTLY CLOSED** | [`docs/architecture/dtk-alignment-audit.md`](../../docs/architecture/dtk-alignment-audit.md) ships the parity inventory. [`docs/architecture/enforcer-registry/enforcers.json`](../../docs/architecture/enforcer-registry/enforcers.json) is the machine-readable registry CI walks. Per-enforcer audits at `packages/contracts/src/enforcers/<Name>.AUDIT.md`. Remaining work: spec 208 ArgumentRuleEnforcer (planned), RateLimitEnforcer port (phase 7), interop fixture corpus (phase 7). |
 | **DEL-5**       | P1       | SDK exports 3 sentinel-only enforcers (`MCP_TOOL_SCOPE_ENFORCER`, `DATA_SCOPE_ENFORCER`, `DELEGATE_BINDING_ENFORCER`) pointing at non-deployed addresses; would revert at redeem. | Open      | Detected by `pnpm check:sentinel-enforcers` CI rail (phase 6b.1). Cleanup options: (a) ship the corresponding contracts (port from smart-agent for `MCP_TOOL_SCOPE`, `DATA_SCOPE`; await H5 cross-delegation work for `DELEGATE_BINDING`), or (b) remove from SDK exports. Tracked in [`enforcer-registry/enforcers.json`](../../docs/architecture/enforcer-registry/enforcers.json) with `status: sentinel-footgun`. |
 
 
@@ -116,7 +116,7 @@ delegation.mint audit-emit + fail-soft sink tests),
 `apps/demo-a2a` (session/init + session/package), `apps/demo-web`
 (signing). Integration coverage via Playwright specs `03-authorize-agent`
   - `04-read-profile` + `05-passkey-login`.
-- **Forge tests (consumer-side):** `apps/contracts/test/DelegationManager.t.sol`
+- **Forge tests (consumer-side):** `packages/contracts/test/DelegationManager.t.sol`
 exercises the on-chain side.
 - **Gaps:**
   - No property test for caveat evaluation (system M4 + should-fix-before-beta).
@@ -132,7 +132,7 @@ exercises the on-chain side.
 - **(H5)** Design + implement `verifyCrossDelegation` with negative tests; coordinate with `mcp-runtime/with-cross-delegation.ts`.
 - **(system M4)** Add property tests for `evaluateCaveats` over a random caveat-set generator.
 - **(system C3)** ~~Emit audit events from `mintDelegationToken`~~ (pass 5b), ~~`verifyDelegationToken`~~ (pass 3b). `revokeDelegation` emission remains — lower priority.
-- **(DEL-4 follow-up)** Ship `ArgumentRuleEnforcer` (spec 208) — closes the biggest cluster of DTK gaps in one contract. Add DTK-shape interop fixture corpus (~10 fixtures, one per shipped enforcer) at `apps/contracts/test/interop/dtk-fixtures/` to prove the "byte-identical" claim from the audit.
+- **(DEL-4 follow-up)** Ship `ArgumentRuleEnforcer` (spec 208) — closes the biggest cluster of DTK gaps in one contract. Add DTK-shape interop fixture corpus (~10 fixtures, one per shipped enforcer) at `packages/contracts/test/interop/dtk-fixtures/` to prove the "byte-identical" claim from the audit.
 - **(DEL-5)** Resolve sentinel-only enforcers — either ship contracts or remove SDK exports. Lint rail prevents new ones from slipping in.
 
 ## 8. External audit readiness

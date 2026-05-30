@@ -319,7 +319,7 @@ export interface VerifyOptsExt extends VerifyOpts {
   /**
    * When set, the delegation MUST carry a caveat with an `enforcer`
    * matching this address. The redeem-time signature check happens
-   * on-chain inside the `QuorumEnforcer.beforeHook` (apps/contracts/
+   * on-chain inside the `QuorumEnforcer.beforeHook` (packages/contracts/
    * src/enforcers/QuorumEnforcer.sol); this opt's role is to fail
    * closed at the OFF-CHAIN layer when a delegation was issued
    * without the required quorum caveat at all. Without this opt set,

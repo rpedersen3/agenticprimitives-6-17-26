@@ -35,7 +35,7 @@ Does NOT do: target-address scoping (`AllowedTargetsEnforcer`), per-argument sco
 
 ## 5. Test posture
 
-Forge tests: `apps/contracts/test/Enforcers.t.sol` covers single-selector / multi / empty / short-calldata cases (4 tests).
+Forge tests: `packages/contracts/test/Enforcers.t.sol` covers single-selector / multi / empty / short-calldata cases (4 tests).
 
 ## 6. Open findings
 

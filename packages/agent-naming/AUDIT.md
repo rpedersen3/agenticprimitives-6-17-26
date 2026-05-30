@@ -72,7 +72,7 @@ client doesn't yet take an `auditSink`; Phase 2 will add the optional
 
 ## Out-of-scope (won't audit here)
 
-- Contract source — lives in `apps/contracts/src/naming/` (Phase 3).
+- Contract source — lives in `packages/contracts/src/naming/` (Phase 3).
 - On-chain authority paths (subregistry delegation, owner rotation
   via custody) — Phase 3 contract Forge tests + Phase 4 client
   integration tests.

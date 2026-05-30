@@ -4,7 +4,7 @@
  * One-shot deploy of the demo to Cloudflare. Run after:
  *   1. `wrangler login` (one-time)
  *   2. Contracts deployed (e.g. `pnpm --filter @agenticprimitives-demo/contracts deploy:base-sepolia`)
- *      → writes apps/contracts/deployments-base-sepolia.json
+ *      → writes packages/contracts/deployments-base-sepolia.json
  *   3. Production D1 created + database_id pasted into demo-mcp/wrangler.toml
  *   4. Secrets set with `--env production` (see specs/120-deploy.md §4)
  *

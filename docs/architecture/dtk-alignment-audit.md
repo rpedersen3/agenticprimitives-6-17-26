@@ -2,7 +2,7 @@
 
 **Status:** initial audit · 2026-05-21 (phase 6b)
 **Owner:** delegation package CODEOWNERS
-**Scope:** `@agenticprimitives/delegation` + `apps/contracts/src/{DelegationManager,enforcers}/`
+**Scope:** `@agenticprimitives/delegation` + `packages/contracts/src/{DelegationManager,enforcers}/`
 **Compared against:** MetaMask Delegation Toolkit (DTK), ERC-7710, ERC-7715
 
 ## 1. Why this doc exists
@@ -71,7 +71,7 @@ We ship the typed redeem; we don't ship the ERC-7710 opaque shape yet. Gap is lo
 The single biggest divergence between agenticprimitives + DTK is caveat breadth. DTK ships ~15 enforcer contracts in their `delegation-framework` repo; we ship 5. The columns:
 
 - **DTK** — name from `metamask/delegation-framework/contracts/enforcers/`.
-- **us-contract** — corresponding Solidity enforcer at `apps/contracts/src/enforcers/`, or `—` if we don't have it.
+- **us-contract** — corresponding Solidity enforcer at `packages/contracts/src/enforcers/`, or `—` if we don't have it.
 - **us-sdk** — SDK builder at `packages/delegation/src/caveats.ts`, or `—` if we don't have it.
 - **parity** — `match` / `partial` / `gap` / `divergent`.
 

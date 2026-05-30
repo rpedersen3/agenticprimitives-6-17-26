@@ -11,7 +11,7 @@ CLAUDE rule: credential add is custody-policy-governed, NEVER self-serve).
 
 On-chain primitives already exist (Explore-verified):
 - `AgentAccount.getPasskey(bytes32 credentialIdDigest) → (uint256 x, uint256 y)`
-  (`apps/contracts/src/AgentAccount.sol:1286`) + `hasPasskey` + `passkeyCount`.
+  (`packages/contracts/src/AgentAccount.sol:1286`) + `hasPasskey` + `passkeyCount`.
 - Sign-in verification is **already on-chain**: `isValidSignature(hash, sig)` →
   `_verifyWebAuthn` decodes the assertion, reads `credentialIdDigest` FROM the
   assertion, looks up the stored pubkey via `getPasskey`, and verifies P256 via

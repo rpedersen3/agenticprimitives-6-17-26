@@ -3,7 +3,7 @@
  *
  * Skipped by default; run with `BASE_SEPOLIA_RPC=… vitest test/integration`
  * to exercise. The contracts these test against are deployed addresses
- * recorded in apps/contracts/deployments-base-sepolia.json.
+ * recorded in packages/contracts/deployments-base-sepolia.json.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createWalletClient, http } from 'viem';

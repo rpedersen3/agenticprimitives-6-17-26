@@ -43,7 +43,7 @@ ap:CustodyPolicy
     a owl:Class ;
     rdfs:subClassOf prov:Plan ;
     rdfs:label "Custody Policy" ;
-    rdfs:comment "The plan that governs how a Smart Agent's CustodyCouncil makes changes: approvals required per tier, safety delay per tier, recovery approvals required, separation-of-duties rules. Implemented on-chain by the CustodyPolicy contract (apps/contracts/src/custody/CustodyPolicy.sol). Tiers: T1 Read (no policy) / T2 Write / T3 Value / T4 Admin / T5 Critical / T6 Recovery." .
+    rdfs:comment "The plan that governs how a Smart Agent's CustodyCouncil makes changes: approvals required per tier, safety delay per tier, recovery approvals required, separation-of-duties rules. Implemented on-chain by the CustodyPolicy contract (packages/contracts/src/custody/CustodyPolicy.sol). Tiers: T1 Read (no policy) / T2 Write / T3 Value / T4 Admin / T5 Critical / T6 Recovery." .
 
 ap:ScheduledCustodyChange
     a owl:Class ;

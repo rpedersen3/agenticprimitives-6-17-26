@@ -61,7 +61,7 @@ export interface DeployFlowError {
  *   - test wallet → raw 65-byte ECDSA (no EIP-191 prefix)
  *   - injected / walletconnect → personal_sign EIP-191-wrapped signature
  * Either format validates: AgentAccount._verifyEcdsa tries raw then
- * EIP-191 recovery (apps/contracts/src/AgentAccount.sol around line 956).
+ * EIP-191 recovery (packages/contracts/src/AgentAccount.sol around line 956).
  */
 export async function deploySmartAccount(
   wallet: SessionWallet,

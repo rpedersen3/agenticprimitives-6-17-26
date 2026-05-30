@@ -16,13 +16,13 @@
 >   now), it warrants an ADR; treat the d.2 rows as "absorbed", not pending.
 > - **Hooks (d.3) + executors (d.4) + `CaveatVerifierHook` (d.5) are NOT built.**
 >   The only `Allowed*` / `Value*` contracts on disk are **delegation caveat
->   enforcers** (`apps/contracts/src/enforcers/*Enforcer.sol`) — a DIFFERENT
+>   enforcers** (`packages/contracts/src/enforcers/*Enforcer.sol`) — a DIFFERENT
 >   taxonomy from this spec's account-level **hooks** (`AllowedTargetsHook`,
 >   etc.). Do not conflate `AllowedTargetsEnforcer` (caveat, redeem-time) with
 >   the planned `AllowedTargetsHook` (account hook, execute-time).
 **Closes:** the architectural problem revealed by phase 6c.5-c — `AgentAccount` runtime bytecode hit 26,876 bytes (2,300 over the EIP-170 ceiling) because optional / policy-heavy / risky surfaces were inlined into the core contract.
 **Builds on:** spec 201 (`agent-account` core), spec 202 (`delegation`), spec 204 (`tool-policy`), spec 206 (`audit`), spec 207 (threshold-policy product surface). Does NOT build on spec 207 § 14's "AdminModule delegatecall blob" plan — that plan is superseded by this one.
-**Reference: industry patterns to port:** ERC-7579 (modular smart account standard — module type IDs, install/uninstall hooks, the `onInstall` / `onUninstall` lifecycle), Safe's module/guard pattern (separately-deployed module contracts that call back into the Safe via `execTransactionFromModule`), Rhinestone's ModuleKit, Biconomy's V2 modular accounts. The existing `installModule` / `uninstallModule` / `isModuleInstalled` / `accountId` surface in `apps/contracts/src/AgentAccount.sol:769-921` is the in-tree ERC-7579 registry — this spec makes it load-bearing.
+**Reference: industry patterns to port:** ERC-7579 (modular smart account standard — module type IDs, install/uninstall hooks, the `onInstall` / `onUninstall` lifecycle), Safe's module/guard pattern (separately-deployed module contracts that call back into the Safe via `execTransactionFromModule`), Rhinestone's ModuleKit, Biconomy's V2 modular accounts. The existing `installModule` / `uninstallModule` / `isModuleInstalled` / `accountId` surface in `packages/contracts/src/AgentAccount.sol:769-921` is the in-tree ERC-7579 registry — this spec makes it load-bearing.
 
 > **Doctrine: AgentAccount is a thin modular core.** Optional, policy-heavy, risky, or app-specific behavior MUST be a module contract (validator / executor / hook / fallback) — never inlined into the core. If a feature is required for every account to exist safely, it stays in core. Everything else is a module. The simple rule:
 >
@@ -73,7 +73,7 @@ MODULE_TYPE_FALLBACK  = 3    (NOT yet supported; phase 7+)
 MODULE_TYPE_HOOK      = 4    (already supported in registry; capped at MAX_HOOKS=8)
 ```
 
-(These match the constants in `apps/contracts/src/AgentAccount.sol:754-757`. They follow the ERC-7579 spec which assigns FALLBACK=3 and HOOK=4 — earlier drafts of this spec had them swapped; corrected here for fidelity to the implementation.)
+(These match the constants in `packages/contracts/src/AgentAccount.sol:754-757`. They follow the ERC-7579 spec which assigns FALLBACK=3 and HOOK=4 — earlier drafts of this spec had them swapped; corrected here for fidelity to the implementation.)
 
 **Validators** (`MODULE_TYPE_VALIDATOR`) — decide *who* can authorize. Called from `_validateSignature` / `validateUserOp` when the signature payload encodes a validator selector.
 
@@ -253,9 +253,9 @@ After **6c.5-d.1** alone, AgentAccount fits in EIP-170 + the live deploy can res
 
 | Test surface | Where it lives |
 | --- | --- |
-| Core ERC-4337 + ERC-7579 install/uninstall | `apps/contracts/test/AgentAccount*.t.sol` (existing 181 tests) |
-| `executeFromModule` unit + permission | `apps/contracts/test/ExecuteFromModule.t.sol` (NEW, phase 6c.5-d.0) |
-| CustodyPolicy unit + integration | `apps/contracts/test/modules/CustodyPolicy.t.sol` + per-account integration with a mock `AgentAccount` |
+| Core ERC-4337 + ERC-7579 install/uninstall | `packages/contracts/test/AgentAccount*.t.sol` (existing 181 tests) |
+| `executeFromModule` unit + permission | `packages/contracts/test/ExecuteFromModule.t.sol` (NEW, phase 6c.5-d.0) |
+| CustodyPolicy unit + integration | `packages/contracts/test/modules/CustodyPolicy.t.sol` + per-account integration with a mock `AgentAccount` |
 | Each module has its own dedicated test file | `test/modules/<ModuleName>.t.sol` |
 | Multi-module composition (validator + hook + executor on one account) | `test/integration/MultiModuleAccount.t.sol` |
 | Cross-account module reuse (one validator deployed, installed on N accounts) | `test/integration/ModuleReuse.t.sol` |
@@ -284,7 +284,7 @@ Spec 207 § 14 (the AdminModule delegatecall blob plan) is **superseded by this 
 - Read this spec for the actual solution.
 - Treat § 14's "8-14h scope estimate" as obsolete — the phase 6c.5-d series breaks the work into d.0 / d.1 / d.2 / etc., each independently shippable.
 
-Spec 207's main body (§ 1 through § 13) is **unchanged**. The product surface — modes, tiers, recovery semantics — stays the same. What moves is implementation: the threshold-policy state + propose/execute/cancel surface relocates from `AgentAccount.sol` into `apps/contracts/src/custody/CustodyPolicy.sol`.
+Spec 207's main body (§ 1 through § 13) is **unchanged**. The product surface — modes, tiers, recovery semantics — stays the same. What moves is implementation: the threshold-policy state + propose/execute/cancel surface relocates from `AgentAccount.sol` into `packages/contracts/src/custody/CustodyPolicy.sol`.
 
 ---
 

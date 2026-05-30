@@ -1,4 +1,4 @@
-// CustodyAction — mirrors enum in apps/contracts/src/custody/CustodyPolicy.sol
+// CustodyAction — mirrors enum in packages/contracts/src/custody/CustodyPolicy.sol
 // (spec 213 § 2.2). The on-the-wire encoding is uint8; this enum maps the
 // values into the same custody-vocabulary names the Solidity surface uses.
 //
@@ -192,7 +192,7 @@ export interface RecoveryPasskeyAdd {
  * and passkeys in one T6 action so the signer set doesn't pass through
  * a half-rotated intermediate state.
  *
- * Solidity struct (from apps/contracts/src/IAgentAccount.sol):
+ * Solidity struct (from packages/contracts/src/IAgentAccount.sol):
  *   struct AgentAccountRecoveryArgs {
  *     address[] addOwners;
  *     address[] removeOwners;

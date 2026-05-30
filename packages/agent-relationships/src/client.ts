@@ -44,7 +44,7 @@ const ZERO_NODE = '0x00000000000000000000000000000000000000000000000000000000000
  *
  * Configuration: `opts.relationships` MUST be the deployed
  * AgentRelationship contract address (recorded in
- * apps/contracts/deployments-<network>.json).
+ * packages/contracts/deployments-<network>.json).
  */
 export interface AgentRelationshipsClientOptsLive extends AgentRelationshipsClientOpts {
   relationships: Address;

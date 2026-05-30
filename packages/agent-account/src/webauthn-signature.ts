@@ -8,7 +8,7 @@
  *   0x01 || abi.encode(Assertion)
  *
  * where `Assertion` matches `WebAuthnLib.Assertion` in the Solidity
- * source (see apps/contracts/src/libraries/WebAuthnLib.sol).
+ * source (see packages/contracts/src/libraries/WebAuthnLib.sol).
  *
  * Doctrine: this is the agent-account substrate's signature dispatch.
  * The auth-method ceremony (DER parsing, COSE attestation, challenge

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Setup script for apps/contracts foundry deps.
+# Setup script for packages/contracts foundry deps.
 # Idempotent: safe to re-run.
 
 set -euo pipefail

@@ -35,7 +35,7 @@ Does NOT do: per-method scoping (use `AllowedMethodsEnforcer` for that), per-arg
 
 ## 5. Test posture
 
-Forge tests: `apps/contracts/test/Enforcers.t.sol` — single-target / multi-target / empty / mismatch cases (4 tests).
+Forge tests: `packages/contracts/test/Enforcers.t.sol` — single-target / multi-target / empty / mismatch cases (4 tests).
 
 ## 6. Open findings
 

@@ -154,7 +154,7 @@ per ADR-0006.
 | **Architecture** | This spec + ADR-0007 + ADR-0008 lock-in. | done 2026-05-23 |
 | **Phase 1** | Package scaffold, types, pure helpers (relationship type constants, edge ID derivation), client API skeleton (writes throw `R Phase 3`). | pending |
 | **Phase 2** | Contract ABIs + read methods on `AgentRelationshipsClient` (`getEdge`, `edgesBySubject`, `edgesByObject`, `edgesByType`, `holdsRole`). | pending |
-| **Phase 3** | Port `AgentRelationship.sol` + `RelationshipTypeRegistry.sol` to `apps/contracts/src/relationships/`. Forge tests for propose / confirm / revoke / role gating / ERC-1271 authorization. Deploy + persist addresses. | pending |
+| **Phase 3** | Port `AgentRelationship.sol` + `RelationshipTypeRegistry.sol` to `packages/contracts/src/relationships/`. Forge tests for propose / confirm / revoke / role gating / ERC-1271 authorization. Deploy + persist addresses. | pending |
 | **Phase 4** | Wire write methods (`propose`, `confirm`, `revoke`, role-set updates). Each uses ERC-1271 on the actor's Smart Agent. | pending |
 | **v2 (deferred)** | `AgentAssertion.sol` (signed-claim layer) + `AgentRelationshipResolver.sol` (assertion-gated edge resolution). Spec amendment when a consumer needs this. | future |
 

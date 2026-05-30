@@ -8,7 +8,7 @@
 
 ## Reference: smart-agent patterns to port
 
-`smart-agent`'s `apps/contracts/src/custody/CustodyPolicy.sol` already
+`smart-agent`'s `packages/contracts/src/custody/CustodyPolicy.sol` already
 ships the on-chain primitives we need: a typed `CustodyAction.RecoverAccount`,
 the schedule + safety-delay + apply T6 ceremony, and the canonical
 `AgentAccountRecoveryArgs` (`addPasskeys`, `addEoaCustodians`,

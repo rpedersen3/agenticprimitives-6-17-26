@@ -1,5 +1,5 @@
 // Relationships-contract ABIs — source of truth:
-// apps/contracts/src/relationships/*.sol (spec 216 / RL Phase 3).
+// packages/contracts/src/relationships/*.sol (spec 216 / RL Phase 3).
 // Hand-typed against `forge inspect` output. Phase 3 lands the
 // contracts on chain; SDK clients wire up reads/writes against these
 // in Phase 4.

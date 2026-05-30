@@ -5,7 +5,7 @@ This package is the **authorization layer for credential add / replace / remove*
 
 ## Owns
 
-- `custodyPolicyAbi`: ABI for `apps/contracts/src/custody/CustodyPolicy.sol`.
+- `custodyPolicyAbi`: ABI for `packages/contracts/src/custody/CustodyPolicy.sol`.
 - `CustodyAction` enum (mirror of the on-chain enum) + per-action `buildXxxArgs` encoders.
 - EIP-712 typed-data shapes for `ScheduleCustodyChangeRequest` /
   `ApplyCustodyChangeRequest` / `CancelScheduledChangeRequest` +
@@ -20,7 +20,7 @@ This package is the **authorization layer for credential add / replace / remove*
 - KMS → `@agenticprimitives/key-custody` (note: different "custody" —
   THAT one is key custody, THIS one is account custody)
 - AgentAccount client + factory → `@agenticprimitives/agent-account`
-- Solidity source → `apps/contracts/src/custody/`
+- Solidity source → `packages/contracts/src/custody/`
 
 ## Read first
 
@@ -29,7 +29,7 @@ This package is the **authorization layer for credential add / replace / remove*
    — why this package exists
 3. [`specs/212-agent-centric-delegation.md`](../../specs/212-agent-centric-delegation.md)
    § 2.2 — the custody / agency vocabulary firewall this package enforces
-4. [`apps/contracts/src/custody/CustodyPolicy.sol`](../../apps/contracts/src/custody/CustodyPolicy.sol)
+4. [`packages/contracts/src/custody/CustodyPolicy.sol`](../../packages/contracts/src/custody/CustodyPolicy.sol)
    — source of truth for the ABI
 
 ## Allowed imports

@@ -1,0 +1,61 @@
+{
+  "name": "@agenticprimitives/contracts",
+  "kind": "contracts",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/",
+  "specEntry": "spec.md",
+  "summary": "Solidity contracts + ABIs + flattened sources + per-network deployment addresses. The on-chain enforcement layer for the agenticprimitives stack.",
+  "owns": {
+    "source": ["src/**", "script/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [],
+  "allowedImports": [
+    "@openzeppelin/contracts",
+    "account-abstraction",
+    "forge-std"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/*"
+  ],
+  "publicExports": [
+    "abi/AgentAccount.json",
+    "abi/AgentAccountFactory.json",
+    "abi/DelegationManager.json",
+    "abi/CustodyPolicy.json",
+    "abi/SmartAgentPaymaster.json",
+    "abi/UniversalSignatureValidator.json",
+    "abi/ApprovedHashRegistry.json",
+    "abi/AgentNameRegistry.json",
+    "abi/PermissionlessSubregistry.json",
+    "abi/AgentNameUniversalResolver.json",
+    "abi/AgentProfileResolver.json",
+    "abi/OntologyTermRegistry.json",
+    "abi/ShapeRegistry.json",
+    "abi/AttributeStorage.json",
+    "abi/RelationshipTypeRegistry.json",
+    "abi/AgentRelationship.json",
+    "abi/MultiSendCallOnly.json",
+    "abi/SignatureSlotRecovery.json",
+    "abi/P256Verifier.json",
+    "abi/WebAuthnLib.json",
+    "deployments-base-sepolia.json",
+    "deployments-anvil.json"
+  ],
+  "forbiddenTerms": [],
+  "ignoreForAgentContext": [
+    "lib/**",
+    "out/**",
+    "cache/**",
+    "broadcast/**",
+    "dist/**",
+    "node_modules/**"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1200,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}
