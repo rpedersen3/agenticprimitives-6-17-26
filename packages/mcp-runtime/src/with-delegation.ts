@@ -382,26 +382,198 @@ export function withDelegation<A extends Record<string, unknown>>(
   };
 }
 
+/**
+ * R5.8 / PKG-MCP-RUNTIME-004 — production-grade options for the
+ * resource-level verify helper. Pre-R5.8 the helper accepted only
+ * `{ toolName, timestamp }` and called `verifyDelegationToken` with
+ * none of the policy / audit / threshold inputs, so a consumer could
+ * silently skip the production policy layer that `withDelegation`
+ * enforces (external audit P0-3). Now the opts surface mirrors
+ * `withDelegation` exactly, and the same construction-time gate
+ * fires when classification or auditSink is missing in production.
+ *
+ * Different from `withDelegation`:
+ *   - this is the non-handler-wrapping variant (just verify, return
+ *     the result). Used for MCP resource list/read paths that don't
+ *     have a tool-call shape.
+ *   - returns `{ principal, grants } | { error }` instead of throwing.
+ *     A `'denied'` decision from the threshold-policy / classification
+ *     gate is reported as `{ error }` so callers can map to their own
+ *     MCP error response. Audit emission still happens; the public
+ *     surface is the only thing that differs from `withDelegation`.
+ */
 export interface VerifyDelegationForResourceOpts {
   toolName?: string;
+  /** Wall-clock at evaluation time (seconds). Optional; defaults to now. */
+  timestamp?: number;
+  /**
+   * Same as `withDelegation` opts. See `withDelegation` for the full
+   * semantic — in production both `classification` and `auditSink`
+   * are required and the helper throws at construction time if they
+   * are missing.
+   */
+  classification?: ToolClassification;
+  auditSink?: AuditSink;
+  correlationId?: string;
+  metricsSink?: MetricsSink;
+  traceparent?: string;
+  environment?: 'production' | 'development';
+  developmentMode?: boolean;
+  /**
+   * Audit H3 — when the threshold-policy decision derived from
+   * `classification` requires a quorum caveat, callers must forward
+   * the wallet-supplied quorum proof. Without it, the verifier
+   * rejects.
+   */
+  quorumProof?: import('@agenticprimitives/delegation').VerifyOptsExt['quorumProof'];
 }
 
 export async function verifyDelegationForResource(
   token: string,
   config: McpResourceVerifyConfig,
-  ctx?: { toolName?: string; timestamp?: number },
+  opts?: VerifyDelegationForResourceOpts,
 ): Promise<{ principal: Address; grants?: DataScopeGrant[] } | { error: string }> {
-  return verifyDelegationToken(token, {
+  // R5.8 / P0-3: identical production gate to `withDelegation`. A
+  // consumer that uses this helper instead of the wrapper does not
+  // get a policy-bypass discount.
+  const env = inferEnvironment(opts);
+  if (env === 'production') {
+    if (!opts?.classification) {
+      throw new Error(
+        '[mcp-runtime] verifyDelegationForResource requires `classification` in production. ' +
+          'The policy engine (tool-policy.evaluateThresholdPolicy) MUST run; an unclassified ' +
+          'resource is a security regression. Pass `opts.classification = declareResource(...)`. ' +
+          'For tests, pass `developmentMode: true` to opt out of the strict gate.',
+      );
+    }
+    if (!opts?.auditSink) {
+      throw new Error(
+        '[mcp-runtime] verifyDelegationForResource requires `auditSink` in production. ' +
+          'Audit emission is the only forensic trail for resource accept/reject; ' +
+          'production deployments MUST persist these. Pass a durable sink (D1, ' +
+          'Cloud Logging, etc.) — wrap with composeSinks(durable, console) if you ' +
+          'still want a tail-friendly mirror.',
+      );
+    }
+  }
+
+  const toolName = opts?.toolName ?? 'unknown';
+  const correlationId =
+    opts?.correlationId ??
+    `vr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const startedAt = Date.now();
+  const metric = opts?.metricsSink;
+
+  const emit = async (
+    outcome: 'success' | 'denied',
+    reason: string | undefined,
+    principal: Address | undefined,
+  ) => {
+    if (metric) {
+      const tags = {
+        tool: toolName,
+        audience: config.audience ?? 'unknown',
+        outcome: outcome === 'success' ? 'accept' : 'reject',
+      };
+      try { metric.increment('mcp_runtime.verify_resource.calls', 1, tags); } catch { /* fail-soft */ }
+      try { metric.observe('mcp_runtime.verify_resource.duration_ms', Date.now() - startedAt, tags); } catch { /* fail-soft */ }
+    }
+    if (!opts?.auditSink) return;
+    try {
+      await opts.auditSink.write(
+        buildEvent({
+          action:
+            outcome === 'success'
+              ? 'mcp-runtime.verify-resource.accept'
+              : 'mcp-runtime.verify-resource.reject',
+          outcome,
+          correlationId,
+          actor: principal ? { type: 'user', id: principal } : { type: 'unknown' },
+          subject: { type: 'tool', id: toolName },
+          audience: config.audience,
+          chainId: config.chainId,
+          reason,
+          context: opts?.traceparent ? { traceparent: opts.traceparent } : undefined,
+        }),
+      );
+    } catch {
+      // Fail-soft: audit emission must never break the auth flow.
+    }
+  };
+
+  // Threshold-policy decision → derive verifier gates (mirrors withDelegation).
+  let requireQuorumCaveat: { enforcer: Address } | undefined;
+  let requireAcceptedOnChain: boolean | undefined;
+  if (opts?.classification) {
+    const thrDecision = evaluateThresholdPolicy(opts.classification);
+    if (thrDecision.requiresQuorum) {
+      if (!config.quorumEnforcer) {
+        const detail =
+          'resource requires quorum caveat but mcp-runtime has no quorumEnforcer configured';
+        console.error('[mcp-runtime] auth misconfigured:', detail);
+        await emit('denied', detail, undefined);
+        return { error: 'auth-misconfigured' };
+      }
+      requireQuorumCaveat = { enforcer: config.quorumEnforcer };
+    }
+    if (thrDecision.requiresAcceptedOnChain) {
+      requireAcceptedOnChain = true;
+    }
+  }
+
+  const result = await verifyDelegationToken(token, {
     audience: config.audience,
     chainId: config.chainId,
     rpcUrl: config.rpcUrl,
     delegationManager: config.delegationManager,
     enforcerMap: config.enforcerMap,
     jtiStore: config.jtiStore,
-    toolName: ctx?.toolName,
+    toolName: opts?.toolName,
     requireDeployed: config.requireDeployed,
-    now: ctx?.timestamp ? () => ctx.timestamp! * 1000 : undefined,
+    auditSink: opts?.auditSink,
+    correlationId,
+    requireQuorumCaveat,
+    requireAcceptedOnChain,
+    quorumProof: opts?.quorumProof,
+    now: opts?.timestamp ? () => opts.timestamp! * 1000 : undefined,
   });
+  if ('error' in result) {
+    await emit('denied', result.error, undefined);
+    // Public surface: opaque error string per the H7-F.1 info-leak rule.
+    // Audit sink already carries the private reason.
+    return { error: 'auth-failed' };
+  }
+
+  // Classification policy enforcement (mirrors withDelegation).
+  if (opts?.classification) {
+    const decision = evaluatePolicy({
+      toolName,
+      classification: opts.classification,
+      callerKind: 'user-session',
+      delegation: {
+        delegator: result.principal,
+        delegate: result.principal,
+        caveats: [],
+      },
+    });
+    if (decision.decision !== 'allow') {
+      const thrDec = evaluateThresholdPolicy(opts.classification);
+      const satisfiedByOnChainBlessing =
+        decision.decision === 'requires-consent' && thrDec.requiresAcceptedOnChain;
+      if (!satisfiedByOnChainBlessing) {
+        const detail =
+          decision.decision === 'deny'
+            ? `policy deny: ${decision.reason}`
+            : `policy requires-consent (${decision.promptId}); runtime does not host consent loop`;
+        console.error('[mcp-runtime] auth failed:', detail);
+        await emit('denied', detail, result.principal);
+        return { error: 'auth-failed' };
+      }
+    }
+  }
+
+  await emit('success', undefined, result.principal);
+  return result;
 }
 
 // H7-B.8 (XPKG-002 / EXT-024 closure) — `withCrossDelegation` +

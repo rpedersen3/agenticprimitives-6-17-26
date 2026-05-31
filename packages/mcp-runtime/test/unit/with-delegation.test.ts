@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { withDelegation, McpAuthError } from '../../src/with-delegation';
+import { withDelegation, verifyDelegationForResource, McpAuthError } from '../../src/with-delegation';
 import { createMemoryJtiStore } from '../../src/jti-stores';
 import type { McpResourceVerifyConfig } from '../../src/types';
 
@@ -340,5 +340,151 @@ describe('withDelegation quorumProof passthrough (audit H3)', () => {
     const innerArgs = inner.mock.calls[0]![0];
     expect(innerArgs).toMatchObject({ principal: '0xabc', extra: 'kept' });
     expect((innerArgs as Record<string, unknown>).quorumProof).toBeUndefined();
+  });
+});
+
+// ─── R5.8 / PKG-MCP-RUNTIME-004 — verifyDelegationForResource production gate ─
+
+describe('verifyDelegationForResource production gate (R5.8 / P0-3)', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
+  beforeEach(() => {
+    (verifyDelegationToken as ReturnType<typeof vi.fn>).mockClear();
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+  });
+
+  it('throws when production-mode and classification missing', async () => {
+    process.env.NODE_ENV = 'production';
+    await expect(
+      verifyDelegationForResource('fake-token', config, {
+        toolName: 'unclassified',
+        // no classification, no auditSink → must throw
+      }),
+    ).rejects.toThrow(/requires `classification` in production/);
+  });
+
+  it('throws when production-mode and auditSink missing', async () => {
+    process.env.NODE_ENV = 'production';
+    await expect(
+      verifyDelegationForResource('fake-token', config, {
+        toolName: 'classified-no-sink',
+        classification: {
+          '@sa-tool': 'delegation-verified',
+          '@sa-auth': 'session-token',
+          '@sa-risk-tier': 'low',
+        },
+        // no auditSink → must throw
+      }),
+    ).rejects.toThrow(/requires `auditSink` in production/);
+  });
+
+  it('does NOT throw in production-mode when both classification + auditSink are supplied', async () => {
+    process.env.NODE_ENV = 'production';
+    (verifyDelegationToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      principal: '0xabc',
+    });
+    const auditSink = { write: vi.fn(async () => {}) };
+    const result = await verifyDelegationForResource('fake-token', config, {
+      toolName: 'classified-with-sink',
+      classification: {
+        '@sa-tool': 'delegation-verified',
+        '@sa-auth': 'session-token',
+        '@sa-risk-tier': 'low',
+      },
+      auditSink,
+    });
+    expect(result).toEqual({ principal: '0xabc' });
+    expect(auditSink.write).toHaveBeenCalledTimes(1);
+  });
+
+  it('developmentMode: true escapes the production gate', async () => {
+    process.env.NODE_ENV = 'production';
+    (verifyDelegationToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      principal: '0xabc',
+    });
+    const result = await verifyDelegationForResource('fake-token', config, {
+      toolName: 'dev-escape',
+      developmentMode: true,
+    });
+    expect(result).toEqual({ principal: '0xabc' });
+  });
+
+  it('environment: "production" forces strict gate even when NODE_ENV is unset', async () => {
+    delete process.env.NODE_ENV;
+    await expect(
+      verifyDelegationForResource('fake-token', config, {
+        toolName: 'forced-prod',
+        environment: 'production',
+      }),
+    ).rejects.toThrow(/requires `classification` in production/);
+  });
+
+  it('threads requireQuorumCaveat into verify opts when high-risk classification', async () => {
+    process.env.NODE_ENV = 'development';
+    const mock = verifyDelegationToken as ReturnType<typeof vi.fn>;
+    mock.mockResolvedValueOnce({ principal: '0xabc' });
+    const quorumEnforcer = '0x9999999999999999999999999999999999999999' as const;
+    const cfg = { ...config, quorumEnforcer };
+    await verifyDelegationForResource('fake-token', cfg, {
+      classification: {
+        '@sa-tool': 'delegation-verified',
+        '@sa-auth': 'session-token',
+        '@sa-risk-tier': 'high',
+      },
+    });
+    const verifyOpts = mock.mock.calls[0]![1];
+    expect(verifyOpts.requireQuorumCaveat).toEqual({ enforcer: quorumEnforcer });
+  });
+
+  it('high-risk + no quorumEnforcer configured: fails closed before chain call', async () => {
+    process.env.NODE_ENV = 'development';
+    const result = await verifyDelegationForResource('fake-token', config, {
+      classification: {
+        '@sa-tool': 'delegation-verified',
+        '@sa-auth': 'session-token',
+        '@sa-risk-tier': 'high',
+      },
+    });
+    // verifyDelegationToken must NOT have been called
+    expect((verifyDelegationToken as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+    expect(result).toEqual({ error: 'auth-misconfigured' });
+  });
+
+  it('emits accept audit event on success when auditSink is configured', async () => {
+    process.env.NODE_ENV = 'development';
+    (verifyDelegationToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      principal: '0xabc',
+    });
+    const auditSink = { write: vi.fn(async () => {}) };
+    await verifyDelegationForResource('fake-token', config, {
+      toolName: 'resource-x',
+      auditSink,
+    });
+    expect(auditSink.write).toHaveBeenCalledTimes(1);
+    const event = auditSink.write.mock.calls[0]![0];
+    expect(event.action).toBe('mcp-runtime.verify-resource.accept');
+    expect(event.outcome).toBe('success');
+  });
+
+  it('emits reject audit event when verify fails + returns opaque auth-failed', async () => {
+    process.env.NODE_ENV = 'development';
+    (verifyDelegationToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      error: 'token expired at slot 0xdead',
+    });
+    const auditSink = { write: vi.fn(async () => {}) };
+    const result = await verifyDelegationForResource('fake-token', config, {
+      toolName: 'resource-x',
+      auditSink,
+    });
+    expect(result).toEqual({ error: 'auth-failed' });
+    // Public surface MUST NOT leak the private reason
+    expect(JSON.stringify(result)).not.toContain('token expired');
+    // Audit row DOES carry the private reason for forensics
+    const event = auditSink.write.mock.calls[0]![0];
+    expect(event.action).toBe('mcp-runtime.verify-resource.reject');
+    expect(event.reason).toBe('token expired at slot 0xdead');
   });
 });

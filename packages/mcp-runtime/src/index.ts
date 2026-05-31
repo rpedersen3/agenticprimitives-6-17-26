@@ -12,6 +12,7 @@ export {
   McpAuthError,
   type McpAuthErrorCode,
   type PrivateAuthFailureContext,
+  type VerifyDelegationForResourceOpts,
 } from './with-delegation';
 export { declareResource } from './declare-resource';
 export {
