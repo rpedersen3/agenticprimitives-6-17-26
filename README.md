@@ -1,18 +1,53 @@
 # agenticprimitives
 
-Composable primitives for building agentic web3 apps. Eight capability packages + one shared types package, each independently consumable, each backed by competitive-landscape research.
+Composable primitives for building agentic web3 apps. **17 publishable `@agenticprimitives/*` packages**, each independently consumable, each backed by competitive-landscape research. Grouped below by concern; see `specs/100-package-boundary-doctrine.md` for the package-boundary contract.
+
+### Auth + sessions
 
 | Package | Purpose |
 | --- | --- |
-| [`@agenticprimitives/connect-auth`](./packages/connect-auth) | Privy-style auth (passkey / SIWE / Google) + JWT sessions + pluggable Signer interfaces |
-| [`@agenticprimitives/agent-account`](./packages/agent-account) | ERC-4337 smart-account substrate: deterministic addressing, ERC-1271, UserOp building |
-| [`@agenticprimitives/delegation`](./packages/delegation) | EIP-712 delegations + session lifecycle (web → agent → MCP) |
-| [`@agenticprimitives/key-custody`](./packages/key-custody) | Envelope encryption + signers + HMAC (local-AES / AWS KMS / GCP KMS) |
-| [`@agenticprimitives/tool-policy`](./packages/tool-policy) | Protocol-agnostic classification + risk tiers + exact-call DSL |
-| [`@agenticprimitives/mcp-runtime`](./packages/mcp-runtime) | Delegation-aware middleware around the official MCP SDK |
-| [`@agenticprimitives/account-custody`](./packages/account-custody) | Custody-layer SDK: CustodyPolicy ABI, action enum + arg builders, EIP-712 typed-data, custodian/trustee/recovery types |
-| [`@agenticprimitives/audit`](./packages/audit) | Audit-event schema, sink interface, in-band sinks (console / memory / PII guardrail), plus the `MetricsSink` observability primitive |
-| [`@agenticprimitives/types`](./packages/types) | Cross-cutting branded primitives |
+| [`@agenticprimitives/connect-auth`](./packages/connect-auth) | Privy-style auth (passkey / SIWE / Google OAuth) + JWT sessions + pluggable `Signer` interfaces |
+| [`@agenticprimitives/connect`](./packages/connect) | SSO broker primitives: token mint + verify (`verifyAgentSession`, `verifyIdToken`), bound-grant flow, redirect helpers |
+
+### Agent account + custody
+
+| Package | Purpose |
+| --- | --- |
+| [`@agenticprimitives/agent-account`](./packages/agent-account) | ERC-4337 + ERC-7579 smart-account substrate: deterministic addressing, ERC-1271, UserOp building, factory mode wiring |
+| [`@agenticprimitives/account-custody`](./packages/account-custody) | Custody-policy SDK: action enum + arg builders, EIP-712 typed-data, custodian/trustee/recovery types |
+| [`@agenticprimitives/key-custody`](./packages/key-custody) | Pluggable KMS: envelope encryption + secp256k1 signers + HMAC (local-AES / AWS KMS / GCP KMS), per-subject derivation |
+
+### Delegation + MCP
+
+| Package | Purpose |
+| --- | --- |
+| [`@agenticprimitives/delegation`](./packages/delegation) | EIP-712 delegations + caveat evaluator + session lifecycle (web → agent → MCP) |
+| [`@agenticprimitives/tool-policy`](./packages/tool-policy) | Protocol-agnostic classification + risk tiers + threshold policy + exact-call DSL |
+| [`@agenticprimitives/mcp-runtime`](./packages/mcp-runtime) | `withDelegation` middleware around the official MCP SDK + JTI stores (sqlite/postgres/memory) |
+
+### Naming + identity
+
+| Package | Purpose |
+| --- | --- |
+| [`@agenticprimitives/agent-naming`](./packages/agent-naming) | ENS-aligned naming registry + resolver for the `.agent` TLD (forward + reverse) |
+| [`@agenticprimitives/agent-profile`](./packages/agent-profile) | CAIP-10 profile resolver + AgentCard schema + on-chain profile reads |
+| [`@agenticprimitives/agent-relationships`](./packages/agent-relationships) | ⚠️ EXPERIMENTAL — on-chain trust-fabric edges. Public graph; **not for confidential edges** (see package README) |
+
+### Directory + ontology
+
+| Package | Purpose |
+| --- | --- |
+| [`@agenticprimitives/identity-directory`](./packages/identity-directory) | Evidence-backed read model — composes naming + profile + relationships into a queryable directory |
+| [`@agenticprimitives/identity-directory-adapters`](./packages/identity-directory-adapters) | CAIP-10 / on-chain / naming / indexer adapter implementations for `identity-directory` |
+| [`@agenticprimitives/ontology`](./packages/ontology) | Hashgraph-aligned ontology (T-box / C-box) + controlled vocabularies + SHACL shapes |
+
+### Audit + types + contracts
+
+| Package | Purpose |
+| --- | --- |
+| [`@agenticprimitives/audit`](./packages/audit) | Audit-event schema + sink interface + in-band sinks (console / memory / PII guardrail) + `MetricsSink` observability primitive |
+| [`@agenticprimitives/types`](./packages/types) | Cross-cutting branded primitives (`SmartAgentAddress`, `Hex`, etc.) — leaf in the dependency graph |
+| [`@agenticprimitives/contracts`](./packages/contracts) | Solidity sources + ABIs + storage-layout snapshots for the on-chain primitives consumed by the other packages |
 
 See [`specs/`](./specs) for the full design. Start with [`000-product-overview.md`](./specs/000-product-overview.md) and [`100-package-boundary-doctrine.md`](./specs/100-package-boundary-doctrine.md).
 
@@ -20,16 +55,16 @@ See [`specs/`](./specs) for the full design. Start with [`000-product-overview.m
 
 ```
 agenticprimitives/
-├── packages/         # The nine @agenticprimitives/* packages
-├── apps/             # Demo apps (web + a2a + mcp + contracts)
+├── packages/         # The 17 publishable @agenticprimitives/* packages
+├── apps/             # Demo apps (web + a2a + mcp + sso + org + jp + contracts)
 ├── specs/            # Doctrine, per-package contracts, archive
-├── docs/             # Usage guides, ADRs
+├── docs/             # Usage guides, ADRs, audits, runbooks
 └── scripts/          # CI guardrails + dev orchestration
 ```
 
 ## Demo
 
-A small end-to-end demo exercises all 7 packages: EOA user (mnemonic in localStorage) signs in via SIWE → smart account provisioned → user delegates to an a2a session key → a2a calls an MCP tool that returns the user's PII, verified by the full delegation chain.
+A small end-to-end demo exercises the core flow: EOA user (mnemonic in localStorage) signs in via SIWE → smart account provisioned → user delegates to an a2a session key → a2a calls an MCP tool that returns the user's PII, verified by the full delegation chain.
 
 ```bash
 # First time only:
