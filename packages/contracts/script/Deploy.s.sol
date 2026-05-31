@@ -7,6 +7,8 @@ import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 
 import {AgentAccountFactory} from "../src/AgentAccountFactory.sol";
 import {DelegationManager} from "../src/agency/DelegationManager.sol";
+import {AgenticGovernance} from "../src/governance/AgenticGovernance.sol";
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {TimestampEnforcer} from "../src/enforcers/TimestampEnforcer.sol";
 import {AllowedTargetsEnforcer} from "../src/enforcers/AllowedTargetsEnforcer.sol";
 import {AllowedMethodsEnforcer} from "../src/enforcers/AllowedMethodsEnforcer.sol";
@@ -77,8 +79,43 @@ contract Deploy is Script {
         EntryPoint entryPoint = new EntryPoint();
         console2.log("EntryPoint:           %s", address(entryPoint));
 
-        // 2. DelegationManager
-        DelegationManager dm = new DelegationManager();
+        // 1.5. H7-C.9 / EXT3-009 — Governance pattern (Timelock + AgenticGovernance).
+        //
+        //   TimelockController (24h, OZ standard) holds the slow-path
+        //   authority. Bootstrapped with `deployer` as the only proposer +
+        //   executor + admin — operator post-deploy step replaces these
+        //   with a long-lived multisig (an `AgentAccount` whose
+        //   `CustodyPolicy` requires M-of-N signers) and renounces.
+        //
+        //   AgenticGovernance is the surface every `GovernanceManaged`
+        //   contract sees as `governance`. Implements `IGovernanceView`
+        //   (pause + signer). Forwards timelock-routed calls so
+        //   `onlyGovernance` sees `msg.sender == AgenticGovernance`.
+        //   Guardian (deployer at bootstrap) can pause without delay.
+        address[] memory proposers = new address[](1);
+        proposers[0] = deployer;
+        address[] memory executors = new address[](1);
+        executors[0] = deployer;
+        TimelockController timelock = new TimelockController(
+            24 hours, // minDelay
+            proposers,
+            executors,
+            deployer  // admin (renounced post-deploy)
+        );
+        console2.log("TimelockController:   %s", address(timelock));
+
+        address[] memory initialSigners = new address[](1);
+        initialSigners[0] = deployer;
+        AgenticGovernance governance = new AgenticGovernance(
+            address(timelock),
+            deployer,         // guardian (operator can rotate post-deploy)
+            initialSigners
+        );
+        console2.log("AgenticGovernance:    %s", address(governance));
+
+        // 2. DelegationManager — receives the AgenticGovernance pointer
+        //    so `redeemDelegation` honors the system-wide pause.
+        DelegationManager dm = new DelegationManager(address(governance));
         console2.log("DelegationManager:    %s", address(dm));
 
         // 2.5. CustodyPolicy — factory-immutable validator. Deployed
@@ -95,7 +132,7 @@ contract Deploy is Script {
             address(custodyPolicy),
             deployer,    // bundlerSigner
             deployer,    // sessionIssuer
-            deployer     // governance
+            address(governance) // H7-C.9: AgenticGovernance, not deployer EOA
         );
         console2.log("AgentAccountFactory:  %s", address(factory));
         console2.log("AgentAccount (impl):  %s", address(factory.accountImplementation()));
@@ -134,7 +171,7 @@ contract Deploy is Script {
         SmartAgentPaymaster paymaster = new SmartAgentPaymaster(
             IEntryPoint(address(entryPoint)),
             deployer,    // initialOwner (transient; can transferOwnership to governance later)
-            deployer     // governance
+            address(governance) // H7-C.9: AgenticGovernance, not deployer EOA
         );
         console2.log("SmartAgentPaymaster:  %s", address(paymaster));
 

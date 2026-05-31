@@ -131,7 +131,7 @@ contract ExecuteFromModuleTest is Test {
 
     function setUp() public {
         EntryPoint ep = new EntryPoint();
-        dm = new DelegationManager();
+        dm = new DelegationManager(address(0));
         owner = vm.addr(OWNER_PK);
         CustodyPolicy cp = new CustodyPolicy();
         factory = new AgentAccountFactory(

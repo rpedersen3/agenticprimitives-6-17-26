@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import "./IDelegationManager.sol";
 import "./ICaveatEnforcer.sol";
+import "../governance/IGovernance.sol";
 
 /**
  * @title DelegationManager
@@ -36,6 +37,22 @@ import "./ICaveatEnforcer.sol";
 contract DelegationManager is IDelegationManager, ReentrancyGuard {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
+
+    // ─── H7-C.10 / EXT3-010 — system-wide pause hook ───────────────────
+    //
+    // DelegationManager is a singleton — every redeem of every delegation
+    // on every chain flows through this contract. An incident-mode pause
+    // here is the kill-switch that stops new delegation actions while an
+    // exploit is being investigated. The pause flag is sourced from
+    // `AgenticGovernance.isPaused()` (a guardian can pause without delay;
+    // unpause needs the timelock).
+    //
+    // `governance` is `address(0)` for legacy deploys; in that case the
+    // pause check is skipped (no governance, no pause source). Production
+    // deploys pass a real AgenticGovernance address.
+    address public immutable governance;
+
+    error SystemPaused();
 
     /// @dev Root authority constant — delegations with this authority are root-level
     bytes32 public constant ROOT_AUTHORITY = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
@@ -84,7 +101,12 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
     ///      our storage discipline and keeps the option open.
     uint256[50] private __gap;
 
-    constructor() {
+    /// @notice Deploys the DelegationManager. Pass `address(0)` for
+    ///         `governance_` to opt out of the H7-C.10 pause gate
+    ///         (legacy / test deploys). Production deploys pass an
+    ///         `AgenticGovernance` address.
+    constructor(address governance_) {
+        governance = governance_;
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
@@ -106,6 +128,17 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
         uint256 value,
         bytes calldata data
     ) external nonReentrant {
+        // H7-C.10 / EXT3-010: system-wide pause gate. Skipped when
+        // `governance` is `address(0)`, an EOA, or a non-conforming
+        // contract (legacy / test deploys). Production deploys pass an
+        // `AgenticGovernance` address; a guardian can pause without delay;
+        // unpause requires the 24h timelock.
+        if (governance != address(0) && governance.code.length > 0) {
+            (bool ok, bytes memory data) = governance.staticcall(
+                abi.encodeWithSelector(IGovernanceView.isPaused.selector)
+            );
+            if (ok && data.length >= 32 && abi.decode(data, (bool))) revert SystemPaused();
+        }
         if (delegations.length == 0) revert EmptyChain();
 
         // Phase 1: Validate chain + run beforeHooks (leaf to root)

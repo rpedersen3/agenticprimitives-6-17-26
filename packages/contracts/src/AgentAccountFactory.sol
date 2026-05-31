@@ -127,7 +127,11 @@ contract AgentAccountFactory is GovernanceManaged {
         AgentAccountInitParams calldata params,
         uint32[7] calldata timelockOverrides,
         uint256 salt
-    ) external returns (AgentAccount account) {
+    ) external whenNotPaused returns (AgentAccount account) {
+        // H7-C.10 / EXT3-010: gated behind the system-wide governance pause.
+        // An incident-mode guardian can freeze new account creation while
+        // an exploit is being investigated; unpause requires the 24h
+        // timelock (see AgenticGovernance).
         _validateInitParams(params);
 
         address addr = _getAddressForAgentAccount(params, salt);

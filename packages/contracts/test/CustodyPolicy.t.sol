@@ -34,7 +34,7 @@ contract CustodyPolicyTest is Test {
 
     function setUp() public {
         EntryPoint ep = new EntryPoint();
-        dm = new DelegationManager();
+        dm = new DelegationManager(address(0));
         owner  = vm.addr(OWNER_PK);
         owner2 = vm.addr(OWNER2_PK);
 

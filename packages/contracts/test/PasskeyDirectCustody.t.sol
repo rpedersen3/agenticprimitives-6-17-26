@@ -36,7 +36,7 @@ contract PasskeyDirectCustodyTest is Test {
 
     function setUp() public {
         EntryPoint ep = new EntryPoint();
-        dm = new DelegationManager();
+        dm = new DelegationManager(address(0));
         validator = new CustodyPolicy();
         factory = new AgentAccountFactory(
             IEntryPoint(address(ep)),

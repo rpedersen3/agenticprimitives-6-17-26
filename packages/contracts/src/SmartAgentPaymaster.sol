@@ -202,9 +202,16 @@ contract SmartAgentPaymaster is BasePaymaster {
         bytes32 /*userOpHash*/,
         uint256 /*maxCost*/
     ) internal view override returns (bytes memory context, uint256 validationData) {
-        // Pause check (only when governance is a contract).
+        // H7-C.10 / EXT3-010: gated behind system-wide governance pause.
+        // Skipped when `governance` is an EOA or non-conforming contract
+        // (legacy / test deploys); production deploys MUST pass an
+        // AgenticGovernance address, which the production-deploy preflight
+        // (`check:production-deploy`) enforces.
         if (governance.code.length > 0) {
-            if (IGovernanceView(governance).isPaused()) revert SystemPaused();
+            (bool ok, bytes memory data) = governance.staticcall(
+                abi.encodeWithSelector(IGovernanceView.isPaused.selector)
+            );
+            if (ok && data.length >= 32 && abi.decode(data, (bool))) revert SystemPaused();
         }
 
         if (_dev) {

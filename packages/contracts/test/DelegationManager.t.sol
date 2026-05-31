@@ -16,7 +16,7 @@ contract DelegationManagerTest is Test {
     address internal delegate;
 
     function setUp() public {
-        dm = new DelegationManager();
+        dm = new DelegationManager(address(0));
         timestampEnf = new TimestampEnforcer();
         delegator = vm.addr(DELEGATOR_PK);
         delegate = vm.addr(DELEGATE_PK);

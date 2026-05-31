@@ -38,7 +38,7 @@ contract CustodyPolicyWave2CTest is Test {
 
     function setUp() public {
         entryPoint = new EntryPoint();
-        dm = new DelegationManager();
+        dm = new DelegationManager(address(0));
         policy = new CustodyPolicy();
         factory = new AgentAccountFactory(
             IEntryPoint(address(entryPoint)),

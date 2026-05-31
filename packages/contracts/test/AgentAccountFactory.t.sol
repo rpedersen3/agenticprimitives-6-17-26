@@ -31,7 +31,7 @@ contract AgentAccountFactoryTest is Test {
 
     function setUp() public {
         EntryPoint ep = new EntryPoint();
-        dm = new DelegationManager();
+        dm = new DelegationManager(address(0));
         custodyPolicy = new CustodyPolicy();
         factory = new AgentAccountFactory(
             IEntryPoint(address(ep)),
@@ -217,7 +217,7 @@ contract AgentAccountFactoryTest is Test {
 
     function test_factory_constructor_rejects_zero_custodyPolicy() public {
         EntryPoint ep = new EntryPoint();
-        DelegationManager dm2 = new DelegationManager();
+        DelegationManager dm2 = new DelegationManager(address(0));
         vm.expectRevert(AgentAccountFactory.ZeroAddress.selector);
         new AgentAccountFactory(
             IEntryPoint(address(ep)),

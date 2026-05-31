@@ -44,13 +44,32 @@ abstract contract GovernanceManaged {
     /// @dev Reverts when the governance pause flag is set. Read-only
     ///      functions stay live; this is for write-surface protection
     ///      only.
+    ///
+    ///      H7-C.10: skipped when `governance` is an EOA or a contract
+    ///      that doesn't implement `IGovernanceView` (legacy / test
+    ///      deploys). Production deploys MUST pass an
+    ///      `AgenticGovernance` contract; the production-deploy
+    ///      preflight (`check:production-deploy`) enforces that.
     modifier whenNotPaused() {
-        if (IGovernanceView(governance).isPaused()) revert SystemPaused();
+        if (_pausedSafe()) revert SystemPaused();
         _;
     }
 
-    /// @notice Read the global pause flag.
+    /// @notice Read the global pause flag. Returns false when governance
+    ///         is non-conforming.
     function paused() external view returns (bool) {
-        return IGovernanceView(governance).isPaused();
+        return _pausedSafe();
+    }
+
+    /// @dev Calls `governance.isPaused()` via staticcall and treats any
+    ///      failure (EOA, missing function, revert) as "not paused" so
+    ///      legacy / test deploys with a non-conforming governance still
+    ///      work. Production deploys ALWAYS use `AgenticGovernance` which
+    ///      implements `IGovernanceView`.
+    function _pausedSafe() internal view returns (bool) {
+        if (governance.code.length == 0) return false;
+        (bool ok, bytes memory data) = governance.staticcall(abi.encodeWithSelector(IGovernanceView.isPaused.selector));
+        if (!ok || data.length < 32) return false;
+        return abi.decode(data, (bool));
     }
 }
