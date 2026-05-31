@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/delegation",
-  "version": "0.0.1",
+  "version": "0.1.0-alpha.1",
   "description": "EIP-712 smart-account delegations with caveats; web→agent→MCP token flow; session lifecycle.",
   "type": "module",
   "main": "./dist/index.js",
@@ -46,9 +46,12 @@
     "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/key-custody": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
-    "viem": "^2.21.0"
+    "viem": "^2.50.0"
   },
   "devDependencies": {
     "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

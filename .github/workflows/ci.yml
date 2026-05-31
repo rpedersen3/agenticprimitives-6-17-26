@@ -47,11 +47,24 @@ jobs:
       - name: Build packages first (apps import from packages' dist/, so build must precede typecheck)
         run: pnpm -r --filter './packages/*' build
 
+      # H7-E.8 / EXT3-003 — public-API surface snapshot. Runs after
+      # build so dist/*.d.ts exists; locks every exported symbol's
+      # shape so silent breaking changes can't ship.
+      - name: API surface snapshot (H7-E.8)
+        run: pnpm check:api-surface
+
       - name: Typecheck all packages + apps
         run: pnpm -r typecheck
 
       - name: Unit tests (vitest)
         run: pnpm test:unit
+
+      # H7-D.8 — per-package vitest coverage threshold. Conservative
+      # baseline (50% lines / 60% branches at the root); per-package
+      # configs may raise. Goal: ratchet up post-audit.
+      - name: Vitest coverage floor (H7-D.8)
+        run: pnpm -r --filter './packages/*' exec vitest run --coverage --reporter=default
+        continue-on-error: false
 
       - name: Integration tests (per-package vitest)
         run: pnpm test:integration:packages
@@ -68,3 +81,9 @@ jobs:
       - name: Forge contract tests (test pyramid Layer 4)
         working-directory: packages/contracts
         run: forge test -vv
+
+      # H7-E.2 — per-contract coverage floor. Ratchet-only gate: any
+      # regression below the recorded debt floors fails CI. New contracts
+      # default to tier floors (libraries 85%/75%, src 60%/35%).
+      - name: Forge coverage floor (H7-E.2)
+        run: pnpm check:forge-coverage

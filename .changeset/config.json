@@ -1,0 +1,31 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [
+    [
+      "@agenticprimitives/types",
+      "@agenticprimitives/audit",
+      "@agenticprimitives/connect-auth",
+      "@agenticprimitives/connect",
+      "@agenticprimitives/key-custody",
+      "@agenticprimitives/account-custody",
+      "@agenticprimitives/agent-account",
+      "@agenticprimitives/delegation",
+      "@agenticprimitives/tool-policy",
+      "@agenticprimitives/mcp-runtime",
+      "@agenticprimitives/agent-naming",
+      "@agenticprimitives/agent-profile",
+      "@agenticprimitives/agent-relationships",
+      "@agenticprimitives/identity-directory",
+      "@agenticprimitives/identity-directory-adapters",
+      "@agenticprimitives/ontology",
+      "@agenticprimitives/contracts"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "master",
+  "updateInternalDependencies": "patch",
+  "ignore": []
+}

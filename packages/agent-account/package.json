@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/agent-account",
-  "version": "0.0.1",
+  "version": "0.1.0-alpha.1",
   "description": "ERC-4337 smart-account substrate: deterministic addressing, factory deployment, ERC-1271 signing, UserOp building.",
   "type": "module",
   "main": "./dist/index.js",
@@ -37,9 +37,12 @@
   "peerDependencies": {
     "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
-    "viem": "^2.21.0"
+    "viem": "^2.50.0"
   },
   "devDependencies": {
     "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

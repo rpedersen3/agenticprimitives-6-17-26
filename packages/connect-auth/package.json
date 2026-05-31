@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/connect-auth",
-  "version": "0.0.1",
+  "version": "0.1.0-alpha.1",
   "description": "User authentication (passkey + SIWE + Google OAuth), JWT sessions, and pluggable signer interfaces.",
   "type": "module",
   "main": "./dist/index.js",
@@ -53,9 +53,12 @@
   },
   "peerDependencies": {
     "@agenticprimitives/types": "workspace:*",
-    "viem": "^2.21.0"
+    "viem": "^2.50.0"
   },
   "devDependencies": {
     "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

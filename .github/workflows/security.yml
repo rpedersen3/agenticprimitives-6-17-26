@@ -103,11 +103,15 @@ jobs:
           # `.gitleaks.toml` here only if we needed allowlists (e.g.
           # known false-positive patterns in golden test fixtures).
 
+  # H7-E.6: promoted from advisory-only. The release workflow
+  # (.github/workflows/release.yml) generates the SBOM as a release
+  # asset on every publish; this security-workflow run still produces
+  # a daily SBOM for the master tree so the artifact has a stable home
+  # for between-release auditor browsing.
   sbom:
-    name: SBOM (advisory only)
+    name: SBOM (CycloneDX)
     runs-on: ubuntu-latest
     timeout-minutes: 3
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -136,6 +140,49 @@ jobs:
           name: sbom-cyclonedx
           path: sbom.cyclonedx.json
           retention-days: 90
+
+  # ─── Slither — Solidity static analysis (H7-E.1) ────────────────
+  # CodeQL (above) covers JS/TS; Slither catches Solidity-side
+  # patterns: reentrancy, unchecked-return, uninitialized storage,
+  # shadowed inherited vars, etc. Tunable via slither.config.json.
+  # Fails the PR on any HIGH-severity finding (LOW + INFORMATIONAL
+  # go to logs for triage).
+  slither:
+    name: Slither (Solidity SAST)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Build contract dependencies (forge-std + AA + OZ)
+        working-directory: packages/contracts
+        run: bash setup.sh
+
+      - uses: crytic/slither-action@v0.4.0
+        with:
+          target: packages/contracts/
+          fail-on: high
+          slither-config: packages/contracts/slither.config.json
+          # Sarif output uploaded to GH Code Scanning for diff-view in PRs.
+          sarif: slither-results.sarif
+        continue-on-error: false
+
+      - name: Upload Slither SARIF to GH Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: slither-results.sarif
 
   # ─── Strict peer-dependency check (audit P1-7) ──────────────────
   # The repo's `.npmrc` keeps `auto-install-peers=true` +

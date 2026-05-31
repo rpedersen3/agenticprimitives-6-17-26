@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/agent-profile",
-  "version": "0.0.1",
+  "version": "0.1.0-alpha.1",
   "description": "Agent identity SDK: HCS-11-aligned typed profile schema (AgentCard), HCS-14 CAIP-10 nativeId helpers, mcpServer.verification methods (DNS TXT / signed URL / HTTP challenge / VP), canonical-JSON content-hash. Speaks identity-domain vocabulary only.",
   "type": "module",
   "main": "./dist/index.js",
@@ -46,10 +46,13 @@
     "@agenticprimitives/agent-account": "workspace:*",
     "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
-    "viem": "^2.21.0"
+    "viem": "^2.50.0"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
     "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

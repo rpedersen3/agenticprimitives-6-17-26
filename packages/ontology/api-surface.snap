@@ -1,0 +1,5 @@
+const CLASS: { readonly Agent: "https://agenticprimitives.dev/ns/core#Agent"
+const NS: { readonly ap: "https://agenticprimitives.dev/ns/core#"
+const ONTOLOGY_VERSION: "0.1.0"
+const PREDICATE: { readonly isFacetOf: "https://agenticprimitives.dev/ns/identity#isFacetOf"
+const SHAPE: { readonly CanonicalAgentId: "https://agenticprimitives.dev/ns/core#CanonicalAgentIdShape"

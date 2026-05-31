@@ -1,0 +1,15 @@
+interface AgentSession
+interface Caip10Parts
+interface CredentialPrincipal
+interface NameContext
+type Address = `0x${string}`
+type AgentType = 'person' | 'org' | 'service'
+type Assurance = 'unverified' | 'asserted' | 'onchain-read' | 'onchain-confirmed'
+type BrandedId<T extends string> = string & { readonly __brand: T
+type Caip10Address = string & { readonly __brand: 'caip10'
+type CanonicalAgentId = Caip10Address
+type CanonicalAgentIdentity = Address
+type ChainId = number & { readonly __chainId: unique symbol
+type CredentialKind = 'passkey' | 'siwe-eoa' | 'hardware' | 'oidc'
+type CredentialRole = 'login-grade' | 'custody-grade'
+type Hex = `0x${string}`

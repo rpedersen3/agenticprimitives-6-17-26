@@ -1,0 +1,8 @@
+{
+  "filter_paths": "lib/|out/|cache/|broadcast/|test/",
+  "detectors_to_exclude": "naming-convention,solc-version,pragma,assembly,low-level-calls",
+  "exclude_low": true,
+  "exclude_informational": true,
+  "compile_force_framework": "foundry",
+  "json": "-"
+}

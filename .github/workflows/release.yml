@@ -1,0 +1,97 @@
+name: Release
+
+# H7-E.3 / E.9 / E.6 — release flow with signed-provenance publish + SBOM-as-asset.
+#
+# Triggered by a push to `master` that contains changeset files. Two
+# possible outcomes:
+#
+#   (a) Changesets present → opens a "Version Packages" PR that bumps
+#       versions + updates CHANGELOGs. Merging that PR re-fires this
+#       workflow.
+#
+#   (b) No changesets, but versions already bumped (the bump PR was
+#       merged) → publishes every changed package to npm with
+#       `--provenance` (Sigstore via GitHub OIDC; closes EXT3-004),
+#       then attaches a CycloneDX SBOM as a release asset (closes
+#       EXT3-004 / promotes the SBOM out of advisory-only mode).
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Required by `npm publish --provenance` (OIDC token).
+permissions:
+  contents: write       # for the "Version Packages" PR + GH Release asset upload
+  pull-requests: write  # for changesets/action to open the PR
+  id-token: write       # for OIDC token used by Sigstore provenance
+
+jobs:
+  release:
+    name: Publish (changesets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # changesets needs full history
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm -r --filter './packages/*' build
+
+      - name: API surface snapshot gate
+        run: pnpm check:api-surface
+
+      - name: Publish via changesets (with provenance)
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          # `pnpm publish` honors per-package publishConfig.access=public.
+          # `--provenance` invokes the npm CLI's Sigstore signing path which
+          # uses the OIDC token requested above.
+          publish: pnpm changeset publish --provenance
+          version: pnpm changeset version
+          title: 'chore(release): version packages'
+          commit: 'chore(release): version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # H7-E.6 — promote CycloneDX SBOM from advisory to required.
+      # Runs ONLY on actual publish (steps.changesets.outputs.published == 'true')
+      # so the SBOM corresponds exactly to the artifacts that just shipped.
+      - name: Generate CycloneDX SBOM (post-publish)
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          npx --yes @cyclonedx/cyclonedx-npm \
+            --output-file sbom.cyclonedx.json \
+            --output-format JSON
+
+      - name: Attach SBOM to GitHub Release
+        if: steps.changesets.outputs.published == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          # changesets/action sets `published` + `publishedPackages`. We
+          # tag the release at the first published version for convenience.
+          files: sbom.cyclonedx.json
+          # The tag is created by changesets/action.
+          tag_name: ${{ fromJson(steps.changesets.outputs.publishedPackages)[0].name }}@${{ fromJson(steps.changesets.outputs.publishedPackages)[0].version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

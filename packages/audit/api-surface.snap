@@ -1,0 +1,20 @@
+const noopMetricsSink: MetricsSink
+function buildEvent(partial: Omit<AuditEvent, 'id' | 'timestamp'> &
+function composeFailHardSinks(...sinks: AuditSink[]): AuditSink
+function composeFailSoftSinks(...sinks: AuditSink[]): AuditSink
+function composeMetricsSinks(...sinks: MetricsSink[]): MetricsSink
+function composeSinks(...sinks: AuditSink[]): AuditSink
+function createConsoleAuditSink(opts?:
+function createConsoleMetricsSink(opts?:
+function createMemoryAuditSink(opts?:
+function createMemoryMetricsSink(): MemoryMetricsSink
+function createPiiGuardrailSink(inner: AuditSink, opts?: PiiGuardrailOpts): AuditSink
+function generateEventId(): string
+function nowIso(): string
+interface AuditEvent
+interface AuditSink
+interface MemoryAuditSinkextends AuditSink
+interface MemoryMetricsSinkextends MetricsSink
+interface MetricsSink
+interface PiiFinding
+interface PiiGuardrailOpts
