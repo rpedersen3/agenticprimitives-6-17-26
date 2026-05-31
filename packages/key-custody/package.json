@@ -39,6 +39,10 @@
     "./kms-viem": {
       "types": "./dist/kms-viem-account.d.ts",
       "import": "./dist/kms-viem-account.js"
+    },
+    "./relayer": {
+      "types": "./dist/relayer-account.d.ts",
+      "import": "./dist/relayer-account.js"
     }
   },
   "files": [

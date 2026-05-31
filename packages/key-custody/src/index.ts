@@ -27,6 +27,11 @@ export {
 } from './derive-subject';
 export { getRelayOnlySigner } from './relay-only';
 export { createKmsAccount } from './account';
+export { createKmsViemAccount } from './kms-viem-account';
+export {
+  createRelayerAccount,
+  type CreateRelayerAccountOpts,
+} from './relayer-account';
 export { canonicalContextBytes } from './aad';
 
 export { LocalAesProvider, LocalSecp256k1Signer } from './providers/local';
