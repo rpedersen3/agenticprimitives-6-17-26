@@ -50,7 +50,7 @@ import {AgentProfilePredicates} from "../src/identity/AgentProfilePredicates.sol
  * **R5.4 / CON-DEPLOY-001 / XCON-001 closure (2026-05-31).** Governance,
  * paymaster owner, naming-root owner, ontology / shape / relationship-
  * type-registry owners no longer fan out to the deployer EOA. They all
- * route through a single resolved **authority** address:
+ * route through a resolved **authority** address:
  *
  *   - `GOVERNANCE_MULTISIG` env var (a multi-sig SA address) → required
  *     for production networks; reverts the deploy if unset.
@@ -59,14 +59,26 @@ import {AgentProfilePredicates} from "../src/identity/AgentProfilePredicates.sol
  *     iteration stays frictionless. The fallback message is the same
  *     line operators see during the production-readiness review.
  *
- * Bundler signer and session issuer are operationally distinct from
- * governance (a hot signer can rotate without disturbing the slow path),
- * so they take their own env vars (`BUNDLER_SIGNER`, `SESSION_ISSUER`)
- * with the resolved authority as the fallback.
+ * **R5.9 / PKG-DEPLOY-002 closure (2026-05-31, external audit P0-1
+ * extension).** Per-role authority addresses. Each on-chain role now
+ * takes its own env var; unset env vars fall back to the resolved
+ * `authority` (preserving R5.4 single-multisig ergonomics):
+ *
+ *   - `TIMELOCK_ADMIN`, `TIMELOCK_PROPOSER`, `TIMELOCK_EXECUTOR`
+ *   - `GOVERNANCE_GUARDIAN`, `GOVERNANCE_SIGNER`
+ *   - `PAYMASTER_OWNER`, `NAMING_ROOT_OWNER`
+ *   - `ONTOLOGY_ADMIN`, `SHAPE_ADMIN`, `RELATIONSHIP_TYPE_ADMIN`
+ *   - `BUNDLER_SIGNER`, `SESSION_ISSUER` (EOA hot keys, R5.4 existing)
+ *
+ * Operators who want separation point each role at a different multisig;
+ * operators who want the R5.4 single-multisig flow leave them unset and
+ * everything routes to `GOVERNANCE_MULTISIG`. Multisig-shaped roles
+ * enforce `.code.length > 0` on production networks; EOA-shaped hot
+ * keys (bundler signer, session issuer) skip the contract check.
  *
  * Single-key compromise of the deployer EOA still owns the broadcast
  * key for THIS deploy transaction, but at the end of the transaction
- * the authority surface lives at the multisig, not the deployer.
+ * the authority surface lives at the multisig(s), not the deployer.
  *
  * Run:
  *   forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 \
@@ -100,11 +112,32 @@ contract Deploy is Script {
         // deploy. Each network either supplies GOVERNANCE_MULTISIG or
         // the script reverts (production) / warns + falls back (testnet).
         address authority = _resolveAuthority(deployer, network);
-        address bundlerSigner = _resolveBundlerSigner(authority);
-        address sessionIssuer = _resolveSessionIssuer(authority);
-        console2.log("authority:  %s", authority);
-        console2.log("bundlerSigner: %s", bundlerSigner);
-        console2.log("sessionIssuer: %s", sessionIssuer);
+
+        // R5.9 / P0-1 — per-role authority resolution. Each role takes
+        // its own env var; unset env vars fall back to `authority`. This
+        // lets an operator point e.g. the paymaster owner at one Safe and
+        // the naming root at a different one. Single-multisig deploys
+        // (the R5.4 ergonomics) keep working — leave all role env vars
+        // unset and everything routes to GOVERNANCE_MULTISIG.
+        Roles memory roles = _resolveRoles(authority, network);
+
+        console2.log("authority:               %s", authority);
+        console2.log("  timelockAdmin:         %s", roles.timelockAdmin);
+        console2.log("  timelockProposer:      %s", roles.timelockProposer);
+        console2.log("  timelockExecutor:      %s", roles.timelockExecutor);
+        console2.log("  governanceGuardian:    %s", roles.governanceGuardian);
+        console2.log("  governanceSigner:      %s", roles.governanceSigner);
+        console2.log("  paymasterOwner:        %s", roles.paymasterOwner);
+        console2.log("  namingRootOwner:       %s", roles.namingRootOwner);
+        console2.log("  ontologyAdmin:         %s", roles.ontologyAdmin);
+        console2.log("  shapeAdmin:            %s", roles.shapeAdmin);
+        console2.log("  relationshipTypeAdmin: %s", roles.relationshipTypeAdmin);
+        console2.log("  bundlerSigner:         %s", roles.bundlerSigner);
+        console2.log("  sessionIssuer:         %s", roles.sessionIssuer);
+        // Keep the named locals for downstream readability — they're now
+        // just the unpacked struct fields.
+        address bundlerSigner = roles.bundlerSigner;
+        address sessionIssuer = roles.sessionIssuer;
 
         vm.startBroadcast();
 
@@ -125,24 +158,25 @@ contract Deploy is Script {
         //   (pause + signer). Forwards timelock-routed calls so
         //   `onlyGovernance` sees `msg.sender == AgenticGovernance`.
         //   Guardian (deployer at bootstrap) can pause without delay.
-        // R5.4 — every auth role bootstrapped to `authority`, not `deployer`.
+        // R5.4 — every auth role bootstrapped via the resolved authority.
+        // R5.9 — each role is independently env-overridable via `roles`.
         address[] memory proposers = new address[](1);
-        proposers[0] = authority;
+        proposers[0] = roles.timelockProposer;
         address[] memory executors = new address[](1);
-        executors[0] = authority;
+        executors[0] = roles.timelockExecutor;
         TimelockController timelock = new TimelockController(
             24 hours, // minDelay
             proposers,
             executors,
-            authority  // admin (multisig from this transaction onward)
+            roles.timelockAdmin  // admin (multisig from this transaction onward)
         );
         console2.log("TimelockController:   %s", address(timelock));
 
         address[] memory initialSigners = new address[](1);
-        initialSigners[0] = authority;
+        initialSigners[0] = roles.governanceSigner;
         AgenticGovernance governance = new AgenticGovernance(
             address(timelock),
-            authority,         // guardian
+            roles.governanceGuardian,  // guardian (R5.9 per-role)
             initialSigners
         );
         console2.log("AgenticGovernance:    %s", address(governance));
@@ -227,9 +261,11 @@ contract Deploy is Script {
                 console2.log("");
             }
         }
+        // R5.9 — paymaster initialOwner is the per-role address (defaults
+        // to authority when PAYMASTER_OWNER env var is unset).
         SmartAgentPaymaster paymaster = new SmartAgentPaymaster(
             IEntryPoint(address(entryPoint)),
-            authority,
+            roles.paymasterOwner,
             address(governance),
             paymasterDevMode,
             verifyingSigner
@@ -255,10 +291,10 @@ contract Deploy is Script {
         //   validate subjects against expected predicate / datatype /
         //   cardinality / enum constraints.
         // R5.4 — ontology + shape registries owned by the resolved authority.
-        // The deployer EOA never holds onto these roles post-broadcast.
-        OntologyTermRegistry ontology = new OntologyTermRegistry(authority);
+        // R5.9 — each ownership independently env-overridable via roles.
+        OntologyTermRegistry ontology = new OntologyTermRegistry(roles.ontologyAdmin);
         console2.log("OntologyTermRegistry: %s", address(ontology));
-        ShapeRegistry shapes = new ShapeRegistry(authority);
+        ShapeRegistry shapes = new ShapeRegistry(roles.shapeAdmin);
         console2.log("ShapeRegistry:        %s", address(shapes));
 
         // 6.6. Agent Naming Service (NS Phase 3, spec 215).
@@ -277,9 +313,10 @@ contract Deploy is Script {
         console2.log("AgentNameResolver:    %s", address(nameResolver));
         AgentNameUniversalResolver nameUniversal = new AgentNameUniversalResolver(nameRegistry);
         console2.log("AgentNameUniversalResolver: %s", address(nameUniversal));
+        // R5.9 — `.agent` root owner is per-role (NAMING_ROOT_OWNER).
         bytes32 agentRoot = nameRegistry.initializeRoot(
             "agent",
-            authority,
+            roles.namingRootOwner,
             address(nameResolver),
             nameRegistry.KIND_AGENT()
         );
@@ -315,7 +352,8 @@ contract Deploy is Script {
         // 6.8. Agent Relationships (RL Phase 3, spec 216) — trust-fabric
         //      edge store + governance-gated type semantics registry.
         // R5.4: relationship-type registry owned by resolved authority.
-        RelationshipTypeRegistry relTypes = new RelationshipTypeRegistry(authority);
+        // R5.9: ownership env-overridable via RELATIONSHIP_TYPE_ADMIN.
+        RelationshipTypeRegistry relTypes = new RelationshipTypeRegistry(roles.relationshipTypeAdmin);
         console2.log("RelationshipTypeRegistry: %s", address(relTypes));
         AgentRelationship relationships = new AgentRelationship();
         console2.log("AgentRelationship:    %s", address(relationships));
@@ -555,6 +593,45 @@ contract Deploy is Script {
         console2.log("  defined atl:AgentProfile shape with %s properties", vm.toString(props.length));
     }
 
+    // ─── R5.9: per-role authority bundle ────────────────────────────────
+
+    /// @dev Bundle of every distinct on-chain role this deploy sets.
+    ///      Pre-R5.9 every field collapsed to the resolved `authority`;
+    ///      post-R5.9 each is independently env-overridable.
+    struct Roles {
+        // Multisig-shaped (contract on production)
+        address timelockAdmin;
+        address timelockProposer;
+        address timelockExecutor;
+        address governanceGuardian;
+        address governanceSigner;
+        address paymasterOwner;
+        address namingRootOwner;
+        address ontologyAdmin;
+        address shapeAdmin;
+        address relationshipTypeAdmin;
+        // EOA-shaped hot keys
+        address bundlerSigner;
+        address sessionIssuer;
+    }
+
+    function _resolveRoles(address authority, string memory network) internal view returns (Roles memory) {
+        return Roles({
+            timelockAdmin:         _resolveContractRole("TIMELOCK_ADMIN",         authority, network),
+            timelockProposer:      _resolveContractRole("TIMELOCK_PROPOSER",      authority, network),
+            timelockExecutor:      _resolveContractRole("TIMELOCK_EXECUTOR",      authority, network),
+            governanceGuardian:    _resolveContractRole("GOVERNANCE_GUARDIAN",    authority, network),
+            governanceSigner:      _resolveContractRole("GOVERNANCE_SIGNER",      authority, network),
+            paymasterOwner:        _resolveContractRole("PAYMASTER_OWNER",        authority, network),
+            namingRootOwner:       _resolveContractRole("NAMING_ROOT_OWNER",      authority, network),
+            ontologyAdmin:         _resolveContractRole("ONTOLOGY_ADMIN",         authority, network),
+            shapeAdmin:            _resolveContractRole("SHAPE_ADMIN",            authority, network),
+            relationshipTypeAdmin: _resolveContractRole("RELATIONSHIP_TYPE_ADMIN", authority, network),
+            bundlerSigner:         _resolveEoaRole("BUNDLER_SIGNER",  authority),
+            sessionIssuer:         _resolveEoaRole("SESSION_ISSUER",  authority)
+        });
+    }
+
     // ─── R5.4: governance-authority resolution ─────────────────────────
 
     /// @dev Resolve the address that holds every governance / pause /
@@ -600,18 +677,71 @@ contract Deploy is Script {
         ));
     }
 
+    // ─── R5.9: per-role authority resolution (P0-1 extension) ───────────
+    //
+    //   R5.4 collapsed every authority surface into one `GOVERNANCE_MULTISIG`
+    //   address. That closed the "deployer owns everything" failure mode
+    //   but left every role (timelock admin, paymaster owner, naming root,
+    //   ontology / shape / relationship admins, bundler signer, session
+    //   issuer) co-located on the same multisig. External audit P0-1 asked
+    //   for role separation: an operator should be able to point the
+    //   timelock admin at one multisig, the paymaster owner at another,
+    //   the naming root at a third, etc.
+    //
+    //   The pattern: each role takes its own env var; unset env vars fall
+    //   back to the resolved authority (preserving R5.4 single-multisig
+    //   ergonomics for operators who don't need separation). On production
+    //   networks, multisig-shaped roles enforce `.code.length > 0` so a
+    //   misconfigured env var can't accidentally point at an EOA.
+    //
+    //   EOA-shaped hot keys (bundler signer, session issuer, paymaster
+    //   verifying signer) skip the contract check — they're explicitly
+    //   meant to be KMS-backed EOAs.
+
+    /// @dev Resolve a multisig-shaped role from env, defaulting to
+    ///      `defaultAuth`. On production networks, enforces that the
+    ///      resolved address is a contract (same invariant as
+    ///      `GOVERNANCE_MULTISIG`). The default (`GOVERNANCE_MULTISIG`)
+    ///      already passed that check, so the require is only on the
+    ///      env override path.
+    function _resolveContractRole(
+        string memory roleName,
+        address defaultAuth,
+        string memory network
+    ) internal view returns (address) {
+        address resolved = vm.envOr(roleName, defaultAuth);
+        if (resolved != defaultAuth && !_isTestnetNetwork(network)) {
+            require(
+                resolved.code.length > 0,
+                string.concat(
+                    "Deploy: ",
+                    roleName,
+                    " must be a contract on production networks (Smart Agent / Safe / Timelock)"
+                )
+            );
+        }
+        return resolved;
+    }
+
+    /// @dev Resolve an EOA-shaped hot-key role from env, defaulting to
+    ///      authority. No contract check — these roles are explicitly
+    ///      KMS-backed EOAs (bundler signer, session issuer).
+    function _resolveEoaRole(string memory roleName, address defaultAuth) internal view returns (address) {
+        return vm.envOr(roleName, defaultAuth);
+    }
+
     /// @dev Bundler signer is hot-key-rotatable separately from governance
     ///      (a paymaster operator can swap KMS keys without disturbing
     ///      the slow path). Pulls from `BUNDLER_SIGNER` env var; falls
     ///      back to the resolved authority.
     function _resolveBundlerSigner(address authority) internal view returns (address) {
-        return vm.envOr("BUNDLER_SIGNER", authority);
+        return _resolveEoaRole("BUNDLER_SIGNER", authority);
     }
 
     /// @dev Session issuer is also hot-key-rotatable. Pulls from
     ///      `SESSION_ISSUER` env var; falls back to authority.
     function _resolveSessionIssuer(address authority) internal view returns (address) {
-        return vm.envOr("SESSION_ISSUER", authority);
+        return _resolveEoaRole("SESSION_ISSUER", authority);
     }
 
     /// @dev Networks where deployer-as-authority fallback is allowed.

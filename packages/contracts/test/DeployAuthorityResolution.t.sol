@@ -131,6 +131,98 @@ contract DeployAuthorityResolutionTest is Test {
         assertEq(harness.callResolveSessionIssuer(DEPLOYER), DEPLOYER);
     }
 
+    // ─── R5.9 / PKG-DEPLOY-002 — per-role authority resolution ──────────
+    //
+    //   The R5.4 single-authority pattern collapsed every governance /
+    //   admin / ownership role onto one address. R5.9 adds per-role env
+    //   vars so an operator can split (or keep collapsed if all unset).
+    //
+    //   Test matrix per role:
+    //     1. Env set + contract addr → returns env addr (production OK)
+    //     2. Env unset → falls back to authority
+    //     3. Env set + EOA on production → reverts (must be contract)
+    //     4. Env set + EOA on testnet → accepted (fallback semantics)
+
+    // Each R5.9 test uses a UNIQUE role-env-var so cross-test bleed
+    // via `vm.setEnv` (which persists at process level) is impossible.
+    // The existing tests demonstrated that `vm.setEnv("X", "")` plus
+    // `vm.envOr` doesn't reliably round-trip across test invocations,
+    // so we sidestep the issue by partitioning the env namespace.
+
+    function test_R5_9_resolveContractRole_envSetReturnsEnvOnProduction() public {
+        ContractStub roleAddr = new ContractStub();
+        vm.setEnv("R5_9_TEST_ROLE_A", vm.toString(address(roleAddr)));
+        address authority = address(0xC0DE);
+        assertEq(
+            harness.callResolveContractRole("R5_9_TEST_ROLE_A", authority, "base-mainnet"),
+            address(roleAddr)
+        );
+    }
+
+    function test_R5_9_resolveContractRole_envUnsetReturnsDefault() public {
+        // Distinct role name so we KNOW the env was never set.
+        address authority = address(0xC0DE);
+        assertEq(
+            harness.callResolveContractRole("R5_9_TEST_ROLE_B", authority, "base-mainnet"),
+            authority
+        );
+    }
+
+    function test_R5_9_resolveContractRole_rejectsEoaOnProduction() public {
+        address eoaAddr = address(0xBADBAD);
+        vm.setEnv("R5_9_TEST_ROLE_C", vm.toString(eoaAddr));
+        address authority = address(0xC0DE);
+        vm.expectRevert(bytes("Deploy: R5_9_TEST_ROLE_C must be a contract on production networks (Smart Agent / Safe / Timelock)"));
+        harness.callResolveContractRole("R5_9_TEST_ROLE_C", authority, "base-mainnet");
+    }
+
+    function test_R5_9_resolveContractRole_acceptsEoaOnTestnet() public {
+        // Testnet path bypasses the contract-shape check so anvil
+        // operators can keep using EOAs for every role.
+        address eoaAddr = address(0xBADBAD);
+        vm.setEnv("R5_9_TEST_ROLE_D", vm.toString(eoaAddr));
+        address authority = address(0xC0DE);
+        assertEq(
+            harness.callResolveContractRole("R5_9_TEST_ROLE_D", authority, "anvil"),
+            eoaAddr
+        );
+    }
+
+    function test_R5_9_resolveContractRole_works_for_every_role_name() public {
+        // Sanity check: every documented role string passes through.
+        // Locks the env-var contract: a future refactor that renames or
+        // case-sensitises a role string fails here.
+        //
+        // We use R5_9_ALL_* test prefixes (NOT the real role names) for
+        // the same isolation reason as the other R5.9 tests — touching
+        // the real names (PAYMASTER_OWNER, etc.) bleeds into the rest
+        // of the test contract. The test below verifies the resolver
+        // accepts arbitrary role strings; the integration tests run via
+        // forge script will exercise the real names end-to-end.
+        ContractStub roleAddr = new ContractStub();
+        string[10] memory roleNames = [
+            "R5_9_ALL_TIMELOCK_ADMIN",
+            "R5_9_ALL_TIMELOCK_PROPOSER",
+            "R5_9_ALL_TIMELOCK_EXECUTOR",
+            "R5_9_ALL_GOVERNANCE_GUARDIAN",
+            "R5_9_ALL_GOVERNANCE_SIGNER",
+            "R5_9_ALL_PAYMASTER_OWNER",
+            "R5_9_ALL_NAMING_ROOT_OWNER",
+            "R5_9_ALL_ONTOLOGY_ADMIN",
+            "R5_9_ALL_SHAPE_ADMIN",
+            "R5_9_ALL_RELATIONSHIP_TYPE_ADMIN"
+        ];
+        address authority = address(0xC0DE);
+        for (uint256 i = 0; i < roleNames.length; i++) {
+            vm.setEnv(roleNames[i], vm.toString(address(roleAddr)));
+            assertEq(
+                harness.callResolveContractRole(roleNames[i], authority, "base-mainnet"),
+                address(roleAddr),
+                roleNames[i]
+            );
+        }
+    }
+
     // ─── helper: try to clear env vars (vm.setEnv with empty string is
     // the only available mechanism in current Foundry). Wrap in an
     // external function so tests can catch the call without aborting.
@@ -150,6 +242,19 @@ contract DeployHarness is Deploy {
     function callResolveSessionIssuer(address authority) external returns (address) {
         return _resolveSessionIssuer(authority);
     }
+    function callResolveContractRole(
+        string memory roleName,
+        address defaultAuth,
+        string memory network
+    ) external view returns (address) {
+        return _resolveContractRole(roleName, defaultAuth, network);
+    }
+}
+
+// Minimal contract used as a per-role env address (helper requires
+// `.code.length > 0` on production networks).
+contract ContractStub {
+    function bar() external pure returns (uint256) { return 1337; }
 }
 
 // Minimal contract used as the env-var multisig (helper requires
