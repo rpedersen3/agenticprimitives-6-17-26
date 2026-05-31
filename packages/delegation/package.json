@@ -1,7 +1,7 @@
 {
   "name": "@agenticprimitives/delegation",
-  "version": "0.1.0-alpha.2",
-  "description": "EIP-712 smart-account delegations with caveats; web\u2192agent\u2192MCP token flow; session lifecycle.",
+  "version": "0.1.0-alpha.3",
+  "description": "EIP-712 smart-account delegations with caveats; web→agent→MCP token flow; session lifecycle.",
   "license": "MIT",
   "repository": {
     "type": "git",
