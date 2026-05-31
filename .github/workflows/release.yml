@@ -1,9 +1,11 @@
 name: Release
 
-# H7-E.3 / E.9 / E.6 — release flow with signed-provenance publish + SBOM-as-asset.
+# R4.1 — release-hardening. Publish path now gated by a `validate` job
+# that mirrors the full ci.yml gate. Release automation must not be
+# easier to pass than normal CI.
 #
 # Triggered by a push to `master` that contains changeset files. Two
-# possible outcomes:
+# possible outcomes (same as before):
 #
 #   (a) Changesets present → opens a "Version Packages" PR that bumps
 #       versions + updates CHANGELOGs. Merging that PR re-fires this
@@ -11,9 +13,11 @@ name: Release
 #
 #   (b) No changesets, but versions already bumped (the bump PR was
 #       merged) → publishes every changed package to npm with
-#       `--provenance` (Sigstore via GitHub OIDC; closes EXT3-004),
-#       then attaches a CycloneDX SBOM as a release asset (closes
-#       EXT3-004 / promotes the SBOM out of advisory-only mode).
+#       provenance (Sigstore via GitHub OIDC). Bound to:
+#         - validate job pass (full CI gate)
+#         - id-token: write (OIDC for Trusted Publishing)
+#         - .npmrc provenance=true (closes the npm publish flag)
+#       Then attaches a CycloneDX SBOM as a GitHub Release asset.
 
 on:
   push:
@@ -24,36 +28,108 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-# Required by `npm publish --provenance` (OIDC token).
 permissions:
   contents: write       # for the "Version Packages" PR + GH Release asset upload
   pull-requests: write  # for changesets/action to open the PR
-  id-token: write       # for OIDC token used by Sigstore provenance
+  id-token: write       # for OIDC token (Sigstore provenance + npm Trusted Publishing)
 
 jobs:
-  release:
-    name: Publish (changesets)
+  validate:
+    name: Full release gate
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # changesets needs full history
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          # Node 24 — npm Trusted Publishing requires CLI 11.5.1+ AND
+          # Node 22.14.0+. 24 is the current LTS line and ships a
+          # compatible npm. Held in lockstep with the release job below.
+          node-version: 24
           registry-url: https://registry.npmjs.org/
-          cache: pnpm
+          package-manager-cache: false
 
-      # R1.4 — packages/contracts builds via `forge build && build:abi`.
-      # Without Foundry the contracts package's prepublish + the
-      # changeset publish step both fail (run 26701379049). Mirror the
-      # version pinned in ci.yml.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Wave H4 — release CI gate. .npmrc still allows permissive
+      # peer-dep resolution locally (auto-install-peers=true,
+      # strict-peer-dependencies=false) so dev installs don't snag,
+      # but every release-bound install re-resolves under strict mode
+      # to catch peer drift before it ships.
+      - name: Strict peer-dep resolution
+        run: pnpm install --frozen-lockfile --strict-peer-dependencies
+
+      - name: Doctrine checks (capability manifests, boundaries, exports, vocabulary firewall)
+        run: pnpm check:all
+
+      - name: Build packages first (apps import from packages' dist/, so build must precede typecheck)
+        run: pnpm -r --filter './packages/*' build
+
+      # H7-E.8 / EXT3-003 — public-API surface snapshot. Runs after
+      # build so dist/*.d.ts exists.
+      - name: API surface snapshot
+        run: pnpm check:api-surface
+
+      - name: Typecheck all packages + apps
+        run: pnpm -r typecheck
+
+      - name: Unit tests (vitest)
+        run: pnpm test:unit
+
+      - name: Integration tests (per-package vitest)
+        run: pnpm test:integration:packages
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Build contract dependencies (forge-std + account-abstraction + OZ)
+        working-directory: packages/contracts
+        run: bash setup.sh
+
+      - name: Forge contract tests (test pyramid Layer 4)
+        working-directory: packages/contracts
+        run: forge test -vv
+
+      # H7-E.2 — per-contract coverage floor. Ratchet-only gate.
+      - name: Forge coverage floor
+        run: pnpm check:forge-coverage
+
+      # R1.3 / C6 — storage-layout snapshot gate. Locks slot/offset
+      # for upgradeable / proxy-deployed contracts.
+      - name: Contract storage-layout snapshots
+        run: pnpm check:storage-layouts
+
+  release:
+    name: Publish (changesets + provenance)
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # changesets needs full history
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+
+      # packages/contracts builds via `forge build && build:abi`. Without
+      # Foundry the contracts package's prepublish step + the changeset
+      # publish call both fail.
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
@@ -61,40 +137,40 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # R1.4 — contracts/build needs forge-std + account-abstraction + OZ
-      # remappings installed by setup.sh before `forge build` succeeds.
-      - name: Install contract dependencies
+      - name: Install contract dependencies (forge-std + account-abstraction + OZ)
         working-directory: packages/contracts
         run: bash setup.sh
 
       - name: Build packages
         run: pnpm -r --filter './packages/*' build
 
-      - name: API surface snapshot gate
+      - name: API surface snapshot gate (defense in depth — also runs in `validate`)
         run: pnpm check:api-surface
 
       - name: Publish via changesets (with provenance)
         id: changesets
         uses: changesets/action@v1
         with:
-          # `pnpm changeset publish` does NOT accept --provenance (it's not
-          # a changesets/cli flag — surfaced as "Unknown flag" in release
-          # run 26702188474). Provenance is configured via .npmrc
-          # `provenance=true`, which pnpm reads when changeset delegates
-          # to the underlying publish call. The Sigstore signing uses the
-          # OIDC token requested in `permissions.id-token: write` above.
-          # `pnpm publish` honors per-package publishConfig.access=public.
+          # `pnpm changeset publish` does NOT accept --provenance (not a
+          # changesets/cli flag). Provenance is configured via .npmrc
+          # `provenance=true` — pnpm reads it when changeset delegates
+          # to the underlying publish call. Sigstore uses the OIDC
+          # token requested in `permissions.id-token: write` above.
+          # publishConfig.access=public per-package honored by pnpm publish.
           publish: pnpm changeset publish
           version: pnpm changeset version
           title: 'chore(release): version packages'
           commit: 'chore(release): version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NPM_TOKEN is the legacy auth path. After R4.7 configures
+          # `npm trust github` for every package, R4.8 removes this
+          # secret and the publish auths purely via OIDC Trusted
+          # Publishing. Kept here until that switch lands.
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # H7-E.6 — promote CycloneDX SBOM from advisory to required.
-      # Runs ONLY on actual publish (steps.changesets.outputs.published == 'true')
-      # so the SBOM corresponds exactly to the artifacts that just shipped.
+      # H7-E.6 — CycloneDX SBOM. Runs ONLY on actual publish so the
+      # SBOM corresponds exactly to the artifacts that just shipped.
       - name: Generate CycloneDX SBOM (post-publish, cdxgen)
         if: steps.changesets.outputs.published == 'true'
         # cdxgen speaks pnpm natively. `@cyclonedx/cyclonedx-npm` was
@@ -110,7 +186,6 @@ jobs:
           # changesets/action sets `published` + `publishedPackages`. We
           # tag the release at the first published version for convenience.
           files: sbom.cyclonedx.json
-          # The tag is created by changesets/action.
           tag_name: ${{ fromJson(steps.changesets.outputs.publishedPackages)[0].name }}@${{ fromJson(steps.changesets.outputs.publishedPackages)[0].version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
