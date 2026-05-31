@@ -10,7 +10,13 @@ export {
   DEFAULT_SESSION_CLOCK_SKEW_SEC,
   type VerifySessionOpts,
 } from './sessions';
-export { csrfTokenFor, verifyCsrf } from './csrf';
+export {
+  csrfTokenFor,
+  verifyCsrf,
+  type CsrfBindings,
+  type CsrfMintOpts,
+  type CsrfVerifyOpts,
+} from './csrf';
 export { deriveSaltFromLabel, deriveSaltFromEmail, type DeriveSaltFromEmailOpts } from './salt';
 export {
   ERC1271_MAGIC,
