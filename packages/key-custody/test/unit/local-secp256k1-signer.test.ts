@@ -121,6 +121,45 @@ describe('LocalSecp256k1Signer', () => {
     const digest = keccak_256(new TextEncoder().encode('fail-soft-test'));
     await expect(auditedSigner.signA2AAction({ digest })).resolves.toBeDefined();
   });
+
+  // R5.3 / PKG-KEY-CUSTODY-003 closure — locks low-s canonical form.
+  // Even though noble defaults to `lowS: true`, the signer now passes
+  // the option explicitly. This fuzz asserts the invariant holds end-
+  // to-end: every emitted `s` byte-value falls in [1, N/2].
+  it('every signature has low-s (s ≤ N/2) per EIP-2', async () => {
+    // secp256k1 curve order N
+    const SECP256K1_N = BigInt(
+      '0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141',
+    );
+    const HALF_N = SECP256K1_N / 2n;
+
+    // Mix different digest sources so noble's deterministic-k path
+    // hits a variety of internal states. Without explicit `lowS`,
+    // ~50% of these would land with s > N/2.
+    const seeds = [
+      'low-s probe 0',
+      'low-s probe 1',
+      'low-s probe 2',
+      'a different message',
+      'and another',
+      'EIP-2 invariant lock',
+      'noble could regress on a future bump',
+      'so we test behavior, not the implementation',
+    ];
+
+    for (let i = 0; i < 100; i++) {
+      const seed = seeds[i % seeds.length] + ':' + i;
+      const digest = keccak_256(new TextEncoder().encode(seed));
+      const { signature } = await signer.signA2AAction({ digest });
+
+      const sBytes = signature.slice(32, 64);
+      const s = bytesToBig(sBytes);
+
+      // The actual invariant: s is in (0, N/2].
+      expect(s).toBeGreaterThan(0n);
+      expect(s <= HALF_N).toBe(true);
+    }
+  });
 });
 
 function bytesToBig(b: Uint8Array): bigint {

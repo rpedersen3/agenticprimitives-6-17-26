@@ -280,7 +280,15 @@ export class SessionManager {
           } else {
             digest = toBytes(msg.raw);
           }
-          const sig = secp256k1.sign(digest, priv);
+          // R5.3 / PKG-DELEGATION-004 closure — enforce low-s canonical
+          // form explicitly. noble defaults to `lowS: true` today; the
+          // audit calls out the implicit dependency that a future bump
+          // could silently regress signature malleability. JTI tracking
+          // uses `claims.jti` not token bytes, so replay-tracking holds
+          // either way, but every signing path makes the invariant
+          // load-bearing at the call site so future auditors don't
+          // have to read noble release notes.
+          const sig = secp256k1.sign(digest, priv, { lowS: true });
           const r = sig.r.toString(16).padStart(64, '0');
           const s = sig.s.toString(16).padStart(64, '0');
           const v = (sig.recovery ?? 0) + 27;

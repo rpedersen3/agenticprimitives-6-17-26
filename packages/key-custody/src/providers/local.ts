@@ -228,7 +228,15 @@ export class LocalSecp256k1Signer implements KmsAccountBackend {
     if (input.digest.length !== 32) {
       throw new Error(`signA2AAction expects a 32-byte digest; got ${input.digest.length}.`);
     }
-    const sig = secp256k1.sign(input.digest, this.priv);
+    // R5.3 / PKG-KEY-CUSTODY-003 closure — enforce low-s canonical form
+    // explicitly. noble defaults to `lowS: true` today, but the audit
+    // calls out the implicit dependency: a future noble bump or a
+    // callsite accidentally passing `lowS: false` would silently land a
+    // signature-malleability regression. Mirror the GCP signer's
+    // `normalizeLowS(s)` invariant by making the option load-bearing
+    // at every call. noble flips `recovery` when normalizing so the
+    // emitted v byte stays consistent with the canonical s.
+    const sig = secp256k1.sign(input.digest, this.priv, { lowS: true });
     // viem-compatible signature: r (32) | s (32) | v (1, 27 or 28)
     const out = new Uint8Array(65);
     out.set(numberTo32Bytes(sig.r), 0);
