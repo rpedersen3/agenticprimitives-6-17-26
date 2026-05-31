@@ -163,11 +163,14 @@ jobs:
           commit: 'chore(release): version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # NPM_TOKEN is the legacy auth path. After R4.7 configures
-          # `npm trust github` for every package, R4.8 removes this
-          # secret and the publish auths purely via OIDC Trusted
-          # Publishing. Kept here until that switch lands.
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # R4.8 — NPM_TOKEN removed. All 17 @agenticprimitives/* packages
+          # are configured with `npm trust github` against this repo +
+          # release.yml + publish permission (R4.7, 2026-05-31). The
+          # publish below now auths via OIDC Trusted Publishing using
+          # the id-token requested in `permissions.id-token: write`
+          # above. Sigstore provenance signing uses the same token.
+          # The `NPM_TOKEN` secret can be revoked separately
+          # via `gh secret delete NPM_TOKEN`.
 
       # H7-E.6 — CycloneDX SBOM. Runs ONLY on actual publish so the
       # SBOM corresponds exactly to the artifacts that just shipped.
