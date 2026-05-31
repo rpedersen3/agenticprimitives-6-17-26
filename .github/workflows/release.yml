@@ -77,10 +77,14 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
+          # `pnpm changeset publish` does NOT accept --provenance (it's not
+          # a changesets/cli flag — surfaced as "Unknown flag" in release
+          # run 26702188474). Provenance is configured via .npmrc
+          # `provenance=true`, which pnpm reads when changeset delegates
+          # to the underlying publish call. The Sigstore signing uses the
+          # OIDC token requested in `permissions.id-token: write` above.
           # `pnpm publish` honors per-package publishConfig.access=public.
-          # `--provenance` invokes the npm CLI's Sigstore signing path which
-          # uses the OIDC token requested above.
-          publish: pnpm changeset publish --provenance
+          publish: pnpm changeset publish
           version: pnpm changeset version
           title: 'chore(release): version packages'
           commit: 'chore(release): version packages'
