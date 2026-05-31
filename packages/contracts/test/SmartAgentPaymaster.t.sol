@@ -27,12 +27,16 @@ contract SmartAgentPaymasterTest is Test {
         ep = new EntryPoint();
         gov = new MockGovernance();
         vm.prank(deployer);
-        pm = new SmartAgentPaymaster(IEntryPoint(address(ep)), deployer, address(gov));
+        // R5.7 — constructor takes explicit devMode + verifyingSigner.
+        // Existing tests assume dev mode; we pass it explicitly.
+        pm = new SmartAgentPaymaster(IEntryPoint(address(ep)), deployer, address(gov), true, address(0));
     }
 
     // ─── Construction ───────────────────────────────────────────────
 
-    function test_ships_in_dev_mode() public view {
+    function test_dev_mode_when_constructed_dev_true() public view {
+        // R5.7: dev mode is now an explicit constructor arg, not an
+        // implicit default. The setUp wires it true.
         assertTrue(pm.devMode());
     }
 
@@ -42,7 +46,77 @@ contract SmartAgentPaymasterTest is Test {
 
     function test_rejects_zero_governance() public {
         vm.expectRevert(SmartAgentPaymaster.ZeroGovernance.selector);
-        new SmartAgentPaymaster(IEntryPoint(address(ep)), deployer, address(0));
+        new SmartAgentPaymaster(IEntryPoint(address(ep)), deployer, address(0), true, address(0));
+    }
+
+    // ─── R5.7 / P0-2: explicit devMode + verifyingSigner at construction ─
+
+    function test_R5_7_constructed_with_devMode_false_starts_in_production_mode() public {
+        // The headline fix: a paymaster constructed with devMode_=false
+        // is in production mode from block 1. Pre-R5.7 this required a
+        // post-broadcast setDevMode(false) tx.
+        SmartAgentPaymaster prodPm = new SmartAgentPaymaster(
+            IEntryPoint(address(ep)),
+            deployer,
+            address(gov),
+            false,
+            address(0)
+        );
+        assertFalse(prodPm.devMode(), "should NOT be in dev mode");
+        assertEq(prodPm.verifyingSigner(), address(0), "no signer yet");
+    }
+
+    function test_R5_7_constructed_with_verifyingSigner_wires_it_atomically() public {
+        // Verifying-paymaster mode set up entirely at construction.
+        // No window where the paymaster accepts all userOps OR rejects
+        // all of them while the operator races to call setVerifyingSigner.
+        address presetSigner = address(0xBEEF);
+        SmartAgentPaymaster vpm = new SmartAgentPaymaster(
+            IEntryPoint(address(ep)),
+            deployer,
+            address(gov),
+            false,
+            presetSigner
+        );
+        assertFalse(vpm.devMode());
+        assertEq(vpm.verifyingSigner(), presetSigner);
+    }
+
+    function test_R5_7_constructed_with_verifyingSigner_emits_event() public {
+        address presetSigner = address(0xBEEF);
+        vm.expectEmit(true, true, false, false);
+        emit SmartAgentPaymaster.VerifyingSignerSet(address(0), presetSigner);
+        new SmartAgentPaymaster(
+            IEntryPoint(address(ep)),
+            deployer,
+            address(gov),
+            false,
+            presetSigner
+        );
+    }
+
+    function test_R5_7_constructed_with_zero_verifyingSigner_does_not_emit() public {
+        // Negative path: passing address(0) should NOT emit the
+        // VerifyingSignerSet event (would be misleading noise in audit
+        // logs / indexers). DevModeSet(false) is still emitted.
+        vm.recordLogs();
+        new SmartAgentPaymaster(
+            IEntryPoint(address(ep)),
+            deployer,
+            address(gov),
+            false,
+            address(0)
+        );
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        // Exactly one log: DevModeSet(false). No VerifyingSignerSet.
+        uint256 verifyingSignerEvents = 0;
+        bytes32 vsTopic = keccak256("VerifyingSignerSet(address,address)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics.length > 0 && logs[i].topics[0] == vsTopic) {
+                verifyingSignerEvents++;
+            }
+        }
+        assertEq(verifyingSignerEvents, 0, "must not emit VerifyingSignerSet for zero address");
     }
 
     function test_owner_is_initial_deployer() public view {

@@ -203,17 +203,42 @@ contract Deploy is Script {
         console2.log("ApprovedHashRegistry: %s", address(approvedHashRegistry));
 
         // 5. SmartAgentPaymaster — sponsors gas for user-op-based account deploys.
-        //    Constructor takes entryPoint, initialOwner (for stake/deposit in this
-        //    broadcast), and governance (for setDevMode + setAccepted later).
-        //    For the demo, deployer plays both roles. Production would split.
-        // R5.4 — initialOwner is the resolved authority, not deployer EOA.
-        // (governance pointer is AgenticGovernance, which is multisig-rooted.)
+        //    Constructor takes entryPoint, initialOwner (multisig from broadcast
+        //    onward — R5.4), governance pointer (AgenticGovernance — H7-C.9),
+        //    AND now (R5.7 / P0-2) explicit devMode + verifyingSigner. Pre-R5.7
+        //    the paymaster always shipped in dev/accept-all mode; production
+        //    deploys had to remember a post-broadcast setDevMode(false) tx.
+        //    Now the network governs: testnets → devMode=true; production →
+        //    devMode=false with the verifying signer pre-wired.
+        bool paymasterDevMode = _isTestnetNetwork(network);
+        address verifyingSigner = vm.envOr("PAYMASTER_VERIFYING_SIGNER", address(0));
+        if (!paymasterDevMode) {
+            // Production: an unset signer + no dev mode = fail-closed
+            // (every userOp reverts with SenderNotAccepted until governance
+            // populates the allowlist). That is a safe state, but it's a
+            // configuration error to land here without a deliberate intent
+            // — surface it loudly so the operator can decide.
+            if (verifyingSigner == address(0)) {
+                console2.log("");
+                console2.log("WARNING: PAYMASTER_VERIFYING_SIGNER unset on production network.");
+                console2.log("WARNING: Paymaster will refuse every userOp until governance");
+                console2.log("WARNING: calls setAccepted(...) or setVerifyingSigner(...).");
+                console2.log("WARNING: This is fail-closed, but probably not what you want.");
+                console2.log("");
+            }
+        }
         SmartAgentPaymaster paymaster = new SmartAgentPaymaster(
             IEntryPoint(address(entryPoint)),
-            authority,    // initialOwner — multisig from this tx onward
-            address(governance) // H7-C.9: AgenticGovernance, not deployer EOA
+            authority,
+            address(governance),
+            paymasterDevMode,
+            verifyingSigner
         );
         console2.log("SmartAgentPaymaster:  %s", address(paymaster));
+        console2.log("  devMode:         %s", paymasterDevMode ? "true (testnet)" : "false (production)");
+        if (verifyingSigner != address(0)) {
+            console2.log("  verifyingSigner: %s", verifyingSigner);
+        }
 
         // 6. UniversalSignatureValidator — signer-agnostic verifier
         //    (ECDSA / ERC-1271 / ERC-6492). demo-a2a's /auth/siwe-verify
@@ -316,20 +341,10 @@ contract Deploy is Script {
         console2.log("  stake:   %s wei", stakeAmount);
         console2.log("  deposit: %s wei", depositAmount);
 
-        // 7. Optional: switch paymaster into verifying-paymaster mode
-        //    (audit C2 closure). When PAYMASTER_VERIFYING_SIGNER env is
-        //    set, sets the signer address + flips dev mode off. demo-a2a
-        //    will sign every paymaster envelope with the matching KMS
-        //    key. For local anvil deploys, leave the env unset → paymaster
-        //    stays in dev/accept-all mode (which is fine for tests).
-        address verifyingSigner = vm.envOr("PAYMASTER_VERIFYING_SIGNER", address(0));
-        if (verifyingSigner != address(0)) {
-            paymaster.setVerifyingSigner(verifyingSigner);
-            paymaster.setDevMode(false);
-            console2.log("  verifyingSigner: %s (dev mode OFF)", verifyingSigner);
-        } else {
-            console2.log("  (PAYMASTER_VERIFYING_SIGNER unset; dev mode stays ON)");
-        }
+        // 7. (R5.7) Paymaster mode is now set at construction (see step 5).
+        //    No post-broadcast setDevMode/setVerifyingSigner call required.
+        //    Governance can rotate later via the same setters; the
+        //    deploy-time wiring is the safe initial state.
 
         vm.stopBroadcast();
 

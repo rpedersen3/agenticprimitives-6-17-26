@@ -51,12 +51,26 @@ import "./governance/IGovernance.sol";
  * The hash deliberately omits `paymasterAndData` from the userOp
  * because the signature lives there.
  *
+ * Construction modes (R5.7 / PKG-PAYMASTER-002 closure — external audit P0-2):
+ *   The constructor takes `bool devMode_` + `address verifyingSigner_`
+ *   EXPLICITLY. There is no implicit fail-open default; pre-R5.7 the
+ *   constructor forcibly set `_dev = true` and production deploys had to
+ *   remember to call `setDevMode(false) + setVerifyingSigner(...)` AFTER
+ *   the broadcast, which left a window where the paymaster would sponsor
+ *   any userOp on the freshly-deployed network. Now: testnet deploys pass
+ *   `devMode_=true`; production deploys pass `devMode_=false` with a
+ *   verifying signer (or allowlist seed). See `Deploy.s.sol`.
+ *
  * Production checklist:
- *   1. Call `setDevMode(false)` (governance only) to leave dev mode.
- *   2. Call `setVerifyingSigner(<KMS-backed signer addr>)` to enable
- *      verifying-paymaster mode (preferred). OR populate `_acceptList`
- *      via `setAccepted` if you want allowlist mode.
- *   3. Monitor `getDeposit()` and alert below a runway threshold.
+ *   1. Construct with `devMode_=false` AND either:
+ *        - a non-zero `verifyingSigner_` for verifying-paymaster mode
+ *          (preferred — Pimlico/Stackup/Alchemy pattern), OR
+ *        - `verifyingSigner_=address(0)` to start in allowlist mode (no
+ *          sender is sponsored until `setAccepted` runs). The fall-back
+ *          to allowlist is fail-closed: every userOp reverts with
+ *          `SenderNotAccepted` until governance explicitly opts a sender
+ *          in. That is the documented safe state.
+ *   2. Monitor `getDeposit()` and alert below a runway threshold.
  *
  * @dev Inherits `addStake`, `unlockStake`, `withdrawStake`, `deposit`,
  *      and `withdrawTo` from `BasePaymaster`. Ownable owner is set in
@@ -102,15 +116,28 @@ contract SmartAgentPaymaster is BasePaymaster {
     ///      begins: 20 (paymaster addr) + 16 (verifGas) + 16 (postOpGas).
     uint256 private constant PM_DATA_OFFSET = 52;
 
+    /// @param devMode_           true → accept-all (dev/anvil); false → require
+    ///                           verifying-signer or allowlist. R5.7 removed
+    ///                           the implicit fail-open default.
+    /// @param verifyingSigner_   EOA that signs paymaster envelopes when
+    ///                           `devMode_=false`. Pass `address(0)` to start
+    ///                           in allowlist mode (fail-closed until
+    ///                           `setAccepted` runs).
     constructor(
         IEntryPoint entryPointAddr,
         address initialOwner,
-        address governance_
+        address governance_,
+        bool devMode_,
+        address verifyingSigner_
     ) BasePaymaster(entryPointAddr, initialOwner) {
         if (governance_ == address(0)) revert ZeroGovernance();
         governance = governance_;
-        _dev = true;
-        emit DevModeSet(true);
+        _dev = devMode_;
+        emit DevModeSet(devMode_);
+        if (verifyingSigner_ != address(0)) {
+            verifyingSigner = verifyingSigner_;
+            emit VerifyingSignerSet(address(0), verifyingSigner_);
+        }
     }
 
     // ─── Admin (governance-only) ────────────────────────────────────────

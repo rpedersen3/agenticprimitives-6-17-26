@@ -18,13 +18,21 @@ import {SmartAgentPaymaster} from "../src/SmartAgentPaymaster.sol";
  *     --sig "run()"
  *
  * Defaults (when env unset):
- *   PAYMASTER_STAKE_WEI    = 0.0005 ether
- *   PAYMASTER_DEPOSIT_WEI  = 0.001  ether
- *   PAYMASTER_UNSTAKE_DELAY = 1 day
+ *   PAYMASTER_STAKE_WEI       = 0.0005 ether
+ *   PAYMASTER_DEPOSIT_WEI     = 0.001  ether
+ *   PAYMASTER_UNSTAKE_DELAY   = 1 day
+ *   PAYMASTER_DEV_MODE        = false  (R5.7 — was implicitly true)
+ *   PAYMASTER_VERIFYING_SIGNER = address(0) (allowlist mode)
  *
  * The caller is also used as governance unless GOVERNANCE is set. For
  * the demo we accept this collapse; production splits governance into a
  * separate multisig.
+ *
+ * R5.7 — devMode is now explicit + defaults to `false`. The previous
+ *        constructor silently shipped accept-all (`_dev=true`) and
+ *        relied on the operator remembering setDevMode(false). Local
+ *        deploys that want accept-all must set `PAYMASTER_DEV_MODE=true`
+ *        on the command line.
  */
 contract DeployPaymaster is Script {
     function run() external {
@@ -40,19 +48,29 @@ contract DeployPaymaster is Script {
         uint256 stake = vm.envOr("PAYMASTER_STAKE_WEI", uint256(0.0005 ether));
         uint256 deposit = vm.envOr("PAYMASTER_DEPOSIT_WEI", uint256(0.001 ether));
         uint32 unstakeDelay = uint32(vm.envOr("PAYMASTER_UNSTAKE_DELAY", uint256(1 days)));
+        bool devMode = vm.envOr("PAYMASTER_DEV_MODE", false);
+        address verifyingSigner = vm.envOr("PAYMASTER_VERIFYING_SIGNER", address(0));
 
         console2.log("=== Deploying SmartAgentPaymaster ===");
-        console2.log("entryPoint:  %s", entryPoint);
-        console2.log("deployer:    %s", deployer);
-        console2.log("governance:  %s", governance);
-        console2.log("stake (wei): %s", stake);
-        console2.log("deposit (wei): %s", deposit);
+        console2.log("entryPoint:     %s", entryPoint);
+        console2.log("deployer:       %s", deployer);
+        console2.log("governance:     %s", governance);
+        console2.log("stake (wei):    %s", stake);
+        console2.log("deposit (wei):  %s", deposit);
+        console2.log("devMode:        %s", devMode ? "true (accept-all - DEV ONLY)" : "false");
+        if (verifyingSigner != address(0)) {
+            console2.log("verifyingSigner: %s", verifyingSigner);
+        } else if (!devMode) {
+            console2.log("verifyingSigner: <unset> (allowlist mode, fail-closed until setAccepted)");
+        }
 
         vm.startBroadcast();
         SmartAgentPaymaster paymaster = new SmartAgentPaymaster(
             IEntryPoint(entryPoint),
             deployer,
-            governance
+            governance,
+            devMode,
+            verifyingSigner
         );
         paymaster.addStake{value: stake}(unstakeDelay);
         paymaster.deposit{value: deposit}();
