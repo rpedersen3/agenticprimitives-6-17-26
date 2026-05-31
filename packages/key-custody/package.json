@@ -43,6 +43,10 @@
     "./relayer": {
       "types": "./dist/relayer-account.d.ts",
       "import": "./dist/relayer-account.js"
+    },
+    "./spend-cap": {
+      "types": "./dist/spend-capped-account.d.ts",
+      "import": "./dist/spend-capped-account.js"
     }
   },
   "files": [

@@ -32,6 +32,11 @@ export {
   createRelayerAccount,
   type CreateRelayerAccountOpts,
 } from './relayer-account';
+export {
+  createSpendCappedAccount,
+  SpendCapExceededError,
+  type CreateSpendCappedAccountOpts,
+} from './spend-capped-account';
 export { canonicalContextBytes } from './aad';
 
 export { LocalAesProvider, LocalSecp256k1Signer } from './providers/local';
