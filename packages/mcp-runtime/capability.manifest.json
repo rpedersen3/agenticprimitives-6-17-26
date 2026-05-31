@@ -42,6 +42,7 @@
     "createMemoryJtiStore",
     "MigratableJtiStore",
     "verifyDelegationForResource",
+    "VerifyDelegationForResourceOpts",
     "McpResourceVerifyConfig",
     "ResourceDefinition",
     "BetterSqlite3DatabaseLike",

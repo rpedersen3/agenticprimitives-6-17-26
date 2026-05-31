@@ -54,7 +54,8 @@
     "SafeSignatureSlot",
     "buildExecuteCallData",
     "buildExecuteBatchCallData",
-    "ContractCall"
+    "ContractCall",
+    "SaMismatchError"
   ],
   "forbiddenTerms": [
     {
