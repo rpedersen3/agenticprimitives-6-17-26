@@ -77,12 +77,13 @@ jobs:
       # H7-E.6 — promote CycloneDX SBOM from advisory to required.
       # Runs ONLY on actual publish (steps.changesets.outputs.published == 'true')
       # so the SBOM corresponds exactly to the artifacts that just shipped.
-      - name: Generate CycloneDX SBOM (post-publish)
+      - name: Generate CycloneDX SBOM (post-publish, cdxgen)
         if: steps.changesets.outputs.published == 'true'
+        # cdxgen speaks pnpm natively. `@cyclonedx/cyclonedx-npm` was
+        # incompatible with pnpm's symlink hoisting (calls `npm ls`
+        # under the hood; npm can't see pnpm's .pnpm/-managed devDeps).
         run: |
-          npx --yes @cyclonedx/cyclonedx-npm \
-            --output-file sbom.cyclonedx.json \
-            --output-format JSON
+          npx --yes @cyclonedx/cdxgen@^11 -t pnpm -o sbom.cyclonedx.json .
 
       - name: Attach SBOM to GitHub Release
         if: steps.changesets.outputs.published == 'true'

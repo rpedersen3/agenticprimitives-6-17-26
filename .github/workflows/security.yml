@@ -95,13 +95,22 @@ jobs:
           # commits, not just the tip.
           fetch-depth: 0
 
+      # H7-E (post-push fix): the official `gitleaks/gitleaks-action@v2`
+      # now requires a paid `GITLEAKS_LICENSE` for org accounts (breaking
+      # change made by gitleaks.io in 2024). Run the upstream binary
+      # directly — it's still open-source under MIT — to keep the gate
+      # free + self-hosted-friendly. Same default rule set; same fail-
+      # close behavior on a finding.
+      - name: Install gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
       - name: gitleaks scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # The action ships a sensible default ruleset; we'd add a
-          # `.gitleaks.toml` here only if we needed allowlists (e.g.
-          # known false-positive patterns in golden test fixtures).
+        run: gitleaks detect --source . --verbose --redact --exit-code 1
+        # `.gitleaks.toml` is added only if we need allowlists (e.g.
+        # known false-positive patterns in golden test fixtures).
 
   # H7-E.6: promoted from advisory-only. The release workflow
   # (.github/workflows/release.yml) generates the SBOM as a release
@@ -116,8 +125,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.0
 
       - uses: actions/setup-node@v4
         with:
@@ -126,14 +133,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Generate an SBOM. Doesn't gate the PR; published as a workflow
-      # artifact so an auditor can browse + verify against deployed
-      # builds.
-      - name: Generate SBOM (CycloneDX)
+      # H7-E (post-push fix): generate SBOM with the cdxgen tool which
+      # speaks pnpm natively. The previous `@cyclonedx/cyclonedx-npm`
+      # tool invokes `npm ls` under the hood and chokes on pnpm's
+      # symlink-based hoisting (npm doesn't see the dev-deps that pnpm
+      # holds in .pnpm/). cdxgen is the upstream CycloneDX-recommended
+      # generator + understands all major package managers.
+      - name: Generate SBOM (CycloneDX, cdxgen)
         run: |
-          npx --yes @cyclonedx/cyclonedx-npm \
-            --output-file sbom.cyclonedx.json \
-            --output-format JSON
+          npx --yes @cyclonedx/cdxgen@^11 -t pnpm -o sbom.cyclonedx.json .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -196,15 +204,17 @@ jobs:
     runs-on: ubuntu-latest
     name: Strict peer-dependency check
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
+      # H7-E (post-push fix): drop `version:` — `pnpm/action-setup@v4`
+      # rejects when both `version:` AND a `packageManager: pnpm@…`
+      # field in package.json are set. We pin via package.json
+      # (single source of truth) so the action picks it up.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 

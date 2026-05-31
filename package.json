@@ -67,7 +67,6 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
-    "@cyclonedx/cyclonedx-npm": "^2.0.0",
     "@types/node": "^22.7.0",
     "viem": "^2.50.0",
     "@vitest/coverage-v8": "^2.1.0",
