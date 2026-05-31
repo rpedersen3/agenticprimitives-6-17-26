@@ -17,6 +17,7 @@ re-export ResourceDefinition from ./types
 re-export ServiceMacContext from ./service-mac
 re-export ServiceMacHeaders from ./service-mac
 re-export ToolClassification from ./types
+re-export VerifyDelegationForResourceOpts from ./with-delegation
 re-export bodyDigestHex from ./service-mac
 re-export createMemoryJtiStore from ./jti-stores
 re-export createPostgresJtiStore from ./jti-stores
