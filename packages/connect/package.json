@@ -1,7 +1,17 @@
 {
   "name": "@agenticprimitives/connect",
   "version": "0.1.0-alpha.2",
-  "description": "Agentic Connect — the SSO broker (spec 224 / ADR-0014). Mints CAIP-10-subject, no-owner AgentSessions (asymmetric + JWKS); drives entry-flow convergence (connect-auth verify → identity-directory resolve → issue/bootstrap/disambiguate) with assurance floor, non-EVM gate, and code-exchange redirect security.",
+  "description": "Agentic Connect \u2014 the SSO broker (spec 224 / ADR-0014). Mints CAIP-10-subject, no-owner AgentSessions (asymmetric + JWKS); drives entry-flow convergence (connect-auth verify \u2192 identity-directory resolve \u2192 issue/bootstrap/disambiguate) with assurance floor, non-EVM gate, and code-exchange redirect security.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/connect"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/connect",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,14 +36,9 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "sso",
-    "broker",
-    "agentsession",
-    "jwks",
-    "agentic"
-  ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/identity-directory": "workspace:*",
@@ -42,7 +47,11 @@
   "devDependencies": {
     "vitest": "^2.1.0"
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "keywords": [
+    "sso",
+    "broker",
+    "agentsession",
+    "jwks",
+    "agentic"
+  ]
 }

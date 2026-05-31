@@ -1,7 +1,17 @@
 {
   "name": "@agenticprimitives/delegation",
   "version": "0.1.0-alpha.2",
-  "description": "EIP-712 smart-account delegations with caveats; web→agent→MCP token flow; session lifecycle.",
+  "description": "EIP-712 smart-account delegations with caveats; web\u2192agent\u2192MCP token flow; session lifecycle.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/delegation"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/delegation",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,16 +36,9 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "delegation",
-    "eip-712",
-    "erc-7710",
-    "erc-1271",
-    "caveat",
-    "session",
-    "agentic"
-  ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@noble/curves": "^1.6.0",
     "@noble/hashes": "^1.5.0"
@@ -51,7 +54,13 @@
   "devDependencies": {
     "vitest": "^2.1.0"
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "keywords": [
+    "delegation",
+    "eip-712",
+    "erc-7710",
+    "erc-1271",
+    "caveat",
+    "session",
+    "agentic"
+  ]
 }

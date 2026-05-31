@@ -2,6 +2,16 @@
   "name": "@agenticprimitives/agent-account",
   "version": "0.1.0-alpha.2",
   "description": "ERC-4337 smart-account substrate: deterministic addressing, factory deployment, ERC-1271 signing, UserOp building.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/agent-account"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/agent-account",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,14 +36,9 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "erc-4337",
-    "smart-account",
-    "account-abstraction",
-    "erc-1271",
-    "agentic"
-  ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
@@ -42,7 +47,11 @@
   "devDependencies": {
     "vitest": "^2.1.0"
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "keywords": [
+    "erc-4337",
+    "smart-account",
+    "account-abstraction",
+    "erc-1271",
+    "agentic"
+  ]
 }

@@ -2,6 +2,16 @@
   "name": "@agenticprimitives/agent-profile",
   "version": "0.1.0-alpha.2",
   "description": "Agent identity SDK: HCS-11-aligned typed profile schema (AgentCard), HCS-14 CAIP-10 nativeId helpers, mcpServer.verification methods (DNS TXT / signed URL / HTTP challenge / VP), canonical-JSON content-hash. Speaks identity-domain vocabulary only.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/agent-profile"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/agent-profile",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -32,16 +42,9 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "agent",
-    "identity",
-    "hcs-11",
-    "hcs-14",
-    "erc-8004",
-    "caip-10",
-    "agentic"
-  ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "@agenticprimitives/agent-account": "workspace:*",
     "@agenticprimitives/connect-auth": "workspace:*",
@@ -52,7 +55,13 @@
     "@types/node": "^22.7.0",
     "vitest": "^2.1.0"
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "keywords": [
+    "agent",
+    "identity",
+    "hcs-11",
+    "hcs-14",
+    "erc-8004",
+    "caip-10",
+    "agentic"
+  ]
 }

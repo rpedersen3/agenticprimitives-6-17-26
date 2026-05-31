@@ -3,6 +3,20 @@
   "version": "0.1.0-alpha.2",
   "description": "Solidity contracts + ABIs + flattened sources + per-network deployment addresses for the agenticprimitives stack.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/contracts"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/contracts",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
+  "exports": {
+    "./abi": "./dist/abi/index.js",
+    "./abi/*": "./dist/abi/*.json",
+    "./deployments/*": "./deployments-*.json"
+  },
   "files": [
     "LICENSE",
     "README.md",
@@ -14,11 +28,6 @@
     "dist/flat",
     "deployments-*.json"
   ],
-  "exports": {
-    "./abi": "./dist/abi/index.js",
-    "./abi/*": "./dist/abi/*.json",
-    "./deployments/*": "./deployments-*.json"
-  },
   "scripts": {
     "setup": "bash setup.sh",
     "build": "forge build && pnpm run build:abi",

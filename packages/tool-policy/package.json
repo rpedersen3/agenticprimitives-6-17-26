@@ -2,6 +2,16 @@
   "name": "@agenticprimitives/tool-policy",
   "version": "0.1.0-alpha.2",
   "description": "Protocol-agnostic classification, risk tiers, and exact-call policy. Consumable by MCP, A2A, LangGraph, and Vercel AI tool runtimes.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/tool-policy"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/tool-policy",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -30,15 +40,9 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "policy",
-    "classification",
-    "risk-tier",
-    "exact-call",
-    "agentic",
-    "tool-policy"
-  ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@noble/hashes": "^1.5.0"
   },
@@ -49,7 +53,12 @@
     "@types/node": "^22.7.0",
     "vitest": "^2.1.0"
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "keywords": [
+    "policy",
+    "classification",
+    "risk-tier",
+    "exact-call",
+    "agentic",
+    "tool-policy"
+  ]
 }

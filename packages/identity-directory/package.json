@@ -2,6 +2,16 @@
   "name": "@agenticprimitives/identity-directory",
   "version": "0.1.0-alpha.2",
   "description": "Evidence-backed read model over canonical agents and their facets (ADR-0015 / spec 223). Declares the ports (NamingPort / OnChainReadPort / IndexerPort) + the query API with provenance + assurance. Not an authority; no eth_getLogs; no fallback. Adapters live in identity-directory-adapters.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/identity-directory"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/identity-directory",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,14 +36,9 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "identity",
-    "directory",
-    "read-model",
-    "knowledge-graph",
-    "agentic"
-  ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "@agenticprimitives/audit": "workspace:*",
     "@agenticprimitives/ontology": "workspace:*",
@@ -42,7 +47,11 @@
   "devDependencies": {
     "vitest": "^2.1.0"
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "keywords": [
+    "identity",
+    "directory",
+    "read-model",
+    "knowledge-graph",
+    "agentic"
+  ]
 }

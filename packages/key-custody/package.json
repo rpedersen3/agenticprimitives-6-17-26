@@ -2,6 +2,16 @@
   "name": "@agenticprimitives/key-custody",
   "version": "0.1.0-alpha.2",
   "description": "Pluggable envelope encryption + signers + HMAC providers (local-AES / AWS KMS / GCP KMS). Pure crypto primitives; no session lifecycle (that's in delegation).",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/key-custody"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/key-custody",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -46,16 +56,9 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "kms",
-    "aws-kms",
-    "gcp-kms",
-    "envelope-encryption",
-    "secp256k1",
-    "hmac",
-    "agentic"
-  ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@noble/curves": "^1.6.0",
     "@noble/hashes": "^1.5.0"
@@ -69,7 +72,13 @@
   "devDependencies": {
     "vitest": "^2.1.0"
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "keywords": [
+    "kms",
+    "aws-kms",
+    "gcp-kms",
+    "envelope-encryption",
+    "secp256k1",
+    "hmac",
+    "agentic"
+  ]
 }

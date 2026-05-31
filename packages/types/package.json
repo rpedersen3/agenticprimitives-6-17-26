@@ -2,6 +2,16 @@
   "name": "@agenticprimitives/types",
   "version": "0.1.0-alpha.2",
   "description": "Cross-cutting branded types and chain primitives shared across @agenticprimitives/* packages.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/types"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/types",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,12 +33,11 @@
     "test": "echo 'no tests yet' && exit 0",
     "clean": "rm -rf dist"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "types",
     "agentic"
-  ],
-  "license": "MIT",
-  "publishConfig": {
-    "access": "public"
-  }
+  ]
 }

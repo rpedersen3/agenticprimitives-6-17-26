@@ -1,7 +1,17 @@
 {
   "name": "@agenticprimitives/account-custody",
   "version": "0.1.0-alpha.2",
-  "description": "Custody-layer SDK: CustodyPolicy ABI, CustodyAction enum + arg builders, EIP-712 typed-data helpers, and Custodian/Trustee/CustodyCouncil types. Speaks custody-domain vocabulary only — no delegation / steward / caveat concepts (those belong in @agenticprimitives/delegation).",
+  "description": "Custody-layer SDK: CustodyPolicy ABI, CustodyAction enum + arg builders, EIP-712 typed-data helpers, and Custodian/Trustee/CustodyCouncil types. Speaks custody-domain vocabulary only \u2014 no delegation / steward / caveat concepts (those belong in @agenticprimitives/delegation).",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/account-custody"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/account-custody",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -24,14 +34,9 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "custody",
-    "multi-sig",
-    "trustee",
-    "recovery",
-    "agentic"
-  ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "@agenticprimitives/types": "workspace:*",
     "viem": "^2.50.0"
@@ -40,7 +45,11 @@
     "@types/node": "^22.7.0",
     "vitest": "^2.1.0"
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "keywords": [
+    "custody",
+    "multi-sig",
+    "trustee",
+    "recovery",
+    "agentic"
+  ]
 }
