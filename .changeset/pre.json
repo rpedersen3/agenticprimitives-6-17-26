@@ -32,6 +32,15 @@
   },
   "changesets": [
     "r1-cross-stack-typehash-convergence",
-    "r4-9-oidc-verification"
+    "r4-9-oidc-verification",
+    "r5-10-session-iss-aud-binding",
+    "r5-11-csrf-actual-origin",
+    "r5-12a-relayer-account",
+    "r5-12b-spend-capped-account",
+    "r5-12c-sa-derivation-invariant",
+    "r5-12d-demo-a2a-relayer-migration",
+    "r5-7-paymaster-explicit-dev-mode",
+    "r5-8-verify-resource-prod-gate",
+    "r5-9-per-role-authority"
   ]
 }

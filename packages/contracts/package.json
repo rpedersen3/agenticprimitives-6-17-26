@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/contracts",
-  "version": "0.1.0-alpha.3",
+  "version": "1.0.0-alpha.4",
   "description": "Solidity contracts + ABIs + flattened sources + per-network deployment addresses for the agenticprimitives stack.",
   "license": "MIT",
   "repository": {

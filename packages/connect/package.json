@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/connect",
-  "version": "0.1.0-alpha.3",
+  "version": "1.0.0-alpha.4",
   "description": "Agentic Connect — the SSO broker (spec 224 / ADR-0014). Mints CAIP-10-subject, no-owner AgentSessions (asymmetric + JWKS); drives entry-flow convergence (connect-auth verify → identity-directory resolve → issue/bootstrap/disambiguate) with assurance floor, non-EVM gate, and code-exchange redirect security.",
   "license": "MIT",
   "repository": {

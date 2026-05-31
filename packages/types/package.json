@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/types",
-  "version": "0.1.0-alpha.3",
+  "version": "1.0.0-alpha.4",
   "description": "Cross-cutting branded types and chain primitives shared across @agenticprimitives/* packages.",
   "license": "MIT",
   "repository": {

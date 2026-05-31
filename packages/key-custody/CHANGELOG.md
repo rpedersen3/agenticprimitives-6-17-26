@@ -1,5 +1,233 @@
 # @agenticprimitives/key-custody
 
+## 1.0.0-alpha.4
+
+### Minor Changes
+
+- 91b5888: R5.12a — Add `createRelayerAccount` for funded relayer chain calls
+  (PKG-KEY-CUSTODY-009 closure).
+
+  ### New API
+
+  ```ts
+  import {
+    buildSignerBackend,
+    createRelayerAccount,
+  } from '@agenticprimitives/key-custody';
+
+  const backend = buildSignerBackend({ backend: 'gcp-kms' });
+  const relayer = await createRelayerAccount(backend, {
+    role: 'direct-deploy',
+    auditSink,
+  });
+
+  await walletClient.writeContract({ account: relayer, ... });
+  // emits: key-custody.relay.sign { role: 'direct-deploy', opType: 'transaction', to, value, ... }
+  ```
+
+  `createRelayerAccount(backend, opts: CreateRelayerAccountOpts)` returns
+  a viem `LocalAccount` (drop-in for `privateKeyToAccount(...)`). The
+  inner KMS account (via `createKmsViemAccount`) handles digest signing
+  — no key material leaves the HSM. The wrapper additionally emits a
+  `key-custody.relay.sign` audit row on every sign op tagged with the
+  caller-supplied `role`.
+
+  ### Audit event shape
+
+  ```ts
+  {
+    action:  'key-custody.relay.sign',
+    outcome: 'success',
+    actor:   { type: 'system', id: '<role>' },
+    subject: { type: 'message' | 'transaction' | 'typed-data', id: '<digestFingerprint>' },
+    context: {
+      role:              '<role>',
+      signerAddress:     '<0x... KMS-backed addr>',
+      opType:            'message' | 'transaction' | 'typed-data',
+      to:                '<tx target>' | null,
+      value:             '<wei as decimal string>' | null,
+      digestFingerprint: '0x + 16 hex chars (9 bytes of keccak)',
+    },
+  }
+  ```
+
+  Fail-soft: audit sink throws don't break the relay flow. Wrap with
+  `composeFailHardSinks` from `@agenticprimitives/audit` for
+  fail-hard semantics.
+
+  ### Why
+
+  External P0-style finding from the demo-a2a doctrine review: there
+  was no documented "use me for funded relayer ops" entry point in
+  `key-custody`. Apps reached for `privateKeyToAccount(env.X_PRIVATE_KEY)`,
+  tripping `check:no-app-private-keys` and emitting zero audit
+  context tagged by operator role. `createRelayerAccount` IS the
+  convention.
+
+  ### New exports
+  - `createRelayerAccount` (main + `/relayer` subpath)
+  - `CreateRelayerAccountOpts` type
+  - Also re-exposes `createKmsViemAccount` from the main index for
+    discoverability (previously available only via `/kms-viem`
+    subpath)
+
+  ### Docs
+  - New `docs/relayer.md` explains when to reach for
+    `createRelayerAccount` vs `createKmsViemAccount`, the role
+    taxonomy convention, and the migration path.
+
+  ### Tests
+
+  13 new R5.12a tests in `test/unit/relayer-account.test.ts`:
+  - address + source tag (`'kms-relayer'`)
+  - delegates signMessage / signTransaction / signTypedData to inner
+  - audit emit shape per op-type (`message` / `transaction` / `typed-data`)
+  - audit context: role, signerAddress, to, value, digestFingerprint
+  - value `bigint` → decimal string (JSON-safe)
+  - digestFingerprint is 18-char hashed prefix (never raw digest)
+  - fail-soft (throwing audit sink doesn't propagate)
+  - no-sink path works
+  - role in BOTH actor.id and context.role
+  - deterministic signing (audit emission is additive)
+  - transaction value omitted → recorded as `'0'`
+
+  94/94 key-custody tests pass (was 81; +13 R5.12a).
+
+  ### Companion work (separate PRs)
+  - **R5.12b** — `createSpendCappedAccount` for funding-only signers
+    (rejects `value > capWei` BEFORE the KMS round-trip)
+  - **R5.12c** — `assertSaMatchesCustodianDerivation` in `agent-account`
+    for sponsored-deploy gates
+  - **R5.12d** — demo-a2a migrates 4 `privateKeyToAccount(DEPLOYER_PRIVATE_KEY)`
+    callsites onto the new pattern
+
+- e4c99dc: R5.12b — Add `createSpendCappedAccount` for per-tx ETH-capped relayers
+  (PKG-KEY-CUSTODY-010 closure).
+
+  ### New API
+
+  ```ts
+  import {
+    createRelayerAccount,
+    createSpendCappedAccount,
+    SpendCapExceededError,
+  } from '@agenticprimitives/key-custody';
+
+  const inner = await createRelayerAccount(backend, {
+    role: 'paymaster-topup',
+    auditSink,
+  });
+  const capped = createSpendCappedAccount(inner, {
+    capWei: 10n ** 17n, // 0.1 ETH per tx
+    auditSink,
+  });
+
+  // Under cap → signs normally; emits key-custody.relay.sign from inner
+  await walletClient.sendTransaction({ account: capped, to, value: 5n * 10n ** 16n });
+
+  // Over cap → throws SpendCapExceededError BEFORE any HSM call;
+  // emits key-custody.relay.spend-cap.reject from the cap wrapper
+  await walletClient.sendTransaction({ account: capped, to, value: 10n ** 18n });
+  ```
+
+  ### Why
+
+  External P0-style finding from the demo-a2a doctrine review: a funded
+  relayer / operator key (paymaster top-up) had no signing-time gate
+  against draining the worker balance in one tx. The cap was only
+  enforceable operationally: monitor balance, hope to catch a drain
+  in time, rotate keys after the fact. A compromised app process
+  holding the signer could drain the entire balance in one shot.
+
+  `createSpendCappedAccount` is a stateless pre-signing gate:
+  `value > capWei` → throws `SpendCapExceededError` BEFORE any HSM
+  round-trip. The HSM never even sees the digest.
+
+  ### Behaviour
+  - `value < capWei` → pass
+  - `value === capWei` → pass (boundary, not violation)
+  - `value > capWei` → reject + audit `denied`
+  - `value === undefined / null` → treated as `0n` → pass
+  - `value` as `number` / `string` → normalised to `bigint`
+  - Unknown value shape → treated as `MAX_UINT256` → reject (fail-closed)
+  - `capWei === 0n` → blocks ALL positive-value txs while allowing
+    zero-value contract writes
+  - `capWei < 0n` → throws at construction
+  - `signMessage` / `signTypedData` → forwarded verbatim (no on-chain
+    value to cap)
+  - Audit emission ONLY on reject; success path stays silent (inner
+    relayer's `key-custody.relay.sign` carries the success)
+  - Fail-soft audit: sink throws do NOT swallow the
+    `SpendCapExceededError`
+
+  ### Composition
+
+  `createSpendCappedAccount(createRelayerAccount(backend, ...), { capWei })`
+  is the canonical funding-signer pattern. The cap is the _outer_ gate;
+  the relayer's KMS+audit is the _inner_ signer.
+
+  ### Audit event shape (reject only)
+
+  ```ts
+  {
+    action:  'key-custody.relay.spend-cap.reject',
+    outcome: 'denied',
+    actor:   { type: 'system', id: '<signerAddress>' },
+    subject: { type: 'transaction', id: '<tx target>' },
+    context: { signerAddress, to, capWei, requestedValue },
+  }
+  ```
+
+  ### New exports
+  - `createSpendCappedAccount` (main index + new `/spend-cap` subpath)
+  - `SpendCapExceededError` class
+  - `CreateSpendCappedAccountOpts` type
+
+  ### What this is NOT
+  - Not a rolling spend budget (per-tx only; cumulative tracking
+    belongs at substrate / operational layer)
+  - Not calldata-aware (a `transfer(...)` ERC-20 call has
+    `transaction.value == 0`; ERC-20 balance limits belong on the
+    contract)
+  - Not a rate limiter (HTTP layer / substrate concern)
+
+  ### Docs
+
+  New `packages/key-custody/docs/spend-capped.md` covers composition,
+  boundary semantics, value normalisation, and the non-goals.
+
+  ### Tests
+
+  22 new R5.12b tests in `test/unit/spend-capped-account.test.ts`:
+  - construction: negative cap rejected, cap=0 accepted, source tag
+  - value gate: under/at/over cap, off-by-one above cap
+  - error message identifies cap / requested / target / signer
+  - value normalisation: undefined / number / string / bigint
+  - cap=0 blocks positive value, passes zero value
+  - signMessage / signTypedData pass-through (no cap applies)
+  - audit emit only on reject; success path silent
+  - fail-soft (throwing sink doesn't swallow error)
+  - no-sink path works
+  - HSM never called on cap reject (vi.spyOn verification)
+  - HSM called once when under cap
+
+  103/103 key-custody tests pass (was 81; +22 R5.12b).
+
+  ### Companion
+
+  This is the funding-signer companion to **R5.12a** (`createRelayerAccount`).
+  Together they're the package-level fix for the demo-a2a
+  `DEPLOYER_PRIVATE_KEY` doctrine red. **R5.12c** (`assertSaMatchesCustodianDerivation`)
+  and **R5.12d** (demo-a2a migration) complete the wave.
+
+### Patch Changes
+
+- Updated dependencies [4c1f3dd]
+- Updated dependencies [20a20de]
+  - @agenticprimitives/connect-auth@1.0.0-alpha.4
+  - @agenticprimitives/types@1.0.0-alpha.4
+  - @agenticprimitives/audit@1.0.0-alpha.4
+
 ## 0.1.0-alpha.3
 
 ### Patch Changes

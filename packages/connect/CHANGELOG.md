@@ -1,5 +1,15 @@
 # @agenticprimitives/connect
 
+## 1.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [4c1f3dd]
+- Updated dependencies [20a20de]
+  - @agenticprimitives/connect-auth@1.0.0-alpha.4
+  - @agenticprimitives/types@1.0.0-alpha.4
+  - @agenticprimitives/identity-directory@1.0.0-alpha.4
+
 ## 0.1.0-alpha.3
 
 ### Patch Changes

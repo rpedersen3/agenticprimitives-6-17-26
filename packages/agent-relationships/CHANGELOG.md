@@ -1,5 +1,16 @@
 # @agenticprimitives/agent-relationships
 
+## 1.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [4c1f3dd]
+- Updated dependencies [20a20de]
+- Updated dependencies [53156b5]
+  - @agenticprimitives/connect-auth@1.0.0-alpha.4
+  - @agenticprimitives/agent-account@1.0.0-alpha.4
+  - @agenticprimitives/types@1.0.0-alpha.4
+
 ## 0.1.0-alpha.3
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/mcp-runtime",
-  "version": "0.1.0-alpha.3",
+  "version": "1.0.0-alpha.4",
   "description": "Delegation-aware authorization middleware around the official MCP TypeScript SDK. The decision layer, not the SDK.",
   "license": "MIT",
   "repository": {
