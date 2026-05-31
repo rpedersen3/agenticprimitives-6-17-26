@@ -1,21 +1,21 @@
 ---
-'@agenticprimitives/types': patch
-'@agenticprimitives/audit': patch
-'@agenticprimitives/connect-auth': patch
-'@agenticprimitives/connect': patch
-'@agenticprimitives/key-custody': patch
-'@agenticprimitives/account-custody': patch
-'@agenticprimitives/agent-account': patch
-'@agenticprimitives/delegation': patch
-'@agenticprimitives/tool-policy': patch
-'@agenticprimitives/mcp-runtime': patch
-'@agenticprimitives/agent-naming': patch
-'@agenticprimitives/agent-profile': patch
-'@agenticprimitives/agent-relationships': patch
-'@agenticprimitives/identity-directory': patch
-'@agenticprimitives/identity-directory-adapters': patch
-'@agenticprimitives/ontology': patch
-'@agenticprimitives/contracts': patch
+'@agenticprimitives/types': minor
+'@agenticprimitives/audit': minor
+'@agenticprimitives/connect-auth': minor
+'@agenticprimitives/connect': minor
+'@agenticprimitives/key-custody': minor
+'@agenticprimitives/account-custody': minor
+'@agenticprimitives/agent-account': minor
+'@agenticprimitives/delegation': minor
+'@agenticprimitives/tool-policy': minor
+'@agenticprimitives/mcp-runtime': minor
+'@agenticprimitives/agent-naming': minor
+'@agenticprimitives/agent-profile': minor
+'@agenticprimitives/agent-relationships': minor
+'@agenticprimitives/identity-directory': minor
+'@agenticprimitives/identity-directory-adapters': minor
+'@agenticprimitives/ontology': minor
+'@agenticprimitives/contracts': minor
 ---
 
 R1 — CROSS-STACK-001 closure + storage-layout snapshot gate.

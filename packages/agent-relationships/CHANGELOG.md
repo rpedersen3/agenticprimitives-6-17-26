@@ -2,7 +2,7 @@
 
 ## 0.1.0-alpha.2
 
-### Patch Changes
+### Minor Changes
 
 - R1 — CROSS-STACK-001 closure + storage-layout snapshot gate.
 
