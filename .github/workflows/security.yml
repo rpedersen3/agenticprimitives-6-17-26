@@ -108,9 +108,9 @@ jobs:
           gitleaks version
 
       - name: gitleaks scan
-        run: gitleaks detect --source . --verbose --redact --exit-code 1
-        # `.gitleaks.toml` is added only if we need allowlists (e.g.
-        # known false-positive patterns in golden test fixtures).
+        # `.gitleaks.toml` at repo root holds the allowlist of verified
+        # false-positive paths (test fixtures, snapshot literals, etc.).
+        run: gitleaks detect --source . --config .gitleaks.toml --verbose --redact --exit-code 1
 
   # H7-E.6: promoted from advisory-only. The release workflow
   # (.github/workflows/release.yml) generates the SBOM as a release
@@ -218,9 +218,12 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install with strict peers (no auto-fill)
+      # H7-E (post-push fix): can't combine `--frozen-lockfile` with
+      # `--config.auto-install-peers=false` — pnpm 9 encodes the
+      # auto-install setting INTO the lockfile to detect drift, and
+      # the repo's `.npmrc` pins `auto-install-peers=true`. The strict
+      # check still works without --frozen-lockfile: pnpm re-resolves
+      # under strict peer rules and fails on any conflict.
+      - name: Install with strict peers
         run: |
-          pnpm install \
-            --frozen-lockfile \
-            --strict-peer-dependencies \
-            --config.auto-install-peers=false
+          pnpm install --strict-peer-dependencies

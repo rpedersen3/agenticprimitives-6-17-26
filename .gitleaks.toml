@@ -1,0 +1,40 @@
+# H7-E (post-push): gitleaks allowlist for repo-specific false positives.
+#
+# Every entry below has been INDIVIDUALLY verified as a test fixture,
+# generated synthetic value, or syntactic match — NOT a real secret.
+# When adding a new entry: include the file + path + a one-line rationale.
+#
+# To run locally:
+#   gitleaks detect --source . --verbose --redact --exit-code 1
+
+title = "agenticprimitives gitleaks config"
+
+[extend]
+# Inherit the upstream default rule set.
+useDefault = true
+
+[allowlist]
+description = "Path + commit allowlist — verified false positives only."
+
+paths = [
+  # Snapshot-style inline JSON of fake delegation tokens (zero-padded
+  # signatures, deterministic fake addresses + jti). Gitleaks reads
+  # the long inline-snapshot hex blob as a high-entropy secret.
+  '''packages/delegation/test/unit/canonical-json\.test\.ts$''',
+
+  # GCP service-account JSON FIXTURES that GENERATE a synthetic RSA
+  # private key at runtime via @noble/curves; the PEM string never
+  # touches disk. The file shows the PEM-builder loop, not a key.
+  '''packages/key-custody/test/unit/gcp-provider\.test\.ts$''',
+  '''packages/key-custody/test/unit/gcp-signer\.test\.ts$''',
+
+  # Pure TypeScript interface field declarations (e.g.
+  # `shapeRegistry?: string;`). Gitleaks mis-reads identifier-strings
+  # as high-entropy generic API keys.
+  '''scripts/gen-dev-vars\.ts$''',
+
+  # `fullyParallel: false` — Playwright config syntax token; the
+  # alphanumeric / colon / underscore mix trips the generic-api-key
+  # entropy heuristic.
+  '''tests/e2e/playwright\.config\.ts$''',
+]
