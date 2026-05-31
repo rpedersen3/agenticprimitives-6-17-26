@@ -315,12 +315,25 @@ export function findRecoveryByte(
       attempts.push(`v=${recovery + 27} threw ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+  // R5.5 / PKG-KEY-CUSTODY-004 closure — previously logged
+  //   { digest, r, s, knownPubKey } as raw hex via console.error.
+  // The digest is typically a userOp hash (chain-correlatable); the
+  // pubkey is the long-lived signer identity. Both are operational
+  // fingerprints. Worker log pipelines that index console output
+  // surface them as searchable. Redact to keccak-prefix-8 so the
+  // error is still actionable (operators can correlate across runs
+  // when needed) without leaking the raw values. `attempts` retains
+  // the recovered-pubkey from each branch — already truncated by
+  // virtue of being recovered output, not key material, and load-
+  // bearing for the actual debug path.
+  const tag = (label: string, b: Uint8Array): string =>
+    `${label}=${bytesToHex(keccak_256(b)).slice(0, 8)}`;
   // eslint-disable-next-line no-console
   console.error('[gcp-kms findRecoveryByte] mismatch:', {
-    digest: bytesToHex(digest),
-    r: bytesToHex(rBytes),
-    s: bytesToHex(sBytes),
-    knownPubKey: bytesToHex(knownPubKey65),
+    digestTag: tag('k', digest),
+    rTag: tag('k', rBytes),
+    sTag: tag('k', sBytes),
+    knownPubKeyTag: tag('k', knownPubKey65),
     attempts,
   });
   throw new Error(
