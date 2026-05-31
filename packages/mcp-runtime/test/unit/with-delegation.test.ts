@@ -64,6 +64,54 @@ describe('withDelegation', () => {
     await expect(wrapped({ token: '' })).rejects.toBeInstanceOf(McpAuthError);
   });
 
+  it('H7-F.1 — McpAuthError carries opaque code + correlationId only (no leakage)', async () => {
+    (verifyDelegationToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      error: 'token expired at slot 0xdeadbeef…',
+    });
+    const wrapped = withDelegation(config, vi.fn());
+    try {
+      await wrapped({ token: 'fake' });
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(McpAuthError);
+      const err = e as McpAuthError;
+      expect(err.code).toBe('auth-failed');
+      expect(err.correlationId).toMatch(/^wd-/);
+      // The private reason ("token expired at slot 0xdeadbeef…") must NOT
+      // be reachable from the caller's error surface.
+      const surfaceKeys = Object.keys(err);
+      expect(surfaceKeys).not.toContain('reason');
+      const msg = JSON.stringify(err.message);
+      expect(msg).not.toMatch(/0xdeadbeef/i);
+    }
+  });
+
+  it('H7-F.1 — missing token also uses opaque code + correlationId', async () => {
+    const wrapped = withDelegation(config, vi.fn());
+    try {
+      await wrapped({ token: '' });
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(McpAuthError);
+      const err = e as McpAuthError;
+      expect(err.code).toBe('auth-failed');
+      expect(err.correlationId).toBeTruthy();
+    }
+  });
+
+  it('H7-F.1 — caller-supplied correlationId is propagated', async () => {
+    (verifyDelegationToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      error: 'expired',
+    });
+    const wrapped = withDelegation(config, vi.fn(), { correlationId: 'caller-req-42' });
+    try {
+      await wrapped({ token: 'fake' });
+    } catch (e) {
+      const err = e as McpAuthError;
+      expect(err.correlationId).toBe('caller-req-42');
+    }
+  });
+
   it('passes toolName through to verifyDelegationToken when configured', async () => {
     const mock = verifyDelegationToken as ReturnType<typeof vi.fn>;
     mock.mockResolvedValueOnce({ principal: '0xabc' });

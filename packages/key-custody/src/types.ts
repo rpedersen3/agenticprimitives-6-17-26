@@ -3,6 +3,94 @@ import type { AuditSink } from '@agenticprimitives/audit';
 
 export type KmsBackend = 'local-aes' | 'aws-kms' | 'gcp-kms';
 
+/**
+ * H7-F.5 / PKG-KEY-CUSTODY-005 closure — opaque branded type for
+ * sensitive config values (raw private keys, KMS service-account JSON,
+ * session secrets, derivation masters, etc.).
+ *
+ * Previously `BuildOpts.config: Record<string, string>` shipped raw
+ * private keys + KMS service-account JSON as plain strings. A consumer
+ * who logged `opts.config` for debugging silently dumped the master
+ * private key to logs (and worse, to any structured-log backend that
+ * indexed it).
+ *
+ * `Secret<T>` is a `BrandedSecret` wrapper that:
+ *   - Cannot be `JSON.stringify`d to its underlying value (the brand
+ *     wins; the value field is non-enumerable + has a custom toJSON
+ *     that returns `'[redacted secret]'`).
+ *   - Cannot be `console.log`'d in a useful way (custom `inspect`
+ *     symbol + `Symbol.toPrimitive` return the redaction marker).
+ *   - Exposes the underlying value ONLY through {@link unwrapSecret}.
+ *
+ * Loaders (`loadSecret`, `loadSecretFromEnv`) are the only constructors.
+ * Existing `Record<string, string>` config still works (back-compat);
+ * new code should use the branded shape via `secretConfig`.
+ */
+const SECRET_BRAND: unique symbol = Symbol.for('agenticprimitives.secret');
+
+export interface Secret<T extends string = string> {
+  readonly [SECRET_BRAND]: true;
+  /** Phantom — for compile-time discrimination of value shapes. */
+  readonly _kind?: T;
+}
+
+interface InternalSecret<T extends string = string> extends Secret<T> {
+  __value: string;
+}
+
+const REDACTED = '[redacted secret]' as const;
+
+/**
+ * Wrap a plain string as an opaque secret. The returned object will
+ * NOT survive `JSON.stringify`, `console.log`, or `util.inspect`.
+ */
+export function loadSecret<T extends string = string>(value: string): Secret<T> {
+  const inner: InternalSecret<T> = {
+    [SECRET_BRAND]: true,
+    __value: value,
+    toJSON: () => REDACTED,
+    toString: () => REDACTED,
+    [Symbol.toPrimitive]: () => REDACTED,
+  } as InternalSecret<T> & {
+    toJSON: () => string;
+    toString: () => string;
+    [Symbol.toPrimitive]: () => string;
+  };
+  // Hide `__value` from enumeration so naive iteration (Object.keys,
+  // spread, JSON.stringify) cannot reach it.
+  Object.defineProperty(inner, '__value', { enumerable: false, writable: false });
+  // Node's util.inspect honors this symbol.
+  Object.defineProperty(inner, Symbol.for('nodejs.util.inspect.custom'), {
+    enumerable: false,
+    value: () => REDACTED,
+  });
+  return inner;
+}
+
+/** Load a secret from a process env var. Throws if the var is missing or empty. */
+export function loadSecretFromEnv<T extends string = string>(name: string): Secret<T> {
+  let value: string | undefined;
+  try {
+    value = process.env?.[name];
+  } catch {
+    /* SES / Workers may throw on process access */
+  }
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`[key-custody] loadSecretFromEnv: env var ${name} is missing or empty`);
+  }
+  return loadSecret<T>(value);
+}
+
+/** Unwrap a secret to its underlying string. Use AT THE LAST POSSIBLE MOMENT. */
+export function unwrapSecret<T extends string>(s: Secret<T>): string {
+  return (s as InternalSecret<T>).__value;
+}
+
+/** Type guard. */
+export function isSecret<T extends string = string>(v: unknown): v is Secret<T> {
+  return typeof v === 'object' && v !== null && (v as { [SECRET_BRAND]?: boolean })[SECRET_BRAND] === true;
+}
+
 export interface BuildOpts {
   /**
    * Backend selection. Recommended explicit value. When omitted, the
@@ -11,7 +99,19 @@ export interface BuildOpts {
    * construction time (audit H1: no silent local-aes default).
    */
   backend?: KmsBackend;
+  /**
+   * Plain config bag (back-compat). H7-F.5 callers should prefer
+   * {@link secretConfig} for any value that's a private key, session
+   * secret, KMS service-account JSON, or derivation master.
+   */
   config?: Record<string, string>;
+  /**
+   * H7-F.5 / PKG-KEY-CUSTODY-005 — sensitive config values wrapped in
+   * `Secret<T>` so they don't survive logging / JSON.stringify.
+   * Factories that need to unwrap call {@link unwrapSecret} at the
+   * latest possible moment + never store the unwrapped value.
+   */
+  secretConfig?: Record<string, Secret<string>>;
   /**
    * Optional audit sink threaded into signers so every signing op emits
    * `key-custody.sign`. Consumers share one sink across all primitives

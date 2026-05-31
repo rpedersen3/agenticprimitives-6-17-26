@@ -128,7 +128,10 @@ describe('GcpKmsProvider', () => {
     expect(wrapped.plaintextDataKey.length).toBe(32);
     expect(wrapped.encryptedDataKey.length).toBeGreaterThan(32);
     expect(wrapped.keyId).toBe(TEST_KEY_NAME);
-    expect(wrapped.keyVersion).toBe('gcp-kms:v1');
+    // H7-F.4: keyVersion now derives from the GCP encrypt response's
+    // `name` field (cryptoKeyVersions/<N>) rather than the legacy
+    // hardcoded 'gcp-kms:v1' string.
+    expect(wrapped.keyVersion).toMatch(/^gcp-kms:v\d+$/);
 
     const unwrapped = await provider.decryptSessionDataKey({
       encryptedDataKey: wrapped.encryptedDataKey,
@@ -174,7 +177,7 @@ describe('GcpKmsProvider', () => {
     ).rejects.toThrow(/HTTP 400/);
   });
 
-  it('decrypt rejects keyVersion mismatch client-side', async () => {
+  it('H7-F.4: decrypt rejects a non-conforming keyVersion shape', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => tokenResponse()) as unknown as typeof fetch);
     const provider = new GcpKmsProvider({ cryptoKeyName: TEST_KEY_NAME, serviceAccountJson });
     await expect(
@@ -182,13 +185,37 @@ describe('GcpKmsProvider', () => {
         encryptedDataKey: new Uint8Array(16),
         aadContext: {},
         keyId: TEST_KEY_NAME,
+        // Not 'gcp-kms:v<N>' or 'gcp-kms:unknown' — must reject.
         keyVersion: 'gcp-kms:OLD',
       }),
-    ).rejects.toThrow(/keyVersion mismatch/);
+    ).rejects.toThrow(/doesn't match the expected/);
   });
 
-  it('keyVersion is the documented gcp-kms:v1 string', () => {
+  it('H7-F.4: default keyVersion is gcp-kms:unknown (test fallback)', () => {
     const provider = new GcpKmsProvider({ cryptoKeyName: TEST_KEY_NAME, serviceAccountJson });
-    expect(provider.keyVersion).toBe('gcp-kms:v1');
+    // The legacy 'gcp-kms:v1' default was hardcoded and gave a false
+    // rotation marker. The new default is 'gcp-kms:unknown' so a
+    // misconfigured mock that doesn't return `name` still gets flagged.
+    expect(provider.keyVersion).toBe('gcp-kms:unknown');
+  });
+
+  it('H7-F.4: keyVersion derives from the GCP encrypt response name', async () => {
+    // Mock GCP encrypt to return cryptoKeyVersions/7 — keyVersion should
+    // surface as 'gcp-kms:v7' (not the hardcoded fallback).
+    const aadContext = { sessionId: 'sa_v7', chainId: '31337' };
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/oauth2.googleapis.com/token')) return tokenResponse();
+      if (url.endsWith(':encrypt')) {
+        return new Response(JSON.stringify({
+          ciphertext: bytesToBase64(new Uint8Array([1, 2, 3, 4])),
+          name: TEST_KEY_NAME + '/cryptoKeyVersions/7',
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }) as unknown as typeof fetch);
+
+    const provider = new GcpKmsProvider({ cryptoKeyName: TEST_KEY_NAME, serviceAccountJson });
+    const wrapped = await provider.generateSessionDataKey({ aadContext });
+    expect(wrapped.keyVersion).toBe('gcp-kms:v7');
   });
 });

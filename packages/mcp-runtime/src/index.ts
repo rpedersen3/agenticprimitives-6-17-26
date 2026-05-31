@@ -10,6 +10,8 @@ export {
   withDelegation,
   verifyDelegationForResource,
   McpAuthError,
+  type McpAuthErrorCode,
+  type PrivateAuthFailureContext,
 } from './with-delegation';
 export { declareResource } from './declare-resource';
 export {

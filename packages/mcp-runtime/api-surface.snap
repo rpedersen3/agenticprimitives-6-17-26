@@ -8,9 +8,11 @@ re-export Hex from ./types
 re-export JtiStore from ./types
 re-export MacProviderLike from ./service-mac
 re-export McpAuthError from ./with-delegation
+re-export McpAuthErrorCode from ./with-delegation
 re-export McpResourceVerifyConfig from ./types
 re-export MigratableJtiStore from ./jti-stores
 re-export PgPoolLike from ./types
+re-export PrivateAuthFailureContext from ./with-delegation
 re-export ResourceDefinition from ./types
 re-export ServiceMacContext from ./service-mac
 re-export ServiceMacHeaders from ./service-mac

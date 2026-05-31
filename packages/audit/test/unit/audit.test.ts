@@ -9,6 +9,9 @@ import {
   createPiiGuardrailSink,
   generateEventId,
   nowIso,
+  AUDIT_ACTION_REGISTRY,
+  isCanonicalAuditAction,
+  type AuditAction,
   type AuditEvent,
   type AuditSink,
   type PiiFinding,
@@ -211,6 +214,50 @@ describe('H7-B.7 — composeFailSoftSinks + composeFailHardSinks', () => {
     ).resolves.toBeUndefined();
     expect(a.events()).toHaveLength(1);
     expect(b.events()).toHaveLength(1);
+  });
+});
+
+describe('H7-F.2 — AUDIT_ACTION_REGISTRY + isCanonicalAuditAction', () => {
+  it('registry is non-empty + every entry is dotted', () => {
+    expect(AUDIT_ACTION_REGISTRY.length).toBeGreaterThan(0);
+    for (const a of AUDIT_ACTION_REGISTRY) {
+      expect(a).toMatch(/^[a-z][a-z0-9-]*\.[a-z][a-z0-9.-]*$/);
+    }
+  });
+
+  it('isCanonicalAuditAction accepts every registry entry', () => {
+    for (const a of AUDIT_ACTION_REGISTRY) {
+      expect(isCanonicalAuditAction(a)).toBe(true);
+    }
+  });
+
+  it('isCanonicalAuditAction rejects an unregistered name', () => {
+    expect(isCanonicalAuditAction('unknown.surface.outcome')).toBe(false);
+    expect(isCanonicalAuditAction('')).toBe(false);
+  });
+
+  it('AuditAction type narrows correctly (compile-time + runtime check)', () => {
+    const a: AuditAction = 'delegation.mint';
+    const event: AuditEvent = {
+      id: generateEventId(),
+      timestamp: nowIso(),
+      action: a,
+      outcome: 'success',
+    };
+    expect(event.action).toBe('delegation.mint');
+  });
+
+  it('action: string (legacy) still compiles + the type-guard catches drift', () => {
+    // Action remains assignable from raw string so existing code is not
+    // forced to bump in lockstep with new entries.
+    const event: AuditEvent = {
+      id: generateEventId(),
+      timestamp: nowIso(),
+      action: 'some.new.event.not.yet.in.registry',
+      outcome: 'success',
+    };
+    // But the registry catches the drift.
+    expect(isCanonicalAuditAction(event.action)).toBe(false);
   });
 });
 

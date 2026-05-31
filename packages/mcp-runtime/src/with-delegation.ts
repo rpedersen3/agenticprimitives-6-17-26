@@ -45,11 +45,63 @@ function inferEnvironment(opts?: {
   return 'production';
 }
 
+/**
+ * H7-F.1 / PKG-MCP-RUNTIME-003 / EXT-026 / EXT-032 closure — split
+ * public error surface from private failure context.
+ *
+ * Previously `McpAuthError.reason` carried the full denial cause
+ * ("policy deny: high-risk tool requires quorum", "delegation
+ * revoked at block N", "ERC-1271 returned 0x00…", etc.). A relying
+ * app that forwarded `error.reason` to the client leaked denial
+ * cause + occasionally PII (signer addresses, delegation hashes).
+ *
+ * The new surface:
+ *   - {@link McpAuthError} is OPAQUE: carries only `code` (a small,
+ *     bounded set) + an opaque `correlationId` the operator can use
+ *     to look up the audit row.
+ *   - {@link PrivateAuthFailureContext} is the rich shape emitted to
+ *     the audit sink at the moment of failure. NEVER returned to the
+ *     caller; consumed only by ops + forensics tooling.
+ *
+ * Migration note: tests that previously asserted on `error.reason`
+ * should assert on `error.code` instead and (for the rich shape)
+ * intercept the audit sink.
+ */
+export type McpAuthErrorCode =
+  | 'auth-failed'        // generic credential / signature / revocation problem
+  | 'auth-misconfigured' // server-side gap (missing quorum enforcer, store, etc.)
+  | 'auth-paused';       // governance pause flag is set
+
 export class McpAuthError extends Error {
-  constructor(public readonly reason: string) {
+  readonly code: McpAuthErrorCode;
+  readonly correlationId: string;
+  constructor(code: McpAuthErrorCode, correlationId: string) {
     super('mcp: auth failed');
     this.name = 'McpAuthError';
+    this.code = code;
+    this.correlationId = correlationId;
   }
+}
+
+/**
+ * Rich failure context emitted to the audit sink. NEVER returned to
+ * the caller.
+ */
+export interface PrivateAuthFailureContext {
+  /** Same correlationId as the thrown {@link McpAuthError}. */
+  correlationId: string;
+  /** The opaque public code. */
+  code: McpAuthErrorCode;
+  /**
+   * The ORIGINAL detailed denial reason (private). May contain
+   * delegation hashes, on-chain addresses, classification tier labels,
+   * etc. Routed to the audit sink (durable, op-only).
+   */
+  reason: string;
+  /** Tool name if known. */
+  toolName?: string;
+  /** Step the failure happened at (`verify`, `policy`, `classification`, etc.). */
+  stage?: string;
 }
 
 export function withDelegation<A extends Record<string, unknown>>(
@@ -152,7 +204,12 @@ export function withDelegation<A extends Record<string, unknown>>(
     const { token, quorumProof, ...rest } =
       args as A & { token: string; quorumProof?: import('@agenticprimitives/delegation').VerifyOptsExt['quorumProof'] };
     const toolName = opts?.toolName ?? 'unknown';
-    const correlationId = opts?.correlationId;
+    // H7-F.1: every request gets a stable correlationId. Caller-supplied
+    // wins; otherwise mint a random one so the thrown McpAuthError carries
+    // a non-empty handle the operator can correlate with audit rows.
+    const correlationId =
+      opts?.correlationId ??
+      `wd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     const startedAt = Date.now();
     const metric = opts?.metricsSink;
 
@@ -201,8 +258,9 @@ export function withDelegation<A extends Record<string, unknown>>(
     };
 
     if (typeof token !== 'string' || token.length === 0) {
+      // H7-F.1: private reason goes to audit; caller sees opaque code.
       await emit('denied', 'missing token', undefined);
-      throw new McpAuthError('missing token');
+      throw new McpAuthError('auth-failed', correlationId);
     }
     // Spec 207 threshold-policy: when a classification is provided,
     // derive the threshold-policy decision via tool-policy +
@@ -223,7 +281,10 @@ export function withDelegation<A extends Record<string, unknown>>(
             'tool requires quorum caveat but mcp-runtime has no quorumEnforcer configured';
           console.error('[mcp-runtime] auth misconfigured:', detail);
           await emit('denied', detail, undefined);
-          throw new McpAuthError(detail);
+          // H7-F.1: server-side config gap surfaces as the distinct
+          // 'auth-misconfigured' code so the caller can distinguish from
+          // a legitimate credential reject.
+          throw new McpAuthError('auth-misconfigured', correlationId);
         }
         requireQuorumCaveat = { enforcer: config.quorumEnforcer };
       }
@@ -265,10 +326,13 @@ export function withDelegation<A extends Record<string, unknown>>(
       quorumProof,
     });
     if ('error' in result) {
-      // Internal log retains the reason; external surface stays opaque.
+      // H7-F.1: the private reason (which may carry delegation hashes
+      // or signer addresses) is emitted to the audit sink and stays
+      // server-side. The caller sees only the opaque code + correlationId
+      // they can quote to the operator for forensics.
       console.error('[mcp-runtime] auth failed:', result.error);
       await emit('denied', result.error, undefined);
-      throw new McpAuthError(result.error);
+      throw new McpAuthError('auth-failed', correlationId);
     }
 
     // Policy enforcement (audit H2). Fail-closed on deny + requires-consent.
@@ -302,7 +366,8 @@ export function withDelegation<A extends Record<string, unknown>>(
               : `policy requires-consent (${decision.promptId}); runtime does not host consent loop`;
           console.error('[mcp-runtime] auth failed:', detail);
           await emit('denied', detail, result.principal);
-          throw new McpAuthError(detail);
+          // H7-F.1: same opaque shape as other reject paths.
+          throw new McpAuthError('auth-failed', correlationId);
         }
       }
     } else {

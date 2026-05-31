@@ -9,6 +9,7 @@ re-export KmsAccountBackend from ./types
 re-export KmsBackend from ./types
 re-export LocalAesProvider from ./providers/local
 re-export LocalSecp256k1Signer from ./providers/local
+re-export Secret from ./types
 re-export SubjectId from ./derive-subject
 re-export buildKeyProvider from ./factories
 re-export buildMacProvider from ./factories
@@ -19,4 +20,8 @@ re-export canonicalContextBytes from ./aad
 re-export createKmsAccount from ./account
 re-export deriveSubjectSigner from ./derive-subject
 re-export getRelayOnlySigner from ./relay-only
+re-export isSecret from ./types
+re-export loadSecret from ./types
+re-export loadSecretFromEnv from ./types
 re-export subjectCanonicalMessage from ./derive-subject
+re-export unwrapSecret from ./types

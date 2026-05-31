@@ -44,13 +44,17 @@
     "noopMetricsSink",
     "generateEventId",
     "nowIso",
-    "buildEvent"
+    "buildEvent",
+    "AUDIT_ACTION_REGISTRY",
+    "AuditAction",
+    "isCanonicalAuditAction"
   ],
   "forbiddenTerms": [
     {
       "term": "Delegation",
-      "reason": "Domain concept; audit package is structural only.",
-      "owningPackage": "@agenticprimitives/delegation"
+      "reason": "Domain concept; audit package is structural only. H7-F.2 exception: the AUDIT_ACTION_REGISTRY in src/index.ts lists action NAMES (e.g. 'delegation.mint', 'mcp-runtime.with-delegation.accept') as dotted action-path tokens — these are emitter-side IDs, not domain references.",
+      "owningPackage": "@agenticprimitives/delegation",
+      "allowInPaths": ["src/index.ts"]
     },
     {
       "term": "Caveat",

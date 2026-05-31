@@ -32,6 +32,81 @@ import type { Hex } from '@agenticprimitives/types';
  * `id` is per-event (UUID-ish); `correlationId` ties multiple events
  * to a single request / flow / session.
  */
+/**
+ * H7-F.2 / PKG-audit-002 / EXT-037 closure — canonical action registry.
+ *
+ * Free-string `action` previously let each emitter pick its own name
+ * with no central catalog — drift hazard the moment more than one
+ * package emits the same conceptual event. The registry below is the
+ * canonical list. `action: AuditAction` keeps the string convention
+ * (still indexes cleanly in structured-log backends) but type-checks
+ * the caller against the registry.
+ *
+ * Convention: `<package>.<surface>.<outcome?>`.
+ *
+ * Each emitting package documents WHICH of these names IT emits in
+ * its `AUDIT.md` "Audit events emitted" section.
+ *
+ * To add a new action:
+ *   1. Add the string to `AUDIT_ACTION_REGISTRY` (below).
+ *   2. Add it to the owning package's `AUDIT.md` list.
+ *   3. The TypeScript union `AuditAction` is derived automatically.
+ *
+ * `action` STILL accepts a raw `string` (the legacy escape hatch) so a
+ * package can ship a one-off event without churn. Production paths
+ * should use the typed name + extend the registry.
+ */
+export const AUDIT_ACTION_REGISTRY = [
+  // ─── delegation (spec 202)
+  'delegation.mint',
+  'delegation.verify.accept',
+  'delegation.verify.reject',
+  'delegation.revoke',
+  // ─── key-custody (spec 203)
+  'key-custody.sign',
+  'key-custody.rotate',
+  'key-custody.envelope.encrypt',
+  'key-custody.envelope.decrypt',
+  'key-custody.session-data-key.generate',
+  // ─── account-custody (spec 213)
+  'account-custody.schedule',
+  'account-custody.apply',
+  'account-custody.cancel',
+  'account-custody.credential.add',
+  'account-custody.credential.remove',
+  'account-custody.credential.replace',
+  // ─── agent-account (spec 201)
+  'agent-account.admin.propose',
+  'agent-account.admin.execute',
+  'agent-account.admin.cancel',
+  // ─── connect-auth (spec 200)
+  'connect-auth.session.mint',
+  'connect-auth.session.verify.accept',
+  'connect-auth.session.verify.reject',
+  // ─── connect (spec 224)
+  'connect.issue.accept',
+  'connect.issue.reject',
+  // ─── mcp-runtime (spec 205)
+  'mcp-runtime.with-delegation.accept',
+  'mcp-runtime.with-delegation.reject',
+  'mcp-runtime.service-mac.issue',
+  'mcp-runtime.service-mac.accept',
+  'mcp-runtime.service-mac.reject',
+  // ─── agent-naming (spec 215)
+  'agent-naming.resolve',
+  'agent-naming.register',
+  'agent-naming.records.update',
+  'agent-naming.primary-name.update',
+  'agent-naming.subregistry.update',
+] as const;
+
+export type AuditAction = (typeof AUDIT_ACTION_REGISTRY)[number];
+
+/** Type guard for callers that need to validate an arbitrary string. */
+export function isCanonicalAuditAction(s: string): s is AuditAction {
+  return (AUDIT_ACTION_REGISTRY as readonly string[]).includes(s);
+}
+
 export interface AuditEvent {
   /** Per-event unique ID. UUID v4 (or v7 if you have it) recommended. */
   id: string;
@@ -40,13 +115,13 @@ export interface AuditEvent {
   /** ISO-8601 timestamp (UTC). */
   timestamp: string;
   /**
-   * Free-form dotted action name. Convention:
-   * `<package>.<surface>.<outcome>`. The schema doesn't enforce a
-   * registry; consumers should keep a doc-list of the action strings
-   * they emit in each package's `AUDIT.md` under "Audit events
-   * emitted".
+   * Dotted action name. Prefer {@link AuditAction} from the canonical
+   * {@link AUDIT_ACTION_REGISTRY}; raw `string` remains accepted for
+   * legacy callers + one-off events. Convention:
+   * `<package>.<surface>.<outcome?>`. Each emitting package documents
+   * its actions in its `AUDIT.md` under "Audit events emitted".
    */
-  action: string;
+  action: AuditAction | (string & {});
   /**
    * Outcome class. `success` for normal operations, `denied` for
    * authority/policy rejects (NOT errors — denial IS a security

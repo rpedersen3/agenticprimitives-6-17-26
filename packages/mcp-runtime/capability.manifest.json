@@ -55,6 +55,8 @@
     "JtiStore",
     "ToolClassification",
     "McpAuthError",
+    "McpAuthErrorCode",
+    "PrivateAuthFailureContext",
     "generateServiceMac",
     "verifyServiceMac",
     "bodyDigestHex",

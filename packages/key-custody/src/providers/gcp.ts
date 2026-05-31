@@ -503,8 +503,35 @@ interface DecryptResponse {
   plaintext: string;
 }
 
+/**
+ * H7-F.4 / PKG-KEY-CUSTODY-008 closure — derive `keyVersion` from the
+ * GCP encryption response instead of a hardcoded string. The GCP KMS
+ * `encrypt` endpoint returns `name` = the full versioned resource path
+ * (`projects/<P>/locations/<L>/keyRings/<R>/cryptoKeys/<K>/cryptoKeyVersions/<V>`).
+ * The version suffix is what GCP uses to identify the actual key version
+ * that encrypted the ciphertext.
+ *
+ * Previously this class returned `'gcp-kms:v1'` regardless of the actual
+ * rotation state — so on a GCP key rotation (under the same cryptoKey
+ * NAME, different VERSION), any encrypted payload was still tagged with
+ * the meaningless `'gcp-kms:v1'` marker. The `decryptSessionDataKey`
+ * equality check then incorrectly accepted ciphertext from BOTH the old
+ * and the new key version as if they were the same, with no audit trail
+ * of which version produced which.
+ */
+function parseCryptoKeyVersion(responseName: string | undefined): string | null {
+  if (!responseName) return null;
+  const m = /\/cryptoKeyVersions\/(\d+)$/.exec(responseName);
+  return m ? `gcp-kms:v${m[1]}` : null;
+}
+
 export class GcpKmsProvider implements A2AKeyProvider {
-  readonly keyVersion = 'gcp-kms:v1';
+  /**
+   * H7-F.4: this default is now ONLY used when the GCP encrypt response
+   * doesn't carry a `name` field (test fixtures + offline mocks). Real
+   * runs derive `keyVersion` from the response per call.
+   */
+  readonly keyVersion = 'gcp-kms:unknown';
   private readonly keyName: string;
   private readonly serviceAccount: ServiceAccount;
   private cachedToken?: CachedToken;
@@ -564,11 +591,17 @@ export class GcpKmsProvider implements A2AKeyProvider {
     });
     const encryptedDataKey = base64Decode(res.ciphertext);
 
+    // H7-F.4: derive keyVersion from the response. GCP returns the full
+    // versioned cryptoKeyVersions/<N> resource path in `name`. When
+    // absent (test fixtures), fall back to the legacy 'gcp-kms:unknown'
+    // marker so callers can spot misconfigured mocks.
+    const keyVersion = parseCryptoKeyVersion(res.name) ?? this.keyVersion;
+
     return {
       plaintextDataKey,
       encryptedDataKey,
       keyId: this.keyName,
-      keyVersion: this.keyVersion,
+      keyVersion,
     };
   }
 
@@ -578,9 +611,16 @@ export class GcpKmsProvider implements A2AKeyProvider {
     keyId: string;
     keyVersion: string;
   }): Promise<Uint8Array> {
-    if (input.keyVersion !== this.keyVersion) {
+    // H7-F.4: validate the `keyVersion` MARKER shape (must be
+    // 'gcp-kms:v<N>' or 'gcp-kms:unknown'). GCP's decrypt endpoint
+    // itself resolves the actual version from the ciphertext metadata,
+    // so the marker is operational ("which version produced this
+    // payload?") rather than a security gate. A null / arbitrary string
+    // here is a signal of cross-backend confusion — fail fast.
+    if (!/^gcp-kms:(v\d+|unknown)$/.test(input.keyVersion)) {
       throw new Error(
-        `GcpKmsProvider: keyVersion mismatch (got "${input.keyVersion}", expected "${this.keyVersion}").`,
+        `GcpKmsProvider: input.keyVersion "${input.keyVersion}" doesn't match the expected ` +
+          `'gcp-kms:v<N>' or 'gcp-kms:unknown' shape (H7-F.4).`,
       );
     }
     const aadBytes = canonicalContextBytes(input.aadContext);

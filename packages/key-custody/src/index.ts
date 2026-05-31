@@ -5,7 +5,8 @@
 import type { Address, Hex } from '@agenticprimitives/types';
 
 export type { Address, Hex };
-export type { A2AKeyProvider, KmsAccountBackend, BuildOpts, KmsBackend } from './types';
+export type { A2AKeyProvider, KmsAccountBackend, BuildOpts, KmsBackend, Secret } from './types';
+export { loadSecret, loadSecretFromEnv, unwrapSecret, isSecret } from './types';
 
 export {
   buildKeyProvider,

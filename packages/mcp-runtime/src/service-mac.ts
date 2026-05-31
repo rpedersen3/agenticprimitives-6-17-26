@@ -117,6 +117,16 @@ export function bodyDigestHex(body: string): Hex {
 /**
  * Caller side: generate the MAC + headers for an outgoing request.
  * The provider MUST support `generateMac`.
+ *
+ * H7-F.3 / PKG-MCP-RUNTIME-006 / CT-9 closure — accepts an optional
+ * `auditSink` that receives `mcp-runtime.service-mac.issue` on
+ * successful generation (mirroring the verify side's
+ * `service-mac.{accept,reject}`). The audit row carries `keyId`,
+ * `service`, `audience`, and the `correlationId` the caller threads in,
+ * so a forensics query can join the issue with the corresponding
+ * downstream accept/reject.
+ *
+ * Fail-soft: audit emission failures NEVER break the MAC issuance.
  */
 export async function generateServiceMac(args: {
   ctx: ServiceMacContext;
@@ -125,6 +135,10 @@ export async function generateServiceMac(args: {
   nonce?: Uint8Array;
   /** Override for tests. Production: leave undefined. */
   now?: () => number;
+  /** H7-F.3 — emit `mcp-runtime.service-mac.issue` on success. */
+  auditSink?: AuditSink;
+  /** Correlation id stitched into the emitted event. */
+  correlationId?: string;
 }): Promise<ServiceMacHeaders> {
   if (!args.provider.generateMac) {
     throw new Error('serviceMac: provider lacks generateMac (use a MAC-capable backend)');
@@ -138,12 +152,40 @@ export async function generateServiceMac(args: {
     service: args.ctx.service,
     audience: args.ctx.audience,
   });
-  return {
+  const headers: ServiceMacHeaders = {
     mac: base64urlEncode(mac),
     nonce,
     timestamp,
     keyId,
   };
+
+  if (args.auditSink) {
+    try {
+      await args.auditSink.write({
+        id: cryptoRandomBytesHex(8),
+        timestamp: new Date().toISOString(),
+        action: 'mcp-runtime.service-mac.issue',
+        outcome: 'success',
+        correlationId: args.correlationId,
+        actor: { type: 'service', id: args.ctx.service },
+        audience: args.ctx.audience,
+        subject: { type: 'service-mac', id: keyId ?? 'unknown' },
+        context: {
+          route: args.ctx.route,
+        },
+      });
+    } catch {
+      /* H7-F.3: fail-soft. Issuance must not break on audit failure. */
+    }
+  }
+  return headers;
+}
+
+function cryptoRandomBytesHex(n: number): string {
+  const buf = cryptoRandomBytes(n);
+  let hex = '';
+  for (const b of buf) hex += b.toString(16).padStart(2, '0');
+  return hex;
 }
 
 /**

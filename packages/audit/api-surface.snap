@@ -1,3 +1,4 @@
+const AUDIT_ACTION_REGISTRY: readonly ["delegation.mint", "delegation.verify.accept", "delegation.verify.reject", "delegation.revoke", "key-custody.sign", "key-custody.rotate", "key-custody.envelope.encrypt", "key-custody.envelope.decrypt", "key-custody.session-data-key.generate", "account-custody.schedule", "account-custody.apply", "account-custody.cancel", "account-custody.credential.add", "account-custody.credential.remove", "account-custody.credential.replace", "agent-account.admin.propose", "agent-account.admin.execute", "agent-account.admin.cancel", "connect-auth.session.mint", "connect-auth.session.verify.accept", "connect-auth.session.verify.reject", "connect.issue.accept", "connect.issue.reject", "mcp-runtime.with-delegation.accept", "mcp-runtime.with-delegation.reject", "mcp-runtime.service-mac.issue", "mcp-runtime.service-mac.accept", "mcp-runtime.service-mac.reject", "agent-naming.resolve", "agent-naming.register", "agent-naming.records.update", "agent-naming.primary-name.update", "agent-naming.subregistry.update"]
 const noopMetricsSink: MetricsSink
 function buildEvent(partial: Omit<AuditEvent, 'id' | 'timestamp'> &
 function composeFailHardSinks(...sinks: AuditSink[]): AuditSink
@@ -10,6 +11,7 @@ function createMemoryAuditSink(opts?:
 function createMemoryMetricsSink(): MemoryMetricsSink
 function createPiiGuardrailSink(inner: AuditSink, opts?: PiiGuardrailOpts): AuditSink
 function generateEventId(): string
+function isCanonicalAuditAction(s: string): s is AuditAction
 function nowIso(): string
 interface AuditEvent
 interface AuditSink
@@ -18,3 +20,4 @@ interface MemoryMetricsSinkextends MetricsSink
 interface MetricsSink
 interface PiiFinding
 interface PiiGuardrailOpts
+type AuditAction = (typeof AUDIT_ACTION_REGISTRY)[number]

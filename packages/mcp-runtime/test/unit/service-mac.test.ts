@@ -105,6 +105,43 @@ describe('generateServiceMac', () => {
     const provider: MacProviderLike = { keyVersion: 'test' };
     await expect(generateServiceMac({ ctx: ctx(), provider })).rejects.toThrow(/generateMac/);
   });
+
+  it('H7-F.3 — emits mcp-runtime.service-mac.issue when audit sink provided', async () => {
+    const events: import('@agenticprimitives/audit').AuditEvent[] = [];
+    const sink: import('@agenticprimitives/audit').AuditSink = {
+      async write(e) { events.push(e); },
+    };
+    const provider = createTestMacProvider(MASTER);
+    await generateServiceMac({
+      ctx: ctx(),
+      provider,
+      auditSink: sink,
+      correlationId: 'req-issue-42',
+    });
+    expect(events).toHaveLength(1);
+    const e = events[0]!;
+    expect(e.action).toBe('mcp-runtime.service-mac.issue');
+    expect(e.outcome).toBe('success');
+    expect(e.correlationId).toBe('req-issue-42');
+    expect(e.actor).toMatchObject({ type: 'service', id: 'a2a-to-mcp' });
+    expect(e.audience).toBe('urn:mcp:server:person');
+    expect(e.subject?.type).toBe('service-mac');
+    expect(e.subject?.id).toBeTruthy();
+  });
+
+  it('H7-F.3 — issuance is fail-soft on audit sink throw', async () => {
+    const provider = createTestMacProvider(MASTER);
+    const throwingSink: import('@agenticprimitives/audit').AuditSink = {
+      async write() { throw new Error('sink down'); },
+    };
+    // Must NOT throw — audit failures cannot break the MAC issuance.
+    const headers = await generateServiceMac({
+      ctx: ctx(),
+      provider,
+      auditSink: throwingSink,
+    });
+    expect(headers.mac).toBeTruthy();
+  });
 });
 
 describe('verifyServiceMac', () => {
