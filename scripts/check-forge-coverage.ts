@@ -44,7 +44,9 @@ const SRC_FLOOR: Threshold = { lines: 60, branches: 35 };
  */
 const ACCEPTED_DEBT: Record<string, Threshold> = {
   'src/SmartAgentPaymaster.sol':                     { lines: 50, branches: 20 },
-  'src/agency/DelegationManager.sol':                { lines: 45, branches: 40 },
+  // src/agency/DelegationManager.sol — R3.3 closed CON-DelegationManager-001.
+  // Coverage: 95.77% lines / 88.24% branches / 100% functions. Above SRC tier
+  // floor (60/35); debt row removed. Any regression below tier fails CI.
   'src/custody/CustodyPolicy.sol':                   { lines: 70, branches: 25 },
   'src/enforcers/CaveatEnforcerBase.sol':            { lines:  0, branches:  0 }, // abstract — exercised via concretes
   'src/identity/AgentProfileResolver.sol':           { lines: 55, branches: 45 },
@@ -55,7 +57,7 @@ const ACCEPTED_DEBT: Record<string, Threshold> = {
   'src/ontology/AttributeStorage.sol':               { lines: 50, branches: 20 },
   'src/relationships/RelationshipTypeRegistry.sol':  { lines: 80, branches: 25 },
   // Production-ready (lower than tier floor but still acceptable for non-load-bearing):
-  'src/AgentAccount.sol':                            { lines: 55, branches: 40 }, // depth needs UserOp flows; D1 invariants locked
+  'src/AgentAccount.sol':                            { lines: 82, branches: 55 }, // R3.4 lifted from 55%/40%; remaining gap is WebAuthn sig flows + recovery + module mocks
 };
 
 function thresholdFor(path: string): { tier: 'libraries' | 'src' | 'debt'; floor: Threshold } {

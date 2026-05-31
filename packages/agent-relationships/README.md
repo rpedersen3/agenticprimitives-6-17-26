@@ -1,5 +1,34 @@
 # @agenticprimitives/agent-relationships
 
+> ⚠️ **Experimental — do NOT use for confidential edges.**
+>
+> This package writes the trust-fabric edge graph **publicly on-chain**.
+> Every edge — its endpoints, type, role set, and status — is visible to
+> anyone reading the chain, forever. There is no on-chain confidentiality
+> for the **fact that an edge exists**.
+>
+> That means this package is **structurally incompatible** with use-cases
+> that bring a confidentiality requirement: financial counterparty graphs,
+> medical referral networks, B2B partnership relationships under NDA,
+> family/household membership, or any "who is connected to whom" graph
+> where the connection itself is the secret. The `metadata-hash` field
+> anchors off-chain JSON but cannot hide the existence of the edge or
+> the identity of its endpoints.
+>
+> Concrete public exposure per edge: `subject` address, `object` address,
+> `relationshipType` (e.g. `HAS_MEMBER`, `HAS_GOVERNANCE_OVER`), role set
+> on each side, `EdgeStatus` lifecycle (proposed/confirmed/active/revoked),
+> and the actor address that submitted each state transition.
+>
+> A future v2 private-edge variant (commitment-based, with
+> selective-disclosure proofs) will live alongside this package. Until it
+> ships, **adopters requiring confidentiality should not use this
+> package** and should hold their relationship graph in an off-chain
+> store with explicit access control.
+>
+> Tracked as the **Privacy Fork** (audit `PKG-agent-relationships-001` /
+> `EXT-019`). `capability.manifest.json` sets `"stability": "experimental"`.
+
 Trust-fabric edge primitive for Smart Agents. An `Edge` is a
 `(subject, object, relationshipType)` triple with a role set on each
 side, a status lifecycle (`PROPOSED → CONFIRMED → ACTIVE → REVOKED`),
