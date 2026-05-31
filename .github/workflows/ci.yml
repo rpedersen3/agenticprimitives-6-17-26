@@ -87,3 +87,11 @@ jobs:
       # default to tier floors (libraries 85%/75%, src 60%/35%).
       - name: Forge coverage floor (H7-E.2)
         run: pnpm check:forge-coverage
+
+      # R1.3 / C6 — storage-layout snapshot gate. Locks the slot+offset
+      # layout of upgradeable / proxy-deployed contracts (AgentAccount,
+      # CustodyPolicy, DelegationManager, SmartAgentPaymaster). Any drift
+      # is a breaking change for deployed proxies and must be explicit
+      # (rotate snapshots via `pnpm check:storage-layouts --update`).
+      - name: Contract storage-layout snapshots (R1.3)
+        run: pnpm check:storage-layouts

@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/agent-account",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "ERC-4337 smart-account substrate: deterministic addressing, factory deployment, ERC-1271 signing, UserOp building.",
   "type": "module",
   "main": "./dist/index.js",

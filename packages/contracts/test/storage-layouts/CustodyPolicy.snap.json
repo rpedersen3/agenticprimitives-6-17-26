@@ -1,0 +1,12 @@
+{
+  "name": "CustodyPolicy",
+  "storage": [
+    {
+      "label": "_configs",
+      "slot": "0",
+      "offset": 0,
+      "type": "t_mapping(t_address,t_struct(Config)_storage)",
+      "contract": "src/custody/CustodyPolicy.sol:CustodyPolicy"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives-demo/jp",
-  "version": "0.0.1",
+  "version": "0.0.2-alpha.0",
   "private": true,
   "description": "JP Adopt-a-People-Group pilot (demo-jp): a relying-app prototype for FPG adoption brokerage. Public capability UX + adopter/facilitator onboarding that connects to Impact (demo-sso), which holds the person/org data + signed MOU/WEA and delegates scoped access (spec 236). Demo only — 'JP' is a placeholder; no real-program affiliation.",
   "type": "module",

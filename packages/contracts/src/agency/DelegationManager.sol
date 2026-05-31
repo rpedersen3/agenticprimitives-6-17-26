@@ -63,12 +63,25 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
     /// @dev EIP-712 domain separator
     bytes32 public immutable DOMAIN_SEPARATOR;
 
-    /// @dev Delegation type hash for EIP-712
+    /// @dev Delegation type hash for EIP-712.
+    ///
+    ///      **R1 / CROSS-STACK-001 closure (2026-05-31):** converged to
+    ///      STANDARD EIP-712. Previously used the non-standard inline form
+    ///      `Delegation(...,bytes32 caveatsHash,...)` which produced a
+    ///      different typehash from what off-chain `viem.hashTypedData`
+    ///      derives from a `Caveat[]` field. The standard form encodes
+    ///      `Caveat[] caveats` in the type string + appends the `Caveat(...)`
+    ///      type definition.
+    ///
+    ///      The `_hashCaveats` function below already computes
+    ///      `keccak256(concat(hashStruct(c) for c in caveats))` which IS the
+    ///      EIP-712 standard `encodeData(Caveat[])`. structHash computation
+    ///      stays identical; only the typehash STRING changed.
     bytes32 public constant DELEGATION_TYPEHASH = keccak256(
-        "Delegation(address delegator,address delegate,bytes32 authority,bytes32 caveatsHash,uint256 salt)"
+        "Delegation(address delegator,address delegate,bytes32 authority,Caveat[] caveats,uint256 salt)Caveat(address enforcer,bytes terms)"
     );
 
-    /// @dev Caveat type hash for EIP-712 (only enforcer + terms; args excluded)
+    /// @dev Caveat type hash for EIP-712 (only enforcer + terms; args excluded).
     bytes32 public constant CAVEAT_TYPEHASH = keccak256(
         "Caveat(address enforcer,bytes terms)"
     );

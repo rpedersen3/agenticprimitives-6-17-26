@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/agent-relationships",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Agent relationships SDK: trust-fabric edge store (subject, object, relationshipType) with role taxonomy. Phase 1 ships edge-ID derivation + relationship-type constants + client skeleton; AgentRelationship.sol + RelationshipTypeRegistry.sol ports land in Phase 3. AgentAssertion + AgentRelationshipResolver deferred to v2.",
   "type": "module",
   "main": "./dist/index.js",

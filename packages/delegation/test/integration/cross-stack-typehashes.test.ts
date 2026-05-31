@@ -1,58 +1,75 @@
-// H7-D.9 / XPKG-003-sec — cross-stack EIP-712 typehash invariant.
+// H7-D.9 / R1 — cross-stack EIP-712 typehash invariant.
 //
-// **2026-05-30 finding discovered during H7-D.9 wiring (open):** the
-// contract's `DELEGATION_TYPEHASH` is computed over the NON-STANDARD
-// EIP-712 type string
+// **R1 / CROSS-STACK-001 closure (2026-05-30).** The contract's
+// `DELEGATION_TYPEHASH` previously used a non-standard EIP-712 type
+// string that inlined a precomputed `bytes32 caveatsHash` field, while
+// the off-chain `DELEGATION_EIP712_TYPES` used the canonical form with
+// a `Caveat[] caveats` reference. The two sides produced DIFFERENT
+// typehashes → different structHashes → different signed digests.
 //
-//   "Delegation(address delegator,address delegate,bytes32 authority,bytes32 caveatsHash,uint256 salt)"
+// In R1 we converged the contract to standard EIP-712. The contract
+// type string now matches viem's canonical encoding (primary struct
+// followed by referenced struct types, alphabetically). This test
+// locks the convergence: any future drift breaks CI.
 //
-// (note `bytes32 caveatsHash`, inlining the precomputed caveats digest)
-// while the off-chain `DELEGATION_EIP712_TYPES` uses the standard form
-//
-//   Delegation { delegator, delegate, authority, caveats: Caveat[], salt }
-//
-// where viem's `hashTypedData` derives the typehash from the canonical
-// string
-//
-//   "Delegation(address delegator,address delegate,bytes32 authority,Caveat[] caveats,uint256 salt)Caveat(address enforcer,bytes terms)"
-//
-// These produce DIFFERENT typehashes → different structHashes → different
-// signed digests. A signature produced off-chain by viem MAY not verify
-// on-chain via the contract's `hashDelegation`. We need to either:
-//   (a) update the contract to standard EIP-712 (`Caveat[] caveats`), OR
-//   (b) compute the contract's non-standard hash from the off-chain side.
-//
-// The test below LOCKS the current behavior of each side so any future
-// drift is caught immediately. It is the gate for fixing the divergence
-// in a follow-up wave (file as CROSS-STACK-001).
+// Original D9 finding history is captured in
+// docs/audits/2026-05-packages-contracts-production-readiness.md.
 
 import { describe, it, expect } from 'vitest';
 import { keccak256, stringToBytes, encodeAbiParameters, type Hex } from 'viem';
 import { DELEGATION_EIP712_TYPES } from '../../src/hash';
 
-const CONTRACT_DELEGATION_TYPE_STRING =
-  'Delegation(address delegator,address delegate,bytes32 authority,bytes32 caveatsHash,uint256 salt)';
-const CONTRACT_CAVEAT_TYPE_STRING = 'Caveat(address enforcer,bytes terms)';
+// The standard EIP-712 type string for `Delegation` is the primary
+// struct followed by the (alphabetically-sorted, deduped) referenced
+// struct types appended without separator. See EIP-712 § "Definition
+// of encodeType" and viem's `hashTypedData` implementation.
+const CANONICAL_DELEGATION_TYPE_STRING =
+  'Delegation(address delegator,address delegate,bytes32 authority,Caveat[] caveats,uint256 salt)' +
+  'Caveat(address enforcer,bytes terms)';
+const CANONICAL_CAVEAT_TYPE_STRING = 'Caveat(address enforcer,bytes terms)';
 
-function encodeType(typeName: string, fields: readonly { name: string; type: string }[]): string {
-  const inner = fields.map((f) => `${f.type} ${f.name}`).join(',');
-  return `${typeName}(${inner})`;
+type EipField = { name: string; type: string };
+type EipTypes = Record<string, readonly EipField[]>;
+
+/** Encode a single struct: `Name(type1 name1,type2 name2,...)`. */
+function encodeStruct(typeName: string, fields: readonly EipField[]): string {
+  return `${typeName}(${fields.map((f) => `${f.type} ${f.name}`).join(',')})`;
+}
+
+/**
+ * Canonical EIP-712 type string: primary struct + every referenced
+ * struct type (transitively), alphabetically sorted, no separators.
+ * Mirrors the encoding viem's `hashTypedData` performs internally.
+ */
+function encodeTypeWithDeps(typeName: string, types: EipTypes): string {
+  const deps = new Set<string>();
+  const visit = (t: string) => {
+    if (!types[t]) return;
+    for (const f of types[t]) {
+      const base = f.type.replace(/\[\]$/, '');
+      if (types[base] && base !== typeName && !deps.has(base)) {
+        deps.add(base);
+        visit(base);
+      }
+    }
+  };
+  visit(typeName);
+  const primary = encodeStruct(typeName, types[typeName]!);
+  const tail = [...deps]
+    .sort()
+    .map((d) => encodeStruct(d, types[d]!))
+    .join('');
+  return primary + tail;
 }
 
 function typehash(typeString: string): Hex {
   return keccak256(stringToBytes(typeString));
 }
 
-describe('H7-D.9 — Caveat typehash (the side that DOES match)', () => {
-  it('TS Caveat type string equals the contract CAVEAT_TYPEHASH preimage', () => {
-    const tsType = encodeType('Caveat', DELEGATION_EIP712_TYPES.Caveat);
-    expect(tsType).toBe(CONTRACT_CAVEAT_TYPE_STRING);
-  });
-
-  it('TS keccak256(Caveat type string) byte-matches contract CAVEAT_TYPEHASH', () => {
-    const tsHash = typehash(encodeType('Caveat', DELEGATION_EIP712_TYPES.Caveat));
-    const contractHash = typehash(CONTRACT_CAVEAT_TYPE_STRING);
-    expect(tsHash).toBe(contractHash);
+describe('R1 / CROSS-STACK-001 closure — Caveat typehash convergence', () => {
+  it('TS Caveat type string equals the canonical EIP-712 form', () => {
+    const tsType = encodeStruct('Caveat', DELEGATION_EIP712_TYPES.Caveat);
+    expect(tsType).toBe(CANONICAL_CAVEAT_TYPE_STRING);
   });
 
   it('Caveat type DOES NOT carry `args` (audit F-1 invariant)', () => {
@@ -62,59 +79,55 @@ describe('H7-D.9 — Caveat typehash (the side that DOES match)', () => {
   });
 });
 
-describe('H7-D.9 — Delegation typehash CROSS-STACK DIVERGENCE (CROSS-STACK-001)', () => {
-  // The two type strings are DIFFERENT. Lock both so a fix is intentional.
-
-  it('contract uses a non-standard EIP-712 inline `bytes32 caveatsHash`', () => {
-    // Verbatim from packages/contracts/src/agency/DelegationManager.sol:68.
-    // If the contract changes this, the lock here breaks → CI signals.
-    expect(CONTRACT_DELEGATION_TYPE_STRING).toBe(
-      'Delegation(address delegator,address delegate,bytes32 authority,bytes32 caveatsHash,uint256 salt)',
+describe('R1 / CROSS-STACK-001 closure — Delegation typehash convergence', () => {
+  it('TS canonical type string includes the appended Caveat definition', () => {
+    const tsType = encodeTypeWithDeps(
+      'Delegation',
+      DELEGATION_EIP712_TYPES as unknown as EipTypes,
     );
+    expect(tsType).toBe(CANONICAL_DELEGATION_TYPE_STRING);
   });
 
-  it('TS uses the standard EIP-712 reference `Caveat[] caveats`', () => {
-    const tsType = encodeType('Delegation', DELEGATION_EIP712_TYPES.Delegation);
-    expect(tsType).toBe(
-      'Delegation(address delegator,address delegate,bytes32 authority,Caveat[] caveats,uint256 salt)',
+  it('TS keccak256(canonical type string) byte-matches the contract DELEGATION_TYPEHASH', () => {
+    const tsHash = typehash(
+      encodeTypeWithDeps(
+        'Delegation',
+        DELEGATION_EIP712_TYPES as unknown as EipTypes,
+      ),
     );
+    const contractHash = typehash(CANONICAL_DELEGATION_TYPE_STRING);
+    expect(tsHash).toBe(contractHash);
   });
 
-  it('the two typehashes ARE NOT EQUAL — open finding CROSS-STACK-001', () => {
-    const tsHash = typehash(encodeType('Delegation', DELEGATION_EIP712_TYPES.Delegation));
-    const contractHash = typehash(CONTRACT_DELEGATION_TYPE_STRING);
-    // Failing this assertion would mean someone fixed the divergence
-    // (or accidentally aligned the strings) — at which point both should
-    // be re-verified and this test inverted to assert EQUALITY.
-    expect(tsHash).not.toBe(contractHash);
-  });
-
-  it('locks the contract typehash byte value (regression-guard)', () => {
-    // If the contract ever changes the type string, this hash drifts and
-    // CI signals immediately.
-    const contractHash = typehash(CONTRACT_DELEGATION_TYPE_STRING);
-    expect(contractHash).toBe('0xac5469bad161df7c56017782e0a87a91008dbe46dacd5eb42e48e7f4b4fc4e39');
-  });
-
-  it('locks the TS-side typehash byte value (regression-guard)', () => {
-    // The TS side independently locks its current state. The fix (either
-    // converge to one form or document the gap) is a follow-up wave.
-    const tsHash = typehash(encodeType('Delegation', DELEGATION_EIP712_TYPES.Delegation));
-    expect(tsHash).toBe('0x89d13f1f844c3a5eb90d36112705f2ce26a98665fc34a02792e2abeba7c48434');
+  it('locks the converged typehash byte value (regression-guard, both sides)', () => {
+    // If either side drifts from this byte value, CI signals. The
+    // contract test `test_DELEGATION_TYPEHASH_is_a_known_constant`
+    // independently locks the same value on the Solidity side.
+    const tsHash = typehash(
+      encodeTypeWithDeps(
+        'Delegation',
+        DELEGATION_EIP712_TYPES as unknown as EipTypes,
+      ),
+    );
+    expect(tsHash).toBe(
+      '0x52f4b7596c22f77177e8e563e6502ad014a696bfc92f9c6cabcaf5738c4ed265',
+    );
   });
 });
 
-describe('H7-D.9 — caveats encoding (the path where both sides AGREE)', () => {
-  // Both layers compute the `caveatsHash` (the 5th field of structHash) as
+describe('R1 — caveats array encoding (the path where both sides already agreed)', () => {
+  // Both layers compute the `caveats` field encoding (the 4th field of
+  // structHash, in standard EIP-712 form) as
   //   keccak256(concat(hashStruct(c) for c in caveats))
-  // even though they DISAGREE on the parent typehash. So the cross-stack
-  // divergence is ISOLATED to the parent typehash; the per-caveat hashes
-  // are byte-identical. Locking both sides here.
+  // The pre-R1 contract used an inlined `bytes32 caveatsHash`; the new
+  // contract delegates this to the standard EIP-712 array-of-struct
+  // encoding. Either way, the per-caveat encoding is byte-identical to
+  // the off-chain side.
 
   it('TS hashStruct(Caveat) byte-matches the contract per-caveat encoding', () => {
     // Contract:
     //   keccak256(abi.encode(CAVEAT_TYPEHASH, c.enforcer, keccak256(c.terms)))
-    const caveatTypehash = typehash(CONTRACT_CAVEAT_TYPE_STRING);
+    const caveatTypehash = typehash(CANONICAL_CAVEAT_TYPE_STRING);
     const enforcer = '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as const;
     const terms: Hex = '0xdeadbeef';
     const expected = keccak256(

@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/connect-auth",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "User authentication (passkey + SIWE + Google OAuth), JWT sessions, and pluggable signer interfaces.",
   "type": "module",
   "main": "./dist/index.js",

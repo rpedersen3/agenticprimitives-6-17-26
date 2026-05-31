@@ -1,0 +1,36 @@
+{
+  "mode": "pre",
+  "tag": "alpha",
+  "initialVersions": {
+    "@agenticprimitives-demo/a2a": "0.0.1",
+    "@agenticprimitives-demo/jp": "0.0.1",
+    "@agenticprimitives-demo/mcp": "0.0.1",
+    "@agenticprimitives-demo/org": "0.0.1",
+    "@agenticprimitives-demo/sso": "0.0.1",
+    "@agenticprimitives-demo/sso-next": "0.0.1",
+    "@agenticprimitives-demo/web": "0.0.1",
+    "@agenticprimitives-demo/web-pro": "0.0.1",
+    "@agenticprimitives-demo/web-recovery": "0.0.1",
+    "@agenticprimitives/account-custody": "0.1.0-alpha.1",
+    "@agenticprimitives/agent-account": "0.1.0-alpha.1",
+    "@agenticprimitives/agent-naming": "0.1.0-alpha.1",
+    "@agenticprimitives/agent-profile": "0.1.0-alpha.1",
+    "@agenticprimitives/agent-relationships": "0.1.0-alpha.1",
+    "@agenticprimitives/audit": "0.1.0-alpha.1",
+    "@agenticprimitives/connect": "0.1.0-alpha.1",
+    "@agenticprimitives/connect-auth": "0.1.0-alpha.1",
+    "@agenticprimitives/contracts": "0.1.0-alpha.1",
+    "@agenticprimitives/delegation": "0.1.0-alpha.1",
+    "@agenticprimitives/identity-directory": "0.1.0-alpha.1",
+    "@agenticprimitives/identity-directory-adapters": "0.1.0-alpha.1",
+    "@agenticprimitives/key-custody": "0.1.0-alpha.1",
+    "@agenticprimitives/mcp-runtime": "0.1.0-alpha.1",
+    "@agenticprimitives/ontology": "0.1.0-alpha.1",
+    "@agenticprimitives/tool-policy": "0.1.0-alpha.1",
+    "@agenticprimitives/types": "0.1.0-alpha.1",
+    "@agenticprimitives-demo/e2e": "0.0.1"
+  },
+  "changesets": [
+    "r1-cross-stack-typehash-convergence"
+  ]
+}

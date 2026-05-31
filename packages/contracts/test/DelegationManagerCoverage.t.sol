@@ -86,11 +86,12 @@ contract DelegationManagerCoverageTest is Test {
     }
 
     function test_DELEGATION_TYPEHASH_is_a_known_constant() public view {
-        // Locks the contract's non-standard EIP-712 type string from
-        // DelegationManager.sol:68. CROSS-STACK-001 (open) tracks the
-        // divergence from the off-chain DELEGATION_EIP712_TYPES.
+        // R1 / CROSS-STACK-001 closure (2026-05-31): converged to STANDARD
+        // EIP-712. The type string now references `Caveat[]` and appends
+        // the `Caveat(...)` type definition. Off-chain viem.hashTypedData
+        // derives the same typehash from the TS DELEGATION_EIP712_TYPES.
         bytes32 expected = keccak256(
-            "Delegation(address delegator,address delegate,bytes32 authority,bytes32 caveatsHash,uint256 salt)"
+            "Delegation(address delegator,address delegate,bytes32 authority,Caveat[] caveats,uint256 salt)Caveat(address enforcer,bytes terms)"
         );
         assertEq(dm.DELEGATION_TYPEHASH(), expected);
     }

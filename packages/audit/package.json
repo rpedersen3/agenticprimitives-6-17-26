@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/audit",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Append-only audit event schema + sink interface. Transport-agnostic; consumers wire concrete sinks (console / D1 / Cloud Logging / etc.).",
   "type": "module",
   "main": "./dist/index.js",

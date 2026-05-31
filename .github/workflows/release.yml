@@ -50,8 +50,22 @@ jobs:
           registry-url: https://registry.npmjs.org/
           cache: pnpm
 
+      # R1.4 — packages/contracts builds via `forge build && build:abi`.
+      # Without Foundry the contracts package's prepublish + the
+      # changeset publish step both fail (run 26701379049). Mirror the
+      # version pinned in ci.yml.
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # R1.4 — contracts/build needs forge-std + account-abstraction + OZ
+      # remappings installed by setup.sh before `forge build` succeeds.
+      - name: Install contract dependencies
+        working-directory: packages/contracts
+        run: bash setup.sh
 
       - name: Build packages
         run: pnpm -r --filter './packages/*' build

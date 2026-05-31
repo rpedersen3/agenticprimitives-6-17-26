@@ -1,0 +1,47 @@
+{
+  "name": "SmartAgentPaymaster",
+  "storage": [
+    {
+      "label": "_owner",
+      "slot": "0",
+      "offset": 0,
+      "type": "t_address",
+      "contract": "src/SmartAgentPaymaster.sol:SmartAgentPaymaster"
+    },
+    {
+      "label": "_pendingOwner",
+      "slot": "1",
+      "offset": 0,
+      "type": "t_address",
+      "contract": "src/SmartAgentPaymaster.sol:SmartAgentPaymaster"
+    },
+    {
+      "label": "_dev",
+      "slot": "1",
+      "offset": 20,
+      "type": "t_bool",
+      "contract": "src/SmartAgentPaymaster.sol:SmartAgentPaymaster"
+    },
+    {
+      "label": "_acceptList",
+      "slot": "2",
+      "offset": 0,
+      "type": "t_mapping(t_address,t_bool)",
+      "contract": "src/SmartAgentPaymaster.sol:SmartAgentPaymaster"
+    },
+    {
+      "label": "verifyingSigner",
+      "slot": "3",
+      "offset": 0,
+      "type": "t_address",
+      "contract": "src/SmartAgentPaymaster.sol:SmartAgentPaymaster"
+    },
+    {
+      "label": "__gap",
+      "slot": "4",
+      "offset": 0,
+      "type": "t_array(t_uint256)49_storage",
+      "contract": "src/SmartAgentPaymaster.sol:SmartAgentPaymaster"
+    }
+  ]
+}

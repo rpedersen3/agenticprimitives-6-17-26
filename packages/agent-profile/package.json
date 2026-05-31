@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/agent-profile",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Agent identity SDK: HCS-11-aligned typed profile schema (AgentCard), HCS-14 CAIP-10 nativeId helpers, mcpServer.verification methods (DNS TXT / signed URL / HTTP challenge / VP), canonical-JSON content-hash. Speaks identity-domain vocabulary only.",
   "type": "module",
   "main": "./dist/index.js",
