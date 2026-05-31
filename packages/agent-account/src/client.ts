@@ -153,6 +153,34 @@ function _initParamsTuple(spec: AgentAccountSpec): {
   };
 }
 
+/**
+ * R5.12c / PKG-AGENT-ACCOUNT-005 — thrown by
+ * {@link AgentAccountClient.assertSaMatchesCustodianDerivation} when a
+ * client-supplied target SA address doesn't match the deterministic
+ * derivation from the verified credential's custodian set.
+ *
+ * The message includes the claimed + derived addresses so operators
+ * can correlate forensically without re-querying the chain. The
+ * structured `spec` field carries the full input to
+ * `getAddressForAgentAccount` so the failure is reproducible.
+ */
+export class SaMismatchError extends Error {
+  readonly claimed: Address;
+  readonly derived: Address;
+  readonly spec: AgentAccountSpec;
+  constructor(opts: { claimed: Address; derived: Address; spec: AgentAccountSpec }) {
+    super(
+      `[agent-account] SA derivation mismatch: claimed ${opts.claimed} but spec derives to ${opts.derived}. ` +
+        `A sponsored deploy / signed action against the claimed address would not match the canonical SA ` +
+        `for the supplied custodian set (mode=${opts.spec.mode ?? 0}, salt=${(opts.spec.salt ?? 0n).toString()}).`,
+    );
+    this.name = 'SaMismatchError';
+    this.claimed = opts.claimed;
+    this.derived = opts.derived;
+    this.spec = opts.spec;
+  }
+}
+
 export class AgentAccountClient {
   private readonly publicClient: PublicClient;
   private readonly opts: AgentAccountClientOpts;
@@ -176,6 +204,70 @@ export class AgentAccountClient {
       _initParamsTuple(spec),
       spec.salt,
     ])) as Address;
+  }
+
+  /**
+   * R5.12c / PKG-AGENT-ACCOUNT-005 — sponsored-deploy invariant gate.
+   *
+   * Verify that a CLAIMED Smart Agent address matches the deterministic
+   * derivation from the SUPPLIED custodian set + spec defaults. Returns
+   * the verified address on match; throws {@link SaMismatchError} on
+   * mismatch.
+   *
+   * **Use this whenever a relying broker sponsors a deploy or signs an
+   * action for a client-supplied target SA address.** A sponsored deploy
+   * that uses the CLAIMED address verbatim trusts the client; a sponsored
+   * deploy gated by this assert verifies the client-supplied target IS
+   * the canonical SA the verified credential implies. Without this gate
+   * any authenticated user could ask the broker to deploy (and pay gas
+   * for) an arbitrary address — a financial DoS.
+   *
+   * Convention: pass the credential-derived address(es) as `custodians`
+   * and the client-supplied target as `claimed`. Defaults match the
+   * canonical "SIWE wallet → mode-0 SA" flow: `mode = 0`, `salt = 0n`,
+   * no trustees, no passkey. Override only when the broker legitimately
+   * deploys a non-default shape (e.g. a passkey-direct SA with
+   * `mode = 0` + the passkey block).
+   *
+   * @example
+   * ```ts
+   * // demo-a2a /session/direct-deploy
+   * const verifiedWallet = recoverSiweAddress(...);
+   * await client.assertSaMatchesCustodianDerivation({
+   *   claimed: body.smartAccountAddress, // client-supplied
+   *   custodians: [verifiedWallet],
+   * });
+   * // Throws SaMismatchError if the client lied; otherwise the broker
+   * // sponsors the deploy of the EXACT canonical SA derived from the
+   * // verified credential.
+   * ```
+   *
+   * @throws SaMismatchError when `claimed.toLowerCase() !== derived.toLowerCase()`.
+   */
+  async assertSaMatchesCustodianDerivation(opts: {
+    claimed: Address;
+    custodians: readonly Address[];
+    mode?: number;
+    salt?: bigint;
+    trustees?: readonly Address[];
+    passkey?: AgentAccountSpec['passkey'];
+  }): Promise<Address> {
+    const spec: AgentAccountSpec = {
+      mode: opts.mode ?? 0,
+      custodians: opts.custodians,
+      trustees: opts.trustees ?? [],
+      passkey: opts.passkey,
+      salt: opts.salt ?? 0n,
+    };
+    const derived = await this.getAddressForAgentAccount(spec);
+    if (derived.toLowerCase() !== opts.claimed.toLowerCase()) {
+      throw new SaMismatchError({
+        claimed: opts.claimed,
+        derived,
+        spec,
+      });
+    }
+    return derived;
   }
 
   /**

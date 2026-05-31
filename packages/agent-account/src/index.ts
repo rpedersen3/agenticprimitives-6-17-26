@@ -2,7 +2,7 @@
 //
 // See ../../specs/201-agent-account.md for the full contract.
 
-export { AgentAccountClient } from './client';
+export { AgentAccountClient, SaMismatchError } from './client';
 export type { AgentAccountClientOpts, AgentAccountSpec } from './client';
 export type { UserOperation, Address, Hex } from './types';
 export { buildExecuteCallData, buildExecuteBatchCallData, type ContractCall } from './execute';
