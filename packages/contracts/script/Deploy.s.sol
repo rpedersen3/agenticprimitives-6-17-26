@@ -47,13 +47,36 @@ import {AgentProfilePredicates} from "../src/identity/AgentProfilePredicates.sol
  * Writes the resulting addresses to deployments-<network>.json so the
  * demo TypeScript apps can read them on startup.
  *
- * For demo purposes, the deployer EOA plays all four trust roles
- * (governance, bundlerSigner, sessionIssuer). Never do this in production.
+ * **R5.4 / CON-DEPLOY-001 / XCON-001 closure (2026-05-31).** Governance,
+ * paymaster owner, naming-root owner, ontology / shape / relationship-
+ * type-registry owners no longer fan out to the deployer EOA. They all
+ * route through a single resolved **authority** address:
+ *
+ *   - `GOVERNANCE_MULTISIG` env var (a multi-sig SA address) → required
+ *     for production networks; reverts the deploy if unset.
+ *   - On `anvil` / `base-sepolia` / `base-sepolia-testnet` the deploy
+ *     falls back to the deployer EOA with a loud warning so testnet
+ *     iteration stays frictionless. The fallback message is the same
+ *     line operators see during the production-readiness review.
+ *
+ * Bundler signer and session issuer are operationally distinct from
+ * governance (a hot signer can rotate without disturbing the slow path),
+ * so they take their own env vars (`BUNDLER_SIGNER`, `SESSION_ISSUER`)
+ * with the resolved authority as the fallback.
+ *
+ * Single-key compromise of the deployer EOA still owns the broadcast
+ * key for THIS deploy transaction, but at the end of the transaction
+ * the authority surface lives at the multisig, not the deployer.
  *
  * Run:
  *   forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 \
  *     --broadcast --private-key 0xac0974... \
  *     --sig "run()"
+ *
+ *   # production:
+ *   GOVERNANCE_MULTISIG=0xMULTISIGSAADDRESS \
+ *   DEPLOY_NETWORK=base-mainnet \
+ *   forge script script/Deploy.s.sol --rpc-url ... --broadcast --private-key ...
  */
 contract Deploy is Script {
     function run() external {
@@ -72,6 +95,16 @@ contract Deploy is Script {
         console2.log("network:    %s", network);
         console2.log("deployer:   %s", deployer);
         console2.log("chainId:    %s", vm.toString(block.chainid));
+
+        // R5.4 — resolve governance authority BEFORE any auth-conferring
+        // deploy. Each network either supplies GOVERNANCE_MULTISIG or
+        // the script reverts (production) / warns + falls back (testnet).
+        address authority = _resolveAuthority(deployer, network);
+        address bundlerSigner = _resolveBundlerSigner(authority);
+        address sessionIssuer = _resolveSessionIssuer(authority);
+        console2.log("authority:  %s", authority);
+        console2.log("bundlerSigner: %s", bundlerSigner);
+        console2.log("sessionIssuer: %s", sessionIssuer);
 
         vm.startBroadcast();
 
@@ -92,23 +125,24 @@ contract Deploy is Script {
         //   (pause + signer). Forwards timelock-routed calls so
         //   `onlyGovernance` sees `msg.sender == AgenticGovernance`.
         //   Guardian (deployer at bootstrap) can pause without delay.
+        // R5.4 — every auth role bootstrapped to `authority`, not `deployer`.
         address[] memory proposers = new address[](1);
-        proposers[0] = deployer;
+        proposers[0] = authority;
         address[] memory executors = new address[](1);
-        executors[0] = deployer;
+        executors[0] = authority;
         TimelockController timelock = new TimelockController(
             24 hours, // minDelay
             proposers,
             executors,
-            deployer  // admin (renounced post-deploy)
+            authority  // admin (multisig from this transaction onward)
         );
         console2.log("TimelockController:   %s", address(timelock));
 
         address[] memory initialSigners = new address[](1);
-        initialSigners[0] = deployer;
+        initialSigners[0] = authority;
         AgenticGovernance governance = new AgenticGovernance(
             address(timelock),
-            deployer,         // guardian (operator can rotate post-deploy)
+            authority,         // guardian
             initialSigners
         );
         console2.log("AgenticGovernance:    %s", address(governance));
@@ -126,12 +160,16 @@ contract Deploy is Script {
         console2.log("CustodyPolicy:        %s", address(custodyPolicy));
 
         // 3. AgentAccountFactory (deploys AgentAccount implementation as side-effect)
+        // R5.4 — bundlerSigner + sessionIssuer routed through the
+        // resolved hot-signer addresses (env-overridable for production
+        // KMS keys). Governance pointer stays at AgenticGovernance
+        // (which itself is now multisig-rooted, R5.4).
         AgentAccountFactory factory = new AgentAccountFactory(
             IEntryPoint(address(entryPoint)),
             address(dm),
             address(custodyPolicy),
-            deployer,    // bundlerSigner
-            deployer,    // sessionIssuer
+            bundlerSigner,
+            sessionIssuer,
             address(governance) // H7-C.9: AgenticGovernance, not deployer EOA
         );
         console2.log("AgentAccountFactory:  %s", address(factory));
@@ -168,9 +206,11 @@ contract Deploy is Script {
         //    Constructor takes entryPoint, initialOwner (for stake/deposit in this
         //    broadcast), and governance (for setDevMode + setAccepted later).
         //    For the demo, deployer plays both roles. Production would split.
+        // R5.4 — initialOwner is the resolved authority, not deployer EOA.
+        // (governance pointer is AgenticGovernance, which is multisig-rooted.)
         SmartAgentPaymaster paymaster = new SmartAgentPaymaster(
             IEntryPoint(address(entryPoint)),
-            deployer,    // initialOwner (transient; can transferOwnership to governance later)
+            authority,    // initialOwner — multisig from this tx onward
             address(governance) // H7-C.9: AgenticGovernance, not deployer EOA
         );
         console2.log("SmartAgentPaymaster:  %s", address(paymaster));
@@ -189,17 +229,23 @@ contract Deploy is Script {
         //   reuse this). ShapeRegistry holds SHACL-style class shapes that
         //   validate subjects against expected predicate / datatype /
         //   cardinality / enum constraints.
-        OntologyTermRegistry ontology = new OntologyTermRegistry(deployer);
+        // R5.4 — ontology + shape registries owned by the resolved authority.
+        // The deployer EOA never holds onto these roles post-broadcast.
+        OntologyTermRegistry ontology = new OntologyTermRegistry(authority);
         console2.log("OntologyTermRegistry: %s", address(ontology));
-        ShapeRegistry shapes = new ShapeRegistry(deployer);
+        ShapeRegistry shapes = new ShapeRegistry(authority);
         console2.log("ShapeRegistry:        %s", address(shapes));
 
         // 6.6. Agent Naming Service (NS Phase 3, spec 215).
         //   Registry + per-node attribute resolver (inherits AttributeStorage)
         //   + universal read aggregator. Deployer bootstraps the .agent
         //   root so demos can register children without chicken-and-egg.
-        // H7-C.4: deployer is the immutable initializer; deploy + initializeRoot
-        // run in the same transaction below so the TLD cannot be frontrun.
+        // H7-C.4: deployer is the immutable initializer (must match the
+        // broadcast key so initializeRoot succeeds in the same tx).
+        // R5.4: the .agent TLD root OWNER is the resolved authority,
+        // not the deployer — initializeRoot's owner arg is the
+        // long-lived authority over the root, while the constructor arg
+        // is just the one-shot frontrun-resistance handle.
         AgentNameRegistry nameRegistry = new AgentNameRegistry(deployer);
         console2.log("AgentNameRegistry:    %s", address(nameRegistry));
         AgentNameAttributeResolver nameResolver = new AgentNameAttributeResolver(nameRegistry, address(ontology));
@@ -208,7 +254,7 @@ contract Deploy is Script {
         console2.log("AgentNameUniversalResolver: %s", address(nameUniversal));
         bytes32 agentRoot = nameRegistry.initializeRoot(
             "agent",
-            deployer,
+            authority,
             address(nameResolver),
             nameRegistry.KIND_AGENT()
         );
@@ -243,7 +289,8 @@ contract Deploy is Script {
 
         // 6.8. Agent Relationships (RL Phase 3, spec 216) — trust-fabric
         //      edge store + governance-gated type semantics registry.
-        RelationshipTypeRegistry relTypes = new RelationshipTypeRegistry(deployer);
+        // R5.4: relationship-type registry owned by resolved authority.
+        RelationshipTypeRegistry relTypes = new RelationshipTypeRegistry(authority);
         console2.log("RelationshipTypeRegistry: %s", address(relTypes));
         AgentRelationship relationships = new AgentRelationship();
         console2.log("AgentRelationship:    %s", address(relationships));
@@ -491,5 +538,75 @@ contract Deploy is Script {
             keccak256(bytes("AgentProfile-shape-v1"))
         );
         console2.log("  defined atl:AgentProfile shape with %s properties", vm.toString(props.length));
+    }
+
+    // ─── R5.4: governance-authority resolution ─────────────────────────
+
+    /// @dev Resolve the address that holds every governance / pause /
+    ///      ownership role at the end of this deploy. Either:
+    ///        - `GOVERNANCE_MULTISIG` env var is set → use it
+    ///        - testnet network with no env var → deployer (loud warn)
+    ///        - production network with no env var → revert
+    ///
+    ///      The audit's "single-key compromise = total system takeover"
+    ///      concern is the testnet-fallback case. The production-reverts
+    ///      case turns the documented manual hand-off ceremony into a
+    ///      hard precondition for the broadcast.
+    function _resolveAuthority(address deployer, string memory network) internal view returns (address) {
+        // vm.envOr is preferred over `try vm.envAddress { } catch { }` here
+        // because the try-catch semantics are inconsistent across forge
+        // test contexts (the catch swallows env-not-set but also legitimate
+        // require reverts further down). vm.envOr returns the default when
+        // the env var is unset, with no overloaded failure mode.
+        address multisig = vm.envOr("GOVERNANCE_MULTISIG", address(0));
+
+        if (multisig != address(0)) {
+            require(multisig.code.length > 0, "Deploy: GOVERNANCE_MULTISIG must be a contract (Smart Agent / Safe / Timelock).");
+            return multisig;
+        }
+
+        if (_isTestnetNetwork(network)) {
+            console2.log("");
+            console2.log(string.concat("WARNING: GOVERNANCE_MULTISIG unset for `", network, "` deploy."));
+            console2.log("WARNING: Falling back to deployer EOA as authority.");
+            console2.log("WARNING: All Timelock proposer/executor/admin, AgenticGovernance");
+            console2.log("WARNING: guardian/signers, paymaster owner, .agent root owner,");
+            console2.log("WARNING: ontology/shape/relationship-type registry owners point at");
+            console2.log("WARNING: the deployer key. Single-key compromise = total system");
+            console2.log("WARNING: takeover. Acceptable for anvil/testnet; never for prod.");
+            console2.log("");
+            return deployer;
+        }
+
+        revert(string.concat(
+            "Deploy: GOVERNANCE_MULTISIG env var REQUIRED for network `",
+            network,
+            "`. Set it to a multi-sig SA address (deployed separately) so the post-broadcast authority surface lives at the multisig, not the deployer EOA. See R5.4 / CON-DEPLOY-001 audit closure."
+        ));
+    }
+
+    /// @dev Bundler signer is hot-key-rotatable separately from governance
+    ///      (a paymaster operator can swap KMS keys without disturbing
+    ///      the slow path). Pulls from `BUNDLER_SIGNER` env var; falls
+    ///      back to the resolved authority.
+    function _resolveBundlerSigner(address authority) internal view returns (address) {
+        return vm.envOr("BUNDLER_SIGNER", authority);
+    }
+
+    /// @dev Session issuer is also hot-key-rotatable. Pulls from
+    ///      `SESSION_ISSUER` env var; falls back to authority.
+    function _resolveSessionIssuer(address authority) internal view returns (address) {
+        return vm.envOr("SESSION_ISSUER", authority);
+    }
+
+    /// @dev Networks where deployer-as-authority fallback is allowed.
+    ///      Anything else is production and requires GOVERNANCE_MULTISIG.
+    function _isTestnetNetwork(string memory network) internal pure returns (bool) {
+        return (
+            keccak256(bytes(network)) == keccak256(bytes("anvil")) ||
+            keccak256(bytes(network)) == keccak256(bytes("base-sepolia")) ||
+            keccak256(bytes(network)) == keccak256(bytes("base-sepolia-testnet")) ||
+            keccak256(bytes(network)) == keccak256(bytes("sepolia"))
+        );
     }
 }
