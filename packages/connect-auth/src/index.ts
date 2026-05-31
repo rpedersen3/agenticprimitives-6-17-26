@@ -2,7 +2,14 @@
 //
 // See ../../specs/200-connect-auth.md for the full contract.
 
-export { mintSession, verifySession, SESSION_COOKIE, SESSION_TTL_SECONDS } from './sessions';
+export {
+  mintSession,
+  verifySession,
+  SESSION_COOKIE,
+  SESSION_TTL_SECONDS,
+  DEFAULT_SESSION_CLOCK_SKEW_SEC,
+  type VerifySessionOpts,
+} from './sessions';
 export { csrfTokenFor, verifyCsrf } from './csrf';
 export { deriveSaltFromLabel, deriveSaltFromEmail, type DeriveSaltFromEmailOpts } from './salt';
 export {
