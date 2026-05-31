@@ -59,7 +59,12 @@ describe('DelegationClient.issueDelegation', () => {
     expect(a.salt).not.toBe(b.salt);
   });
 
-  it('passes "0x" for missing caveat args in the typed-data message', async () => {
+  it('H7-D / PKG-delegation-004 closure: EIP-712 Caveat type EXCLUDES `args` (audit F-1)', async () => {
+    // `args` is the redeemer-supplied runtime data. It MUST NOT appear in the
+    // signed typed-data message because (a) on-chain CAVEAT_TYPEHASH is
+    // keccak256("Caveat(address enforcer,bytes terms)") — args excluded;
+    // (b) including args would let the redeemer's chosen args ride inside
+    // the delegator's signature. (audit F-1)
     const signer = {
       address: '0xaaaa' as const,
       signTypedData: vi.fn().mockResolvedValue('0xfff'),
@@ -75,7 +80,16 @@ describe('DelegationClient.issueDelegation', () => {
       caveats: [buildCaveat(TIMESTAMP_ENFORCER, encodeTimestampTerms(1, 2))],
       salt: 1n,
     });
-    const message = signer.signTypedData.mock.calls[0]![0].message;
-    expect(message.caveats[0].args).toBe('0x');
+    const callArg = signer.signTypedData.mock.calls[0]![0];
+    // The Caveat EIP-712 type lists `enforcer` + `terms` only.
+    expect(callArg.types.Caveat).toEqual([
+      { name: 'enforcer', type: 'address' },
+      { name: 'terms', type: 'bytes' },
+    ]);
+    // The signed message's caveat carries enforcer + terms; args is absent.
+    const sentCaveat = callArg.message.caveats[0];
+    expect(sentCaveat.enforcer).toBe(TIMESTAMP_ENFORCER);
+    expect(sentCaveat.terms).toBeDefined();
+    expect(sentCaveat.args).toBeUndefined();
   });
 });

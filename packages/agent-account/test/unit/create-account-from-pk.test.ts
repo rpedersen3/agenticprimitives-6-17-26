@@ -86,12 +86,15 @@ describe('AgentAccountClient.createAgentAccountFromPrivateKey', () => {
     };
     expect(call.address).toBe(FACTORY);
     expect(call.functionName).toBe('createAgentAccount');
-    // args: [initParamsTuple, safetyDelaySeconds, salt]
-    const params = call.args[0] as { custodians: unknown[]; mode: number; trustees: unknown[] };
+    // H7-D / PKG-agent-account-004 closure — args:
+    //   [0] initParamsTuple
+    //   [1] timelockOverrides uint32[7] (one per CustodyTier; mode=0 sends zeros)
+    //   [2] salt uint256
+    const params = call.args[0] as { custodians: unknown[]; mode: number; trustes: unknown[] };
     expect(params.custodians).toEqual([OWNER]);
     expect(params.mode).toBe(0);
-    expect(params.trustees).toEqual([]);
-    expect(call.args[1]).toBe(0);
+    expect((params as { trustees: unknown[] }).trustees).toEqual([]);
+    expect(call.args[1]).toEqual([0, 0, 0, 0, 0, 0, 0]);
     expect(call.args[2]).toBe(42n);
     expect(call.account.address).toBe(BOOTSTRAP_ADDR);
   });

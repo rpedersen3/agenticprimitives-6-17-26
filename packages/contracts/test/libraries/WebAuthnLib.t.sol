@@ -107,12 +107,161 @@ contract WebAuthnLibTest is Test {
         bytes32 rp = keccak256("rp.example");
         bytes memory authData = _buildAuthData(rp, 0x01); // UP set
         bool ok = lib.verify(_assertion(authData), bytes32(0), 1, 1, rp, false);
+        assertFalse(ok);
+    }
+
+    // ─── H7-D.5 — clientDataJSON shape coverage ─────────────────────
+
+    function test_rejects_when_typeIndex_out_of_bounds() public {
+        bytes32 rp = keccak256("rp.example");
+        bytes memory authData = _buildAuthData(rp, 0x01);
+        WebAuthnLib.Assertion memory a = WebAuthnLib.Assertion({
+            authenticatorData: authData,
+            clientDataJSON: '{}', // 2 bytes — typeIndex=100 is out of bounds
+            challengeIndex: 0,
+            typeIndex: 100,
+            r: 0,
+            s: 0,
+            credentialIdDigest: bytes32(0)
+        });
+        bool ok = lib.verify(a, bytes32(0), 1, 1, rp, false);
+        assertFalse(ok, "typeIndex past end must reject");
+    }
+
+    function test_rejects_when_type_field_mismatch() public {
+        bytes32 rp = keccak256("rp.example");
+        bytes memory authData = _buildAuthData(rp, 0x01);
+        // Has the right prefix but wrong type value.
+        WebAuthnLib.Assertion memory a = WebAuthnLib.Assertion({
+            authenticatorData: authData,
+            clientDataJSON: '"type":"webauthn.put"',
+            challengeIndex: 0,
+            typeIndex: 0,
+            r: 0,
+            s: 0,
+            credentialIdDigest: bytes32(0)
+        });
+        bool ok = lib.verify(a, bytes32(0), 1, 1, rp, false);
+        assertFalse(ok, "wrong type value must reject");
+    }
+
+    function test_rejects_when_challenge_index_out_of_bounds() public {
+        bytes32 rp = keccak256("rp.example");
+        bytes memory authData = _buildAuthData(rp, 0x01);
+        WebAuthnLib.Assertion memory a = WebAuthnLib.Assertion({
+            authenticatorData: authData,
+            clientDataJSON: '"type":"webauthn.get"',
+            challengeIndex: 100,
+            typeIndex: 0,
+            r: 0,
+            s: 0,
+            credentialIdDigest: bytes32(0)
+        });
+        bool ok = lib.verify(a, bytes32(0), 1, 1, rp, false);
+        assertFalse(ok, "challengeIndex past end must reject");
+    }
+
+    function test_rejects_when_challenge_missing_closing_quote() public {
+        bytes32 rp = keccak256("rp.example");
+        bytes memory authData = _buildAuthData(rp, 0x01);
+        // Has '"type":"webauthn.get"' + '"challenge":"' + 43 chars but NOT
+        // followed by '"'. (43 'A's would otherwise decode to 32 zero bytes.)
+        string memory cdj = '"type":"webauthn.get""challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA?';
+        WebAuthnLib.Assertion memory a = WebAuthnLib.Assertion({
+            authenticatorData: authData,
+            clientDataJSON: cdj,
+            challengeIndex: 21,
+            typeIndex: 0,
+            r: 0,
+            s: 0,
+            credentialIdDigest: bytes32(0)
+        });
+        bool ok = lib.verify(a, bytes32(0), 1, 1, rp, false);
+        assertFalse(ok, "missing closing quote must reject");
+    }
+
+    function test_rejects_when_base64url_contains_invalid_char() public {
+        bytes32 rp = keccak256("rp.example");
+        bytes memory authData = _buildAuthData(rp, 0x01);
+        // '!' (0x21) is not a valid base64url char (only [A-Za-z0-9-_]).
+        string memory cdj = '"type":"webauthn.get""challenge":"!AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"';
+        WebAuthnLib.Assertion memory a = WebAuthnLib.Assertion({
+            authenticatorData: authData,
+            clientDataJSON: cdj,
+            challengeIndex: 21,
+            typeIndex: 0,
+            r: 0,
+            s: 0,
+            credentialIdDigest: bytes32(0)
+        });
+        bool ok = lib.verify(a, bytes32(0), 1, 1, rp, false);
+        assertFalse(ok, "invalid base64url char must reject");
+    }
+
+    function test_full_verify_succeeds_when_RIP7212_mocked_success() public {
+        // Mock RIP-7212 to always return 1 (signature valid). Build a
+        // properly-shaped assertion: correct authData header + clientDataJSON
+        // with valid type field + 43 base64url chars whose decode produces
+        // exactly the expected challenge bytes.
+        //
+        // 43 'A' chars in base64url decode to 32 bytes of 0x00 → expected
+        // challenge hash = bytes32(0).
+        bytes32 rp = keccak256("rp.example");
+        bytes memory authData = _buildAuthData(rp, 0x01);
+        string memory cdj = '"type":"webauthn.get""challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"';
+        WebAuthnLib.Assertion memory a = WebAuthnLib.Assertion({
+            authenticatorData: authData,
+            clientDataJSON: cdj,
+            challengeIndex: 21,
+            typeIndex: 0,
+            r: 1,
+            s: 1,
+            credentialIdDigest: bytes32(0)
+        });
+        // Mock RIP-7212 success.
+        bytes memory successCode = type(SuccessReturnMock).runtimeCode;
+        vm.etch(address(0x100), successCode);
+
+        bool ok = lib.verify(a, bytes32(0), 1, 1, rp, false);
+        assertTrue(ok, "with mocked RIP-7212 success + well-shaped assertion, verify must succeed");
+    }
+
+    function test_full_verify_fails_when_challenge_decodes_to_wrong_hash() public {
+        // Same well-shaped assertion as above, but the expected challenge is
+        // NOT bytes32(0). The base64url decode of 43 'A's = bytes32(0), which
+        // does NOT match a non-zero expected challenge.
+        bytes32 rp = keccak256("rp.example");
+        bytes memory authData = _buildAuthData(rp, 0x01);
+        string memory cdj = '"type":"webauthn.get""challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"';
+        WebAuthnLib.Assertion memory a = WebAuthnLib.Assertion({
+            authenticatorData: authData,
+            clientDataJSON: cdj,
+            challengeIndex: 21,
+            typeIndex: 0,
+            r: 1,
+            s: 1,
+            credentialIdDigest: bytes32(0)
+        });
+        // Even with RIP-7212 mocked success, the challenge-mismatch check
+        // fires earlier.
+        bytes memory successCode = type(SuccessReturnMock).runtimeCode;
+        vm.etch(address(0x100), successCode);
+
+        bool ok = lib.verify(a, bytes32(uint256(0xCAFE)), 1, 1, rp, false);
+        assertFalse(ok, "wrong challenge must reject even when crypto succeeds");
+    }
+
+    function _unused_to_silence_compiler() internal pure {
+        // Empty; keeps existing tail clean.
         // Library returns false because clientDataJSON is "{}" not a valid
         // webauthn.get bundle — that's expected; we just want to ensure
         // the rp / UP checks didn't reject first.
-        assertFalse(ok, "downstream cdj check should reject; not a positive signal here");
-        // We don't have an easy way to assert "got past _checkAuthData"
-        // from the boolean return; that path is covered by the AgentAccount
-        // integration tests via PasskeyDirectCustody.t.sol.
+    }
+}
+
+/// @dev Simple mock contract whose fallback returns `abi.encode(uint256(1))`.
+contract SuccessReturnMock {
+    fallback(bytes calldata) external returns (bytes memory) {
+        return abi.encode(uint256(1));
     }
 }

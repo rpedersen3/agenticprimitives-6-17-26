@@ -94,4 +94,51 @@ contract SignatureSlotBoundsTest is Test {
         ));
         h.recover(bytes32(uint256(1)), slot, 0, address(0));
     }
+
+    // ─── H7-D.7 — per-v-byte coverage matrix ────────────────────────
+
+    function test_v3_to_v26_reject_as_InvalidSignature() public {
+        // v in [3, 26] is an unknown signature kind — must revert with
+        // InvalidSignature(v) for every byte value in the range.
+        for (uint8 v = 3; v <= 26; v++) {
+            bytes memory slot = _slot(bytes32(0), bytes32(0), v);
+            vm.expectRevert(abi.encodeWithSelector(SignatureSlotRecovery.InvalidSignature.selector, v));
+            h.recover(bytes32(uint256(1)), slot, 0, address(0));
+        }
+    }
+
+    function test_v29_and_v30_reject_as_InvalidSignature() public {
+        for (uint8 v = 29; v <= 30; v++) {
+            bytes memory slot = _slot(bytes32(0), bytes32(0), v);
+            vm.expectRevert(abi.encodeWithSelector(SignatureSlotRecovery.InvalidSignature.selector, v));
+            h.recover(bytes32(uint256(1)), slot, 0, address(0));
+        }
+    }
+
+    function test_v27_v28_ecdsa_reverts_on_zero_recovery() public {
+        // v=27/28 is the ECDSA path. r=0,s=0 recovers to address(0) → InvalidSignature.
+        for (uint8 v = 27; v <= 28; v++) {
+            bytes memory slot = _slot(bytes32(0), bytes32(0), v);
+            vm.expectRevert(abi.encodeWithSelector(SignatureSlotRecovery.InvalidSignature.selector, v));
+            h.recover(bytes32(uint256(1)), slot, 0, address(0));
+        }
+    }
+
+    function test_v31_v32_eth_sign_reverts_on_zero_recovery() public {
+        // v>30 is the eth_sign-wrapped path; subtract 4 to recover. Zero
+        // signature recovers to address(0) → InvalidSignature.
+        for (uint8 v = 31; v <= 32; v++) {
+            bytes memory slot = _slot(bytes32(0), bytes32(0), v);
+            vm.expectRevert(abi.encodeWithSelector(SignatureSlotRecovery.InvalidSignature.selector, v));
+            h.recover(bytes32(uint256(1)), slot, 0, address(0));
+        }
+    }
+
+    function test_v1_approved_hash_with_zero_registry_reverts_InvalidSignature() public {
+        // v=1 with `approvedHashRegistry == address(0)` → InvalidSignature
+        // path that intentionally rejects the pre-approved-hash flow.
+        bytes memory slot = _slot(bytes32(uint256(0xDEAD)), bytes32(0), 1);
+        vm.expectRevert(abi.encodeWithSelector(SignatureSlotRecovery.InvalidSignature.selector, uint8(1)));
+        h.recover(bytes32(uint256(1)), slot, 0, address(0));
+    }
 }

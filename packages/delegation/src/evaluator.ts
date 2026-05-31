@@ -63,7 +63,12 @@ function evalTimestamp(c: Caveat, ctx: CaveatContext): CaveatVerdict {
     ) as readonly [bigint, bigint];
     const ts = BigInt(ctx.timestamp);
     if (ts < validAfter) return { enforcer: c.enforcer, allowed: false, reason: 'before validAfter' };
-    if (ts >= validUntil) return { enforcer: c.enforcer, allowed: false, reason: 'after validUntil' };
+    // H7-D.10 / XPKG-001-sec: align with on-chain TimestampEnforcer.sol:28
+    // (`if (block.timestamp > validUntil) revert TimestampExpired()`). The
+    // boundary is INCLUSIVE — at ts == validUntil the on-chain enforcer
+    // accepts, so the off-chain pre-check MUST also accept (else a redeem
+    // that would land on-chain gets denied at the off-chain gate).
+    if (ts > validUntil) return { enforcer: c.enforcer, allowed: false, reason: 'after validUntil' };
     return { enforcer: c.enforcer, allowed: true };
   } catch (e) {
     return { enforcer: c.enforcer, allowed: false, reason: `timestamp decode error: ${e instanceof Error ? e.message : e}` };

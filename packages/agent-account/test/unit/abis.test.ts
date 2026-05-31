@@ -6,10 +6,13 @@ describe('abis', () => {
     const fn = agentAccountFactoryAbi.find((e) => e.type === 'function' && e.name === 'createAgentAccount');
     expect(fn).toBeDefined();
     expect(fn!.stateMutability).toBe('nonpayable');
-    // (initParams tuple, safetyDelaySeconds, salt)
+    // H7-D / PKG-agent-account-004 closure — current ABI shape is
+    // (initParams tuple, timelockOverrides uint32[7], salt). The [7]
+    // overrides hold one entry per CustodyTier (T1..T7). Test fixture was
+    // stale from a pre-spec-209 single-scalar timelock world.
     expect(fn!.inputs).toHaveLength(3);
     expect(fn!.inputs[0]?.type).toBe('tuple');
-    expect(fn!.inputs[1]?.type).toBe('uint32');
+    expect(fn!.inputs[1]?.type).toBe('uint32[7]');
     expect(fn!.inputs[2]?.type).toBe('uint256');
   });
 

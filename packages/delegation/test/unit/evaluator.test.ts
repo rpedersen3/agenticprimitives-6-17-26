@@ -60,9 +60,18 @@ describe('evaluateCaveats — timestamp', () => {
     if (!v[0]!.allowed) expect(v[0]!.reason).toContain('validAfter');
   });
 
-  it('denies at/after validUntil (half-open interval)', () => {
+  it('H7-D.10 / XPKG-001-sec: allows AT validUntil (matches on-chain `> validUntil`)', () => {
+    // On-chain TimestampEnforcer.sol:28 uses `if (block.timestamp > validUntil) revert`.
+    // Off-chain MUST allow at the boundary so a redeem that lands on-chain
+    // doesn't get denied at the off-chain gate.
     const c = buildCaveat(ENFORCERS.timestamp, encodeTimestampTerms(1000, 2000));
     const v = evaluateCaveats([c], { timestamp: 2000 }, ENFORCERS);
+    expect(v[0]!.allowed).toBe(true);
+  });
+
+  it('denies after validUntil', () => {
+    const c = buildCaveat(ENFORCERS.timestamp, encodeTimestampTerms(1000, 2000));
+    const v = evaluateCaveats([c], { timestamp: 2001 }, ENFORCERS);
     expect(v[0]!.allowed).toBe(false);
     if (!v[0]!.allowed) expect(v[0]!.reason).toContain('validUntil');
   });
