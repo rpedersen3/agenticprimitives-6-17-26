@@ -11,6 +11,7 @@ re-export ContractCall from ./execute
 re-export Hex from ./types
 re-export PackedUserOperation from ./bundler-client
 re-export SIG_TYPE_WEBAUTHN from ./webauthn-signature
+re-export SaMismatchError from ./client
 re-export SafeSignatureSlot from ./quorum
 re-export UserOperation from ./types
 re-export agentAccountAbi from ./abis

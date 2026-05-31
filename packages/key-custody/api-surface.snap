@@ -2,6 +2,8 @@ re-export A2AKeyProvider from ./types
 re-export AwsKmsProvider from ./providers/aws
 re-export AwsKmsSigner from ./providers/aws
 re-export BuildOpts from ./types
+re-export CreateRelayerAccountOpts from ./relayer-account
+re-export CreateSpendCappedAccountOpts from ./spend-capped-account
 re-export DeriveSubjectOpts from ./derive-subject
 re-export GcpKmsProvider from ./providers/gcp
 re-export GcpKmsSigner from ./providers/gcp
@@ -10,6 +12,7 @@ re-export KmsBackend from ./types
 re-export LocalAesProvider from ./providers/local
 re-export LocalSecp256k1Signer from ./providers/local
 re-export Secret from ./types
+re-export SpendCapExceededError from ./spend-capped-account
 re-export SubjectId from ./derive-subject
 re-export buildKeyProvider from ./factories
 re-export buildMacProvider from ./factories
@@ -18,6 +21,9 @@ re-export buildToolExecutorBackend from ./factories
 re-export buildToolExecutorBackendNoIsolation from ./factories
 re-export canonicalContextBytes from ./aad
 re-export createKmsAccount from ./account
+re-export createKmsViemAccount from ./kms-viem-account
+re-export createRelayerAccount from ./relayer-account
+re-export createSpendCappedAccount from ./spend-capped-account
 re-export deriveSubjectSigner from ./derive-subject
 re-export getRelayOnlySigner from ./relay-only
 re-export isSecret from ./types
