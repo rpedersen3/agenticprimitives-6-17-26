@@ -84,6 +84,19 @@ jobs:
       - name: Doctrine checks (publish-gated subset)
         run: pnpm check:all-publish
 
+      # Foundry must come BEFORE `pnpm -r build` because
+      # `packages/contracts/build` invokes `forge build && build:abi`.
+      # Without this, package build fails before any of the TS package
+      # builds, API surface, typecheck, or contract tests run.
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Build contract dependencies (forge-std + account-abstraction + OZ)
+        working-directory: packages/contracts
+        run: bash setup.sh
+
       - name: Build packages first (apps import from packages' dist/, so build must precede typecheck)
         run: pnpm -r --filter './packages/*' build
 
@@ -100,15 +113,6 @@ jobs:
 
       - name: Integration tests (per-package vitest)
         run: pnpm test:integration:packages
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: stable
-
-      - name: Build contract dependencies (forge-std + account-abstraction + OZ)
-        working-directory: packages/contracts
-        run: bash setup.sh
 
       - name: Forge contract tests (test pyramid Layer 4)
         working-directory: packages/contracts
