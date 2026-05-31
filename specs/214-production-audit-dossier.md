@@ -10,6 +10,11 @@ updates the closure status of items in this spec.
 is the running scorecard; this spec is the **target shape** we're
 auditing toward.
 
+**Strategy anchor:** [`240-native-agentic-primitives-platform-strategy.md`](./240-native-agentic-primitives-platform-strategy.md)
+sets the audit posture for packages and Ethereum contracts: AI-assisted review is
+mandatory on every change, but external review / contests remain required trust
+signals for the authority substrate before broad production scale.
+
 ---
 
 ## 1. Purpose

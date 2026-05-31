@@ -4,6 +4,12 @@
 **Source of capabilities:** `smart-agent` monorepo, branch `003-intent-marketplace-proposal` (extracted, not forked).
 
 > **Rev 2 note:** The original 4-package cut (auth / delegation / kms / mcp-resources) was restructured into 6 capability + 1 shared = 7 packages, justified by competitive-landscape research. See [`100-package-boundary-doctrine.md`](./100-package-boundary-doctrine.md) for principles and [`101-v0-package-proposal.md`](./101-v0-package-proposal.md) for per-package justification. The original four specs are preserved at [`_archive/00X-*.md`](./_archive/).
+>
+> **Rev 3 strategy note (2026-05-30):** Architecture and roadmap decisions now
+> build on [`240-native-agentic-primitives-platform-strategy.md`](./240-native-agentic-primitives-platform-strategy.md):
+> first-party Smart Agent primitives, AI-assisted audit on every change, selective
+> external review for trust signals, and thin modular Ethereum contracts as the
+> long-term advantage over disjointed SDK stacks.
 
 ---
 
@@ -14,6 +20,11 @@ Modern agentic web apps repeatedly re-implement the same scaffolding around four
 `smart-agent` has built mature, production-grade versions of all four — but they're embedded inside one application monorepo. `agenticprimitives` re-shapes them into 7 independently consumable npm packages that any agentic web app can adopt without inheriting smart-agent's product surface.
 
 Each package is a **product boundary**: a separately publishable, independently consumable unit with its own `CLAUDE.md` and `capability.manifest.json` so Claude (and other agents) can route work efficiently to one or two packages instead of one giant repo context.
+
+The product direction is native-first: we prefer a coherent primitives platform
+over glued vendor SDKs when the flow touches identity, custody, delegation,
+policy, and audit. AI-assisted development and audit are part of the operating
+model, but not a substitute for external review of the authority substrate.
 
 ---
 

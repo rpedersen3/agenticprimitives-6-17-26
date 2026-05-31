@@ -54,7 +54,9 @@ contract AgentAccountFactoryModeTest is Test {
             trustees: guardians,
             initialPasskeyCredentialIdDigest: bytes32(0),
             initialPasskeyX: 0,
-            initialPasskeyY: 0
+            initialPasskeyY: 0,
+
+            initialPasskeyRpIdHash: bytes32(uint256(0x7270696468617368))
         });
     }
 
@@ -211,7 +213,9 @@ contract AgentAccountFactoryModeTest is Test {
             trustees: _guardians(1, guardian1, address(0), address(0)),
             initialPasskeyCredentialIdDigest: TEST_CRED,
             initialPasskeyX: TEST_X,
-            initialPasskeyY: TEST_Y
+            initialPasskeyY: TEST_Y,
+
+            initialPasskeyRpIdHash: bytes32(uint256(0x7270696468617368))
         });
         AgentAccount acct = factory.createAgentAccount(p, _defaultTimelocks(), 20);
 

@@ -21,7 +21,7 @@ contract AgentNameAttributeResolverTest is Test {
     bytes32 internal aliceNode;
 
     function setUp() public {
-        reg = new AgentNameRegistry();
+        reg = new AgentNameRegistry(deployer);
         ontology = new OntologyTermRegistry(governor);
         resolver = new AgentNameAttributeResolver(reg, address(ontology));
 

@@ -359,24 +359,36 @@ contract CustodyPolicy {
             reqThreshold = _approvalsValue(c, tier);
         }
 
-        uint64 nowTs = uint64(block.timestamp);
-        uint64 eta = uint64(nowTs + timelock);
+        // H7-C.5 / XCON-002: aggressive block-scoping so `forge coverage`
+        // compiles without `--ir-minimum`. The verify + write halves are
+        // independent on the stack; we let each release its locals before
+        // the next runs.
+        uint64 eta;
         changeId = ++c.nextChangeId;
-        bytes32 payloadHash = _hashProposeRequest(account, action, args, changeId);
-        address[] memory propSigners = _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, isRecovery);
-
-        c.pending[changeId] = ScheduledChange({
-            action: action,
-            args: args,
-            proposedAt: nowTs,
-            eta: eta,
-            proposer: msg.sender,
-            executed: false,
-            cancelled: false
-        });
-
-        for (uint256 i; i < propSigners.length; i++) {
-            c.proposerCustodians[changeId][propSigners[i]] = true;
+        {
+            uint64 nowTs = uint64(block.timestamp);
+            eta = uint64(nowTs + timelock);
+            c.pending[changeId] = ScheduledChange({
+                action: action,
+                args: args,
+                proposedAt: nowTs,
+                eta: eta,
+                proposer: msg.sender,
+                executed: false,
+                cancelled: false
+            });
+        }
+        {
+            ScheduleVerifyCtx memory sctx = ScheduleVerifyCtx({
+                action: action,
+                changeId: changeId,
+                reqThreshold: reqThreshold,
+                isRecovery: isRecovery
+            });
+            address[] memory propSigners = _verifyScheduleQuorum(account, c, sctx, args, quorumSigs);
+            for (uint256 i; i < propSigners.length; i++) {
+                c.proposerCustodians[changeId][propSigners[i]] = true;
+            }
         }
 
         emit CustodyChangeScheduled(account, changeId, action, eta, msg.sender);
@@ -396,7 +408,7 @@ contract CustodyPolicy {
         uint8 tier = _effectiveTierFor(c, p.action, p.args);
         uint8 reqThreshold = isRecovery ? c.recoveryApprovals : _approvalsValue(c, tier);
         bytes32 payloadHash = _hashExecuteRequest(account, p.action, p.args, changeId, p.eta);
-        address[] memory execSigners = _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, isRecovery);
+        address[] memory execSigners = _verifyQuorum(account, c, QuorumVerifyArgs({payloadHash: payloadHash, reqThreshold: reqThreshold, guardianMode: isRecovery}), quorumSigs);
 
         if (c.mode == 3 && !isRecovery) {
             for (uint256 i; i < execSigners.length; i++) {
@@ -428,11 +440,11 @@ contract CustodyPolicy {
             uint8 reqThreshold = inOwnerCancelWindow
                 ? _approvalsValue(c, 4)
                 : c.recoveryApprovals;
-            _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, !inOwnerCancelWindow);
+            _verifyQuorum(account, c, QuorumVerifyArgs({payloadHash: payloadHash, reqThreshold: reqThreshold, guardianMode: !inOwnerCancelWindow}), quorumSigs);
         } else {
             uint8 tier = _effectiveTierFor(c, p.action, p.args);
             uint8 reqThreshold = _approvalsValue(c, tier);
-            _verifyQuorum(account, c, payloadHash, quorumSigs, reqThreshold, false);
+            _verifyQuorum(account, c, QuorumVerifyArgs({payloadHash: payloadHash, reqThreshold: reqThreshold, guardianMode: false}), quorumSigs);
         }
 
         p.cancelled = true;
@@ -552,28 +564,61 @@ contract CustodyPolicy {
         return c.safetyDelayByTier[tier];
     }
 
+    /// @dev H7-C.5 / XCON-002 — scalar args packed into a memory struct so
+    ///      `_verifyQuorum`'s callers stay below the via-IR-off stack limit
+    ///      and `forge coverage` builds without `--ir-minimum`.
+    struct QuorumVerifyArgs {
+        bytes32 payloadHash;
+        uint8 reqThreshold;
+        bool guardianMode;
+    }
+
+    /// @dev H7-C.5 / XCON-002 — context struct packed so the verify call
+    ///      from `scheduleCustodyChange` doesn't blow the stack under
+    ///      coverage compile.
+    struct ScheduleVerifyCtx {
+        CustodyAction action;
+        uint256 changeId;
+        uint8 reqThreshold;
+        bool isRecovery;
+    }
+
+    function _verifyScheduleQuorum(
+        address account,
+        Config storage c,
+        ScheduleVerifyCtx memory ctx,
+        bytes calldata args,
+        bytes calldata quorumSigs
+    ) internal view returns (address[] memory) {
+        bytes32 payloadHash = _hashProposeRequest(account, ctx.action, args, ctx.changeId);
+        QuorumVerifyArgs memory va = QuorumVerifyArgs({
+            payloadHash: payloadHash,
+            reqThreshold: ctx.reqThreshold,
+            guardianMode: ctx.isRecovery
+        });
+        return _verifyQuorum(account, c, va, quorumSigs);
+    }
+
     function _verifyQuorum(
         address account,
         Config storage c,
-        bytes32 payloadHash,
-        bytes calldata signatures,
-        uint8 reqThreshold,
-        bool guardianMode
+        QuorumVerifyArgs memory vargs,
+        bytes calldata signatures
     ) internal view returns (address[] memory signers) {
-        if (signatures.length < uint256(reqThreshold) * 65) {
-            revert AdminInsufficientQuorum(signatures.length / 65, reqThreshold);
+        if (signatures.length < uint256(vargs.reqThreshold) * 65) {
+            revert AdminInsufficientQuorum(signatures.length / 65, vargs.reqThreshold);
         }
         bytes memory sigsMem = signatures;
         address approvedHashReg = c.approvedHashRegistry;
-        signers = new address[](reqThreshold);
+        signers = new address[](vargs.reqThreshold);
         address prev;
-        for (uint256 i; i < reqThreshold; i++) {
+        for (uint256 i; i < vargs.reqThreshold; i++) {
             address signer = SignatureSlotRecovery.recoverFromSlot(
-                payloadHash, sigsMem, i, approvedHashReg
+                vargs.payloadHash, sigsMem, i, approvedHashReg
             );
             if (signer <= prev) revert AdminDuplicateOrUnsortedSigner(signer);
             prev = signer;
-            if (guardianMode) {
+            if (vargs.guardianMode) {
                 if (!c.trustees[signer]) revert UnauthorizedTrustee(signer);
             } else {
                 if (!IAgentAccount(account).isCustodian(signer)) revert AdminUnauthorizedSigner(signer);
@@ -597,8 +642,15 @@ contract CustodyPolicy {
             (address oldOwner) = abi.decode(args, (address));
             _execute(account, abi.encodeCall(IAgentAccount.removeCustodian, (oldOwner)));
         } else if (action == CustodyAction.AddPasskeyCredential) {
-            (bytes32 cid, uint256 x, uint256 y) = abi.decode(args, (bytes32, uint256, uint256));
-            _execute(account, abi.encodeWithSignature("addPasskey(bytes32,uint256,uint256)", cid, x, y));
+            // H7-C.1 / CON-WEBAUTHN-001: rpIdHash now bundled in the action args
+            // so credential additions through the custody-policy entrypoint
+            // also bind to a specific RP.
+            (bytes32 cid, uint256 x, uint256 y, bytes32 rpIdHash) =
+                abi.decode(args, (bytes32, uint256, uint256, bytes32));
+            _execute(account, abi.encodeWithSignature(
+                "addPasskey(bytes32,uint256,uint256,bytes32)",
+                cid, x, y, rpIdHash
+            ));
         } else if (action == CustodyAction.RemovePasskeyCredential) {
             (bytes32 cid) = abi.decode(args, (bytes32));
             _execute(account, abi.encodeWithSignature("removePasskey(bytes32)", cid));
@@ -796,9 +848,10 @@ contract CustodyPolicy {
         uint256 addedPasskeys;
         for (uint256 i; i < r.addPasskeys.length; i++) {
             AgentAccountRecoveryPasskeyAdd memory pk = r.addPasskeys[i];
+            // H7-C.1 / CON-WEBAUTHN-001: addPasskey now requires rpIdHash.
             _execute(account, abi.encodeWithSignature(
-                "addPasskey(bytes32,uint256,uint256)",
-                pk.credentialIdDigest, pk.x, pk.y
+                "addPasskey(bytes32,uint256,uint256,bytes32)",
+                pk.credentialIdDigest, pk.x, pk.y, pk.rpIdHash
             ));
             addedPasskeys++;
         }

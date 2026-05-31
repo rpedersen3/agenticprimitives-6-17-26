@@ -47,17 +47,23 @@ struct AgentAccountInitParams {
     bytes32 initialPasskeyCredentialIdDigest; // 0x0 to skip the passkey
     uint256 initialPasskeyX;
     uint256 initialPasskeyY;
+    // H7-C.1 / CON-WEBAUTHN-001: rpIdHash the initial passkey was registered
+    // against. Required (non-zero) when the passkey is present.
+    bytes32 initialPasskeyRpIdHash;
 }
 
 /**
  * @notice One passkey to add as part of a T6 recovery. Coupled to
  *         `AgentAccountRecoveryArgs.addPasskeys` so callers can name
  *         each entry instead of juggling parallel arrays.
+ *
+ *         H7-C.1 added `rpIdHash` — see `IAgentAccount.addPasskey`.
  */
 struct AgentAccountRecoveryPasskeyAdd {
     bytes32 credentialIdDigest;
     uint256 x;
     uint256 y;
+    bytes32 rpIdHash;
 }
 
 /**

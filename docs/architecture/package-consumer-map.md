@@ -8,6 +8,11 @@ routing map, not the design — the design lives in `specs/2XX-*.md` and each
 spans several," see [`task-routing.md`](./task-routing.md); for the boundary
 rules, [`specs/100-package-boundary-doctrine.md`](../../specs/100-package-boundary-doctrine.md).
 
+Strategic roadmap and audit posture are governed by
+[`specs/240-native-agentic-primitives-platform-strategy.md`](../../specs/240-native-agentic-primitives-platform-strategy.md):
+native Smart Agent primitives first, AI-assisted review on every change, and
+selective external review for the package + contract authority substrate.
+
 > **Naming note.** Three packages were renamed (commit `7861f4b`) to remove two
 > collisions (login-vs-profile, account-custody-vs-key-custody). The names below
 > are current; the `(was: …)` hints are only for migrating old imports:
@@ -64,3 +69,4 @@ Each package sits in one layer; dependencies only ever point *up* the list
 - [`cross-cutting-capabilities.md`](./cross-cutting-capabilities.md) — capabilities that span 3+ packages.
 - [`specs/100-package-boundary-doctrine.md` §8](../../specs/100-package-boundary-doctrine.md) — the consumer-doc standard this map satisfies.
 - [`specs/101-v0-package-proposal.md`](../../specs/101-v0-package-proposal.md) — the package roster + deferred packages.
+- [`specs/240-native-agentic-primitives-platform-strategy.md`](../../specs/240-native-agentic-primitives-platform-strategy.md) — product strategy for native primitives, AI-assisted audit, and Ethereum contract hardening.

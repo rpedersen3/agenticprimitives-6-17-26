@@ -57,7 +57,9 @@ contract CustodyPolicyWave2CTest is Test {
             trustees: new address[](0),
             initialPasskeyCredentialIdDigest: bytes32(0),
             initialPasskeyX: 0,
-            initialPasskeyY: 0
+            initialPasskeyY: 0,
+
+            initialPasskeyRpIdHash: bytes32(uint256(0x7270696468617368))
         });
         acct = factory.createAgentAccount(p, _defaultTimelocks(), 1);
     }
@@ -76,7 +78,9 @@ contract CustodyPolicyWave2CTest is Test {
             trustees: trustees,
             initialPasskeyCredentialIdDigest: bytes32(0),
             initialPasskeyX: 1,
-            initialPasskeyY: 2
+            initialPasskeyY: 2,
+
+            initialPasskeyRpIdHash: bytes32(uint256(0x7270696468617368))
         });
         uint32[7] memory tl;
         tl[4] = 1; // T4 = 1s — value irrelevant since the reject lands at initializer.
@@ -87,13 +91,13 @@ contract CustodyPolicyWave2CTest is Test {
     function test_C6_addPasskey_rejects_zero_credentialIdDigest() public {
         vm.prank(address(acct));
         vm.expectRevert(AgentAccount.InvalidCredentialIdDigest.selector);
-        acct.addPasskey(bytes32(0), 12345, 67890);
+        acct.addPasskey(bytes32(0), 12345, 67890, bytes32(uint256(0x7270696468617368)));
     }
 
     function test_C6_addPasskey_accepts_valid_digest() public {
         bytes32 cid = keccak256("alice.passkey.v1");
         vm.prank(address(acct));
-        acct.addPasskey(cid, 12345, 67890);
+        acct.addPasskey(cid, 12345, 67890, bytes32(uint256(0x7270696468617368)));
         // No revert = pass; the existing addPasskey tests cover the
         // full state mutation invariants.
     }

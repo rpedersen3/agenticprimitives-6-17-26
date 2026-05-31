@@ -64,7 +64,7 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
     event DelegationRevokedBy(bytes32 indexed delegationHash, address indexed by);
 
     error DelegationRevoked_();
-    error InvalidSignature();
+    error DelegationManager_InvalidSignature();
     error InvalidAuthority();
     error OnlyDelegator();
     error ExecutionFailed();
@@ -305,13 +305,13 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
         // ERC-1271 for smart accounts
         if (signer.code.length > 0) {
             bytes4 result = IERC1271(signer).isValidSignature(digest, signature);
-            if (result != IERC1271.isValidSignature.selector) revert InvalidSignature();
+            if (result != IERC1271.isValidSignature.selector) revert DelegationManager_InvalidSignature();
             return;
         }
         // EOA — recover from eth-signed message hash
         bytes32 ethHash = digest.toEthSignedMessageHash();
         address recovered = ethHash.recover(signature);
-        if (recovered != signer) revert InvalidSignature();
+        if (recovered != signer) revert DelegationManager_InvalidSignature();
     }
 
     // ─── Internal: Hashing ─────────────────────────────────────────────

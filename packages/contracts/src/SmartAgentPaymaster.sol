@@ -169,6 +169,13 @@ contract SmartAgentPaymaster is BasePaymaster {
         uint48 validUntil,
         uint48 validAfter
     ) public view returns (bytes32) {
+        // H7-C.7 / CON-PAYMASTER-004: bind `address(entryPoint)` into the
+        // signed material so a signed envelope cannot survive an EntryPoint
+        // redeploy. Pre-fix, the hash omitted the EntryPoint — a long-lived
+        // signed envelope (validUntil in the future) issued against the
+        // current EntryPoint would have been verifiable against a NEW
+        // EntryPoint deployed at a different address, allowing cross-deployment
+        // replay until validUntil elapses.
         return keccak256(
             abi.encode(
                 userOp.sender,
@@ -180,6 +187,7 @@ contract SmartAgentPaymaster is BasePaymaster {
                 userOp.gasFees,
                 block.chainid,
                 address(this),
+                address(entryPoint()), // H7-C.7 binding
                 validUntil,
                 validAfter
             )

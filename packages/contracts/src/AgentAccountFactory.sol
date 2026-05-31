@@ -176,6 +176,7 @@ contract AgentAccountFactory is GovernanceManaged {
                 params.initialPasskeyCredentialIdDigest,
                 params.initialPasskeyX,
                 params.initialPasskeyY,
+                params.initialPasskeyRpIdHash,
                 delegationManager,
                 address(this)
             )

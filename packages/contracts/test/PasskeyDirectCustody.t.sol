@@ -61,7 +61,9 @@ contract PasskeyDirectCustodyTest is Test {
             trustees: new address[](0),
             initialPasskeyCredentialIdDigest: cred,
             initialPasskeyX: x,
-            initialPasskeyY: y
+            initialPasskeyY: y,
+
+            initialPasskeyRpIdHash: bytes32(uint256(0x7270696468617368))
         });
     }
 
@@ -105,7 +107,7 @@ contract PasskeyDirectCustodyTest is Test {
 
         // addPasskey is onlySelf; simulate the userOp via vm.prank.
         vm.prank(address(acct));
-        acct.addPasskey(cred2, x2, y2);
+        acct.addPasskey(cred2, x2, y2, bytes32(uint256(0x7270696468617368)));
 
         assertTrue(acct.isCustodian(pia2));
         assertEq(acct.custodianCount(), 2);
@@ -120,7 +122,7 @@ contract PasskeyDirectCustodyTest is Test {
         address pia2 = _pia(x2, y2);
 
         vm.startPrank(address(acct));
-        acct.addPasskey(cred2, x2, y2);
+        acct.addPasskey(cred2, x2, y2, bytes32(uint256(0x7270696468617368)));
         assertTrue(acct.isCustodian(pia2));
         acct.removePasskey(cred2);
         vm.stopPrank();
@@ -136,7 +138,7 @@ contract PasskeyDirectCustodyTest is Test {
         // same PIA. The piaToCredentialId mapping check catches this.
         vm.prank(address(acct));
         vm.expectRevert(); // PasskeyAlreadyRegistered
-        acct.addPasskey(keccak256("alias-credential"), PASSKEY_X, PASSKEY_Y);
+        acct.addPasskey(keccak256("alias-credential"), PASSKEY_X, PASSKEY_Y, bytes32(uint256(0x7270696468617368)));
     }
 
     // ─── (d) v=2 slot decoding via a harness contract ──────────────────
@@ -151,7 +153,8 @@ contract PasskeyDirectCustodyTest is Test {
         // that derived(x', y') != r.
         address claimedPia = address(0xDEADBEEF);
         WebAuthnLib.Assertion memory dummyAssertion;
-        bytes memory tail = abi.encode(PASSKEY_X, PASSKEY_Y, dummyAssertion);
+        // H7-C.1: v=2 slot encoding now carries rpIdHash before the assertion.
+        bytes memory tail = abi.encode(PASSKEY_X, PASSKEY_Y, bytes32(uint256(0x7270696468617368)), dummyAssertion);
         bytes memory sigs = _buildOneSlotSigs(claimedPia, tail, /*v=*/ 2);
 
         address derived = _pia(PASSKEY_X, PASSKEY_Y);
@@ -170,7 +173,8 @@ contract PasskeyDirectCustodyTest is Test {
         // past the PIA check and reached WebAuthn.verify.
         address pia = _pia(PASSKEY_X, PASSKEY_Y);
         WebAuthnLib.Assertion memory emptyAssertion;
-        bytes memory tail = abi.encode(PASSKEY_X, PASSKEY_Y, emptyAssertion);
+        // H7-C.1: v=2 slot encoding now carries rpIdHash before the assertion.
+        bytes memory tail = abi.encode(PASSKEY_X, PASSKEY_Y, bytes32(uint256(0x7270696468617368)), emptyAssertion);
         bytes memory sigs = _buildOneSlotSigs(pia, tail, /*v=*/ 2);
 
         vm.expectRevert(abi.encodeWithSelector(

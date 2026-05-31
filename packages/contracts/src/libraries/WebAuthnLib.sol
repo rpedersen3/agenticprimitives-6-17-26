@@ -12,10 +12,25 @@ import "./P256Verifier.sol";
  *     signingMessage = authenticatorData || sha256(clientDataJSON)
  *     signingHash    = sha256(signingMessage)
  *
- *   Checks:
- *     - clientDataJSON contains "type":"webauthn.get" at typeIndex.
- *     - clientDataJSON contains "challenge":"<base64url(expectedHash)>" at challengeIndex.
- *     - P256Verifier.verify(signingHash, r, s, x, y) returns true.
+ *   Checks (H7-C.1 / CON-WEBAUTHN-001 closure):
+ *     - `authData[0..32]` (rpIdHash) EQUALS `expectedRpIdHash`
+ *       — kills cross-RP signing-oracle attacks where an attacker controls
+ *         a signing oracle at a different RP whose origin happens to be
+ *         under their control. WITHOUT this check the on-chain verifier
+ *         accepted any P-256 signature over `sha256(authData || sha256(cdj))`
+ *         regardless of which RP produced it.
+ *     - User-Present bit set (`authData[32] & 0x01 == 0x01`).
+ *     - If `requireUv = true`, User-Verified bit set (`authData[32] & 0x04 == 0x04`).
+ *     - `clientDataJSON` contains `"type":"webauthn.get"` at `typeIndex`.
+ *     - `clientDataJSON` contains `"challenge":"<base64url(expectedHash)>"`
+ *       at `challengeIndex`.
+ *     - `P256Verifier.verify(signingHash, r, s, x, y)` returns true.
+ *
+ *   The `clientDataJSON.origin` allowlist is NOT pinned here. Origin
+ *   semantics depend on multi-frontend account policy and live in the
+ *   account's stored policy if it adopts an allowlist — verifiers that
+ *   want origin-pinning supply a pre-hashed origin via the consumer's
+ *   own logic.
  *
  *   Used by both AgentAccount (native passkey path) and the standalone
  *   PasskeyValidator (for external 1271-style verification).
@@ -33,19 +48,58 @@ library WebAuthnLib {
     }
 
     /// @notice Verify that `assertion` is a valid WebAuthn signature over
-    ///         `expectedChallengeHash` produced by `(pubX, pubY)`.
+    ///         `expectedChallengeHash` produced by `(pubX, pubY)`, AND was
+    ///         produced for the RP whose ID hashes to `expectedRpIdHash`,
+    ///         AND has the User-Present (and optionally User-Verified) bits set.
+    ///
+    /// @param assertion             The decoded WebAuthn assertion bundle.
+    /// @param expectedChallengeHash The 32-byte challenge the assertion must sign.
+    /// @param pubX, pubY            The registered P-256 public key (uncompressed).
+    /// @param expectedRpIdHash      `sha256(rpId)` of the RP the credential was
+    ///                              registered against. Pinning this kills the
+    ///                              cross-RP signing-oracle vector.
+    /// @param requireUv             Whether the User-Verified bit must be set
+    ///                              (the account's policy choice).
     function verify(
         Assertion memory assertion,
         bytes32 expectedChallengeHash,
         uint256 pubX,
-        uint256 pubY
+        uint256 pubY,
+        bytes32 expectedRpIdHash,
+        bool requireUv
     ) internal view returns (bool) {
+        if (!_checkAuthData(assertion.authenticatorData, expectedRpIdHash, requireUv)) {
+            return false;
+        }
         if (!_checkClientData(assertion.clientDataJSON, assertion.typeIndex, assertion.challengeIndex, expectedChallengeHash)) {
             return false;
         }
         bytes32 cdjHash = sha256(bytes(assertion.clientDataJSON));
         bytes32 signingHash = sha256(abi.encodePacked(assertion.authenticatorData, cdjHash));
         return P256Verifier.verify(signingHash, assertion.r, assertion.s, pubX, pubY);
+    }
+
+    /// @dev Validates the authenticatorData header per WebAuthn spec §6.1:
+    ///      bytes [0..32]  = rpIdHash
+    ///      byte  [32]     = flags (bit 0 UP, bit 2 UV, bit 6 AT, bit 7 ED)
+    ///      bytes [33..36] = signCount (big-endian u32; informational, not checked here)
+    function _checkAuthData(
+        bytes memory authData,
+        bytes32 expectedRpIdHash,
+        bool requireUv
+    ) private pure returns (bool) {
+        if (authData.length < 37) return false;
+        // Compare 32-byte rpIdHash prefix.
+        bytes32 actualRpIdHash;
+        assembly {
+            // authData is `bytes`; first 32 bytes after the length word are the rpIdHash.
+            actualRpIdHash := mload(add(authData, 0x20))
+        }
+        if (actualRpIdHash != expectedRpIdHash) return false;
+        uint8 flags = uint8(authData[32]);
+        if (flags & 0x01 == 0) return false; // UP not set
+        if (requireUv && flags & 0x04 == 0) return false; // UV required but not set
+        return true;
     }
 
     /// @dev Validates the two structural invariants of clientDataJSON:

@@ -32,7 +32,10 @@ import {WebAuthnLib} from "./WebAuthnLib.sol";
  *                              `address(uint160(uint256(keccak256(abi.encode(x, y)))))`).
  *                              s holds the byte offset into `signatures`
  *                              to a length-prefixed tail containing
- *                              `abi.encode(uint256 x, uint256 y, WebAuthnLib.Assertion assertion)`.
+ *                              `abi.encode(uint256 x, uint256 y, bytes32 rpIdHash, WebAuthnLib.Assertion assertion)`.
+ *                              The `rpIdHash` MUST equal the rpIdHash this credential was
+ *                              registered against — verified by `WebAuthnLib.verify`. Added
+ *                              in H7-C.1 / CON-WEBAUTHN-001 closure.
  *                              The library re-derives the PIA from (x, y)
  *                              and asserts it matches r before running
  *                              the WebAuthn verify against (x, y).
@@ -51,6 +54,11 @@ library SignatureSlotRecovery {
     error ContractSigInvalid(address signer);
     error PasskeySigInvalid(address signer);
     error PasskeyPubKeyMismatch(address claimed, address derived);
+    /// @notice H7-C.3 / CON-SIG-SLOT-001/-002 — a slot's tail (length + blob)
+    ///         claims to extend past the end of the `signatures` array.
+    ///         Without this check, the assembly load could read unallocated
+    ///         memory and pass garbage to the downstream verifier.
+    error SigTailOutOfBounds(uint8 v, uint256 sigOffset, uint256 sigLen, uint256 totalLen);
 
     bytes4 internal constant ERC1271_MAGIC = 0x1626ba7e;
 
@@ -93,9 +101,21 @@ library SignatureSlotRecovery {
             // (length, blob) tail.
             signer = address(uint160(uint256(r)));
             uint256 sigOffset = uint256(s);
+            // H7-C.3 / CON-SIG-SLOT-001: bound the length-prefix read.
+            // sigOffset must leave room for the 32-byte length word.
+            if (sigOffset + 32 > signatures.length) {
+                revert SigTailOutOfBounds(v, sigOffset, 0, signatures.length);
+            }
             uint256 sigLen;
             assembly {
                 sigLen := mload(add(signatures, add(0x20, sigOffset)))
+            }
+            // H7-C.3: bound the tail-blob copy. The tail (length + blob) must
+            // fit fully within `signatures.length`; otherwise the assembly
+            // copy below reads past the buffer and feeds garbage to the
+            // verifier.
+            if (sigOffset + 32 + sigLen > signatures.length) {
+                revert SigTailOutOfBounds(v, sigOffset, sigLen, signatures.length);
             }
             bytes memory dyn = new bytes(sigLen);
             assembly {
@@ -119,15 +139,23 @@ library SignatureSlotRecovery {
             }
         } else if (v == 2) {
             // WebAuthn passkey slot. r holds the claimed PIA; tail
-            // holds (x, y, Assertion). Verify the assertion against
-            // the supplied pubkey, then assert that the PIA derived
-            // from (x, y) matches the claim. Caller authorizes via
-            // `account.isCustodian(signer)`.
+            // holds (x, y, rpIdHash, Assertion). Verify the assertion
+            // against the supplied pubkey, then assert that the PIA
+            // derived from (x, y) matches the claim. Caller authorizes
+            // via `account.isCustodian(signer)`.
             signer = address(uint160(uint256(r)));
             uint256 sigOffset = uint256(s);
+            // H7-C.3 / CON-SIG-SLOT-002: bound the length-prefix read.
+            if (sigOffset + 32 > signatures.length) {
+                revert SigTailOutOfBounds(v, sigOffset, 0, signatures.length);
+            }
             uint256 sigLen;
             assembly {
                 sigLen := mload(add(signatures, add(0x20, sigOffset)))
+            }
+            // H7-C.3: bound the tail-blob copy.
+            if (sigOffset + 32 + sigLen > signatures.length) {
+                revert SigTailOutOfBounds(v, sigOffset, sigLen, signatures.length);
             }
             bytes memory dyn = new bytes(sigLen);
             assembly {
@@ -137,11 +165,17 @@ library SignatureSlotRecovery {
                     mstore(add(dst, j), mload(add(src, j)))
                 }
             }
-            (uint256 pubX, uint256 pubY, WebAuthnLib.Assertion memory assertion) =
-                abi.decode(dyn, (uint256, uint256, WebAuthnLib.Assertion));
+            // H7-C.1 / CON-WEBAUTHN-001: slot now carries rpIdHash so the
+            // verifier pins the RP the assertion was produced for.
+            // Slot encoding: (uint256 pubX, uint256 pubY, bytes32 rpIdHash,
+            //                 WebAuthnLib.Assertion assertion).
+            (uint256 pubX, uint256 pubY, bytes32 rpIdHash, WebAuthnLib.Assertion memory assertion) =
+                abi.decode(dyn, (uint256, uint256, bytes32, WebAuthnLib.Assertion));
             address derived = address(uint160(uint256(keccak256(abi.encode(pubX, pubY)))));
             if (derived != signer) revert PasskeyPubKeyMismatch(signer, derived);
-            if (!WebAuthnLib.verify(assertion, payloadHash, pubX, pubY)) {
+            // requireUv=false at the slot level; account policy can layer UV
+            // requirement via a future policy module.
+            if (!WebAuthnLib.verify(assertion, payloadHash, pubX, pubY, rpIdHash, false)) {
                 revert PasskeySigInvalid(signer);
             }
         } else if (v == 27 || v == 28) {

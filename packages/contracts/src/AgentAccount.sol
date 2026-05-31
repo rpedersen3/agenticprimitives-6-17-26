@@ -140,6 +140,8 @@ contract AgentAccount is
     ///      at every entry point that writes the digest.
     error InvalidCredentialIdDigest();
     error InvalidPasskeyPublicKey();
+    /// @notice H7-C.1 / CON-WEBAUTHN-001 — addPasskey was called with rpIdHash == bytes32(0).
+    error InvalidRpIdHash();
     error CannotRemoveLastSigner();
     error UnknownSignatureType(uint8 sigType);
     error AgenticPrimitivesAgentNotAllowedAsCustodian(address candidate);
@@ -234,6 +236,9 @@ contract AgentAccount is
      *        initial passkey (or `bytes32(0)` to skip).
      * @param passkeyX P-256 X coordinate (or 0 to skip the passkey).
      * @param passkeyY P-256 Y coordinate (or 0 to skip).
+     * @param passkeyRpIdHash `sha256(rpId)` for the initial passkey (or
+     *        `bytes32(0)` to skip — required to be non-zero when the
+     *        passkey is present; H7-C.1 / CON-WEBAUTHN-001).
      * @param dm DelegationManager address (or `address(0)`).
      * @param factory_ The factory that deployed this account.
      */
@@ -242,9 +247,14 @@ contract AgentAccount is
         bytes32 passkeyCredentialIdDigest,
         uint256 passkeyX,
         uint256 passkeyY,
+        bytes32 passkeyRpIdHash,
         address dm,
         address factory_
     ) external initializer {
+        // H7-C.5: passkey setup factored into `_setupInitialPasskey` to keep
+        // `initialize`'s local-variable count below the `via_ir`-off stack
+        // limit. `forge coverage` builds without `via_ir`; this lets the
+        // coverage build compile (closes XCON-002).
         bool withPasskey = passkeyX != 0 && passkeyY != 0;
         if (externalCustodians.length == 0 && !withPasskey) {
             revert ZeroAddress();
@@ -263,29 +273,41 @@ contract AgentAccount is
         _externalCustodianCount = externalCustodians.length;
 
         if (withPasskey) {
-            // Audit C-6: reject zero digest at every passkey-write site.
-            if (passkeyCredentialIdDigest == bytes32(0)) revert InvalidCredentialIdDigest();
-            PasskeyStorage storage $ = _passkeyStorage();
-            address pia = _passkeyIdentity(passkeyX, passkeyY);
-            // Architectural invariant: a PIA never appears in both the
-            // external-custodian set AND the passkey set. The two
-            // mappings are disjoint by intent (see `isCustodian` /
-            // `custodianCount`); double-registration would inflate
-            // `custodianCount` and break the threshold matrix computed
-            // by the factory's `_buildValidatorInitData`.
-            if (_externalCustodians[pia]) {
-                revert CustodianAlreadyExists(pia);
-            }
-            $.keys[passkeyCredentialIdDigest] = PasskeyEntry(passkeyX, passkeyY);
-            $.registered[passkeyCredentialIdDigest] = true;
-            $.piaToCredentialId[pia] = passkeyCredentialIdDigest;
-            $.count = 1;
-            emit PasskeyAdded(passkeyCredentialIdDigest, passkeyX, passkeyY);
-            emit CustodianAdded(pia);
+            _setupInitialPasskey(passkeyCredentialIdDigest, passkeyX, passkeyY, passkeyRpIdHash);
         }
 
         _delegationManager = dm;
         _factory = factory_;
+    }
+
+    /// @dev H7-C.5 — passkey-init body extracted so `initialize` stays below
+    ///      the via-IR-off stack limit (lets `forge coverage` compile).
+    ///      Behavior unchanged from the prior inline block.
+    function _setupInitialPasskey(
+        bytes32 credIdDigest,
+        uint256 x,
+        uint256 y,
+        bytes32 rpIdHash
+    ) internal {
+        // Audit C-6: reject zero digest at every passkey-write site.
+        if (credIdDigest == bytes32(0)) revert InvalidCredentialIdDigest();
+        // H7-C.1 / CON-WEBAUTHN-001: zero rpIdHash would let the verifier
+        // accept any RP (kills the pin).
+        if (rpIdHash == bytes32(0)) revert InvalidRpIdHash();
+        PasskeyStorage storage $ = _passkeyStorage();
+        address pia = _passkeyIdentity(x, y);
+        // Architectural invariant: a PIA never appears in both the
+        // external-custodian set AND the passkey set.
+        if (_externalCustodians[pia]) {
+            revert CustodianAlreadyExists(pia);
+        }
+        $.keys[credIdDigest] = PasskeyEntry(x, y);
+        $.registered[credIdDigest] = true;
+        $.piaToCredentialId[pia] = credIdDigest;
+        $.rpIdHashOf[credIdDigest] = rpIdHash;
+        $.count = 1;
+        emit PasskeyAdded(credIdDigest, x, y, rpIdHash);
+        emit CustodianAdded(pia);
     }
 
     // ─── Custody-policy initializer (relocated) ──────────────────────
@@ -1082,7 +1104,12 @@ contract AgentAccount is
             PasskeyStorage storage $ = _passkeyStorage();
             PasskeyEntry storage key = $.keys[a.credentialIdDigest];
             if (key.x == 0 && key.y == 0) return false;
-            return WebAuthnLib.verify(a, hash, key.x, key.y);
+            // H7-C.1 / CON-WEBAUTHN-001: pin per-credential rpIdHash + require UP.
+            // UV is not required at the library layer; account policy can layer
+            // UV requirement in via a future policy module if needed.
+            bytes32 rpIdHash = $.rpIdHashOf[a.credentialIdDigest];
+            if (rpIdHash == bytes32(0)) return false;
+            return WebAuthnLib.verify(a, hash, key.x, key.y, rpIdHash, false);
         } catch {
             return false;
         }
@@ -1227,6 +1254,11 @@ contract AgentAccount is
         // first-class quorum members (v=2 slots in
         // SignatureSlotRecovery).
         mapping(address => bytes32) piaToCredentialId;
+        // H7-C.1 / CON-WEBAUTHN-001: per-credential RP ID hash, captured
+        // at registration and pinned at every verify. Stored separately
+        // from PasskeyEntry to preserve the existing PasskeyEntry storage
+        // layout for upgrade safety. Required (non-zero) on add.
+        mapping(bytes32 => bytes32) rpIdHashOf;
     }
 
     function _passkeyStorage() private pure returns (PasskeyStorage storage $) {
@@ -1234,18 +1266,31 @@ contract AgentAccount is
         assembly { $.slot := slot }
     }
 
-    event PasskeyAdded(bytes32 indexed credentialIdDigest, uint256 x, uint256 y);
+    event PasskeyAdded(bytes32 indexed credentialIdDigest, uint256 x, uint256 y, bytes32 rpIdHash);
     event PasskeyRemoved(bytes32 indexed credentialIdDigest);
 
-    /// @notice Register a new WebAuthn credential. onlySelf — callable via a
-    ///         UserOp signed by any existing signer (owner or another passkey).
-    ///         Also registers the credential's Passkey-Identity-Address
-    ///         (PIA) so `isCustodian(pia)` returns true and v=2 quorum
-    ///         slots can count this passkey as a distinct signer.
-    function addPasskey(bytes32 credentialIdDigest, uint256 x, uint256 y) external onlySelf {
+    /// @notice Register a new WebAuthn credential bound to a specific RP.
+    ///         `onlySelf` — callable via a UserOp signed by any existing signer
+    ///         (owner or another passkey). Also registers the credential's
+    ///         Passkey-Identity-Address (PIA) so `isCustodian(pia)` returns
+    ///         true and v=2 quorum slots can count this passkey as a distinct
+    ///         signer.
+    /// @param rpIdHash `sha256(rpId)` — the RP this credential was registered
+    ///                 against. PINNED on every verify (H7-C.1 / CON-WEBAUTHN-001
+    ///                 closure). Must be non-zero. Each credential carries its
+    ///                 own rpIdHash so an account that adopts credentials across
+    ///                 multiple RPs gets correct per-credential origin scoping.
+    function addPasskey(
+        bytes32 credentialIdDigest,
+        uint256 x,
+        uint256 y,
+        bytes32 rpIdHash
+    ) external onlySelf {
         if (x == 0 || y == 0) revert InvalidPasskeyPublicKey();
         // Audit C-6: zero digest poisons piaToCredentialId mapping.
         if (credentialIdDigest == bytes32(0)) revert InvalidCredentialIdDigest();
+        // H7-C.1: zero rpIdHash would let the verifier accept any RP (kills the pin).
+        if (rpIdHash == bytes32(0)) revert InvalidRpIdHash();
         PasskeyStorage storage $ = _passkeyStorage();
         if ($.registered[credentialIdDigest]) revert PasskeyAlreadyRegistered(credentialIdDigest);
         address pia = _passkeyIdentity(x, y);
@@ -1254,8 +1299,9 @@ contract AgentAccount is
         $.keys[credentialIdDigest] = PasskeyEntry(x, y);
         $.registered[credentialIdDigest] = true;
         $.piaToCredentialId[pia] = credentialIdDigest;
+        $.rpIdHashOf[credentialIdDigest] = rpIdHash;
         $.count += 1;
-        emit PasskeyAdded(credentialIdDigest, x, y);
+        emit PasskeyAdded(credentialIdDigest, x, y, rpIdHash);
         emit CustodianAdded(pia);
     }
 
@@ -1272,6 +1318,7 @@ contract AgentAccount is
         delete $.keys[credentialIdDigest];
         $.registered[credentialIdDigest] = false;
         delete $.piaToCredentialId[pia];
+        delete $.rpIdHashOf[credentialIdDigest];
         $.count -= 1;
         emit PasskeyRemoved(credentialIdDigest);
         emit CustodianRemoved(pia);

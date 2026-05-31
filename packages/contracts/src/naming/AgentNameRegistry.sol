@@ -37,6 +37,19 @@ pragma solidity ^0.8.28;
  * agrees).
  */
 contract AgentNameRegistry {
+    // ─── H7-C.4 / CON-NAMING-001 — root-initializer gate ───────────────
+    //
+    // `initializeRoot` was permissionless: any mempool observer could
+    // front-run the deployer's first `initializeRoot("agent", ...)` and
+    // own `.agent` forever. The fix is to pin the initializer to an
+    // immutable address set at construction; the deploy script performs
+    // both steps in a single transaction so no front-run window exists.
+    //
+    // The role is INITIALIZATION-ONLY. Once a root is initialized, control
+    // belongs to its `rootOwner` (a smart-agent governance address) — the
+    // initializer cannot rotate it.
+    address public immutable initializer;
+
     // ─── Types ──────────────────────────────────────────────────────
 
     struct NameRecord {
@@ -59,6 +72,11 @@ contract AgentNameRegistry {
     error RootAlreadyInitialized();
     error EmptyLabel();
     error ZeroOwner();
+    /// @notice H7-C.4 / CON-NAMING-001 — `initializeRoot` may only be called
+    ///         by the immutable `initializer` set at construction. Closes the
+    ///         permissionless-frontrun vector where any mempool observer
+    ///         could claim a TLD before the deployer's first init landed.
+    error NotInitializer(address caller, address initializer);
 
     // ─── Events ─────────────────────────────────────────────────────
 
@@ -109,6 +127,16 @@ contract AgentNameRegistry {
     /// @notice Default kind tags downstream callers may use.
     bytes32 public constant KIND_AGENT = keccak256("namespace:Agent");
 
+    // ─── Constructor (H7-C.4) ───────────────────────────────────────
+
+    /// @notice Set the immutable root-initializer. The deploy script
+    ///         deploys the registry + calls `initializeRoot` in the same
+    ///         transaction so the TLD can't be frontrun.
+    constructor(address initializer_) {
+        if (initializer_ == address(0)) revert ZeroOwner();
+        initializer = initializer_;
+    }
+
     // ─── Namehash Helpers ───────────────────────────────────────────
 
     /// @notice Pure namehash for a top-level label (parent = bytes32(0)).
@@ -138,6 +166,10 @@ contract AgentNameRegistry {
         address resolverContract,
         bytes32 kind
     ) external returns (bytes32 rootNode) {
+        // H7-C.4 / CON-NAMING-001: only the immutable initializer may claim a
+        // TLD. The deploy script bundles deploy+init in one transaction so no
+        // frontrun window exists.
+        if (msg.sender != initializer) revert NotInitializer(msg.sender, initializer);
         if (bytes(label).length == 0) revert EmptyLabel();
         if (rootOwner == address(0)) revert ZeroOwner();
         rootNode = namehashRoot(label);

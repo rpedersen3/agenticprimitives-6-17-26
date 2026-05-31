@@ -19,7 +19,7 @@ contract PermissionlessSubregistryTest is Test {
     bytes32 internal demoNode;
 
     function setUp() public {
-        registry = new AgentNameRegistry();
+        registry = new AgentNameRegistry(deployer);
         ontology = new OntologyTermRegistry(deployer);
         resolver = new AgentNameAttributeResolver(registry, address(ontology));
         vm.prank(deployer);

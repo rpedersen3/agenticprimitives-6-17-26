@@ -56,7 +56,9 @@ contract UniversalSignatureValidatorTest is Test {
             trustees: new address[](0),
             initialPasskeyCredentialIdDigest: cred,
             initialPasskeyX: x,
-            initialPasskeyY: y
+            initialPasskeyY: y,
+
+            initialPasskeyRpIdHash: bytes32(uint256(0x7270696468617368))
         });
     }
 

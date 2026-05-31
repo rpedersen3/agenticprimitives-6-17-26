@@ -161,7 +161,9 @@ contract Deploy is Script {
         //   Registry + per-node attribute resolver (inherits AttributeStorage)
         //   + universal read aggregator. Deployer bootstraps the .agent
         //   root so demos can register children without chicken-and-egg.
-        AgentNameRegistry nameRegistry = new AgentNameRegistry();
+        // H7-C.4: deployer is the immutable initializer; deploy + initializeRoot
+        // run in the same transaction below so the TLD cannot be frontrun.
+        AgentNameRegistry nameRegistry = new AgentNameRegistry(deployer);
         console2.log("AgentNameRegistry:    %s", address(nameRegistry));
         AgentNameAttributeResolver nameResolver = new AgentNameAttributeResolver(nameRegistry, address(ontology));
         console2.log("AgentNameResolver:    %s", address(nameResolver));

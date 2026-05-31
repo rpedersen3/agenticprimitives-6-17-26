@@ -151,7 +151,7 @@ contract DelegationManagerTest is Test {
         forged.signature = _signDelegation(forged, DELEGATE_PK);
 
         vm.prank(delegate);
-        vm.expectRevert(DelegationManager.InvalidSignature.selector);
+        vm.expectRevert(DelegationManager.DelegationManager_InvalidSignature.selector);
         dm.revokeDelegationByOwner(forged);
     }
 

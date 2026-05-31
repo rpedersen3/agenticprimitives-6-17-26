@@ -65,7 +65,9 @@ contract AdminFlowsViaValidatorTest is Test {
             trustees: trustees,
             initialPasskeyCredentialIdDigest: bytes32(0),
             initialPasskeyX: 0,
-            initialPasskeyY: 0
+            initialPasskeyY: 0,
+
+            initialPasskeyRpIdHash: bytes32(uint256(0x7270696468617368))
         });
         acct = factory.createAgentAccount(p, _defaultTimelocks(), 1);
     }

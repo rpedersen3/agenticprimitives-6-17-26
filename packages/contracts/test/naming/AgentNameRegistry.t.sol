@@ -16,7 +16,7 @@ contract AgentNameRegistryTest is Test {
     bytes32 internal constant KIND = keccak256("namespace:Agent");
 
     function setUp() public {
-        reg = new AgentNameRegistry();
+        reg = new AgentNameRegistry(deployer);
         vm.prank(deployer);
         AGENT_ROOT_NODE = reg.initializeRoot("agent", deployer, address(0), KIND);
     }
@@ -34,18 +34,31 @@ contract AgentNameRegistryTest is Test {
     }
 
     function test_initializeRoot_secondCallReverts() public {
+        vm.prank(deployer);
         vm.expectRevert(AgentNameRegistry.RootAlreadyInitialized.selector);
         reg.initializeRoot("agent", deployer, address(0), KIND);
     }
 
     function test_initializeRoot_emptyLabelReverts() public {
+        vm.prank(deployer);
         vm.expectRevert(AgentNameRegistry.EmptyLabel.selector);
         reg.initializeRoot("", deployer, address(0), KIND);
     }
 
     function test_initializeRoot_zeroOwnerReverts() public {
+        vm.prank(deployer);
         vm.expectRevert(AgentNameRegistry.ZeroOwner.selector);
         reg.initializeRoot("foo", address(0), address(0), KIND);
+    }
+
+    /// H7-C.4 / CON-NAMING-001 — non-initializer cannot claim a TLD.
+    function test_initializeRoot_nonInitializerReverts() public {
+        address attacker = address(0xBAD);
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(
+            AgentNameRegistry.NotInitializer.selector, attacker, deployer
+        ));
+        reg.initializeRoot("malicious", attacker, address(0), KIND);
     }
 
     function test_initializeRoot_multipleRoots() public {

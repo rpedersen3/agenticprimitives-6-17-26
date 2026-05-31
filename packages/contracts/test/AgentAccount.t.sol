@@ -50,7 +50,9 @@ contract AgentAccountTest is Test {
             trustees: new address[](0),
             initialPasskeyCredentialIdDigest: cred,
             initialPasskeyX: x,
-            initialPasskeyY: y
+            initialPasskeyY: y,
+
+            initialPasskeyRpIdHash: bytes32(uint256(0x7270696468617368))
         });
     }
 
@@ -129,7 +131,7 @@ contract AgentAccountTest is Test {
         address[] memory custodians = new address[](1);
         custodians[0] = owner;
         vm.expectRevert();
-        acct.initialize(custodians, bytes32(0), 0, 0, address(dm), address(factory));
+        acct.initialize(custodians, bytes32(0), 0, 0, bytes32(uint256(0x7270696468617368)), address(dm), address(factory));
     }
 
     // ─── Passkey-only initializer (phase 6f.4 unified) ────────────────
@@ -168,7 +170,7 @@ contract AgentAccountTest is Test {
         AgentAccount pk = _deployPasskey(102);
         address[] memory empty;
         vm.expectRevert();
-        pk.initialize(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y, address(dm), address(factory));
+        pk.initialize(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y, bytes32(uint256(0x7270696468617368)), address(dm), address(factory));
     }
 
     function test_passkey_account_emits_PasskeyAdded_at_init() public {
@@ -178,7 +180,7 @@ contract AgentAccountTest is Test {
         address[] memory empty;
         address predicted = factory.getAddressForAgentAccount(_simpleParams(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y), 103);
         vm.expectEmit(true, false, false, true, predicted);
-        emit AgentAccount.PasskeyAdded(TEST_CRED_DIGEST, TEST_X, TEST_Y);
+        emit AgentAccount.PasskeyAdded(TEST_CRED_DIGEST, TEST_X, TEST_Y, bytes32(uint256(0x7270696468617368)));
         factory.createAgentAccount(_simpleParams(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y), _defaultTimelocks(), 103);
     }
 
