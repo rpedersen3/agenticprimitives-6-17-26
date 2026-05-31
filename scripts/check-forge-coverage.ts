@@ -57,7 +57,10 @@ const ACCEPTED_DEBT: Record<string, Threshold> = {
   'src/ontology/AttributeStorage.sol':               { lines: 50, branches: 20 },
   'src/relationships/RelationshipTypeRegistry.sol':  { lines: 80, branches: 25 },
   // Production-ready (lower than tier floor but still acceptable for non-load-bearing):
-  'src/AgentAccount.sol':                            { lines: 82, branches: 55 }, // R3.4 lifted from 55%/40%; remaining gap is WebAuthn sig flows + recovery + module mocks
+  // src/AgentAccount.sol — R3.5 closed CON-AgentAccount-001.
+  // Coverage: 91.25% lines / 90.65% statements / 84.51% branches / 100% functions.
+  // Above ≥90 lines / ≥80 branches production-library target. Debt row removed;
+  // contract held to standard SRC tier floor.
 };
 
 function thresholdFor(path: string): { tier: 'libraries' | 'src' | 'debt'; floor: Threshold } {
