@@ -63,6 +63,14 @@ jobs:
       - name: Build packages first (apps import from packages' dist/, so build must precede typecheck)
         run: pnpm -r --filter './packages/*' build
 
+      # R7.2 — ABI sync gate. Must run AFTER `pnpm -r build` because
+      # the check compares the TS ABI mirror in packages/agent-account
+      # against the Foundry-built ABI in packages/contracts/dist/abi/.
+      # Cannot run from `check:all` because that step runs BEFORE forge
+      # build (see the ordering above).
+      - name: ABI sync check (R7.2)
+        run: pnpm check:abi-sync
+
       # H7-E.8 / EXT3-003 — public-API surface snapshot. Runs after
       # build so dist/*.d.ts exists; locks every exported symbol's
       # shape so silent breaking changes can't ship.

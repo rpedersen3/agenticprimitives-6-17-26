@@ -39,11 +39,16 @@ function isSourceContract(artifactPath) {
 
 const exports = [];
 
-function walk(dir) {
+function walk(dir, parentDir = null) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      walk(full);
+      // Skip `out/X.t.sol/` (forge test artifacts) and
+      // `out/X.s.sol/` (deploy-script artifacts) at the directory level
+      // so we never pick up their contracts even if they happen to
+      // metadata-reference a src/ file.
+      if (/\.(t|s)\.sol$/.test(entry.name)) continue;
+      walk(full, entry.name);
     } else if (entry.isFile() && entry.name.endsWith('.json')) {
       if (!isSourceContract(full)) continue;
       let json;
@@ -52,7 +57,24 @@ function walk(dir) {
       } catch {
         continue;
       }
-      const sourcePath = json.ast?.absolutePath || json.metadata?.sources && Object.keys(json.metadata.sources)[0];
+      // forge artifacts live at out/<File>.sol/<Contract>.json. The
+      // `ast.absolutePath` ALWAYS points at the contract's own source file
+      // (out/X.sol always means X.sol). `metadata.sources` is an unsorted
+      // map whose first key may be ANY import — including lib/* — which
+      // previously caused contracts importing from
+      // `lib/account-abstraction` (AgentAccount, AgentAccountFactory,
+      // SmartAgentPaymaster) to be silently filtered out of dist/abi/.
+      //
+      // The fix: ALWAYS prefer ast.absolutePath; only fall back to the
+      // metadata-sources scan when the ast block is missing (legacy
+      // artifacts). When scanning metadata, pick the FIRST source whose
+      // path starts with src/ rather than the arbitrary first key.
+      let sourcePath = json.ast?.absolutePath;
+      if (!sourcePath && json.metadata?.sources) {
+        sourcePath = Object.keys(json.metadata.sources).find((p) =>
+          p.startsWith(SRC_PREFIX),
+        );
+      }
       if (!sourcePath || !sourcePath.startsWith(SRC_PREFIX)) continue;
       const abi = json.abi;
       if (!Array.isArray(abi)) continue;
