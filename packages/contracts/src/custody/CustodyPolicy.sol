@@ -4,6 +4,22 @@ pragma solidity ^0.8.28;
 import {IAgentAccount, AgentAccountRecoveryArgs, AgentAccountRecoveryPasskeyAdd} from "../IAgentAccount.sol";
 import {SignatureSlotRecovery} from "../libraries/SignatureSlotRecovery.sol";
 
+/// @dev R6.6 — minimal interface for the `account → factory → governance.isPaused()`
+///      staticcall chain. Mirrors the same patterns introduced by R6.5
+///      in `AgentAccount` (see `IAgentAccountFactoryView` /
+///      `IAgentAccountPauseView` in `AgentAccount.sol`).
+interface IAgentAccountFactoryAccessor {
+    function factory() external view returns (address);
+}
+
+interface ICustodyPolicyFactoryView {
+    function governance() external view returns (address);
+}
+
+interface ICustodyPolicyPauseView {
+    function isPaused() external view returns (bool);
+}
+
 /**
  * @title CustodyPolicy
  * @notice ERC-7579 module that owns the schedule / apply / cancel
@@ -123,6 +139,64 @@ contract CustodyPolicy {
     constructor() {
         _CACHED_CHAIN_ID = block.chainid;
         _CACHED_DOMAIN_SEPARATOR = _buildDomainSeparator();
+    }
+
+    // ─── R6.6 / CON-CustodyPolicy-005 — system-pause modifier ──────
+    //
+    //   `whenAccountNotPaused(account)` reverts when
+    //   `AgenticGovernance.isPaused() == true`, where governance is
+    //   resolved per-call via the account's factory:
+    //
+    //       account.factory() → factory.governance() → governance.isPaused()
+    //
+    //   3 staticcalls. Custody schedule/apply are rare; the gas cost
+    //   is acceptable. Non-conforming hops (EOA factory, EOA governance,
+    //   missing fn) treat the system as "not paused" so legacy / test
+    //   deploys keep working — mirrors the R6.5 pattern in AgentAccount
+    //   and `GovernanceManaged._pausedSafe()`.
+    //
+    //   Applied to: `scheduleCustodyChange`, `applyCustodyChange`.
+    //
+    //   Deliberately NOT applied to (recovery primitives that must
+    //   work during an incident):
+    //     - `cancelScheduledChange` — defensive de-escalation
+    //     - `onUninstall`           — removing attack surface
+    //     - `onInstall`              — gated upstream by paused
+    //                                   `installModule` on AgentAccount (R6.5)
+    //                                   and paused `createAgentAccount`
+    //                                   on AgentAccountFactory
+    modifier whenAccountNotPaused(address account) {
+        if (_systemPausedFor(account)) revert SystemPaused();
+        _;
+    }
+
+    /// @notice R6.6 — thrown when a `whenAccountNotPaused`-guarded
+    ///         entrypoint is called while the governance pause flag
+    ///         is set.
+    error SystemPaused();
+
+    function _systemPausedFor(address account) internal view returns (bool) {
+        if (account == address(0) || account.code.length == 0) return false;
+        // Hop 1: account → factory
+        (bool okF, bytes memory dataF) = account.staticcall(
+            abi.encodeWithSelector(IAgentAccountFactoryAccessor.factory.selector)
+        );
+        if (!okF || dataF.length < 32) return false;
+        address fac = abi.decode(dataF, (address));
+        if (fac == address(0) || fac.code.length == 0) return false;
+        // Hop 2: factory → governance
+        (bool okG, bytes memory dataG) = fac.staticcall(
+            abi.encodeWithSelector(ICustodyPolicyFactoryView.governance.selector)
+        );
+        if (!okG || dataG.length < 32) return false;
+        address gov = abi.decode(dataG, (address));
+        if (gov == address(0) || gov.code.length == 0) return false;
+        // Hop 3: governance → isPaused
+        (bool okP, bytes memory dataP) = gov.staticcall(
+            abi.encodeWithSelector(ICustodyPolicyPauseView.isPaused.selector)
+        );
+        if (!okP || dataP.length < 32) return false;
+        return abi.decode(dataP, (bool));
     }
 
     function _buildDomainSeparator() internal view returns (bytes32) {
@@ -335,7 +409,7 @@ contract CustodyPolicy {
         CustodyAction action,
         bytes calldata args,
         bytes calldata quorumSigs
-    ) external returns (uint256 changeId) {
+    ) external whenAccountNotPaused(account) returns (uint256 changeId) {
         Config storage c = _configs[account];
         if (!c.installed) revert NotInstalledOn(account);
 
@@ -394,7 +468,10 @@ contract CustodyPolicy {
         emit CustodyChangeScheduled(account, changeId, action, eta, msg.sender);
     }
 
-    function applyCustodyChange(address account, uint256 changeId, bytes calldata quorumSigs) external {
+    function applyCustodyChange(address account, uint256 changeId, bytes calldata quorumSigs)
+        external
+        whenAccountNotPaused(account)
+    {
         Config storage c = _configs[account];
         if (!c.installed) revert NotInstalledOn(account);
 
