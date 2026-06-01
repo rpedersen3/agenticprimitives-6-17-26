@@ -9,7 +9,7 @@
  * custody-ceremony helper already handles passkey + SIWE quorum slots.
  */
 
-import { keccak256, encodeAbiParameters, type Address } from 'viem';
+import { keccak256, encodeAbiParameters, type Address, type Hex } from 'viem';
 import { config } from '../config';
 import { registerPasskeyForSeat, savePasskeyForSeat, type DemoPasskey } from './passkey';
 import { loadSeats, type AuthMethod, type SeatClaim } from './seats';
