@@ -21,6 +21,7 @@ import { config } from '../config';
 import type { DemoPasskey } from './passkey';
 import { csrfHeaders, ensureCsrfToken, CsrfError } from './csrf';
 import { getSessionSalt } from './session-salt';
+import { derivePasskeyRpIdHash } from './chain-reads';
 
 /** Derive a passkey's PIA — keccak256(abi.encode(x, y))[12:32]. */
 function passkeyIdentity(x: bigint, y: bigint): Address {
@@ -93,6 +94,9 @@ export async function deployPersonAgent(
         initialPasskeyCredentialIdDigest: `0x${'00'.repeat(32)}`,
         initialPasskeyX: '0',
         initialPasskeyY: '0',
+        // Mode-0 EOA-only deploy: no passkey → zero rpIdHash is the
+        // factory's accepted "no passkey" case.
+        initialPasskeyRpIdHash: `0x${'00'.repeat(32)}`,
         timelockOverrides: [],
         // Session-scoped salt: stable within one demo session (so
         // re-claims of the same seat reproduce the same SA) but
@@ -132,6 +136,11 @@ export async function deployPersonAgent(
   // direct-deploy (factory call from worker EOA) since the userOpHash
   // signing flow + mode=1 paymaster gas budget is a separate concern
   // (Wave R1 native multi-signer ceremony will refactor this).
+  // Passkey path: rpIdHash MUST be the hostname-derived value (matching the
+  // RP-ID the authenticator was registered against). Zero rpIdHash with a
+  // non-zero passkey causes a factory revert (orphan-registry root cause,
+  // 2026-06-01); the server fail-closes on this since the same date.
+  const rpIdHash = await derivePasskeyRpIdHash();
   const directRes = await fetch(`${baseTrimmed}/session/direct-deploy`, {
     method: 'POST',
     credentials: 'include',
@@ -143,6 +152,7 @@ export async function deployPersonAgent(
       initialPasskeyCredentialIdDigest: passkey.credentialIdDigest,
       initialPasskeyX: passkey.pubKeyX.toString(),
       initialPasskeyY: passkey.pubKeyY.toString(),
+      initialPasskeyRpIdHash: rpIdHash,
       timelockOverrides: [],
       salt: getSessionSalt(),
     }),

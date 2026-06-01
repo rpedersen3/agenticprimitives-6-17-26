@@ -42,6 +42,18 @@ export interface AgentAccountInitParams {
   initialPasskeyRpIdHash: Hex;
 }
 
+/** SHA-256 of `window.location.hostname` as 32-byte hex. The on-chain
+ *  factory mixes `rpIdHash` into the CREATE2 salt for passkey-direct SAs,
+ *  so the address derived client-side MUST be computed with the SAME
+ *  rpIdHash the server uses. Mirrors demo-sso-next's helper (PR #90) +
+ *  the demo-a2a server-side guard added 2026-06-01. */
+export async function derivePasskeyRpIdHash(): Promise<Hex> {
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'impact-agent.me';
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(hostname));
+  const arr = Array.from(new Uint8Array(buf));
+  return ('0x' + arr.map((b) => b.toString(16).padStart(2, '0')).join('')) as Hex;
+}
+
 /**
  * Predict the deployed AgentAccount address for given init params + salt.
  * Factory uses CREATE2 so this is deterministic before the tx broadcasts.

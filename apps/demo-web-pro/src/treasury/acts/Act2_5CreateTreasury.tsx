@@ -34,7 +34,7 @@ import {
   executeCallFromAgent,
   encodeExecuteCall,
 } from '../../lib/execute-call';
-import { predictAccountAddress, waitForCode } from '../../lib/chain-reads';
+import { predictAccountAddress, waitForCode, derivePasskeyRpIdHash } from '../../lib/chain-reads';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { shortAddress } from '../../components';
@@ -129,6 +129,10 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     }
     // Wave R0 — mode>0 requires ≥1 trustee at deploy. Self-trustee
     // bootstrap; Bob's identity is added via T6 admin in later acts.
+    // rpIdHash MUST be the real hostname-derived value when passkey is
+    // supplied — zero with a non-zero passkey causes a factory revert
+    // (orphan-registry root cause, 2026-06-01).
+    const aliceRpIdHash = alicePasskey ? await derivePasskeyRpIdHash() : (('0x' + '00'.repeat(32)) as Hex);
     const initParams = {
       mode: 1, // hybrid — same shape as Org; threshold bumps to 2 in Act 4
       custodians: custodians,
@@ -136,8 +140,7 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
       initialPasskeyCredentialIdDigest: alicePasskey?.credentialIdDigest ?? (('0x' + '00'.repeat(32)) as Hex),
       initialPasskeyX: alicePasskey?.pubKeyX ?? 0n,
       initialPasskeyY: alicePasskey?.pubKeyY ?? 0n,
-      // H7-C.1 / CON-WEBAUTHN-001: rpIdHash required on-chain when passkey is supplied.
-      initialPasskeyRpIdHash: ((alicePasskey as { rpIdHash?: Hex } | undefined)?.rpIdHash) ?? (("0x" + "00".repeat(32)) as Hex),
+      initialPasskeyRpIdHash: aliceRpIdHash,
     } as const;
 
     // Salt includes the Org address (so Treasury can't collide
@@ -204,6 +207,7 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
           initialPasskeyCredentialIdDigest: initParams.initialPasskeyCredentialIdDigest,
           initialPasskeyX: initParams.initialPasskeyX.toString(),
           initialPasskeyY: initParams.initialPasskeyY.toString(),
+          initialPasskeyRpIdHash: initParams.initialPasskeyRpIdHash,
           timelockOverrides: [0, 0, 0, 0, 1, 0, 0],
           salt: salt.toString(),
         }),

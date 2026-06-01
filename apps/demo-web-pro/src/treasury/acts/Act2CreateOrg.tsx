@@ -31,7 +31,7 @@ import {
   executeCallFromAgent,
   encodeExecuteCall,
 } from '../../lib/execute-call';
-import { predictAccountAddress, waitForCode } from '../../lib/chain-reads';
+import { predictAccountAddress, waitForCode, derivePasskeyRpIdHash } from '../../lib/chain-reads';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
 import { shortAddress } from '../../components';
@@ -141,6 +141,12 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     // Alice's own identity as the founding trustee (self-trustee
     // pattern). Bob's identity gets added to trustees in Act 3+ via
     // T6 admin once Bob's PSA is enrolled.
+    // H7-C.1 / CON-WEBAUTHN-001: rpIdHash required on-chain when passkey is
+    // supplied. MUST match the value the server sees / the value the prediction
+    // uses — derive from `window.location.hostname` (same as the WebAuthn rp.id
+    // used at passkey registration). Zero-value when no passkey was enrolled
+    // (mode-0 EOA-only deploys) is the factory's accepted no-passkey case.
+    const aliceRpIdHash = alicePasskey ? await derivePasskeyRpIdHash() : (('0x' + '00'.repeat(32)) as Hex);
     const initParams = {
       mode: 1, // hybrid
       custodians: custodians,
@@ -148,8 +154,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
       initialPasskeyCredentialIdDigest: alicePasskey?.credentialIdDigest ?? (('0x' + '00'.repeat(32)) as Hex),
       initialPasskeyX: alicePasskey?.pubKeyX ?? 0n,
       initialPasskeyY: alicePasskey?.pubKeyY ?? 0n,
-      // H7-C.1 / CON-WEBAUTHN-001: rpIdHash required on-chain when passkey is supplied.
-      initialPasskeyRpIdHash: ((alicePasskey as { rpIdHash?: Hex } | undefined)?.rpIdHash) ?? (("0x" + "00".repeat(32)) as Hex),
+      initialPasskeyRpIdHash: aliceRpIdHash,
     } as const;
 
     // Salt derived from (org name, founder identity, version tag,
@@ -227,6 +232,7 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
           initialPasskeyCredentialIdDigest: initParams.initialPasskeyCredentialIdDigest,
           initialPasskeyX: initParams.initialPasskeyX.toString(),
           initialPasskeyY: initParams.initialPasskeyY.toString(),
+          initialPasskeyRpIdHash: initParams.initialPasskeyRpIdHash,
           timelockOverrides: [0, 0, 0, 0, 1, 0, 0],
           salt: salt.toString(),
         }),
