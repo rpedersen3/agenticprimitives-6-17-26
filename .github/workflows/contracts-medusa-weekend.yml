@@ -1,0 +1,81 @@
+name: Contracts Medusa (weekend)
+
+# R9.5 — Medusa long-burn coverage-guided property fuzzing.
+#
+# Different sampling strategy than R9.4's Echidna (HEVM-based) and the
+# R9.1/R9.2 Foundry invariant runner. Medusa uses go-ethereum's EVM
+# with mutational coverage-guided fuzzing — different in both engine
+# and feedback loop. Account / custody / delegation bugs are often
+# multi-step sequence bugs; the three fuzzers' independent coverage
+# graphs make it harder for one bug to slip every net.
+#
+# Schedule: weekly + manual dispatch. Per R9.5 design ARTIFACT-ONLY
+# (continue-on-error: true) — a failed weekend doesn't break the
+# green bar. Graduates to PR-blocking once a green track record is
+# established. The weekend budget (4 hours / 14400s) lets Medusa
+# explore deep call sequences Echidna's nightly 50K test limit
+# doesn't reach.
+
+on:
+  schedule:
+    # 03:17 UTC Saturday — earliest of the weekly schedules so the
+    # corpus artifact is available before working hours Monday.
+    - cron: '17 3 * * 6'
+  workflow_dispatch: {}
+
+concurrency:
+  group: contracts-medusa-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  medusa:
+    name: Medusa (CustodyPolicy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 280       # ~4.5h, leaves buffer over the 4h fuzz timeout
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install crytic-compile (Medusa build driver)
+        run: |
+          python3 -m pip install --user pipx
+          python3 -m pipx ensurepath
+          pipx install crytic-compile
+          crytic-compile --version
+
+      - name: Install Medusa 1.5.1 (go-ethereum EVM, Cancun-native)
+        run: |
+          curl -sL https://github.com/crytic/medusa/releases/download/v1.5.1/medusa-linux-x64.tar.gz \
+            | tar -xz -C /usr/local/bin
+          medusa --version
+
+      - name: Build contract dependencies (forge-std + AA + OZ)
+        working-directory: packages/contracts
+        run: bash setup.sh
+
+      - name: Run Medusa weekend (4-hour budget, 4 parallel workers)
+        working-directory: packages/contracts
+        run: medusa fuzz --config medusa.json
+
+      - name: Upload Medusa corpus + coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: medusa-custodypolicy-corpus
+          path: packages/contracts/medusa-corpus/
+          retention-days: 60
+          if-no-files-found: warn

@@ -11,10 +11,11 @@ broadcast/
 deployments-anvil.json
 lcov.info
 coverage-r6-9.json
-# R9.4 — Echidna writes coverage + replay corpus + crytic-export here.
-# The corpus IS audit-evidence (sequences that exercised previously-
-# unhit branches), but it's generated content + reproducible from the
-# harness + a seed. The nightly workflow artifact-uploads the corpus
-# dir so it's still preserved out-of-tree.
+# R9.4 / R9.5 — Echidna + Medusa write coverage + replay corpus +
+# crytic-export here. Both corpora ARE audit-evidence (sequences that
+# exercised previously-unhit branches), but generated content +
+# reproducible from harness + seed. Nightly + weekly workflows
+# artifact-upload these dirs so they're preserved out-of-tree.
 echidna-corpus/
+medusa-corpus/
 crytic-export/
