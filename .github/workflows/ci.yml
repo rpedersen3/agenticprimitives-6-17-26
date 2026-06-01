@@ -47,6 +47,19 @@ jobs:
       - name: Doctrine checks (capability manifests, boundaries, exports, vocabulary firewall)
         run: pnpm check:all
 
+      # R5.12 moved contracts from apps/ → packages/, which means
+      # `pnpm -r --filter './packages/*' build` now runs
+      # `forge build && pnpm run build:abi` in packages/contracts.
+      # Foundry MUST be installed before the build step, not after.
+      - name: Install Foundry (must precede packages build)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Build contract dependencies (forge-std + account-abstraction + OZ)
+        working-directory: packages/contracts
+        run: bash setup.sh
+
       - name: Build packages first (apps import from packages' dist/, so build must precede typecheck)
         run: pnpm -r --filter './packages/*' build
 
@@ -66,20 +79,16 @@ jobs:
       # baseline (50% lines / 60% branches at the root); per-package
       # configs may raise. Goal: ratchet up post-audit.
       - name: Vitest coverage floor (H7-D.8)
-        run: pnpm -r --filter './packages/*' exec vitest run --coverage --reporter=default
+        # --passWithNoTests: a few generic-type packages (types, ontology)
+        # have no .test.ts files yet; that's an intentional skip, not a
+        # gate failure. Packages WITH tests still enforce their coverage
+        # floor (the `--coverage` flag exits non-zero on threshold misses
+        # inside their own vitest.config.ts).
+        run: pnpm -r --filter './packages/*' exec vitest run --coverage --reporter=default --passWithNoTests
         continue-on-error: false
 
       - name: Integration tests (per-package vitest)
         run: pnpm test:integration:packages
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: stable
-
-      - name: Build contract dependencies (forge-std + account-abstraction + OZ)
-        working-directory: packages/contracts
-        run: bash setup.sh
 
       - name: Forge contract tests (test pyramid Layer 4)
         working-directory: packages/contracts
