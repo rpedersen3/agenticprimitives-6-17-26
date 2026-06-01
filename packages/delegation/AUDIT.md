@@ -1,9 +1,18 @@
 # `@agenticprimitives/delegation` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20 (pass 5b — mintDelegationToken emit added)
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-20
 **Owners:** delegation package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- **Heavy R9 substrate coverage** + R11.1 audit-contract changes:
+  - R9.2 DelegationManager Foundry stateful invariants (`packages/contracts/test/invariant/DelegationManager.invariant.t.sol` — 5 × 25,600 calls): revocation irreversibility, hash determinism, DOMAIN_SEPARATOR immutability, ROOT_AUTHORITY + OPEN_DELEGATION constants unchanged, revoked-set monotonic.
+  - R1 / H7-D.9 closure: cross-stack EIP-712 typehash equality test at `packages/delegation/test/integration/cross-stack-typehashes.test.ts` (6 tests) — now surfaced as a CI gate via `pnpm check:eip712-typehash-equality` (R11.4).
+  - **R11.1 fail-hard audit propagation.** `mintDelegationToken` + `verifyDelegationToken` (3 sites) had their wrapper-level `try/catch` removed; sink composition now determines fail-hard vs fail-soft. Tests: `packages/delegation/test/unit/token.test.ts::R11.1: a throwing audit sink PROPAGATES`.
+- See [audit-evidence-index.md § 3.1 + § 4](../../docs/audits/audit-evidence-index.md).
 
 ## 1. Charter
 

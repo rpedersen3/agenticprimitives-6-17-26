@@ -1,9 +1,14 @@
 # `@agenticprimitives/types` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-20
 **Owners:** types package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- Leaf package — no security claims to lock at the contract layer; types are consumed by every downstream package whose claims R9 DOES lock. See [audit-evidence-index.md § 1-4](../../docs/audits/audit-evidence-index.md) for the substrate this package transitively backs.
 
 ## 1. Charter
 

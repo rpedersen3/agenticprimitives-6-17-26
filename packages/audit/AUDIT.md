@@ -1,9 +1,16 @@
 # `@agenticprimitives/audit` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20 (pass 5g — createPiiGuardrailSink shipped, AUD-1 closed)
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-20
 **Owners:** audit package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- **R11.1 / N16 closure.** `composeFailHardSinks` is now the load-bearing primitive that `mcp-runtime.withDelegation`, `delegation.{mintDelegationToken, verifyDelegationToken}`, and `mcp-runtime.service-mac` honor for security-critical events. Wrapper-level `try/catch` swallowing was removed across all 8 emit sites in R11.1; sink composition now expresses the caller's intent (fail-soft via `composeSinks`, fail-hard via `composeFailHardSinks`).
+- See [audit-evidence-index.md § 4](../../docs/audits/audit-evidence-index.md) row "Fail-hard audit propagation (R11.1)" for the test files that lock the new contract.
+- Cross-cutting: every package emits via this surface; see the per-package `Capabilities this package participates in → Audit / forensics trail` block in each `CLAUDE.md` for the action vocabulary.
 
 ## 1. Charter
 

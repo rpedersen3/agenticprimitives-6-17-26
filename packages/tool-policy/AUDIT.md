@@ -1,9 +1,17 @@
 # `@agenticprimitives/tool-policy` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-20
 **Owners:** tool-policy package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- Locked by N8 closure + tests:
+  - `evaluatePolicy` shape-gate (fail-closed default for unknown / missing classification metadata): `packages/tool-policy/src/decision.ts:73-79`.
+  - Negative-test matrix: `packages/tool-policy/test/unit/decision-fail-closed.test.ts`.
+- Downstream: `mcp-runtime.withDelegation` (R8.1 type-level production-strict + R11.1 fail-hard audit) consumes `evaluatePolicy` and propagates the decision into `delegation.verifyDelegationToken` opts.
 
 ## 1. Charter
 

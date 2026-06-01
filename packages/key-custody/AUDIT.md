@@ -1,9 +1,18 @@
 # `@agenticprimitives/key-custody` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20 (pass 5b — audit emit wired)
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-20
 **Owners:** key-custody package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- **R11.1 + R11.3 changes** + transitive R9 coverage:
+  - **R11.1 fail-hard audit:** `LocalSecp256k1Signer.signA2AAction` + `GcpKmsSigner.signA2AAction` emit `key-custody.sign` audit rows; the downstream wrapper now propagates sink failures (production callers using `composeFailHardSinks` get fail-hard semantics).
+  - **R11.3 public surface cleanup:** `AwsKmsProvider` + `AwsKmsSigner` removed from `src/index.ts` + `capability.manifest.json:publicExports` (their v0 implementations throw `not yet implemented`); the `KmsBackend` type keeps `'aws-kms'` as a future value. `buildToolExecutorBackend` (the always-throwing alias) likewise removed from public; `buildToolExecutorBackendNoIsolation` is the canonical explicit-name variant until v1 lands true per-tool HKDF isolation.
+  - Per-subject derivation (spec 235) is locked by unit tests in `test/unit/derive-subject.test.ts`.
+  - **Still open (R10 P1.7 + P1.8):** managed HMAC rotation policy; envelope `encrypt` / `decrypt` audit-event emission. See [R10 readiness assessment](../../docs/audits/2026-06-01-r10-internal-readiness-assessment.md).
 
 ## 1. Charter
 

@@ -1,9 +1,14 @@
 # `@agenticprimitives/identity-directory-adapters` — Security & Architecture Audit
 
 **Status:** alpha (thin wrapper — ADR-0015 firewall)
-**Last refreshed:** 2026-05-30
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-30
 **Owners:** identity-directory-adapters package CODEOWNERS
 **System audit cross-reference:** [docs/audits/2026-05-packages-contracts-production-readiness.md](../../docs/audits/2026-05-packages-contracts-production-readiness.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- Adapter implementations for `identity-directory`. No direct on-chain claims; the adapters consume the same `agent-naming` + `agent-profile` + `agent-relationships` substrate covered above.
 
 ## 1. Charter
 

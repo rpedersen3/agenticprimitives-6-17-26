@@ -1,9 +1,18 @@
 # `@agenticprimitives/mcp-runtime` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-20
 **Owners:** mcp-runtime package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- **R8.1 + R11.1 substrate changes:**
+  - **R8.1** — `withDelegation` is now production-strict at the TYPE level via TS function overloads + discriminated union (`ProductionWithDelegationOpts` requires `classification` + `auditSink`; `DevelopmentWithDelegationOpts` requires `developmentMode: true`). Forgetting either in production is a compile error AND a runtime throw.
+  - **R11.1 fail-hard audit propagation.** Removed `try/catch` swallowing at 5 sites: `withDelegation`'s emit, `verifyDelegationForResource`'s emit, and all 3 `service-mac.{issue, reject, accept}` emit sites. Caller's sink composition (`composeSinks` fail-soft vs `composeFailHardSinks` fail-hard) now determines failure behavior.
+  - Tests: `packages/mcp-runtime/test/unit/with-delegation.test.ts::R11.1` + `service-mac.test.ts::R11.1` (4 R11.1 tests).
+- Downstream of: `delegation.verifyDelegationToken` (R11.1) + `tool-policy.evaluatePolicy` (N8 closure).
 
 ## 1. Charter
 

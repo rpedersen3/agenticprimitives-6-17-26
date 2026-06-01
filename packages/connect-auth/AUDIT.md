@@ -1,9 +1,15 @@
 # `@agenticprimitives/connect-auth` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-20
 **Owners:** connect-auth package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- Sessions + auth surface. R9 wave did not directly add contract-side proofs for this package (it's TS-side); R11.1 changed how downstream `delegation.mintDelegationToken` / `delegation.verifyDelegationToken` handle audit-sink failures — see [audit-evidence-index.md § 4](../../docs/audits/audit-evidence-index.md) row "Fail-hard audit propagation (R11.1)".
+- WebAuthn UV enforcement at the contract layer (R8.2) is locked by the Halmos proof `WebAuthnLibUvR82.halmos.t.sol::check_R82_uvNotSet_with_requireUvTrue_alwaysRejects` (consumes this package's passkey assertions; see § 3.2 of contracts AUDIT.md).
 
 ## 1. Charter
 

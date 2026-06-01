@@ -1,7 +1,8 @@
 # @agenticprimitives/agent-profile — package audit
 
 **Status:** Phase 1 (SDK skeleton + pure helpers + types).
-**Last refreshed:** 2026-05-23.
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-23
 **Owner:** [security-auditor](../../docs/agents/security-auditor.md) +
 [technical-architect-auditor](../../docs/agents/technical-architect-auditor.md).
 **System audit cross-ref:** see
@@ -85,3 +86,8 @@ and emit through it.
 | Date | Wave | What changed |
 | --- | --- | --- |
 | 2026-05-23 | ID Phase 1 | Initial audit. AI-1/2/3 open; security invariants verified by unit tests. |
+
+## R9 substrate coverage (2026-06-01)
+
+- Profile + AgentCard resolver. R9 added no direct substrate change here; the `AgentProfileResolver` contract is covered by `packages/contracts/test/identity/AgentProfileResolver.t.sol`. See [`packages/contracts/AUDIT.md`](../contracts/AUDIT.md).
+

@@ -1,9 +1,14 @@
 # `@agenticprimitives/connect` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-30
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-30
 **Owners:** connect package CODEOWNERS
 **System audit cross-reference:** [docs/audits/2026-05-packages-contracts-production-readiness.md](../../docs/audits/2026-05-packages-contracts-production-readiness.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- SSO broker. R9 added no direct substrate change here; sessions minted by this package are verified downstream via `delegation.verifyDelegationToken` (R11.1 fail-hard audit) and `mcp-runtime.withDelegation` (R11.1 fail-hard audit). See [audit-evidence-index.md § 4](../../docs/audits/audit-evidence-index.md).
 
 ## 1. Charter
 

@@ -1,7 +1,8 @@
 # @agenticprimitives/agent-relationships — package audit
 
 **Status:** Phase 1 (SDK skeleton + pure helpers + taxonomy).
-**Last refreshed:** 2026-05-23.
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-23
 **Owner:** [security-auditor](../../docs/agents/security-auditor.md) +
 [technical-architect-auditor](../../docs/agents/technical-architect-auditor.md).
 **System audit cross-ref:** see
@@ -86,3 +87,8 @@ Spec-declared in `specs/216-agent-relationships.md` § 8.
 | Date | Wave | What changed |
 | --- | --- | --- |
 | 2026-05-23 | RL Phase 1 | Initial audit. AR-1/2/3/4 open; security invariants verified by unit tests. |
+
+## R9 substrate coverage (2026-06-01)
+
+- ⚠️ **Public on-chain graph — EXPERIMENTAL.** R9 added no direct substrate change here; the `AgentRelationship` contract is covered by the existing test pack. **Production posture:** out of v1 recommendation per [`packages/contracts/AUDIT.md` § 3.9](../contracts/AUDIT.md) (EXT-019; encrypted-edge design pending).
+

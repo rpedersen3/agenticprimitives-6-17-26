@@ -1,9 +1,14 @@
 # `@agenticprimitives/ontology` — Security & Architecture Audit
 
 **Status:** experimental (v0.1 — package-boundary question per XPKG-004-arch)
-**Last refreshed:** 2026-05-30
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-30
 **Owners:** ontology package CODEOWNERS
 **System audit cross-reference:** [docs/audits/2026-05-packages-contracts-production-readiness.md](../../docs/audits/2026-05-packages-contracts-production-readiness.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- Ontology registries (T-box / C-box) — SHACL shapes, predicate registry, attribute storage. R9 added no direct substrate change here; the `OntologyTermRegistry` + `ShapeRegistry` + `AttributeStorage` contracts are covered by the existing test pack. See [`packages/contracts/AUDIT.md`](../contracts/AUDIT.md).
 
 ## 1. Charter
 

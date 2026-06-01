@@ -1,9 +1,18 @@
 # `@agenticprimitives/agent-account` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-20
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-20
 **Owners:** agent-account package CODEOWNERS
 **System audit cross-reference:** [docs/architecture/product-readiness-audit.md](../../docs/architecture/product-readiness-audit.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- **Heavy R9 substrate coverage** — every claim about AgentAccount's authority closure is now symbolically proven:
+  - `Halmos AgentAccountOnlySelf.halmos.t.sol` proves (for ALL inputs) that external callers cannot call `setDelegationManager`, `removeCustodian`, `setUpgradeTimelock`, `upgradeToAndCall` (UUPS), or `removePasskey`. PR-blocking via `security.yml::halmos`.
+  - `Halmos WebAuthnLibUvR82.halmos.t.sol` proves the R8.2 UV-required gate at the contract layer (UP+UV bits enforced for ALL inputs).
+  - `AgentAccountFactoryMaxCustodiansR96.t.sol` (R9.6) locks the H-6 `MAX_INITIAL_CUSTODIANS = 32` cap including the `uint8` truncation case (256 → 0).
+- See [`packages/contracts/AUDIT.md` § 5](../contracts/AUDIT.md) for the full Halmos + Foundry-invariant table.
 
 ## 1. Charter
 

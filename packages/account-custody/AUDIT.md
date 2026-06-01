@@ -1,9 +1,21 @@
 # `@agenticprimitives/account-custody` — Security & Architecture Audit
 
 **Status:** alpha
-**Last refreshed:** 2026-05-30
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-30
 **Owners:** account-custody package CODEOWNERS
 **System audit cross-reference:** [docs/audits/2026-05-packages-contracts-production-readiness.md](../../docs/audits/2026-05-packages-contracts-production-readiness.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- Locked by R9.1 CustodyPolicy Foundry stateful invariants (`packages/contracts/test/invariant/CustodyPolicy.invariant.t.sol` — 5 invariants × 25,600 calls each per CI run, PR-blocking):
+  - thresholds always >= 1 when installed (zero would brick the account)
+  - recoveryApprovals <= trusteeCount (recovery must be possible)
+  - custodyMode in {0,1,2,3} (dispatcher branch coverage)
+  - scheduledChangeCount monotonic non-decreasing (no changeId reuse — "no double execute" rests on it)
+  - uninstalled-account views read zero/default (no state leak)
+- Plus R9.4 Echidna nightly + R9.5 Medusa weekend on the same `CustodyPolicyEchidna` / `CustodyPolicyMedusa` harnesses (different EVM engines, different coverage strategies).
+- See [audit-evidence-index.md § 3.1](../../docs/audits/audit-evidence-index.md) for the full table.
 
 ## 1. Charter
 

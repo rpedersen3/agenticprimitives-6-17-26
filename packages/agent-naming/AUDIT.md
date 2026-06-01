@@ -1,7 +1,8 @@
 # @agenticprimitives/agent-naming — package audit
 
 **Status:** Phase 1 (SDK skeleton + spec + pure helpers).
-**Last refreshed:** 2026-05-23.
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-23
 **Owner:** [security-auditor](../../docs/agents/security-auditor.md) +
 [technical-architect-auditor](../../docs/agents/technical-architect-auditor.md).
 **System audit cross-ref:** see
@@ -84,3 +85,13 @@ client doesn't yet take an `auditSink`; Phase 2 will add the optional
 | Date | Wave | What changed |
 | --- | --- | --- |
 | 2026-05-23 | NS Phase 1 | Initial audit. AN-1/2/3 open; security invariants verified by unit tests. |
+
+## R9 substrate coverage (2026-06-01)
+
+- Locked by R6.2 + R6.8 contract-side hardening:
+  - `AgentNameRegistry.initializeRoot` cannot be frontrun (immutable initializer + same-tx deploy) — H7-C.4 / CON-NAMING-001.
+  - `PermissionlessSubregistry.register` is `nonReentrant` — R6.2 / CON-SUBREGISTRY-003.
+  - Pause coverage: 7 mutating functions (register, backfillLabel, setOwner, setResolver, setSubregistry, renew, setPrimaryName) are `whenNotPaused` — R6.8.
+  - ADR-0012 / ADR-0013: NO `eth_getLogs` in product read paths; `reverseResolveString` is the canonical single-call.
+- See [`packages/contracts/AUDIT.md` § 3.8](../contracts/AUDIT.md).
+

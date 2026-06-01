@@ -1,9 +1,14 @@
 # `@agenticprimitives/identity-directory` — Security & Architecture Audit
 
 **Status:** alpha (Phase 1 — indexer + on-chain confirm pattern; not on critical authority path at v0.1)
-**Last refreshed:** 2026-05-30
+**Last refreshed:** 2026-06-01 (R9 substrate coverage references + R11.1 fail-hard audit + R11.3 public-surface cleanup)
+**Prior refresh:** 2026-05-30
 **Owners:** identity-directory package CODEOWNERS
 **System audit cross-reference:** [docs/audits/2026-05-packages-contracts-production-readiness.md](../../docs/audits/2026-05-packages-contracts-production-readiness.md)
+
+## R9 substrate coverage (2026-06-01)
+
+- Read model — composes naming + profile + relationships. No direct on-chain claims; locked transitively via the upstream packages' R9 coverage. See [audit-evidence-index.md](../../docs/audits/audit-evidence-index.md).
 
 ## 1. Charter
 
