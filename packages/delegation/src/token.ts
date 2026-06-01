@@ -201,30 +201,31 @@ export async function mintDelegationToken(
   const sigHex = sig.startsWith('0x') ? sig.slice(2) : sig;
   const sigBytes = new Uint8Array(Buffer.from(sigHex, 'hex'));
   const token = `${base64urlEncode(canonical)}.${base64urlEncodeBytes(sigBytes)}`;
-  // Audit emit (C3 pass 3c). Fail-soft. JTI is logged because it's the
+  // Audit emit (C3 pass 3c). R11.1 / N16: NO try/catch around the sink
+  // write — the sink composition (`composeSinks` fail-soft vs
+  // `composeFailHardSinks` fail-hard) expresses the caller's intent.
+  // For production callers using fail-hard sinks, a `delegation.mint`
+  // emission failure aborts the mint flow — the token is NOT returned
+  // without a recorded audit row. JTI is logged because it's the
   // correlation primitive for downstream verify events — not secret.
   if (opts?.auditSink) {
-    try {
-      await opts.auditSink.write(
-        buildEvent({
-          action: 'delegation.mint',
-          outcome: 'success',
-          correlationId: opts.correlationId,
-          actor: { type: 'user', id: claims.delegation.delegator },
-          subject: { type: 'jti', id: jti },
-          audience: claims.aud,
-          context: {
-            iss: claims.iss,
-            sub: claims.sub,
-            sessionKeyAddress: claims.sessionKeyAddress,
-            ttlSeconds: ttl,
-            usageLimit: claims.usageLimit ?? null,
-          },
-        }),
-      );
-    } catch {
-      /* fail-soft */
-    }
+    await opts.auditSink.write(
+      buildEvent({
+        action: 'delegation.mint',
+        outcome: 'success',
+        correlationId: opts.correlationId,
+        actor: { type: 'user', id: claims.delegation.delegator },
+        subject: { type: 'jti', id: jti },
+        audience: claims.aud,
+        context: {
+          iss: claims.iss,
+          sub: claims.sub,
+          sessionKeyAddress: claims.sessionKeyAddress,
+          ttlSeconds: ttl,
+          usageLimit: claims.usageLimit ?? null,
+        },
+      }),
+    );
   }
   return { token, jti };
 }
@@ -425,29 +426,27 @@ export async function verifyDelegationToken(
     delegationDigest: Hex | undefined,
   ) => {
     if (!opts.auditSink) return;
-    try {
-      await opts.auditSink.write(
-        buildEvent({
-          action:
-            outcome === 'success'
-              ? 'delegation.verify.accept'
-              : 'delegation.verify.reject',
-          outcome,
-          correlationId: opts.correlationId,
-          actor: principal ? { type: 'user', id: principal } : { type: 'unknown' },
-          subject: delegationDigest
-            ? { type: 'delegation', id: delegationDigest }
-            : undefined,
-          audience: opts.audience,
-          chainId: opts.chainId,
-          digest: delegationDigest,
-          reason,
-          context: opts.toolName ? { tool: opts.toolName } : undefined,
-        }),
-      );
-    } catch {
-      /* fail-soft */
-    }
+    // R11.1 / N16: NO try/catch — sink composition determines fail-hard
+    // vs fail-soft. See `mintDelegationToken` doc-comment for rationale.
+    await opts.auditSink.write(
+      buildEvent({
+        action:
+          outcome === 'success'
+            ? 'delegation.verify.accept'
+            : 'delegation.verify.reject',
+        outcome,
+        correlationId: opts.correlationId,
+        actor: principal ? { type: 'user', id: principal } : { type: 'unknown' },
+        subject: delegationDigest
+          ? { type: 'delegation', id: delegationDigest }
+          : undefined,
+        audience: opts.audience,
+        chainId: opts.chainId,
+        digest: delegationDigest,
+        reason,
+        context: opts.toolName ? { tool: opts.toolName } : undefined,
+      }),
+    );
   };
   const rejectWith = async (
     reason: string,
@@ -645,29 +644,27 @@ export async function verifyDelegationToken(
   // Accept emit — extended context to capture the threshold-policy
   // outcome (`acceptedOnChain`) for forensics + dashboards. Reuses the
   // same `emit` shape as the reject path but with extra context fields.
+  // R11.1 / N16: NO try/catch — sink composition determines fail-hard
+  // vs fail-soft.
   if (opts.auditSink) {
-    try {
-      const context: Record<string, string | number | boolean | null> = {};
-      if (opts.toolName) context.tool = opts.toolName;
-      if (opts.requireAcceptedOnChain !== undefined) {
-        context.acceptedOnChain = acceptedOnChain;
-      }
-      await opts.auditSink.write(
-        buildEvent({
-          action: 'delegation.verify.accept',
-          outcome: 'success',
-          correlationId: opts.correlationId,
-          actor: { type: 'user', id: claims.delegation.delegator },
-          subject: { type: 'delegation', id: eip712Hash },
-          audience: opts.audience,
-          chainId: opts.chainId,
-          digest: eip712Hash,
-          context: Object.keys(context).length > 0 ? context : undefined,
-        }),
-      );
-    } catch {
-      /* fail-soft */
+    const context: Record<string, string | number | boolean | null> = {};
+    if (opts.toolName) context.tool = opts.toolName;
+    if (opts.requireAcceptedOnChain !== undefined) {
+      context.acceptedOnChain = acceptedOnChain;
     }
+    await opts.auditSink.write(
+      buildEvent({
+        action: 'delegation.verify.accept',
+        outcome: 'success',
+        correlationId: opts.correlationId,
+        actor: { type: 'user', id: claims.delegation.delegator },
+        subject: { type: 'delegation', id: eip712Hash },
+        audience: opts.audience,
+        chainId: opts.chainId,
+        digest: eip712Hash,
+        context: Object.keys(context).length > 0 ? context : undefined,
+      }),
+    );
   }
 
   return { principal: claims.delegation.delegator };

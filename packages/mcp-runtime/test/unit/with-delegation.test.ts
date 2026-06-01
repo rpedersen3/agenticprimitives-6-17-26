@@ -192,6 +192,73 @@ describe('withDelegation', () => {
     // verify should not even have been called.
     expect(verifyDelegationToken).not.toHaveBeenCalled();
   });
+
+  // ─── R11.1 — fail-hard audit sink propagation ────────────────────
+
+  it('R11.1: a throwing audit sink (fail-hard) PROPAGATES the throw on accept', async () => {
+    // Caller composed `composeFailHardSinks(...)`; one sink fails;
+    // the wrapper must NOT swallow the failure. The tool call MUST
+    // NOT proceed without a recorded audit row.
+    (verifyDelegationToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      principal: '0xabc',
+    });
+    const failingSink = {
+      write: vi.fn(async () => {
+        throw new Error('[audit:fail-hard] D1 write failed');
+      }),
+    };
+    const innerCalls: unknown[] = [];
+    const wrapped = withDelegation(
+      config,
+      async (_p, _i) => {
+        innerCalls.push('inner-called');
+        return { ok: true };
+      },
+      {
+        classification: {
+          '@sa-tool': 'delegation-verified',
+          '@sa-auth': 'session-token',
+          '@sa-risk-tier': 'low',
+        },
+        auditSink: failingSink,
+      },
+    );
+    await expect(wrapped({ token: 'fake' })).rejects.toThrow(/fail-hard/);
+    // The inner handler MIGHT have run (depends on emit ordering). The
+    // load-bearing claim is that the throw propagates rather than being
+    // silently swallowed.
+    expect(failingSink.write).toHaveBeenCalled();
+  });
+
+  it('R11.1: a throwing audit sink PROPAGATES the throw on reject too', async () => {
+    // Sink failure on the reject path must also surface so the caller
+    // observes the audit-durability failure instead of seeing an opaque
+    // `auth-failed` with no audit row.
+    (verifyDelegationToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      error: 'expired',
+    });
+    const failingSink = {
+      write: vi.fn(async () => {
+        throw new Error('[audit:fail-hard] D1 write failed');
+      }),
+    };
+    const wrapped = withDelegation(
+      config,
+      async (_p, _i) => ({ ok: true }),
+      {
+        classification: {
+          '@sa-tool': 'delegation-verified',
+          '@sa-auth': 'session-token',
+          '@sa-risk-tier': 'low',
+        },
+        auditSink: failingSink,
+      },
+    );
+    // The wrapper would normally throw `McpAuthError('auth-failed')`
+    // on the reject path; the sink failure preempts that — caller
+    // observes the audit failure instead.
+    await expect(wrapped({ token: 'fake' })).rejects.toThrow(/fail-hard/);
+  });
 });
 
 // ─── Wave H1 — production-default gate ─────────────────────────────────

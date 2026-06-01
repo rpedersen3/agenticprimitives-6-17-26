@@ -266,29 +266,46 @@ export function withDelegation<A extends Record<string, unknown>>(
         try { metric.observe('mcp_runtime.with_delegation.duration_ms', Date.now() - startedAt, tags); } catch { /* fail-soft */ }
       }
       if (!opts?.auditSink) return;
-      try {
-        await opts.auditSink.write(
-          buildEvent({
-            action:
-              outcome === 'success'
-                ? 'mcp-runtime.with-delegation.accept'
-                : 'mcp-runtime.with-delegation.reject',
-            outcome,
-            correlationId,
-            actor: principal ? { type: 'user', id: principal } : { type: 'unknown' },
-            subject: { type: 'tool', id: toolName },
-            audience: config.audience,
-            chainId: config.chainId,
-            reason,
-            // Traceparent (W3C) stamped into context for downstream
-            // trace correlation. Reject events still carry the trace.
-            context: opts?.traceparent ? { traceparent: opts.traceparent } : undefined,
-          }),
-        );
-      } catch {
-        // Fail-soft: audit emission must never break the auth flow.
-        // composeSinks should be doing this for us, but belt-and-braces.
-      }
+      // R11.1 / N16 closure: NO try/catch around the sink write.
+      //
+      // Previous behavior swallowed sink errors to "never break the auth
+      // flow." That was a fail-soft hole: a production caller that
+      // composed `composeFailHardSinks(...)` to enforce durable audit
+      // for security-critical events would have its fail-hard semantic
+      // OVERRIDDEN by the wrapper.
+      //
+      // The contract is now:
+      //   - `composeSinks(...)` (fail-soft per-sink) is permissive by
+      //     design; its `write` won't throw even if a downstream sink
+      //     fails.
+      //   - `composeFailHardSinks(...)` (fail-hard per-sink) throws if
+      //     any sink fails — production callers use this for events
+      //     whose absence from durable storage would be a security
+      //     regression. The throw propagates through `emit` and aborts
+      //     the surrounding auth flow with a runtime error; the tool
+      //     call does NOT proceed without a recorded audit row.
+      //
+      // The sink composition expresses the caller's intent; the wrapper
+      // honors it. See `@agenticprimitives/audit` exports for the two
+      // composer choices.
+      await opts.auditSink.write(
+        buildEvent({
+          action:
+            outcome === 'success'
+              ? 'mcp-runtime.with-delegation.accept'
+              : 'mcp-runtime.with-delegation.reject',
+          outcome,
+          correlationId,
+          actor: principal ? { type: 'user', id: principal } : { type: 'unknown' },
+          subject: { type: 'tool', id: toolName },
+          audience: config.audience,
+          chainId: config.chainId,
+          reason,
+          // Traceparent (W3C) stamped into context for downstream
+          // trace correlation. Reject events still carry the trace.
+          context: opts?.traceparent ? { traceparent: opts.traceparent } : undefined,
+        }),
+      );
     };
 
     if (typeof token !== 'string' || token.length === 0) {
@@ -514,26 +531,28 @@ export async function verifyDelegationForResource(
       try { metric.observe('mcp_runtime.verify_resource.duration_ms', Date.now() - startedAt, tags); } catch { /* fail-soft */ }
     }
     if (!opts?.auditSink) return;
-    try {
-      await opts.auditSink.write(
-        buildEvent({
-          action:
-            outcome === 'success'
-              ? 'mcp-runtime.verify-resource.accept'
-              : 'mcp-runtime.verify-resource.reject',
-          outcome,
-          correlationId,
-          actor: principal ? { type: 'user', id: principal } : { type: 'unknown' },
-          subject: { type: 'tool', id: toolName },
-          audience: config.audience,
-          chainId: config.chainId,
-          reason,
-          context: opts?.traceparent ? { traceparent: opts.traceparent } : undefined,
-        }),
-      );
-    } catch {
-      // Fail-soft: audit emission must never break the auth flow.
-    }
+    // R11.1 / N16 closure (parallel to withDelegation:emit). NO try/catch
+    // around the sink write. The sink composition expresses the caller's
+    // intent: `composeSinks` (fail-soft) absorbs per-sink errors;
+    // `composeFailHardSinks` (fail-hard) throws on any sink failure.
+    // The wrapper honors that intent — see `with-delegation.ts:emit`
+    // doc-comment for the full rationale.
+    await opts.auditSink.write(
+      buildEvent({
+        action:
+          outcome === 'success'
+            ? 'mcp-runtime.verify-resource.accept'
+            : 'mcp-runtime.verify-resource.reject',
+        outcome,
+        correlationId,
+        actor: principal ? { type: 'user', id: principal } : { type: 'unknown' },
+        subject: { type: 'tool', id: toolName },
+        audience: config.audience,
+        chainId: config.chainId,
+        reason,
+        context: opts?.traceparent ? { traceparent: opts.traceparent } : undefined,
+      }),
+    );
   };
 
   // Threshold-policy decision → derive verifier gates (mirrors withDelegation).

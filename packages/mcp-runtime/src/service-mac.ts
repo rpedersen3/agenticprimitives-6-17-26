@@ -160,23 +160,25 @@ export async function generateServiceMac(args: {
   };
 
   if (args.auditSink) {
-    try {
-      await args.auditSink.write({
-        id: cryptoRandomBytesHex(8),
-        timestamp: new Date().toISOString(),
-        action: 'mcp-runtime.service-mac.issue',
-        outcome: 'success',
-        correlationId: args.correlationId,
-        actor: { type: 'service', id: args.ctx.service },
-        audience: args.ctx.audience,
-        subject: { type: 'service-mac', id: keyId ?? 'unknown' },
-        context: {
-          route: args.ctx.route,
-        },
-      });
-    } catch {
-      /* H7-F.3: fail-soft. Issuance must not break on audit failure. */
-    }
+    // R11.1 / N16: NO try/catch — sink composition determines fail-hard
+    // vs fail-soft. A caller passing `composeFailHardSinks(...)` for
+    // outbound service-mac issuance audit is making a deliberate
+    // production-grade choice: if the audit can't be recorded, the
+    // outbound MAC envelope is NOT issued (the caller observes the
+    // failure and can retry or surface the error).
+    await args.auditSink.write({
+      id: cryptoRandomBytesHex(8),
+      timestamp: new Date().toISOString(),
+      action: 'mcp-runtime.service-mac.issue',
+      outcome: 'success',
+      correlationId: args.correlationId,
+      actor: { type: 'service', id: args.ctx.service },
+      audience: args.ctx.audience,
+      subject: { type: 'service-mac', id: keyId ?? 'unknown' },
+      context: {
+        route: args.ctx.route,
+      },
+    });
   }
   return headers;
 }
@@ -224,28 +226,28 @@ export async function verifyServiceMac(args: {
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
   const emitReject = async (reason: string) => {
     if (!args.auditSink) return;
-    try {
-      await args.auditSink.write(
-        buildEvent({
-          action: 'mcp-runtime.service-mac.reject',
-          outcome: 'denied',
-          correlationId: args.correlationId,
-          actor: { type: 'service', id: args.ctx.service },
-          subject: { type: 'tool', id: args.ctx.route },
-          audience: args.ctx.audience,
-          reason,
-          context: {
-            keyId: args.headers.keyId,
-            // Hash of the nonce so the raw value (which is one-shot
-            // and tied to a specific request) isn't surfaced in logs
-            // beyond what's already required for the rejection trail.
-            nonceHash: nonceHashShort(args.headers.nonce),
-          },
-        }),
-      );
-    } catch {
-      /* fail-soft */
-    }
+    // R11.1 / N16: NO try/catch — sink composition determines fail-hard
+    // vs fail-soft. For inbound MAC reject, a fail-hard sink failure
+    // propagates to the caller — the verify result is dominated by the
+    // audit-durability failure rather than returning a quiet `ok: false`.
+    await args.auditSink.write(
+      buildEvent({
+        action: 'mcp-runtime.service-mac.reject',
+        outcome: 'denied',
+        correlationId: args.correlationId,
+        actor: { type: 'service', id: args.ctx.service },
+        subject: { type: 'tool', id: args.ctx.route },
+        audience: args.ctx.audience,
+        reason,
+        context: {
+          keyId: args.headers.keyId,
+          // Hash of the nonce so the raw value (which is one-shot
+          // and tied to a specific request) isn't surfaced in logs
+          // beyond what's already required for the rejection trail.
+          nonceHash: nonceHashShort(args.headers.nonce),
+        },
+      }),
+    );
   };
   const reject = async (reason: string): Promise<{ ok: false; reason: string }> => {
     await emitReject(reason);
@@ -298,24 +300,25 @@ export async function verifyServiceMac(args: {
   void ts; // ts is bounded by clock-skew gate above; no further use here.
 
   if (args.auditSink) {
-    try {
-      await args.auditSink.write(
-        buildEvent({
-          action: 'mcp-runtime.service-mac.accept',
-          outcome: 'success',
-          correlationId: args.correlationId,
-          actor: { type: 'service', id: args.ctx.service },
-          subject: { type: 'tool', id: args.ctx.route },
-          audience: args.ctx.audience,
-          context: {
-            keyId: args.headers.keyId,
-            nonceHash: nonceHashShort(args.headers.nonce),
-          },
-        }),
-      );
-    } catch {
-      /* fail-soft */
-    }
+    // R11.1 / N16: NO try/catch — sink composition determines fail-hard
+    // vs fail-soft. Service-mac.accept is the "this cross-service call
+    // was authorized" audit row; production callers using fail-hard
+    // sinks treat its absence from durable storage as a security
+    // regression and want the auth flow aborted.
+    await args.auditSink.write(
+      buildEvent({
+        action: 'mcp-runtime.service-mac.accept',
+        outcome: 'success',
+        correlationId: args.correlationId,
+        actor: { type: 'service', id: args.ctx.service },
+        subject: { type: 'tool', id: args.ctx.route },
+        audience: args.ctx.audience,
+        context: {
+          keyId: args.headers.keyId,
+          nonceHash: nonceHashShort(args.headers.nonce),
+        },
+      }),
+    );
   }
 
   return { ok: true };

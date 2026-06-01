@@ -139,10 +139,18 @@ describe('mintDelegationToken', () => {
     expect(evt.audience).toBe('urn:mcp:server:person');
   });
 
-  it('fail-soft: audit sink throws do not propagate', async () => {
+  // R11.1 / N16: contract REVERSED. Previously asserted fail-soft (the
+  // wrapper swallowed sink errors). That OVERRODE the caller's
+  // sink-composition intent — a production caller passing
+  // `composeFailHardSinks(...)` to enforce durable audit for
+  // security-critical events had their fail-hard contract silently
+  // bypassed. New contract: the sink composition expresses the caller's
+  // intent; the mint flow honors it. Callers who want fail-soft compose
+  // with `composeSinks(...)` (which absorbs per-sink errors by design).
+  it('R11.1: a throwing audit sink PROPAGATES — no silent swallow', async () => {
     const throwingSink = {
       async write() {
-        throw new Error('sink down');
+        throw new Error('[audit:fail-hard] sink down');
       },
     };
     await expect(
@@ -157,6 +165,6 @@ describe('mintDelegationToken', () => {
         eip191Sign,
         { auditSink: throwingSink },
       ),
-    ).resolves.toBeDefined();
+    ).rejects.toThrow(/fail-hard|sink down/);
   });
 });

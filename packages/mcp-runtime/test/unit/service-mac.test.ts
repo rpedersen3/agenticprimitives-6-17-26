@@ -129,18 +129,23 @@ describe('generateServiceMac', () => {
     expect(e.subject?.id).toBeTruthy();
   });
 
-  it('H7-F.3 — issuance is fail-soft on audit sink throw', async () => {
+  it('R11.1: issuance audit sink failure PROPAGATES (was H7-F.3 fail-soft; contract reversed)', async () => {
     const provider = createTestMacProvider(MASTER);
     const throwingSink: import('@agenticprimitives/audit').AuditSink = {
-      async write() { throw new Error('sink down'); },
+      async write() { throw new Error('[audit:fail-hard] sink down'); },
     };
-    // Must NOT throw — audit failures cannot break the MAC issuance.
-    const headers = await generateServiceMac({
-      ctx: ctx(),
-      provider,
-      auditSink: throwingSink,
-    });
-    expect(headers.mac).toBeTruthy();
+    // Contract REVERSED: the caller's sink composition expresses intent.
+    // A production caller using `composeFailHardSinks(...)` for outbound
+    // service-mac issuance audit is making a deliberate choice — if the
+    // audit can't be recorded, the MAC envelope is NOT issued. Callers
+    // wanting fail-soft compose with `composeSinks(...)`.
+    await expect(
+      generateServiceMac({
+        ctx: ctx(),
+        provider,
+        auditSink: throwingSink,
+      }),
+    ).rejects.toThrow(/sink down|fail-hard/);
   });
 });
 
@@ -195,23 +200,28 @@ describe('verifyServiceMac', () => {
     expect(JSON.stringify(evt)).not.toContain(headers.nonce);
   });
 
-  it('accept emit is fail-soft: sink throws do not propagate', async () => {
+  it('R11.1: accept emit sink failure PROPAGATES (contract reversed)', async () => {
+    // The service-mac.accept audit is the "this cross-service call was
+    // authorized" row. Production callers using `composeFailHardSinks`
+    // treat its absence as a security regression and want the auth flow
+    // aborted. Wrapper no longer swallows sink errors.
     const { provider, headers } = await freshHeaders();
     const jtiStore = createMemoryJtiStore();
     const throwingSink = {
       async write() {
-        throw new Error('sink down');
+        throw new Error('[audit:fail-hard] sink down');
       },
     };
-    const result = await verifyServiceMac({
-      ctx: ctx(),
-      headers,
-      provider,
-      jtiStore,
-      now: () => NOW,
-      auditSink: throwingSink,
-    });
-    expect(result.ok).toBe(true);
+    await expect(
+      verifyServiceMac({
+        ctx: ctx(),
+        headers,
+        provider,
+        jtiStore,
+        now: () => NOW,
+        auditSink: throwingSink,
+      }),
+    ).rejects.toThrow(/sink down|fail-hard/);
   });
 
   it('rejects a tampered MAC', async () => {
