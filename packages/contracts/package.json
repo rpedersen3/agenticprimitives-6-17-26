@@ -15,7 +15,15 @@
   "exports": {
     "./abi": "./dist/abi/index.js",
     "./abi/*": "./dist/abi/*.json",
-    "./deployments/*": "./deployments-*.json"
+    "./deployments": {
+      "types": "./dist/deployments/index.d.ts",
+      "default": "./dist/deployments/index.js"
+    },
+    "./deployments/*": {
+      "types": "./dist/deployments/*.d.ts",
+      "default": "./dist/deployments/*.js"
+    },
+    "./deployments-json/*": "./deployments-*.json"
   },
   "files": [
     "LICENSE",
@@ -25,13 +33,15 @@
     "spec.md",
     "src",
     "dist/abi",
+    "dist/deployments",
     "dist/flat",
     "deployments-*.json"
   ],
   "scripts": {
     "setup": "bash setup.sh",
-    "build": "forge build && pnpm run build:abi",
+    "build": "forge build && pnpm run build:abi && pnpm run build:deployments",
     "build:abi": "node scripts/build-abi.mjs",
+    "build:deployments": "node scripts/build-deployments.mjs",
     "build:flat": "node scripts/build-flat.mjs",
     "test": "forge test",
     "typecheck": "echo 'no TS in this package; ABIs are JSON' && exit 0",

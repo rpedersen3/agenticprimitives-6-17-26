@@ -3,6 +3,11 @@ out/
 cache/
 broadcast/
 .env
-deployments-*.json
+# R7.3 — deployments-base-sepolia.json IS committed (public on-chain
+# addresses; downstream consumers depend on it via
+# `@agenticprimitives/contracts/deployments/base-sepolia`). The local
+# anvil JSON is still ignored — its addresses are developer-machine-
+# specific (depend on devnet block/timestamp at deploy).
+deployments-anvil.json
 lcov.info
 coverage-r6-9.json
