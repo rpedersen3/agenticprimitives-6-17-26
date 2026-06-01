@@ -217,13 +217,19 @@ describe('verifyServiceMac', () => {
   it('rejects a tampered MAC', async () => {
     const { provider, headers } = await freshHeaders();
     const jtiStore = createMemoryJtiStore();
-    // Flip the last hex char to something GUARANTEED to differ from the
-    // original — the previous `endsWith('A') ? 'B' : 'A'` form was a flake
-    // when the MAC randomly ended in 'B' (~6% of runs: replacement equaled
-    // the original → same MAC → tamper test passed verification).
-    const lastChar = headers.mac.slice(-1);
-    const replacement = lastChar === '0' ? '1' : '0';
-    const tampered = { ...headers, mac: headers.mac.slice(0, -1) + replacement };
+    // Flip the FIRST char to something guaranteed to decode differently.
+    //
+    // `headers.mac` is a base64url-encoded 32-byte HMAC (43 chars, no
+    // padding). Earlier attempts to tamper by replacing the LAST char
+    // were no-ops on average ~50% of the time: the trailing char only
+    // encodes 4 significant bits of the 256-bit digest, so e.g. '0'
+    // (52, bits 110100) and '1' (53, bits 110101) yield the same
+    // decoded bytes once the 2 trailing bits are masked. Replacing the
+    // FIRST char always crosses a full byte boundary → decoded bytes
+    // are guaranteed to differ.
+    const firstChar = headers.mac.charAt(0);
+    const replacement = firstChar === 'A' ? 'B' : 'A';
+    const tampered = { ...headers, mac: replacement + headers.mac.slice(1) };
     const result = await verifyServiceMac({
       ctx: ctx(),
       headers: tampered,
