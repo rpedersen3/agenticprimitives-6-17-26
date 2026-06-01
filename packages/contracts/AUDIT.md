@@ -1,13 +1,16 @@
 # `@agenticprimitives/contracts` — Security & Architecture Audit
 
 **Status:** alpha (Base Sepolia testnet, deployed end-to-end)
-**Last refreshed:** 2026-06-01 (R6 contracts hardening wave landed)
+**Last refreshed:** 2026-06-01 (R9 wave landed — Foundry invariant suites + Halmos symbolic proofs + Echidna nightly + Medusa weekend; H-6 `MAX_INITIAL_CUSTODIANS = 32` cap closed; supply-chain CVE allowlist; AEL spec 237 + Package Design v2 spec 238)
+**Prior refresh:** 2026-06-01 (R6 contracts hardening wave landed)
 **Owners:** contracts package CODEOWNERS
 **System audit cross-reference:** [`docs/architecture/product-readiness-audit.md`](../../docs/architecture/product-readiness-audit.md)
 **Prior dossier:** [`docs/audits/2026-05-packages-contracts-production-readiness.md`](../../docs/audits/2026-05-packages-contracts-production-readiness.md) (per-contract findings table)
 **Recon doc:** [`docs/audits/r6-contracts-recon-2026-05-31.md`](../../docs/audits/r6-contracts-recon-2026-05-31.md) (R6 wave triage)
 
-> **Reader's note for external auditors.** This dossier is the AUDIT-ready summary of the security posture of every contract under `src/`. It pairs with `specs/214-production-audit-dossier.md` (the target shape we're auditing toward) and the [`docs/audits/`](../../docs/audits) folder (threat model, architecture diagram, evidence checklist). For finding-level detail use the cross-references at the bottom of each section. All R6 hardening (the 2026-06-01 wave) is included; earlier waves (H1–H4) are likewise reflected.
+> **Reader's note for external auditors.** This dossier is the AUDIT-ready summary of the security posture of every contract under `src/`. It pairs with `specs/214-production-audit-dossier.md` (the target shape we're auditing toward), the [`docs/audits/`](../../docs/audits) folder (threat model, architecture diagram, evidence checklist), and the **R10 internal readiness assessment** at [`docs/audits/2026-06-01-r10-internal-readiness-assessment.md`](../../docs/audits/2026-06-01-r10-internal-readiness-assessment.md) (active P0/P1/P2/P3 backlog). For finding-level detail use the cross-references at the bottom of each section.
+>
+> **Coverage stack as of R9 (2026-06-01):** 680 Foundry tests across 37 .sol files + 7 Halmos symbolic proofs + 4 Echidna nightly properties + 4 Medusa weekend properties. R6 (2026-06-01), H1-H4 (2026-05-23), and earlier waves are all reflected. Static analysis (Slither + Aderyn + CodeQL) + Solhint security lint are PR-blocking; pnpm-audit + gitleaks + SBOM in the security workflow.
 
 ## 1. Charter
 
@@ -194,9 +197,39 @@ All 11 security-critical contracts ≥ 75% lines (the audit-floor). Branches: 10
 
 **Storage layouts:** `pnpm check:storage-layouts` snapshot-locks AgentAccount + CustodyPolicy + DelegationManager + SmartAgentPaymaster slot layouts (R1.3 / C6). Any drift fails CI explicitly.
 
-**Symbolic verification:** Not yet present — `R6.11 Halmos` planned for the top-3 invariants (CustodyPolicy quorum binding, QuorumEnforcer payload-hash, AgentAccount onlySelf).
+**Symbolic verification (R9.3 + R9.3.x):** Halmos symbolic-execution proofs LIVE in `test/halmos/`. PR-blocking via the `halmos` job in `.github/workflows/security.yml`. Current proof set (7 proofs, terminate in 0.13s):
 
-**Fuzz suites:** Not yet present — planned alongside the external-audit engagement.
+| Proof | Target | File |
+|---|---|---|
+| R8.2 UV-required gate | `WebAuthnLib.verify(..., requireUv = true)` rejects when UV bit unset, for ALL inputs | `WebAuthnLibUvR82.halmos.t.sol::check_R82_uvNotSet_with_requireUvTrue_alwaysRejects` |
+| H7-C.1 UP-required gate | `WebAuthnLib.verify` rejects when UP bit unset, regardless of `requireUv` | `WebAuthnLibUvR82.halmos.t.sol::check_H7C1_upNotSet_alwaysRejects_regardlessOfRequireUv` |
+| `setDelegationManager` onlySelf | External caller cannot rotate the delegation root of trust | `AgentAccountOnlySelf.halmos.t.sol::check_onlySelf_setDelegationManager_revertsForExternalCaller` |
+| `removeCustodian` onlySelf | External caller cannot kick custodians | same file |
+| `setUpgradeTimelock` onlySelf | External caller cannot disable the upgrade timelock | same file |
+| `upgradeToAndCall` onlySelf (UUPS hook) | **Catastrophic if bypassable — Halmos proves it isn't.** External caller cannot swap the implementation | same file |
+| `removePasskey` onlySelf | External caller cannot un-register a credential | same file |
+
+Each proof: caller address symbolic, all args symbolic, only constraint is `caller != address(acct)`. Halmos explores every other input dimension.
+
+**Foundry stateful invariants (R9.1 + R9.2):** in `test/invariant/`. 15 invariants × 25,600 calls each per CI run, PR-blocking.
+
+| Suite | Invariants |
+|---|---|
+| `CustodyPolicy.invariant.t.sol` | thresholds nonzero • recoveryApprovals ≤ trusteeCount • mode ∈ {0..3} • changeCount monotonic • uninstalled views zero |
+| `DelegationManager.invariant.t.sol` | revocation irreversible • hash deterministic • domain separator immutable • root/open constants unchanged • revoked-set monotonic |
+| `SmartAgentPaymaster.invariant.t.sol` | devMode locked • governance immutable • verifyingSigner locked • arbitrary-sender not accepted • governance gate holds for fresh caller |
+
+**Echidna nightly fuzz (R9.4):** `test/echidna/CustodyPolicyEchidna.t.sol` — 4 properties × 50,000 sequences × 4 parallel workers, runs nightly at 02:17 UTC via `.github/workflows/contracts-echidna-nightly.yml`. Artifact-only (`continue-on-error: true`); corpus uploaded as a 30-day-retained artifact. Smoke run: 1.3M calls / 4524 unique instructions / all 4 properties PASS in 26 seconds.
+
+**Medusa weekend fuzz (R9.5):** `test/medusa/CustodyPolicyMedusa.t.sol` — 4 properties × 4-hour budget × 4 parallel workers, runs Saturday 03:17 UTC via `.github/workflows/contracts-medusa-weekend.yml`. Different EVM engine (go-ethereum vs Echidna's HEVM) — independent coverage graphs. Artifact-only; 60-day corpus retention.
+
+**Stack mix rationale.** Each tool has a different blind spot:
+- Foundry invariants — stateful random + seeded shrinking; PR-blocking; catches per-PR regressions.
+- Halmos — symbolic execution; covers ALL paths but bounded; PR-blocking on narrow proofs.
+- Echidna — stateful ABI-aware random + coverage-guided; nightly; catches multi-step sequence bugs Foundry's seed strategy doesn't explore.
+- Medusa — different EVM + different coverage-guidance strategy; weekly; deep-corpus regression coverage.
+
+A regression that slips one tool's coverage graph can still be caught by another.
 
 ## 6. Public API surface (audit scope)
 
@@ -213,11 +246,19 @@ See [`docs/audits/2026-05-packages-contracts-production-readiness.md`](../../doc
 | Finding | Severity | Notes |
 |---|---|---|
 | N1 (system audit) | P0 | Leaked deployer key — testnet-only acceptance; production runbook in § 4.1 above |
+| External Solidity audit | High (gate-level) | Cyfrin / CodeHawks contest planned; refer to R10 readiness doc P1.10 |
 | CON-WEBAUTHN-AUTHDATA-len | Medium | Authenticator-data length check (open across H7) |
-| EIP-712 cross-stack typehash test | Medium | H7-D.9 still open — TS-side test file not wired |
-| Halmos / formal verification | Medium | R6.11 planned target — top-3 invariants |
-| External Solidity audit | High (gate-level) | Cyfrin / CodeHawks contest planned |
+| EIP-712 cross-stack typehash CI gate | Medium | Test file LIVE (`packages/delegation/test/integration/cross-stack-typehashes.test.ts`) — 6 tests pass; CI gate to mark it pre-publish-required is the open item (R10 P0.3) |
+| Kontrol / Certora formal verification | Medium | Halmos covers narrow proofs; Kontrol/Certora are R10 P2.2/P2.3 deferred to post-audit |
 | Encrypted-edge AgentRelationship | Low | EXT-019; product decision pending |
+
+**Closed since prior refresh (R9 wave, 2026-06-01):**
+
+- Halmos symbolic verification — landed in R9.3 + R9.3.x (7 proofs)
+- Foundry stateful invariants — landed in R9.1 + R9.2 (15 invariants)
+- Echidna nightly + Medusa weekend — landed in R9.4 + R9.5
+- Aderyn H-6 (`MAX_INITIAL_CUSTODIANS = 32`) — R9.6 cap with 6 regression tests
+- Slither M-1 (PermissionlessSubregistry cross-function reentrancy) — false positive triaged + `slither-disable-next-line` annotated; full triage in [`docs/audits/r9-static-analysis-triage.md`](../../docs/audits/r9-static-analysis-triage.md)
 
 **Closed in R6 (2026-06-01):**
 
@@ -239,9 +280,14 @@ See [`docs/audits/2026-05-packages-contracts-production-readiness.md`](../../doc
 - [x] System-wide pause wired on critical paths — R6.5 / R6.6 / R6.8
 - [x] Subregistry reentrancy guarded — R6.2
 - [x] Stateless-enforcer invariant test-locked — R6.7
-- [ ] Cross-stack typehash test green — H7-D.9 (open)
-- [ ] Halmos symbolic harness on top-3 invariants — R6.11 (planned)
-- [ ] Governance pattern: Safe + Timelock(24h); deployer EOA renounces — H7-C.9 / EXT3-009 (production-deploy item; runbook in § 4.1)
+- [x] Cross-stack typehash test green — H7-D.9 / R1 closure; lives at `packages/delegation/test/integration/cross-stack-typehashes.test.ts` (6 tests pass). Open item: CI script gate marking it as a required pre-publish check (R10 P0.3).
+- [x] Halmos symbolic harness on top-3 invariants — R9.3 + R9.3.x landed (7 proofs, PR-blocking).
+- [x] Echidna nightly stateful fuzzing — R9.4 (nightly schedule, artifact-only).
+- [x] Medusa weekend coverage-guided fuzzing — R9.5 (weekly schedule, artifact-only).
+- [x] H-6 / ATL-SEC-05 — initial custodians cap closed at construction — R9.6.
+- [ ] Governance pattern: Safe + Timelock(24h); deployer EOA renounces — H7-C.9 / EXT3-009 (production-deploy item; runbook in § 4.1; R10 P1.1)
+- [ ] On-chain governance-shape verifier script — R10 P1.2 (post-deploy gate that fails CI if `factory.governance() != multisig` etc.)
+- [ ] Kontrol / Certora formal verification on top-3 invariants — R10 P2.2 / P2.3 (post-audit)
 - [ ] One external Solidity audit firm engagement — Cyfrin / CodeHawks (planned)
 - [x] Per-network deployments JSON committed — R7.3 (`deployments-base-sepolia.json` in tree)
 - [x] Generated TS deployments module — R7.3 (`@agenticprimitives/contracts/deployments/<network>`)
