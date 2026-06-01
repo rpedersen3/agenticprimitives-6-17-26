@@ -34,6 +34,13 @@ pragma solidity ^0.8.28;
  *     Off-chain JSON published at `metadataURI` MUST hash to
  *     `metadataHash`; consumers reject mismatched fetches.
  */
+// R6.3 — Every `e.createdAt == 0` comparison in this contract is a
+//        sentinel "edge-never-created" check. Storage default IS exactly
+//        0 for unset records, so the equality is semantically a
+//        "does-not-exist" probe — not a numeric-precision concern.
+//        Disabling Slither's `incorrect-equality` at the contract scope
+//        keeps these inline reads idiomatic.
+// slither-disable-start incorrect-equality
 contract AgentRelationship {
     enum EdgeStatus {
         NONE,        // 0 — never set (sentinel)
@@ -287,3 +294,4 @@ contract AgentRelationship {
         }
     }
 }
+// slither-disable-end incorrect-equality

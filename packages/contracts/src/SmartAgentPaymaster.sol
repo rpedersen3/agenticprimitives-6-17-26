@@ -263,6 +263,8 @@ contract SmartAgentPaymaster is BasePaymaster {
             // EIP-191 wrap matches what KMS-backed `signMessage({raw})`
             // produces via the v0.7 reference paymaster convention.
             bytes32 ethHash = hash.toEthSignedMessageHash();
+            // R6.3: third return (sigVersion) intentionally discarded; the explicit `err` + `recovered != verifyingSigner` revert IS the auth.
+            // slither-disable-next-line unused-return
             (address recovered, ECDSA.RecoverError err, ) = ECDSA.tryRecover(ethHash, signature);
             if (err != ECDSA.RecoverError.NoError || recovered != verifyingSigner) {
                 // Returning sigFailed=true (per EntryPoint convention)

@@ -192,6 +192,55 @@ jobs:
         with:
           sarif_file: slither-results.sarif
 
+  # ─── Aderyn — Cyfrin's AI-first Solidity scanner (R6.3) ─────────
+  # Runs alongside Slither because Aderyn catches different patterns:
+  # ERC-20 wrong-return-checks, custom-error inconsistencies, storage
+  # gap drift, missing receive() for payable, etc. Both scanners agree
+  # on the absence of HIGH issues today; tomorrow they may disagree,
+  # which is exactly the value of running both.
+  #
+  # Aderyn is installed from the upstream release tarball (not a
+  # third-party action) so the supply-chain surface stays small.
+  # Non-blocking by design (`continue-on-error: true`) — Aderyn's
+  # detector pack is still evolving and a noisy report shouldn't
+  # block PRs while the triage policy stabilises. Once the false-
+  # positive rate is known we flip to `fail-on: high`.
+  aderyn:
+    name: Aderyn (Cyfrin AI SAST)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Build contract dependencies (forge-std + AA + OZ)
+        working-directory: packages/contracts
+        run: bash setup.sh
+
+      - name: Install Aderyn
+        run: |
+          curl -L https://github.com/Cyfrin/aderyn/releases/latest/download/aderyn-installer.sh | bash
+          echo "$HOME/.aderyn/bin" >> "$GITHUB_PATH"
+
+      - name: Run Aderyn against packages/contracts
+        working-directory: packages/contracts
+        run: aderyn --output ../../aderyn-report.md || true
+        continue-on-error: true
+
+      - name: Upload Aderyn report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aderyn-report
+          path: aderyn-report.md
+          if-no-files-found: warn
+
   # ─── Strict peer-dependency check (audit P1-7) ──────────────────
   # The repo's `.npmrc` keeps `auto-install-peers=true` +
   # `strict-peer-dependencies=false` so day-to-day local + CI

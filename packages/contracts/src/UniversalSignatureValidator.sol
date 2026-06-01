@@ -125,11 +125,14 @@ contract UniversalSignatureValidator {
     ) private pure returns (bool) {
         if (sig.length != 65) return false;
         // Try raw hash first.
+        // R6.3: third return (sigVersion) intentionally discarded; the `err` + `recovered == signer` is the auth.
+        // slither-disable-next-line unused-return
         (address recovered, ECDSA.RecoverError err, ) = ECDSA.tryRecover(hash, sig);
         if (err == ECDSA.RecoverError.NoError && recovered == signer) return true;
         // Then try the eth-signed prefix variant — many wallets sign this
         // form even when the caller passes a raw digest.
         bytes32 prefixed = hash.toEthSignedMessageHash();
+        // slither-disable-next-line unused-return
         (recovered, err, ) = ECDSA.tryRecover(prefixed, sig);
         return err == ECDSA.RecoverError.NoError && recovered == signer;
     }

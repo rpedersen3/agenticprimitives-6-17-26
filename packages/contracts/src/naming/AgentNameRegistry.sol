@@ -303,6 +303,9 @@ contract AgentNameRegistry is GovernanceManaged {
      *         universal resolver enforces the round-trip on reads.
      */
     function setPrimaryName(bytes32 node) external whenNotPaused {
+        // R6.3: `registeredAt == 0` is a sentinel "record-never-created" check.
+        // Storage default IS exactly 0; not a numeric precision concern.
+        // slither-disable-next-line incorrect-equality
         if (node != bytes32(0) && _records[node].registeredAt == 0) revert NodeNotFound();
         _primaryName[msg.sender] = node;
         if (node == bytes32(0)) emit PrimaryNameCleared(msg.sender);

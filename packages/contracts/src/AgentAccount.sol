@@ -1122,11 +1122,14 @@ contract AgentAccount is
 
     function _verifyEcdsa(bytes32 hash, bytes memory sig) internal view returns (bool) {
         // Try raw hash first — matches EntryPoint v0.8 (EIP-712 userOpHash signed directly).
+        // R6.3: third return (sigVersion) intentionally discarded; we rely on `err` + custodian-set membership.
+        // slither-disable-next-line unused-return
         (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(hash, sig);
         if (err == ECDSA.RecoverError.NoError && _externalCustodians[recovered]) return true;
         // Fall back to eth-signed-message wrap — matches v0.7 and legacy ERC-1271
         // callers that pre-prefix the digest.
         bytes32 ethSigned = hash.toEthSignedMessageHash();
+        // slither-disable-next-line unused-return
         (recovered, err,) = ECDSA.tryRecover(ethSigned, sig);
         return err == ECDSA.RecoverError.NoError && _externalCustodians[recovered];
     }
@@ -1140,9 +1143,12 @@ contract AgentAccount is
         bytes memory sig,
         address expected
     ) internal pure returns (bool) {
+        // R6.3: third return (sigVersion) intentionally discarded; the `err` discriminant + `recovered == expected` is the auth.
+        // slither-disable-next-line unused-return
         (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(hash, sig);
         if (err == ECDSA.RecoverError.NoError && recovered == expected) return true;
         bytes32 ethSigned = MessageHashUtils.toEthSignedMessageHash(hash);
+        // slither-disable-next-line unused-return
         (recovered, err,) = ECDSA.tryRecover(ethSigned, sig);
         return err == ECDSA.RecoverError.NoError && recovered == expected;
     }
