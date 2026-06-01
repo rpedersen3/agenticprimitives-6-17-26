@@ -252,6 +252,17 @@ export async function passkeyLogin(registerIfMissing = true): Promise<PasskeyOut
 // claim (register + set-primary) in the same op. Needs the SA address up front (the claim's
 // newOwner) — derived deterministically from the passkey + salt (a factory view, no signature).
 
+/** SHA-256 of `window.location.hostname` — must match the value sent in the
+ *  deploy POST body (and the server's Origin-derived default), so prediction
+ *  and deploy compute the same SA address. Closes the orphan-registry root
+ *  cause (live-debug 2026-06-01). */
+async function derivePasskeyRpIdHash(): Promise<Hex> {
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'impact-agent.me';
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(hostname));
+  const arr = Array.from(new Uint8Array(buf));
+  return ('0x' + arr.map((b) => b.toString(16).padStart(2, '0')).join('')) as Hex;
+}
+
 /** Deterministic passkey-direct SA address (mode 0, no custodians, the passkey, given salt). */
 async function derivePasskeySa(passkey: DemoPasskey, salt: bigint): Promise<Address> {
   const accounts = new AgentAccountClient({
@@ -260,9 +271,15 @@ async function derivePasskeySa(passkey: DemoPasskey, salt: bigint): Promise<Addr
     entryPoint: CONTRACTS.entryPoint,
     factory: CONTRACTS.agentAccountFactory,
   });
+  const rpIdHash = await derivePasskeyRpIdHash();
   return accounts.getAddressForAgentAccount({
     custodians: [],
-    passkey: { credentialIdDigest: passkey.credentialIdDigest, x: passkey.pubKeyX, y: passkey.pubKeyY },
+    passkey: {
+      credentialIdDigest: passkey.credentialIdDigest,
+      x: passkey.pubKeyX,
+      y: passkey.pubKeyY,
+      rpIdHash,
+    },
     salt,
   });
 }
@@ -296,6 +313,8 @@ export async function bootstrapWithPasskey(
 ): Promise<{ ok: true; agent: Address } | { ok: false; error: string }> {
   await ensureCsrfToken();
   onStep?.('Preparing your workspace…');
+  // rpIdHash MUST match `derivePasskeySa` (orphan-registry root cause 2026-06-01).
+  const rpIdHash = await derivePasskeyRpIdHash();
   const buildRes = await fetch('/a2a/session/deploy', {
     method: 'POST',
     credentials: 'include',
@@ -305,6 +324,7 @@ export async function bootstrapWithPasskey(
       credentialIdDigest: passkey.credentialIdDigest,
       pubKeyX: passkey.pubKeyX.toString(),
       pubKeyY: passkey.pubKeyY.toString(),
+      rpIdHash,
       ...(callData ? { callData } : {}),
     }),
   });
@@ -484,12 +504,15 @@ export async function createChildAgentForSite(
   if (!claim.ok) return { ok: false, error: claim.error };
 
   onStep?.('Deploying the agent + claiming its name…');
+  // rpIdHash MUST match derivePasskeySa (orphan-registry root cause 2026-06-01).
+  const rpIdHash = await derivePasskeyRpIdHash();
   const dep = await deployAgent(
     {
       initMethod: 'passkey',
       credentialIdDigest: pk.credentialIdDigest,
       pubKeyX: pk.pubKeyX.toString(),
       pubKeyY: pk.pubKeyY.toString(),
+      rpIdHash,
       salt: salt.toString(),
       callData: claim.callData, // deploy + claim atomically
     },
