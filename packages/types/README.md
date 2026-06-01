@@ -20,4 +20,4 @@ const account: Address = '0x...';
 
 ## Status
 
-Pre-alpha. Minimal by design. Adding a type here requires ≥2 consuming packages.
+Alpha track — testnet-only. Minimal by design (adding a type here requires ≥2 consuming packages). Do not deploy to production until the gates listed in the root [`README.md` Status section](../../README.md#status) are cleared.

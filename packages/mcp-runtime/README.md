@@ -40,4 +40,4 @@ The handler no longer touches auth. The wrapper performs: HMAC envelope check â†
 
 ## Status
 
-Pre-alpha. Spec stable.
+Alpha track â€” testnet-only. Spec + API stable; do not deploy to production until the gates listed in the root [`README.md` Status section](../../README.md#status) are cleared.

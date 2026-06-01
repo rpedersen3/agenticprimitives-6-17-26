@@ -1,10 +1,25 @@
 # Product Readiness Architecture Audit
 
 **Status:** living document — refreshed at the end of each hardening pass
-**Last refreshed:** 2026-05-23 (Wave H1-H4 — production-default packages, custody hardening, peer-strict release CI)
+**Last refreshed:** 2026-06-01 (R6 contracts hardening wave — 10 PRs landed: AgentAccount / CustodyPolicy / AgentNameRegistry pause coverage; PermissionlessSubregistry reentrancy guard; SmartAgentPaymaster + CustodyPolicy coverage push from 50.9% → 98.2% lines and 30% → 68% branches respectively; Slither + Aderyn dual SAST; per-contract coverage aggregator)
+**Prior refresh:** 2026-05-23 (Wave H1-H4 — production-default packages, custody hardening, peer-strict release CI)
 **Original draft:** 2026-05-19
-**Scope:** all `@agenticprimitives/*` packages (including `audit`, `custody`), demo apps (web, web-pro, web-recovery, a2a, mcp), contracts, deploy path, CI, architecture docs, live production deployment
-**Verdict:** credible pre-production architecture. Most package-boundary footguns are now structural rather than opt-in. Remaining launch blockers concentrate in operational readiness (durable A2A audit, off-chain quorum semantics, contract dossier for external audit), not in obvious broken checks.
+**Scope:** all `@agenticprimitives/*` packages (including `audit`, `custody`), demo apps (web, web-pro, web-recovery, a2a, mcp), contracts, deploy path, CI, architecture docs, live testnet deployment
+**Verdict:** credible alpha-track architecture; testnet-deployed end-to-end with 635 Foundry tests across 28 contracts. Most package-boundary footguns are structural rather than opt-in. Remaining launch blockers concentrate in OPERATIONAL readiness (clean production governance keys, third-party contracts audit, durable A2A audit sink) — NOT in architecture or implementation gaps. Production deferral is gating on external review + key rotation, not on code maturity.
+
+## Audit Reader's Guide (added 2026-06-01)
+
+External reviewers occasionally read this doc top-to-bottom and conflate items that were CLOSED in a hardening wave with items still open. Quick disambiguation:
+
+- **N1 — leaked deployer key (P0):** OPEN. Intentional for the public-reproducible testnet demo; production rotation runbook in `packages/contracts/AUDIT.md`.
+- **N8 — `tool-policy.evaluatePolicy` fail-open (P0):** **CLOSED 2026-05-23.** Shape-gate fail-closed at `packages/tool-policy/src/decision.ts:73-79`; closed-enum validation in `validateClassificationShape` (lines 47-67); Wave H1 inverted `withDelegation` to production-strict default. Negative-test matrix at `packages/tool-policy/test/decision.test.ts`. If an external reviewer cites N8 as open, they are reading a pre-2026-05-23 snapshot.
+- **N9 — `/session/package` persists on failed ERC-1271 (P1):** **CLOSED 2026-05-23.** Returns HTTP 400 `erc1271_failed` before persistence.
+- **N11 — A2A BigInt parsing (P1):** **CLOSED 2026-05-23.** Shared `apps/demo-a2a/src/validate.ts` module covers every deploy route.
+- **N12 — credentialed CORS reflection (P1):** **CLOSED 2026-05-23.** Exact-allowlist via `ALLOWED_ORIGINS` env; non-HTTPS rejected outside localhost.
+- **N10 — preflight not yet strict enough (P1):** GENUINELY OPEN. Operational readiness work, not a code gap.
+- **N13 — managed HMAC key rotation (P2):** GENUINELY OPEN.
+- **N14 — passkey UV preferred vs required (P2):** GENUINELY OPEN (policy decision pending).
+- **N15 — contracts audit dossier (P2):** PARTIALLY CLOSED 2026-05-23 (auditor packet at `docs/audits/{threat-model,architecture-diagram,evidence-checklist}.md`); `packages/contracts/AUDIT.md` + third-party engagement still open.
 
 This document is intentionally direct. It treats the repo as if it were preparing for a third-party security and technical architecture review.
 

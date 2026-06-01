@@ -28,4 +28,4 @@ const kmsAccount = await createKmsAccount(signer);
 
 ## Status
 
-Pre-alpha. Spec stable.
+Alpha track — testnet-only. Spec + API stable; do not deploy to production until the gates listed in the root [`README.md` Status section](../../README.md#status) are cleared.

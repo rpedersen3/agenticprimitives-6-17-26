@@ -80,7 +80,15 @@ Live deploy targets: Vercel (web) + Fly.io (a2a + mcp) + Base Sepolia (contracts
 
 ## Status
 
-Pre-alpha, but materially implemented. Specs and APIs are stable; the demo apps exercise the full chain (SIWE/passkey auth → smart-account deploy → custody policy + multi-sig → off-chain delegations + MCP tool calls) end-to-end on Base Sepolia. **Not production-ready** — see the in-repo audit ([`docs/architecture/product-readiness-audit.md`](./docs/architecture/product-readiness-audit.md)) for the open P0/P1 list. Appropriate for controlled internal demos and architecture review only.
+**Alpha track — testnet-only.** Specs and APIs are stable; package boundaries are enforced by CI; ~635 Foundry tests across 28 contracts; the H1–H4 + R6 hardening waves are complete. Demo apps exercise the full chain (SIWE/passkey auth → smart-account deploy → custody policy + multi-sig → off-chain delegations + MCP tool calls) end-to-end on Base Sepolia.
+
+**Do not deploy to production yet.** Production launches are deferred pending operational steps independent of the architecture:
+
+1. **External contracts audit** (Cyfrin / CodeHawks contest planned).
+2. **Clean production governance keys** — the current testnet deployer is intentionally public so the demo stack is reproducible; production deploys MUST rotate to a fresh KMS-backed key per the [`packages/contracts/AUDIT.md`](./packages/contracts/AUDIT.md) runbook.
+3. **Closure of the residual P1 items** tracked in [`docs/architecture/product-readiness-audit.md`](./docs/architecture/product-readiness-audit.md).
+
+Suitable today for controlled internal demos, architecture review, and integration prototyping. The R6 contracts hardening wave + the SmartAgentPaymaster verifying-paymaster path + the production-strict `withDelegation` default mean the codebase is "production-pattern-correct" — the gating items are key custody + audit dossier, not implementation gaps.
 
 ## Provenance
 

@@ -46,4 +46,4 @@ await sink.write(
 
 ## Status
 
-Pre-alpha. Schema versioned (`schemaVersion: 1`); bumps are major.
+Alpha track — testnet-only. Schema versioned (`schemaVersion: 1`); bumps are major. Do not deploy to production until the gates listed in the root [`README.md` Status section](../../README.md#status) are cleared.
