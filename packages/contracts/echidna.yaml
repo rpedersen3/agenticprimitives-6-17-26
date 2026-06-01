@@ -1,0 +1,36 @@
+# R9.4 -- Echidna config for nightly stateful property fuzzing.
+#
+# Echidna is an ABI-aware random-sequence fuzzer. It calls every public
+# function on the harness with random inputs, then asserts every
+# `echidna_*` property still holds. Stateful: each call's effect
+# persists for the next call in the sequence. Different from Foundry
+# invariants (which use a similar pattern but with Foundry's seed
+# strategy) and Halmos (symbolic; covers all paths but bounded).
+#
+# Use cases:
+#   - Catches multi-step sequence bugs unit tests miss.
+#   - Generates a CORPUS of interesting sequences -- valuable
+#     regression artifact independent of the property checks.
+#
+# Nightly profile: ~30 min budget per harness, 50000 calls, full
+# corpus dump. CI artifact-only (non-blocking) by R9.4 design;
+# graduates to PR-blocking once a green track record is established.
+
+testMode: property
+testLimit: 50000
+seqLen: 100
+shrinkLimit: 5000
+
+# Corpus is the audit-evidence asset. Sequences that exercise
+# previously-unhit branches get checked into corpus/ and replayed
+# next run for regression coverage.
+corpusDir: "echidna-corpus"
+
+# Solver / coverage settings.
+coverage: true
+codeSize: 0xffffffff  # the AgentAccount + factory + DM bundle is large
+
+# Format the output so the nightly workflow can parse it.
+# Echidna 2.2.7+ supports Cancun-emitted bytecode natively (MCOPY +
+# transient storage), so we don't need to pin --evm-version.
+format: text

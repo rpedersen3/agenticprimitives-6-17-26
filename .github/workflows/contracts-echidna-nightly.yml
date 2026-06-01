@@ -1,0 +1,79 @@
+name: Contracts Echidna (nightly)
+
+# R9.4 — Echidna ABI-aware stateful property fuzzing.
+#
+# Different sampling strategy than Foundry's invariant runner (which
+# also produces stateful sequences but with different seed semantics)
+# and Halmos (symbolic; covers all paths but bounded). Echidna's
+# long-running property fuzz catches multi-step sequence bugs that
+# Foundry / Halmos might miss.
+#
+# Schedule: nightly + manual dispatch. Per R9.4 design this workflow
+# is ARTIFACT-ONLY (continue-on-error: true) so the night's run
+# doesn't break the green bar — the artifact + summary make any
+# violation visible the next morning. Graduates to PR-blocking once
+# a green track record is established.
+
+on:
+  schedule:
+    # 02:17 UTC nightly — earlier than the Monday-only security workflow
+    # so a failed Echidna run is observable before the working day starts.
+    - cron: '17 2 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: contracts-echidna-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  echidna:
+    name: Echidna (CustodyPolicy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install crytic-compile (Echidna build driver)
+        run: |
+          python3 -m pip install --user pipx
+          python3 -m pipx ensurepath
+          pipx install crytic-compile
+          crytic-compile --version
+
+      - name: Install Echidna 2.2.7 (Cancun-complete HEVM)
+        run: |
+          curl -sL https://github.com/crytic/echidna/releases/download/v2.2.7/echidna-2.2.7-x86_64-linux.tar.gz \
+            | tar -xz -C /usr/local/bin
+          echidna --version
+
+      - name: Build contract dependencies (forge-std + AA + OZ)
+        working-directory: packages/contracts
+        run: bash setup.sh
+
+      - name: Run Echidna nightly (50,000 sequences, 4 workers)
+        working-directory: packages/contracts
+        run: echidna test/echidna/CustodyPolicyEchidna.t.sol --contract CustodyPolicyEchidna --config echidna.yaml
+
+      - name: Upload Echidna corpus + coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: echidna-custodypolicy-corpus
+          path: packages/contracts/echidna-corpus/
+          retention-days: 30
+          if-no-files-found: warn
