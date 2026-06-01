@@ -5,3 +5,4 @@ broadcast/
 .env
 deployments-*.json
 lcov.info
+coverage-r6-9.json

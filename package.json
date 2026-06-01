@@ -36,6 +36,8 @@
     "check:no-app-private-keys": "tsx scripts/check-no-app-private-keys.ts",
     "check:no-domain-in-packages": "tsx scripts/check-no-domain-in-packages.ts",
     "check:forge-coverage": "tsx scripts/check-forge-coverage.ts",
+    "coverage:contracts": "tsx scripts/coverage-contracts.ts",
+    "coverage:contracts:no-run": "tsx scripts/coverage-contracts.ts --no-run",
     "check:api-surface": "tsx scripts/check-api-surface.ts",
     "check:production-deploy": "tsx scripts/check-production-deploy.ts",
     "check:supply-chain": "tsx scripts/audit-supply-chain.ts",
