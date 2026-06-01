@@ -1172,11 +1172,23 @@ contract AgentAccount is
             PasskeyEntry storage key = $.keys[a.credentialIdDigest];
             if (key.x == 0 && key.y == 0) return false;
             // H7-C.1 / CON-WEBAUTHN-001: pin per-credential rpIdHash + require UP.
-            // UV is not required at the library layer; account policy can layer
-            // UV requirement in via a future policy module if needed.
+            // R8.2 / ATL-SEC-03: require UV (User Verification) at the library
+            // layer. Wave H1 made the JS-side ceremony pass
+            // `userVerification: 'required'` for custody-grade flows
+            // (demo-sso, demo-sso-next, demo-org, demo-web-recovery); the
+            // third-party audit (2026-05-31) correctly observed that the
+            // contract still passed `requireUv: false` here. That meant a
+            // permissive authenticator could produce a UP-only assertion
+            // and we'd accept it. R8.2 makes UV strictly required on every
+            // ERC-1271 verify. Browser ceremonies that pass
+            // `userVerification: 'preferred'` will be REJECTED at the
+            // signature step — those apps (demo-web, demo-web-pro) MUST
+            // upgrade to `'required'` for production deployments. Tests
+            // exercising lower-assurance flows can install a separate
+            // passkey-validator module that relaxes this check.
             bytes32 rpIdHash = $.rpIdHashOf[a.credentialIdDigest];
             if (rpIdHash == bytes32(0)) return false;
-            return WebAuthnLib.verify(a, hash, key.x, key.y, rpIdHash, false);
+            return WebAuthnLib.verify(a, hash, key.x, key.y, rpIdHash, /*requireUv*/ true);
         } catch {
             return false;
         }
