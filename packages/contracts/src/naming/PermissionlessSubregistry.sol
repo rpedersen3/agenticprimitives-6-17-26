@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "./AgentNameRegistry.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title PermissionlessSubregistry
@@ -36,7 +37,15 @@ import "./AgentNameRegistry.sol";
  *     through whatever authority `newOwner` represents (EOA wallet,
  *     PSA CustodyPolicy quorum, etc.).
  */
-contract PermissionlessSubregistry {
+/// @dev R6.2 — `ReentrancyGuard` closes the Slither finding
+///      `reentrancy-no-eth` on `register()`: the prior-claim check
+///      (`claimedBy[msg.sender] != 0`) was followed by an external
+///      call to `REGISTRY.register(...)` BEFORE the corresponding
+///      state write. A malicious resolver invoked by the registry
+///      could re-enter `register()` and pass the check a second time.
+///      The guard prevents any nested call into `register()`, closing
+///      the window. Recon doc § 4.1 / `docs/audits/r6-contracts-recon-2026-05-31.md`.
+contract PermissionlessSubregistry is ReentrancyGuard {
     AgentNameRegistry public immutable REGISTRY;
     bytes32 public immutable PARENT_NODE;
     address public immutable DEFAULT_RESOLVER;
@@ -77,7 +86,7 @@ contract PermissionlessSubregistry {
      *         fee — fee gating belongs in a different subregistry
      *         shape if needed.
      */
-    function register(string calldata label, address newOwner) external returns (bytes32 childNode) {
+    function register(string calldata label, address newOwner) external nonReentrant returns (bytes32 childNode) {
         if (bytes(label).length == 0) revert EmptyLabel();
         if (bytes(label).length < MIN_LABEL_LENGTH) revert LabelTooShort();
         if (newOwner == address(0)) revert ZeroNewOwner();
