@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import "../governance/GovernanceManaged.sol";
+
 /**
  * @title AgentNameRegistry
  * @notice Hierarchical multi-root name registry for Smart Agents.
@@ -36,7 +38,11 @@ pragma solidity ^0.8.28;
  * discipline (a primary name only counts when the forward record
  * agrees).
  */
-contract AgentNameRegistry {
+/// @dev R6.8 — inherits `GovernanceManaged` to gain the
+///      `whenNotPaused` modifier on its mutating surface. The registry
+///      still owns its own per-node auth (`_requireParentAuth` /
+///      `msg.sender == owner`); governance only owns the pause flag.
+contract AgentNameRegistry is GovernanceManaged {
     // ─── H7-C.4 / CON-NAMING-001 — root-initializer gate ───────────────
     //
     // `initializeRoot` was permissionless: any mempool observer could
@@ -129,10 +135,13 @@ contract AgentNameRegistry {
 
     // ─── Constructor (H7-C.4) ───────────────────────────────────────
 
-    /// @notice Set the immutable root-initializer. The deploy script
-    ///         deploys the registry + calls `initializeRoot` in the same
-    ///         transaction so the TLD can't be frontrun.
-    constructor(address initializer_) {
+    /// @notice Set the immutable root-initializer + governance pointer.
+    ///         The deploy script deploys the registry + calls
+    ///         `initializeRoot` in the same transaction so the TLD
+    ///         can't be frontrun. R6.8 added `governance_` so the
+    ///         registry can read the system pause flag through
+    ///         `GovernanceManaged._pausedSafe()`.
+    constructor(address initializer_, address governance_) GovernanceManaged(governance_) {
         if (initializer_ == address(0)) revert ZeroOwner();
         initializer = initializer_;
     }
@@ -219,7 +228,7 @@ contract AgentNameRegistry {
         address newOwner,
         address resolverContract,
         uint64 expiry
-    ) external returns (bytes32 childNode) {
+    ) external whenNotPaused returns (bytes32 childNode) {
         if (bytes(label).length == 0) revert EmptyLabel();
         if (newOwner == address(0)) revert ZeroOwner();
         _requireParentAuth(parentNode);
@@ -252,7 +261,7 @@ contract AgentNameRegistry {
      *         Authorized to the node's owner ONLY — labels can't be
      *         changed once set, preventing display spoofing.
      */
-    function backfillLabel(bytes32 node, string calldata label_) external {
+    function backfillLabel(bytes32 node, string calldata label_) external whenNotPaused {
         _requireNodeAuth(node);
         if (bytes(label_).length == 0) revert EmptyLabel();
         if (keccak256(bytes(label_)) != _records[node].labelhash) revert NotAuthorized();
@@ -262,26 +271,26 @@ contract AgentNameRegistry {
 
     // ─── Setters ────────────────────────────────────────────────────
 
-    function setOwner(bytes32 node, address newOwner) external {
+    function setOwner(bytes32 node, address newOwner) external whenNotPaused {
         _requireNodeAuth(node);
         if (newOwner == address(0)) revert ZeroOwner();
         _records[node].owner = newOwner;
         emit OwnerChanged(node, newOwner);
     }
 
-    function setResolver(bytes32 node, address resolverContract) external {
+    function setResolver(bytes32 node, address resolverContract) external whenNotPaused {
         _requireNodeAuth(node);
         _records[node].resolver = resolverContract;
         emit ResolverChanged(node, resolverContract);
     }
 
-    function setSubregistry(bytes32 node, address subregistryContract) external {
+    function setSubregistry(bytes32 node, address subregistryContract) external whenNotPaused {
         _requireNodeAuth(node);
         _records[node].subregistry = subregistryContract;
         emit SubregistryChanged(node, subregistryContract);
     }
 
-    function renew(bytes32 node, uint64 newExpiry) external {
+    function renew(bytes32 node, uint64 newExpiry) external whenNotPaused {
         _requireNodeAuth(node);
         _records[node].expiry = newExpiry;
         emit NameRenewed(node, newExpiry);
@@ -293,7 +302,7 @@ contract AgentNameRegistry {
      *         NOT verify the forward record points back here. The
      *         universal resolver enforces the round-trip on reads.
      */
-    function setPrimaryName(bytes32 node) external {
+    function setPrimaryName(bytes32 node) external whenNotPaused {
         if (node != bytes32(0) && _records[node].registeredAt == 0) revert NodeNotFound();
         _primaryName[msg.sender] = node;
         if (node == bytes32(0)) emit PrimaryNameCleared(msg.sender);

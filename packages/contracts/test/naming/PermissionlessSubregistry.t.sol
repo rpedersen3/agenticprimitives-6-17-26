@@ -19,7 +19,7 @@ contract PermissionlessSubregistryTest is Test {
     bytes32 internal demoNode;
 
     function setUp() public {
-        registry = new AgentNameRegistry(deployer);
+        registry = new AgentNameRegistry(deployer, deployer);
         ontology = new OntologyTermRegistry(deployer);
         resolver = new AgentNameAttributeResolver(registry, address(ontology));
         vm.prank(deployer);
@@ -186,7 +186,10 @@ contract MaliciousRegistry is AgentNameRegistry {
     PermissionlessSubregistry public reentrancyTarget;
     bool internal didReenter;
 
-    constructor(address deployer) AgentNameRegistry(deployer) {}
+    // R6.8: AgentNameRegistry constructor takes (initializer, governance).
+    // For this mock we pass `deployer` for both — EOA governance reads as
+    // "not paused" so the mock behaves like the pre-R6.8 single-arg form.
+    constructor(address deployer) AgentNameRegistry(deployer, deployer) {}
 
     function setReentrancyTarget(PermissionlessSubregistry t) external {
         reentrancyTarget = t;

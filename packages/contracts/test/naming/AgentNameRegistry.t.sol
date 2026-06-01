@@ -16,7 +16,7 @@ contract AgentNameRegistryTest is Test {
     bytes32 internal constant KIND = keccak256("namespace:Agent");
 
     function setUp() public {
-        reg = new AgentNameRegistry(deployer);
+        reg = new AgentNameRegistry(deployer, deployer);
         vm.prank(deployer);
         AGENT_ROOT_NODE = reg.initializeRoot("agent", deployer, address(0), KIND);
     }

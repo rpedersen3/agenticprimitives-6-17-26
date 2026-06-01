@@ -307,7 +307,10 @@ contract Deploy is Script {
         // not the deployer — initializeRoot's owner arg is the
         // long-lived authority over the root, while the constructor arg
         // is just the one-shot frontrun-resistance handle.
-        AgentNameRegistry nameRegistry = new AgentNameRegistry(deployer);
+        // R6.8 — constructor now takes governance pointer so the
+        // registry can read the system pause flag from
+        // AgenticGovernance.isPaused().
+        AgentNameRegistry nameRegistry = new AgentNameRegistry(deployer, address(governance));
         console2.log("AgentNameRegistry:    %s", address(nameRegistry));
         AgentNameAttributeResolver nameResolver = new AgentNameAttributeResolver(nameRegistry, address(ontology));
         console2.log("AgentNameResolver:    %s", address(nameResolver));
