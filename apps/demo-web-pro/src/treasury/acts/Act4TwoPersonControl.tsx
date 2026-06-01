@@ -42,7 +42,7 @@ import {
   buildAddPasskeyCredentialArgs,
   buildChangeApprovalsRequiredArgs,
 } from '@agenticprimitives/account-custody';
-import { readApprovalsRequired, readIsCustodian } from '../../lib/chain-reads';
+import { readApprovalsRequired, readIsCustodian, derivePasskeyRpIdHash } from '../../lib/chain-reads';
 import { scheduleAndApply, type CeremonyResult, type CeremonyPhase } from '../../lib/custody-ceremony';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
@@ -258,6 +258,9 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
           signer: bobPasskeyAuth.pia,
         });
         if (!already) {
+          // H7-C.1: rpIdHash MUST be the real hostname-derived value
+          // (sha256(window.location.hostname)). addPasskey reverts on zero.
+          const bobRpIdHash = await derivePasskeyRpIdHash();
           const step = await scheduleAndApply({
             account: treasury.address,
             action: CustodyAction.AddPasskeyCredential,
@@ -265,6 +268,7 @@ export function Act4TwoPersonControl({ onComplete }: { onComplete: () => void })
               bobPasskeyAuth.credentialIdDigest,
               bobPasskeyAuth.pubKeyX,
               bobPasskeyAuth.pubKeyY,
+              bobRpIdHash,
             ),
             signers: [{
               seat: aliceClaim,

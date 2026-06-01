@@ -49,6 +49,7 @@ import { scheduleAndApply } from '../../lib/custody-ceremony';
 import {
   readIsCustodian,
   readSafetyDelay,
+  derivePasskeyRpIdHash,
 } from '../../lib/chain-reads';
 import { ConnectionDialog, type ConnectionStage } from '../components/ConnectionDialog';
 import { LiveStatusBadge } from '../components/LiveStatusBadge';
@@ -364,6 +365,10 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
           signer: bobPasskeyAuth.pia,
         });
         if (!already) {
+          // H7-C.1: rpIdHash MUST match the RP-ID Bob's passkey was registered
+          // against (sha256(window.location.hostname)) — the on-chain
+          // `addPasskey` reverts on zero. SDK validates this at the wire boundary.
+          const bobRpIdHash = await derivePasskeyRpIdHash();
           const step = await scheduleAndApply({
             account: org.address,
             action: CustodyAction.AddPasskeyCredential,
@@ -371,6 +376,7 @@ export function Act3BobJoins({ onComplete }: { onComplete: () => void }) {
               bobPasskeyAuth.credentialIdDigest,
               bobPasskeyAuth.pubKeyX,
               bobPasskeyAuth.pubKeyY,
+              bobRpIdHash,
             ),
             signers: [{
               seat: aliceClaim,

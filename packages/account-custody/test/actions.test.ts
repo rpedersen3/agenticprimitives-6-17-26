@@ -146,25 +146,35 @@ describe('buildChangeApprovalsRequiredArgs', () => {
 });
 
 describe('buildAddPasskeyCredentialArgs', () => {
-  it('encodes (credId, x, y) as abi.encode(bytes32, uint256, uint256)', () => {
+  const RPID = ('0x' + 'cd'.repeat(32)) as `0x${string}`;
+
+  it('encodes (credId, x, y, rpIdHash) as abi.encode(bytes32, uint256, uint256, bytes32)', () => {
     const credId = '0x' + 'ab'.repeat(32);
     const x = 0x64a72a4f45f6c724e379a54efa3dbfe14c04fa12eddc44f7830aca98ee0f5cf7n;
     const y = 0x0c7dfbe96e6d041812e831c4f2e8597209c103508a3f3b53466713fd1f64197fn;
-    const encoded = buildAddPasskeyCredentialArgs(credId as `0x${string}`, x, y);
-    const [c, xb, yb] = decodeAbiParameters(
-      [{ type: 'bytes32' }, { type: 'uint256' }, { type: 'uint256' }],
+    const encoded = buildAddPasskeyCredentialArgs(credId as `0x${string}`, x, y, RPID);
+    const [c, xb, yb, rb] = decodeAbiParameters(
+      [{ type: 'bytes32' }, { type: 'uint256' }, { type: 'uint256' }, { type: 'bytes32' }],
       encoded,
     );
     expect((c as string).toLowerCase()).toBe(credId.toLowerCase());
     expect(xb).toBe(x);
     expect(yb).toBe(y);
+    expect((rb as string).toLowerCase()).toBe(RPID.toLowerCase());
   });
 
   it('preserves (credId, x, y) order — regression lock', () => {
     const credId = '0x' + 'aa'.repeat(32);
-    const a = buildAddPasskeyCredentialArgs(credId as `0x${string}`, 1n, 2n);
-    const b = buildAddPasskeyCredentialArgs(credId as `0x${string}`, 2n, 1n);
+    const a = buildAddPasskeyCredentialArgs(credId as `0x${string}`, 1n, 2n, RPID);
+    const b = buildAddPasskeyCredentialArgs(credId as `0x${string}`, 2n, 1n, RPID);
     expect(a).not.toBe(b);
+  });
+
+  it('rejects zero rpIdHash — addPasskey reverts on it (H7-C.1)', () => {
+    const credId = '0x' + 'aa'.repeat(32);
+    expect(() =>
+      buildAddPasskeyCredentialArgs(credId as `0x${string}`, 1n, 2n, ('0x' + '00'.repeat(32)) as `0x${string}`),
+    ).toThrow(/rpIdHash.*non-zero/);
   });
 });
 
@@ -244,21 +254,25 @@ describe('action builder range guards (audit H2)', () => {
   });
 
   describe('buildAddPasskeyCredentialArgs', () => {
-    it('accepts non-zero credential + non-zero x/y', () => {
-      expect(() => buildAddPasskeyCredentialArgs(REAL_DIGEST, 1n, 2n)).not.toThrow();
+    const REAL_RPID = ('0x' + 'cd'.repeat(32)) as `0x${string}`;
+    it('accepts non-zero credential + non-zero x/y + non-zero rpIdHash', () => {
+      expect(() => buildAddPasskeyCredentialArgs(REAL_DIGEST, 1n, 2n, REAL_RPID)).not.toThrow();
     });
     it('rejects zero credentialIdDigest (C-6)', () => {
-      expect(() => buildAddPasskeyCredentialArgs(ZERO_BYTES32, 1n, 2n)).toThrow(/C-6/);
+      expect(() => buildAddPasskeyCredentialArgs(ZERO_BYTES32, 1n, 2n, REAL_RPID)).toThrow(/C-6/);
     });
     it('rejects malformed bytes32', () => {
       expect(() =>
         // @ts-expect-error — runtime guard catches malformed
-        buildAddPasskeyCredentialArgs('0xabc', 1n, 2n),
+        buildAddPasskeyCredentialArgs('0xabc', 1n, 2n, REAL_RPID),
       ).toThrow(/not a 32-byte hex/);
     });
     it('rejects x = 0 or y = 0', () => {
-      expect(() => buildAddPasskeyCredentialArgs(REAL_DIGEST, 0n, 2n)).toThrow(/uint256 in \[1/);
-      expect(() => buildAddPasskeyCredentialArgs(REAL_DIGEST, 1n, 0n)).toThrow(/uint256 in \[1/);
+      expect(() => buildAddPasskeyCredentialArgs(REAL_DIGEST, 0n, 2n, REAL_RPID)).toThrow(/uint256 in \[1/);
+      expect(() => buildAddPasskeyCredentialArgs(REAL_DIGEST, 1n, 0n, REAL_RPID)).toThrow(/uint256 in \[1/);
+    });
+    it('rejects zero rpIdHash (H7-C.1)', () => {
+      expect(() => buildAddPasskeyCredentialArgs(REAL_DIGEST, 1n, 2n, ZERO_BYTES32 as `0x${string}`)).toThrow(/rpIdHash.*non-zero/);
     });
   });
 

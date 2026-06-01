@@ -129,18 +129,27 @@ export function buildChangeApprovalsRequiredArgs(tier: number, newCount: number)
 }
 
 /**
- * Encode args for `AddPasskeyCredential(credentialIdDigest, x, y)`.
+ * Encode args for `AddPasskeyCredential(credentialIdDigest, x, y, rpIdHash)`.
  * Side effect on AgentAccount: also registers the PIA derived from
  * `(x, y)` as a first-class custodian.
  *
  * Wave 2C C-6 hardening: on-chain initializer rejects credentialIdDigest
  * == 0; this builder echoes that check at the wire-format boundary so
  * the demo never spends gas on a guaranteed-revert tx.
+ *
+ * H7-C.1 / CON-WEBAUTHN-001 (encoded shape updated 2026-06-01): the
+ * on-chain `CustodyPolicy.AddPasskeyCredential` decoder reads 4 fields
+ * `(bytes32, uint256, uint256, bytes32)` and forwards `rpIdHash` to
+ * `AgentAccount.addPasskey(...)`. `addPasskey` reverts on `rpIdHash ==
+ * bytes32(0)` (`InvalidRpIdHash`), so the SDK MUST require a non-zero
+ * rpIdHash here. Encoding only 3 fields produced silent-reverts in the
+ * inner userOp (Act 3 'AddPasskey Bob on Org' live debug).
  */
 export function buildAddPasskeyCredentialArgs(
   credentialIdDigest: Hex,
   x: bigint,
   y: bigint,
+  rpIdHash: Hex,
 ): Hex {
   assertBytes32('AddPasskeyCredential.credentialIdDigest', credentialIdDigest);
   if (credentialIdDigest === ('0x' + '00'.repeat(32))) {
@@ -148,9 +157,13 @@ export function buildAddPasskeyCredentialArgs(
   }
   assertUint256('AddPasskeyCredential.x', x, 1n);
   assertUint256('AddPasskeyCredential.y', y, 1n);
+  assertBytes32('AddPasskeyCredential.rpIdHash', rpIdHash);
+  if (rpIdHash === ('0x' + '00'.repeat(32))) {
+    throw new RangeError('[custody] AddPasskeyCredential.rpIdHash: must be non-zero (AgentAccount.addPasskey reverts on zero rpIdHash — H7-C.1)');
+  }
   return encodeAbiParameters(
-    [{ type: 'bytes32' }, { type: 'uint256' }, { type: 'uint256' }],
-    [credentialIdDigest, x, y],
+    [{ type: 'bytes32' }, { type: 'uint256' }, { type: 'uint256' }, { type: 'bytes32' }],
+    [credentialIdDigest, x, y, rpIdHash],
   );
 }
 
