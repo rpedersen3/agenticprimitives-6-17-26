@@ -13,6 +13,13 @@ export {
   type McpAuthErrorCode,
   type PrivateAuthFailureContext,
   type VerifyDelegationForResourceOpts,
+  // R8.1: surface the type-level production-strict opts so external
+  // consumers can both (a) get TS errors when they forget classification
+  // / auditSink in production wrappers, and (b) name the type
+  // explicitly when threading opts through a builder function.
+  type WithDelegationOpts,
+  type ProductionWithDelegationOpts,
+  type DevelopmentWithDelegationOpts,
 } from './with-delegation';
 export { declareResource } from './declare-resource';
 export {

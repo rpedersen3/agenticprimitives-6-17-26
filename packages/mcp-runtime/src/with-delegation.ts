@@ -104,74 +104,108 @@ export interface PrivateAuthFailureContext {
   stage?: string;
 }
 
+// ─── R8.1 — type-level production-strict invariant ──────────────────
+//
+// Wave H1 (closed) made `withDelegation` production-by-default at RUNTIME:
+// the wrapper throws at construction time if classification or auditSink
+// is missing AND the runtime is production. The 2026-05-31 third-party
+// audit (ATL-SEC-02) correctly observed that this gate is policy-by-
+// convention at the TYPE level — both fields were still `T?` (optional)
+// in the opts type, so a TS-only consumer could not see the requirement
+// without reading the doc.
+//
+// R8.1 converts the runtime gate into a TYPE-LEVEL invariant via three
+// public overloads:
+//
+//   1. **Production-strict.** `classification` + `auditSink` are REQUIRED.
+//      `developmentMode` is forbidden (literal `false` or absent). This is
+//      the canonical shape for production code.
+//   2. **Explicit development opt-out.** `developmentMode: true` is REQUIRED.
+//      The runtime still won't emit audit events when auditSink is missing —
+//      but the consumer has signalled they know.
+//   3. **Implementation signature** — the loose union, never exposed
+//      directly; TS routes overload-resolution to (1) or (2).
+//
+// The runtime checks remain as defense-in-depth (consumers can still
+// `as any` past the type system).
+
+interface WithDelegationCommonOpts {
+  toolName?: string;
+  /** Correlation ID threaded into emitted events. */
+  correlationId?: string;
+  /**
+   * Metrics sink (production-readiness wave 1). When provided, the
+   * wrapper emits:
+   *   - counter `mcp_runtime.with_delegation.calls` per call
+   *     (tags: tool, audience, outcome ∈ accept|reject)
+   *   - histogram `mcp_runtime.with_delegation.duration_ms` per call
+   *     (tags: tool, audience, outcome)
+   * Cardinality is bounded by the tool registry; safe for production
+   * Prometheus / Datadog / OpenTelemetry pipelines.
+   */
+  metricsSink?: MetricsSink;
+  /**
+   * W3C traceparent header value (`00-{trace-id}-{parent-id}-{flags}`)
+   * captured from the inbound request. Forwarded on outbound calls
+   * the handler makes and stamped into emitted audit events so the
+   * full session→token→tool chain stitches together end-to-end.
+   */
+  traceparent?: string;
+  /**
+   * Environment axis. Production = canonical default; the construction-
+   * time gate fires here. Development = opt out of the strict gate.
+   * The wrapper infers from process.env.NODE_ENV when this is unset —
+   * see `inferEnvironment`.
+   */
+  environment?: 'production' | 'development';
+}
+
+/**
+ * **Production-strict opts** — `classification` + `auditSink` are required
+ * at the TYPE level. R8.1: the audit (ATL-SEC-02) flagged Wave H1's
+ * runtime-only gate as policy-by-convention; this shape closes the gap.
+ */
+export interface ProductionWithDelegationOpts extends WithDelegationCommonOpts {
+  classification: ToolClassification;
+  auditSink: AuditSink;
+  developmentMode?: false;
+}
+
+/**
+ * **Development opt-out opts** — caller must signal `developmentMode: true`
+ * explicitly. Both classification + auditSink are optional in this branch;
+ * the wrapper bypasses the strict gate. Use ONLY in tests / non-production
+ * callers; production code MUST use {@link ProductionWithDelegationOpts}.
+ */
+export interface DevelopmentWithDelegationOpts extends WithDelegationCommonOpts {
+  classification?: ToolClassification;
+  auditSink?: AuditSink;
+  developmentMode: true;
+}
+
+/** Union of the two type-level invariants. */
+export type WithDelegationOpts =
+  | ProductionWithDelegationOpts
+  | DevelopmentWithDelegationOpts;
+
+// Public overloads — the TS compiler routes callers to whichever variant
+// their opts object satisfies. Missing classification / auditSink WITHOUT
+// `developmentMode: true` is a TYPE ERROR, not a runtime surprise.
 export function withDelegation<A extends Record<string, unknown>>(
   config: McpResourceVerifyConfig,
   handler: (args: A & { principal: Address; grants?: DataScopeGrant[] }) => Promise<unknown>,
-  opts?: {
-    toolName?: string;
-    /**
-     * Tool classification metadata (audit H2). When provided, the
-     * `evaluatePolicy()` decision engine runs after delegation verify;
-     * `deny` and `requires-consent` both reject with McpAuthError. When
-     * omitted, an internal warning is logged but the call proceeds
-     * (back-compat for unclassified demo tools). Production code MUST
-     * pass classification — the production preflight will eventually
-     * enforce this.
-     */
-    classification?: ToolClassification;
-    /**
-     * Audit sink (audit C3). When provided, the wrapper emits
-     * `mcp-runtime.with-delegation.{accept,reject}` events on every
-     * call. Omit only for tests / paths that explicitly opt out of
-     * forensics; production code MUST pass a sink and the preflight
-     * will eventually enforce.
-     */
-    auditSink?: AuditSink;
-    /** Correlation ID threaded into emitted events. */
-    correlationId?: string;
-    /**
-     * Metrics sink (production-readiness wave 1). When provided, the
-     * wrapper emits:
-     *   - counter `mcp_runtime.with_delegation.calls` per call
-     *     (tags: tool, audience, outcome ∈ accept|reject)
-     *   - histogram `mcp_runtime.with_delegation.duration_ms` per call
-     *     (tags: tool, audience, outcome)
-     * Cardinality is bounded by the tool registry; safe for production
-     * Prometheus / Datadog / OpenTelemetry pipelines.
-     */
-    metricsSink?: MetricsSink;
-    /**
-     * W3C traceparent header value (`00-{trace-id}-{parent-id}-{flags}`)
-     * captured from the inbound request. Forwarded on outbound calls
-     * the handler makes and stamped into emitted audit events so the
-     * full session→token→tool chain stitches together end-to-end.
-     */
-    traceparent?: string;
-    /**
-     * Production-readiness gate (audit H1). Inverted default behaviour:
-     * `withDelegation` runs in PRODUCTION mode unless the consumer
-     * explicitly opts out via `developmentMode: true` (test/dev shim)
-     * OR the runtime reports `NODE_ENV !== 'production'`. In
-     * production, the wrapper throws at construction time if
-     * `classification` or `auditSink` is missing. This makes the
-     * package API impossible to misuse: you can't register a tool
-     * wrapper without the metadata the policy engine + audit pipeline
-     * need.
-     *
-     * Pass `environment: 'production'` to force production (the
-     * canonical override; useful for tests that need to exercise prod
-     * gates without setting NODE_ENV). Pass `environment: 'development'`
-     * or `developmentMode: true` to opt out — required only for tests.
-     */
-    environment?: 'production' | 'development';
-    /**
-     * Explicit opt-out shorthand for non-production callers. Equivalent
-     * to `environment: 'development'`. Useful so test code reads as
-     * "this is intentionally a dev wrapper" rather than referencing
-     * the environment axis directly.
-     */
-    developmentMode?: boolean;
-  },
+  opts: ProductionWithDelegationOpts,
+): (args: A & { token: string }) => Promise<unknown>;
+export function withDelegation<A extends Record<string, unknown>>(
+  config: McpResourceVerifyConfig,
+  handler: (args: A & { principal: Address; grants?: DataScopeGrant[] }) => Promise<unknown>,
+  opts: DevelopmentWithDelegationOpts,
+): (args: A & { token: string }) => Promise<unknown>;
+// Implementation (loose) — the public overloads above narrow this.
+export function withDelegation<A extends Record<string, unknown>>(
+  config: McpResourceVerifyConfig,
+  handler: (args: A & { principal: Address; grants?: DataScopeGrant[] }) => Promise<unknown>,
+  opts: WithDelegationOpts,
 ): (args: A & { token: string }) => Promise<unknown> {
   // Inferred environment — production-by-default per audit H1. The
   // construction-time gate now fires unless the consumer explicitly

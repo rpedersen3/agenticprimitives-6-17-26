@@ -3,6 +3,7 @@ re-export BetterSqlite3DatabaseLike from ./types
 re-export Caveat from ./types
 re-export DataScopeGrant from ./types
 re-export Delegation from ./types
+re-export DevelopmentWithDelegationOpts from ./with-delegation
 re-export EnforcerAddressMap from ./types
 re-export Hex from ./types
 re-export JtiStore from ./types
@@ -13,11 +14,13 @@ re-export McpResourceVerifyConfig from ./types
 re-export MigratableJtiStore from ./jti-stores
 re-export PgPoolLike from ./types
 re-export PrivateAuthFailureContext from ./with-delegation
+re-export ProductionWithDelegationOpts from ./with-delegation
 re-export ResourceDefinition from ./types
 re-export ServiceMacContext from ./service-mac
 re-export ServiceMacHeaders from ./service-mac
 re-export ToolClassification from ./types
 re-export VerifyDelegationForResourceOpts from ./with-delegation
+re-export WithDelegationOpts from ./with-delegation
 re-export bodyDigestHex from ./service-mac
 re-export createMemoryJtiStore from ./jti-stores
 re-export createPostgresJtiStore from ./jti-stores
