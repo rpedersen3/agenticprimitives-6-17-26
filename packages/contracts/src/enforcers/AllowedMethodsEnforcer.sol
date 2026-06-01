@@ -8,6 +8,12 @@ import "../agency/ICaveatEnforcer.sol";
  * @notice Restricts delegated calls to specific function selectors.
  * @dev terms = abi.encode(bytes4[] allowedSelectors)
  *      Follows ERC-7710 / MetaMask DeleGator beforeHook/afterHook pattern.
+ *
+ *      R6.7 — Stateless validator; no `whenNotPaused` modifier needed
+ *      (hooks are `pure`, contract has zero storage). The DM-side pause
+ *      check in `DelegationManager.redeemDelegation` gates all
+ *      reachable enforcer dispatch. See `docs/audits/r6-contracts-recon-2026-05-31.md`
+ *      § 4.4 + `test/EnforcerPauseInvariantR67.t.sol`.
  */
 contract AllowedMethodsEnforcer is ICaveatEnforcer {
     error MethodNotAllowed();

@@ -8,6 +8,13 @@ import "../agency/ICaveatEnforcer.sol";
  * @notice Enforces a time window — delegation is only valid between two timestamps.
  * @dev terms = abi.encode(uint256 validAfter, uint256 validUntil)
  *      Follows ERC-7710 / MetaMask DeleGator beforeHook/afterHook pattern.
+ *
+ *      R6.7 — Stateless validator; no `whenNotPaused` modifier needed.
+ *      `beforeHook` is `external view` (reads `block.timestamp`); contract
+ *      has zero storage. The DM-side pause check in
+ *      `DelegationManager.redeemDelegation` gates all reachable enforcer
+ *      dispatch. See `docs/audits/r6-contracts-recon-2026-05-31.md`
+ *      § 4.4 + `test/EnforcerPauseInvariantR67.t.sol`.
  */
 contract TimestampEnforcer is ICaveatEnforcer {
     error TimestampNotYetValid();

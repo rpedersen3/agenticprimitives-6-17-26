@@ -68,6 +68,14 @@ import "../libraries/SignatureSlotRecovery.sol";
  *      Only the first `threshold` slots are checked. Excess entries
  *      beyond the threshold are ignored — callers SHOULD NOT pad blobs
  *      unnecessarily as calldata cost scales linearly.
+ *
+ *      R6.7 — Stateless validator; no `whenNotPaused` modifier needed.
+ *      `beforeHook` is `external view` (reads `block.chainid`), `afterHook`
+ *      is `external pure` (empty body); contract has zero storage
+ *      variables. The DM-side pause check in
+ *      `DelegationManager.redeemDelegation` gates all reachable enforcer
+ *      dispatch. See `docs/audits/r6-contracts-recon-2026-05-31.md`
+ *      § 4.4 + `test/EnforcerPauseInvariantR67.t.sol`.
  */
 contract QuorumEnforcer is ICaveatEnforcer {
     error InsufficientQuorum(uint256 supplied, uint8 threshold);

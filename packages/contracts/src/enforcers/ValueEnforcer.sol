@@ -8,6 +8,12 @@ import "../agency/ICaveatEnforcer.sol";
  * @notice Enforces a maximum ETH value per call.
  * @dev terms = abi.encode(uint256 maxValue)
  *      Follows ERC-7710 / MetaMask DeleGator beforeHook/afterHook pattern.
+ *
+ *      R6.7 — Stateless validator; no `whenNotPaused` modifier needed
+ *      (hooks are `pure`, contract has zero storage). The DM-side pause
+ *      check in `DelegationManager.redeemDelegation` gates all
+ *      reachable enforcer dispatch. See `docs/audits/r6-contracts-recon-2026-05-31.md`
+ *      § 4.4 + `test/EnforcerPauseInvariantR67.t.sol`.
  */
 contract ValueEnforcer is ICaveatEnforcer {
     error ValueExceedsLimit();
