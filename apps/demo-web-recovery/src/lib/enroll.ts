@@ -124,6 +124,10 @@ export async function directDeploy(args: {
             initialPasskeyCredentialIdDigest: pk.credentialIdDigest,
             initialPasskeyX: pk.pubKeyX.toString(),
             initialPasskeyY: pk.pubKeyY.toString(),
+            // H7-C.1 / CON-WEBAUTHN-001: rpIdHash required when passkey
+            // is supplied. The Worker defaults to sha256('impact-agent.me')
+            // for the testnet demo when this field is omitted.
+            initialPasskeyRpIdHash: (pk as { rpIdHash?: Hex }).rpIdHash,
           }
         : {}),
       timelockOverrides: args.timelockOverrides,

@@ -47,7 +47,8 @@ const DEMO_SSO_URL = process.env.DEMO_SSO_URL ?? `https://${PAGES_PROJECT_SSO}.p
 const PAGES_PROJECT_ORG = process.env.PAGES_PROJECT_ORG ?? 'agenticprimitives-demo-org';
 const DEMO_ORG_URL = process.env.DEMO_ORG_URL ?? `https://${PAGES_PROJECT_ORG}.pages.dev`;
 
-const DEPLOYMENTS_PATH = join(REPO_ROOT, 'apps', 'contracts', `deployments-${NETWORK}.json`);
+// R5.12 moved contracts from apps/ → packages/.
+const DEPLOYMENTS_PATH = join(REPO_ROOT, 'packages', 'contracts', `deployments-${NETWORK}.json`);
 const STATE_PATH = join(REPO_ROOT, 'cloudflare-urls.json');
 
 const TOTAL = 11;
@@ -132,10 +133,28 @@ try {
   );
 }
 
+// wrangler 4.93+ exits 1 on `whoami` when the OAuth token cannot
+// enumerate accounts (limited `account:read` scope), even though the
+// token IS valid for deploys when CLOUDFLARE_ACCOUNT_ID is set
+// explicitly. Tolerate the partial-auth case here.
 try {
   execSync('wrangler whoami', { stdio: 'pipe' });
-} catch {
-  fail('not logged into Cloudflare. Run: wrangler login');
+} catch (e: any) {
+  const stderr = (e?.stderr ?? '').toString();
+  const partialAuth = stderr.includes('Failed to automatically retrieve account IDs');
+  if (!partialAuth) {
+    fail('not logged into Cloudflare. Run: wrangler login');
+  } else if (!process.env.CLOUDFLARE_ACCOUNT_ID) {
+    fail(
+      'Cloudflare OAuth token cannot list accounts. Set CLOUDFLARE_ACCOUNT_ID ' +
+        'explicitly (from https://dash.cloudflare.com → right sidebar → Account ID), ' +
+        'or re-run `wrangler login` with broader scopes.',
+    );
+  } else {
+    console.log(
+      `  (wrangler partial-auth tolerated; using CLOUDFLARE_ACCOUNT_ID=${process.env.CLOUDFLARE_ACCOUNT_ID.slice(0, 8)}…)`,
+    );
+  }
 }
 if (!existsSync(DEPLOYMENTS_PATH)) {
   fail(

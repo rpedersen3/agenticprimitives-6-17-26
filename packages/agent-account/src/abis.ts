@@ -15,6 +15,11 @@ const initParamsTuple = {
     { name: 'initialPasskeyCredentialIdDigest', type: 'bytes32' },
     { name: 'initialPasskeyX', type: 'uint256' },
     { name: 'initialPasskeyY', type: 'uint256' },
+    // H7-C.1 / CON-WEBAUTHN-001: rpIdHash binds the passkey to a specific
+    // Relying Party at registration. Required by the on-chain struct
+    // since the binding was added; the TS ABI mirror was previously
+    // out-of-sync, causing factory reverts with a 6-field tuple.
+    { name: 'initialPasskeyRpIdHash', type: 'bytes32' },
   ],
 } as const;
 

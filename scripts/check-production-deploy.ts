@@ -144,9 +144,10 @@ function fail(audit: string, check: string, message: string) {
 
 (function checkLiveDeploymentsShape() {
   const network = process.env.DEPLOY_NETWORK ?? 'base-sepolia';
+  // R5.12 moved contracts from apps/ → packages/.
   const deploymentsPath = join(
     REPO_ROOT,
-    'apps',
+    'packages',
     'contracts',
     `deployments-${network}.json`,
   );

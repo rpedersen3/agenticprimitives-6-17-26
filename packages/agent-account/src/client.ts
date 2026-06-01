@@ -113,6 +113,10 @@ export interface AgentAccountSpec {
     credentialIdDigest: Hex;
     x: bigint;
     y: bigint;
+    // H7-C.1 / CON-WEBAUTHN-001: RP-ID hash binds the passkey to a
+    // specific Relying Party at registration. Required by the on-chain
+    // struct since the binding was added.
+    rpIdHash?: Hex;
   };
   salt: bigint;
   /**
@@ -142,6 +146,7 @@ function _initParamsTuple(spec: AgentAccountSpec): {
   initialPasskeyCredentialIdDigest: Hex;
   initialPasskeyX: bigint;
   initialPasskeyY: bigint;
+  initialPasskeyRpIdHash: Hex;
 } {
   return {
     mode: spec.mode ?? 0,
@@ -150,6 +155,10 @@ function _initParamsTuple(spec: AgentAccountSpec): {
     initialPasskeyCredentialIdDigest: spec.passkey?.credentialIdDigest ?? ZERO_BYTES32,
     initialPasskeyX: spec.passkey?.x ?? 0n,
     initialPasskeyY: spec.passkey?.y ?? 0n,
+    // H7-C.1 / CON-WEBAUTHN-001: rpIdHash binds the passkey to a specific
+    // RP. Defaults to ZERO_BYTES32 when no passkey is supplied (mode-0
+    // EOA-only deploys); the factory's _validateInitParams allows this.
+    initialPasskeyRpIdHash: spec.passkey?.rpIdHash ?? ZERO_BYTES32,
   };
 }
 

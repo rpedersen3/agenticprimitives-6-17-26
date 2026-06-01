@@ -136,6 +136,8 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
       initialPasskeyCredentialIdDigest: alicePasskey?.credentialIdDigest ?? (('0x' + '00'.repeat(32)) as Hex),
       initialPasskeyX: alicePasskey?.pubKeyX ?? 0n,
       initialPasskeyY: alicePasskey?.pubKeyY ?? 0n,
+      // H7-C.1 / CON-WEBAUTHN-001: rpIdHash required on-chain when passkey is supplied.
+      initialPasskeyRpIdHash: ((alicePasskey as { rpIdHash?: Hex } | undefined)?.rpIdHash) ?? (("0x" + "00".repeat(32)) as Hex),
     } as const;
 
     // Salt includes the Org address (so Treasury can't collide

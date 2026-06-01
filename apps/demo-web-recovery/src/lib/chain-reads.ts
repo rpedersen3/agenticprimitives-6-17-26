@@ -34,6 +34,8 @@ export interface AgentAccountInitParams {
   initialPasskeyCredentialIdDigest: Hex;
   initialPasskeyX: bigint;
   initialPasskeyY: bigint;
+  // H7-C.1 / CON-WEBAUTHN-001: rpIdHash required by the on-chain struct.
+  initialPasskeyRpIdHash: Hex;
 }
 
 /**
