@@ -308,6 +308,7 @@ export function withDelegation<A extends Record<string, unknown>>(
       jtiStore: config.jtiStore,
       toolName: opts?.toolName,
       requireDeployed: config.requireDeployed,
+      enforceOnChain: config.enforceOnChain === true,
       // Thread the audit sink + correlation id down so delegation
       // emits `delegation.verify.{accept,reject}` events through the
       // same sink as `mcp-runtime.with-delegation.*`. Pass 3b.

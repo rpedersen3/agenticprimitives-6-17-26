@@ -41,6 +41,18 @@ export interface McpResourceVerifyConfig {
    * either omit T3+ tools or leave this unset and stick to T1/T2.
    */
   quorumEnforcer?: Address;
+  /**
+   * Opt the off-chain delegation evaluator into "this delegation will be
+   * redeemed on-chain elsewhere; treat inert/on-chain-only caveats as
+   * allowed when off-chain context is missing." Default: `false` (strict
+   * H7-B.2 mode — rejects with `context-required` when an inert caveat
+   * is encountered without context).
+   *
+   * Set `true` for MCP READ flows where the delegation carries on-chain
+   * action caveats (AllowedTargets / AllowedMethods / Value) that are
+   * conceptually inert for off-chain read operations.
+   */
+  enforceOnChain?: boolean;
 }
 
 export interface ResourceDefinition {

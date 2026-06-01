@@ -281,6 +281,159 @@ function fail(audit: string, check: string, message: string) {
   }
 })();
 
+// ─── R7.4 / N10.1: A2A_MAC_SECRET must be set as a wrangler secret ───
+//
+// demo-mcp REJECTS every service-MAC envelope at the middleware boundary
+// when A2A_MAC_SECRET is unset in production (apps/demo-mcp/src/index.ts
+// lines 179-197). demo-a2a likewise needs the matching secret to PRODUCE
+// the MAC. The preflight needs to gate on it explicitly because the
+// failure mode is opaque to the operator: every PII call returns
+// `service-mac unavailable` 401 with no hint at the missing secret.
+//
+// We don't read wrangler's secret store from the preflight (would require
+// auth + a name lookup) — instead we check that the deploy command/env
+// invocation EXPECTS the secret to be present + warn loudly when it isn't.
+
+(function checkA2aMacSecretWiring() {
+  const a2aWranglerToml = join(REPO_ROOT, 'apps', 'demo-a2a', 'wrangler.toml');
+  if (!existsSync(a2aWranglerToml)) return;
+  const text = readFileSync(a2aWranglerToml, 'utf8');
+  // The wrangler.toml advertises the secret name as a placeholder
+  // (Cloudflare convention) — the value comes from `wrangler secret put`.
+  // We require the literal "A2A_MAC_SECRET" to appear so the operator
+  // sees an explicit reminder in the deploy log.
+  if (!text.includes('A2A_MAC_SECRET')) {
+    fail(
+      'N10',
+      'a2a-mac-secret-not-declared',
+      `apps/demo-a2a/wrangler.toml does not mention A2A_MAC_SECRET. ` +
+        `Set it via \`wrangler secret put A2A_MAC_SECRET --env production\` ` +
+        `BEFORE the deploy; demo-mcp will 401 every PII / org-sensitive call ` +
+        `until both sides share the same value. Reference: ` +
+        `apps/demo-mcp/src/index.ts L179-197.`,
+    );
+  }
+})();
+
+// ─── R7.4 / N10.2: every demo-mcp tool route MUST declare classification ─
+//
+// Wave H1 closed the runtime gap: withDelegation's production default
+// throws at construction time when a tool isn't classified. The preflight
+// catches the same condition at *deploy time* so the failure surfaces
+// before the Worker upload, not on the first user request.
+//
+// Heuristic: every `app.post('/tools/<name>'` in demo-mcp/src/index.ts
+// must have a corresponding `declareTool({ name: '<name>' }, ...)` call
+// somewhere in the same file. Missing → fail.
+
+(function checkDemoMcpToolClassificationCoverage() {
+  const mcpIdx = join(REPO_ROOT, 'apps', 'demo-mcp', 'src', 'index.ts');
+  if (!existsSync(mcpIdx)) return;
+  const text = readFileSync(mcpIdx, 'utf8');
+  const tools = new Set<string>();
+  const toolRe = /app\.post\(\s*['"]\/tools\/([a-z0-9_-]+)['"]/g;
+  let m: RegExpExecArray | null;
+  while ((m = toolRe.exec(text)) !== null) tools.add(m[1]);
+  if (tools.size === 0) return; // no tools registered
+
+  const declareRe = /declareTool\(\s*\{\s*name:\s*['"]([a-z0-9_-]+)['"]/g;
+  const declared = new Set<string>();
+  while ((m = declareRe.exec(text)) !== null) declared.add(m[1]);
+
+  const missing = [...tools].filter((t) => !declared.has(t));
+  if (missing.length > 0) {
+    fail(
+      'N10',
+      'mcp-tool-without-classification',
+      `apps/demo-mcp/src/index.ts registers tool routes without a matching ` +
+        `\`declareTool({ name, … })\` classification: ${missing.join(', ')}. ` +
+        `withDelegation's production-strict default rejects every call to an ` +
+        `unclassified tool at construction time. Add a declareTool() block ` +
+        `next to each route handler.`,
+    );
+  }
+})();
+
+// ─── R7.4 / N10.3: demo-mcp must wire a durable audit sink in production ─
+//
+// audit invariant (packages/audit + spec 206): every delegation.{mint,verify}
+// + mcp-runtime.service-mac.{accept,reject} event MUST land in a durable
+// sink so security incidents can be reconstructed end-to-end. The console
+// sink is a dev shim. Production deploys MUST wire D1 (or an external sink).
+//
+// Heuristic: demo-mcp/wrangler.toml MUST declare a [[d1_databases]] binding
+// (the production audit sink) AND demo-mcp/src/index.ts MUST construct
+// the audit sink from env.DB rather than a console-only fallback.
+
+(function checkDemoMcpAuditSinkWiring() {
+  const mcpToml = join(REPO_ROOT, 'apps', 'demo-mcp', 'wrangler.toml');
+  if (!existsSync(mcpToml)) return;
+  const tomlText = readFileSync(mcpToml, 'utf8');
+  if (!/\[\[(env\.[a-z]+\.)?d1_databases\]\]/.test(tomlText)) {
+    fail(
+      'N10',
+      'mcp-audit-sink-not-bound',
+      `apps/demo-mcp/wrangler.toml does not declare a D1 binding. ` +
+        `Production audit (spec 206) requires a durable sink for ` +
+        `delegation.{mint,verify} + service-mac.{accept,reject} events. ` +
+        `Add \`[[d1_databases]] binding = "DB" database_name = "demo-mcp"\` ` +
+        `(and the matching production database_id under [env.production]).`,
+    );
+  }
+  const mcpIdx = join(REPO_ROOT, 'apps', 'demo-mcp', 'src', 'index.ts');
+  if (existsSync(mcpIdx)) {
+    const text = readFileSync(mcpIdx, 'utf8');
+    if (!/buildAuditSink|createD1AuditSink/.test(text)) {
+      fail(
+        'N10',
+        'mcp-audit-sink-not-constructed',
+        `apps/demo-mcp/src/index.ts does not call buildAuditSink/createD1AuditSink. ` +
+          `Even with a D1 binding the sink object has to be passed to withDelegation ` +
+          `+ the service-mac middleware, otherwise events fall back to console.log.`,
+      );
+    }
+  }
+})();
+
+// ─── R7.4 / N10.4: SmartAgentPaymaster must be non-dev in production ───
+//
+// SmartAgentPaymaster.sol ships in either `devMode=true` (accept-all, only
+// safe for testnets) or `devMode=false` + a verifying-signer / allowlist
+// (production). Operators land on testnet via Deploy.s.sol's
+// _isTestnetNetwork() helper. For PRODUCTION network deploys the preflight
+// MUST refuse the deploy if PAYMASTER_VERIFYING_SIGNER is unset — the
+// fail-closed allowlist alternative is a deliberate operator choice
+// signaled by PAYMASTER_ALLOWLIST_OK=true.
+
+(function checkPaymasterModeForProductionNetwork() {
+  const network = process.env.DEPLOY_NETWORK ?? 'base-sepolia';
+  // Testnets are exempt — the contract auto-flips devMode=true there.
+  const TESTNETS = new Set(['anvil', 'base-sepolia', 'sepolia', 'arb-sepolia', 'op-sepolia']);
+  if (TESTNETS.has(network)) return;
+  const hasVerifyingSigner = (process.env.PAYMASTER_VERIFYING_SIGNER ?? '').length > 0;
+  const allowlistOk = process.env.PAYMASTER_ALLOWLIST_OK === 'true';
+  if (!hasVerifyingSigner && !allowlistOk) {
+    fail(
+      'N10',
+      'paymaster-not-locked-down-for-production',
+      `Production network "${network}" requires either ` +
+        `PAYMASTER_VERIFYING_SIGNER (verifying-paymaster mode) or ` +
+        `PAYMASTER_ALLOWLIST_OK=true (fail-closed allowlist mode). ` +
+        `Without one, the paymaster either accepts every userOp (devMode) ` +
+        `or sponsors nothing (no signer + no allowlist). Pick one explicitly.`,
+    );
+  }
+})();
+
+// ─── R7.4 / N10.5: SKIP flag is policy-controlled ─────────────────────
+//
+// The skip flag check is already in place (block at the top of this file
+// refuses to honor AGENTICPRIMITIVES_SKIP_PREFLIGHT=1 inside CI). N10's
+// policy requirement is that operators who DO use it outside CI document
+// the reason — that's an operational discipline item, not a code gate.
+// We surface a one-line WARN here so the deploy log captures the override.
+// The main() block at the bottom emits the final WARN/PASS line.
+
 // ─── helpers ──────────────────────────────────────────────────────────
 
 function walk(dir: string): string[] {
