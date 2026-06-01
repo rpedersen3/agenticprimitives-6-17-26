@@ -1,0 +1,22 @@
+# R9.3 — Halmos symbolic-execution config.
+#
+# `halmos` reads this from the Foundry project root. CLI flags can
+# override; this is the *committed default* the CI + local-dev invoke.
+#
+# Scope:
+#   `test/halmos/**` — proofs that benefit from symbolic exploration
+#   over the entire input space (the R8.2 UV gate is the headline
+#   example). Foundry's `forge test` ignores these because they use
+#   the `check_*` prefix Halmos requires.
+#
+# Bytes lengths:
+#   The bit-level gates we prove (UP at flags[0], UV at flags[2]) only
+#   care about the 37-byte minimum authenticator-data layout. Setting
+#   `default-bytes-lengths = 37` keeps the symbolic state small enough
+#   that the proofs terminate in milliseconds. Proofs that need a
+#   different length pin it explicitly via `--array-lengths`.
+
+[global]
+match-contract = "Halmos$"
+default-bytes-lengths = "37"
+solver-timeout-assertion = 60000

@@ -75,8 +75,8 @@ if (!existsSync(CONTRACTS_DIR)) {
   process.exit(2);
 }
 
-console.log('[check-forge-coverage] running `forge coverage --ir-minimum --report summary` …');
-const result = spawnSync('forge', ['coverage', '--ir-minimum', '--report', 'summary'], {
+console.log('[check-forge-coverage] running `forge coverage --ir-minimum --report summary --no-match-path test/halmos/**` …');
+const result = spawnSync('forge', ['coverage', '--ir-minimum', '--report', 'summary', '--no-match-path', 'test/halmos/**'], {
   cwd: CONTRACTS_DIR,
   encoding: 'utf8',
   stdio: ['ignore', 'pipe', 'pipe'],

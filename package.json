@@ -68,6 +68,7 @@
     "check:demo-org": "pnpm --filter @agenticprimitives-demo/org typecheck",
     "check:contracts": "pnpm --filter @agenticprimitives-demo/contracts test",
     "check:contracts-lint": "pnpm --filter @agenticprimitives/contracts run lint",
+    "check:contracts-halmos": "pnpm --filter @agenticprimitives/contracts run halmos",
     "generate:capability-index": "tsx scripts/generate-capability-index.ts",
     "bootstrap:demo-names": "tsx scripts/bootstrap-demo-names.ts"
   },

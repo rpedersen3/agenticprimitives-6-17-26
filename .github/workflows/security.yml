@@ -156,6 +156,46 @@ jobs:
           path: sbom.cyclonedx.json
           retention-days: 90
 
+  # ─── Halmos — symbolic-execution proofs (R9.3) ──────────────────
+  # Catches what fuzzing samples: properties that must hold for the
+  # ENTIRE input space, not just the ones the fuzzer happened to draw.
+  # Scope is intentionally narrow (`test/halmos/**`) — symbolic
+  # exploration of the full codebase is intractable; narrow proofs on
+  # high-stakes invariants (the R8.2 UV-required gate is the headline)
+  # are tractable and high-ROI.
+  # Fails the PR on any proof regression. Local: `pnpm check:contracts-halmos`.
+  halmos:
+    name: Halmos (symbolic proofs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install Halmos via pipx
+        run: |
+          python3 -m pip install --user pipx
+          python3 -m pipx ensurepath
+          pipx install halmos
+          halmos --version
+
+      - name: Build contract dependencies (forge-std + AA + OZ)
+        working-directory: packages/contracts
+        run: bash setup.sh
+
+      - name: Run Halmos
+        working-directory: packages/contracts
+        run: halmos
+
   # ─── Solhint — Solidity security lint (R9.1) ────────────────────
   # Focused security ruleset (NOT solhint:recommended — that bundles
   # style rules that would force a mechanical churn of the existing
