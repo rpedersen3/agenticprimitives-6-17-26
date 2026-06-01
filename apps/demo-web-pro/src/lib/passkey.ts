@@ -176,7 +176,13 @@ export async function registerPasskeyForSeat(
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256 / P-256
       authenticatorSelection: {
         residentKey: 'preferred',
-        userVerification: 'preferred',
+        // R8.2 / ATL-SEC-03: AgentAccount._verifyWebAuthn requires UV=1 on
+        // every signature. Registering with `userVerification: 'preferred'`
+        // would let the authenticator skip the UV bit on later assertions —
+        // sigs would then fail validation with no decoded reason (AA24).
+        // Required at registration so any compatible authenticator is forced
+        // into a UV-capable mode from the start.
+        userVerification: 'required',
       },
       attestation: 'none',
       timeout: 60_000,
@@ -221,7 +227,11 @@ export async function assertWithPasskey(
     publicKey: {
       challenge: challengeBytes as BufferSource,
       allowCredentials: [{ id: credentialIdBytes as BufferSource, type: 'public-key' }],
-      userVerification: 'preferred',
+      // R8.2 / ATL-SEC-03: the on-chain validator requires UV=1. 'preferred'
+      // lets the authenticator skip UV on platforms without biometrics →
+      // signature is silently rejected as AA24 with no decoded reason.
+      // 'required' surfaces auth issues at the browser layer instead.
+      userVerification: 'required',
       timeout: 60_000,
     },
   })) as PublicKeyCredential | null;
