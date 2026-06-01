@@ -6,7 +6,7 @@
  * seat shows two custody checks per target account.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import type { Address } from 'viem';
 import { orgConfig } from '../../org-config';
 import {

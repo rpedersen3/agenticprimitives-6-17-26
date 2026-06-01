@@ -217,7 +217,13 @@ describe('verifyServiceMac', () => {
   it('rejects a tampered MAC', async () => {
     const { provider, headers } = await freshHeaders();
     const jtiStore = createMemoryJtiStore();
-    const tampered = { ...headers, mac: headers.mac.replace(/.$/, headers.mac.endsWith('A') ? 'B' : 'A') };
+    // Flip the last hex char to something GUARANTEED to differ from the
+    // original — the previous `endsWith('A') ? 'B' : 'A'` form was a flake
+    // when the MAC randomly ended in 'B' (~6% of runs: replacement equaled
+    // the original → same MAC → tamper test passed verification).
+    const lastChar = headers.mac.slice(-1);
+    const replacement = lastChar === '0' ? '1' : '0';
+    const tampered = { ...headers, mac: headers.mac.slice(0, -1) + replacement };
     const result = await verifyServiceMac({
       ctx: ctx(),
       headers: tampered,

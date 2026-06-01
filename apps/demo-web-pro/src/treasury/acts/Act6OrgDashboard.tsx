@@ -15,7 +15,7 @@
  *                              Org + Treasury, with eta countdown
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { formatEther, type Address } from 'viem';
 import { orgConfig } from '../../org-config';
 import {
