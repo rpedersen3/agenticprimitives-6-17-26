@@ -149,6 +149,31 @@ jobs:
           path: sbom.cyclonedx.json
           retention-days: 90
 
+  # ─── Solhint — Solidity security lint (R9.1) ────────────────────
+  # Focused security ruleset (NOT solhint:recommended — that bundles
+  # style rules that would force a mechanical churn of the existing
+  # codebase without proportional security gain). Rationale for each
+  # on/off rule lives in packages/contracts/.solhint.md.
+  # Fails the PR on any rule-error. Fast (<10s) — no forge build needed.
+  solhint:
+    name: Solhint (Solidity security lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Solhint
+        run: pnpm check:contracts-lint
+
   # ─── Slither — Solidity static analysis (H7-E.1) ────────────────
   # CodeQL (above) covers JS/TS; Slither catches Solidity-side
   # patterns: reentrancy, unchecked-return, uninitialized storage,

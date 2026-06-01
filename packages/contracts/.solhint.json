@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "compiler-version": ["error", "^0.8.28"],
+    "avoid-tx-origin": "error",
+    "avoid-suicide": "error",
+    "avoid-sha3": "error",
+    "avoid-throw": "error",
+    "check-send-result": "error",
+    "state-visibility": "error",
+    "no-complex-fallback": "error",
+    "no-inline-assembly": "off",
+    "avoid-low-level-calls": "off",
+    "no-console": "warn",
+    "not-rely-on-time": "off",
+    "reason-string": "off"
+  }
+}

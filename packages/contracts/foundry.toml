@@ -7,6 +7,15 @@ optimizer = true
 optimizer_runs = 200
 via_ir = true
 
+# R9.1 — flags required by openzeppelin-foundry-upgrades' UUPS upgrade-safety
+# validations (used in pre-upgrade gates for AgentAccount). The validations
+# need the build's AST + per-source storage layouts to detect a storage-gap
+# regression BEFORE the broadcast — running them as a forge script step that
+# reads the compiled metadata, not as a runtime check.
+ast = true
+build_info = true
+extra_output = ["storageLayout"]
+
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "account-abstraction/=lib/account-abstraction/contracts/",
@@ -25,5 +34,25 @@ fs_permissions = [
     { access = "read",  path = "./test/fixtures" },
 ]
 
+# R9.1 — fuzz/invariant profile bumps per the audit guidance. Defaults stay
+# tight enough to run on every PR; the `nightly` profile is the long-burn
+# version invoked by a scheduled workflow (see R9.3/R9.4 wave).
 [fuzz]
+runs = 1000
+max_test_rejects = 65536
+
+[invariant]
 runs = 256
+depth = 100
+fail_on_revert = false
+shrink_run_limit = 5000
+
+# Long-burn nightly profile — invoke with `FOUNDRY_PROFILE=nightly forge test`.
+[profile.nightly.fuzz]
+runs = 10000
+
+[profile.nightly.invariant]
+runs = 1024
+depth = 250
+fail_on_revert = false
+shrink_run_limit = 10000
