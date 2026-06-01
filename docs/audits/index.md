@@ -1,6 +1,6 @@
 # Security & Architecture Audit Index
 
-**Last refreshed:** 2026-05-30 (added the dedicated packages+contracts audit doc — `2026-05-packages-contracts-production-readiness.md` — under a focused production-library lens; existing app-audit doc unchanged).
+**Last refreshed:** 2026-06-01 (added R10 internal readiness assessment — `2026-06-01-r10-internal-readiness-assessment.md` — post-R9 wave, with prioritized P0/P1/P2/P3 backlog for the external-audit handoff. Replaces the predecessor `2026-05-packages-contracts-production-readiness.md` as the active tracker for package+contract production readiness.)
 
 ## Auditor packet (the third-party-audit-ready dossier)
 
@@ -10,7 +10,8 @@
 | [`threat-model.md`](./threat-model.md) | security-auditor | STRIDE per trust boundary, mapped to packages. (Stale — does not yet cover `demo-jp`, `demo-sso-next`, or specs 232/234/235/236; refresh queued — see ARCH-005 in the pre-production audit below.) |
 | [`architecture-diagram.md`](./architecture-diagram.md) | technical-architect-auditor | System map, dependency graph, deployment topology, trust boundaries. (Same staleness — ARCH-005.) |
 | [`evidence-checklist.md`](./evidence-checklist.md) | security + architect | Every security control → source + test + audit event + closure status. (Same staleness — ARCH-005.) |
-| [`2026-05-packages-contracts-production-readiness.md`](./2026-05-packages-contracts-production-readiness.md) | security + architect (2026-05-30) | **NEW — focused production-library audit.** Scope = `packages/*` + `packages/contracts/*` ONLY (demos + app-integration explicitly out of scope). 25+ in-scope findings reclassified from prior dossier + ~30 NEW package-/contract-layer findings + per-package + per-contract scorecards + a 6-wave plan. **This is the doc a third-party reviewer of the production library suite reads first.** |
+| [`2026-06-01-r10-internal-readiness-assessment.md`](./2026-06-01-r10-internal-readiness-assessment.md) | security + architect (2026-06-01) | **CURRENT — post-R9 internal readiness assessment.** Verifies the third-party assessment against current repo state; surfaces additional gaps; prioritized P0 (audit-blocking, ~1 day) / P1 (production-blocking, ~1 week) / P2 (post-audit) / P3 (polish) backlog. **This is the doc a third-party reviewer of the production library suite reads first.** Supersedes the 2026-05-30 predecessor below as the active tracker. |
+| [`2026-05-packages-contracts-production-readiness.md`](./2026-05-packages-contracts-production-readiness.md) | security + architect (2026-05-30) | Predecessor of the R10 doc above. Captured the package + contract findings before the R9 wave; cross-referenced rows folded into the R10 doc with status updates. Kept for historical context. |
 | [`2026-05-pre-production-readiness.md`](./2026-05-pre-production-readiness.md) | security + architect (2026-05-29) | App-focused pre-launch audit of `demo-jp` + `demo-sso-next` + consumed packages. 23 SEC + 22 ARCH + 18 D + 37 EXT rows. **The package-/contract-layer subset is now re-cast in the new doc above**; this one remains the tracker for demo-app + deploy-substrate findings (OIDC flows, app handoffs, app vocabulary drift). |
 
 ## Auditor agents (Claude Code subagents)

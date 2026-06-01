@@ -1,11 +1,14 @@
 # Product Readiness Architecture Audit
 
 **Status:** living document — refreshed at the end of each hardening pass
-**Last refreshed:** 2026-06-01 (R6 contracts hardening wave — 10 PRs landed: AgentAccount / CustodyPolicy / AgentNameRegistry pause coverage; PermissionlessSubregistry reentrancy guard; SmartAgentPaymaster + CustodyPolicy coverage push from 50.9% → 98.2% lines and 30% → 68% branches respectively; Slither + Aderyn dual SAST; per-contract coverage aggregator)
+**Last refreshed:** 2026-06-01 (R9 wave complete — 9 PRs landed: Foundry tune + Solhint + invariant suites for CustodyPolicy/DelegationManager/SmartAgentPaymaster; Halmos symbolic proofs of WebAuthn UV/UP + AgentAccount onlySelf closure; Echidna nightly + Medusa weekend stateful fuzzing; H-6 custodians cap closed + Slither/Aderyn triage; supply-chain CVE allowlist; spec 237 AEL + spec 238 v2 topology docs)
+**Prior refresh:** 2026-06-01 (R6 contracts hardening wave — 10 PRs; CustodyPolicy coverage 50.9%→98.2%; Slither + Aderyn dual SAST)
 **Prior refresh:** 2026-05-23 (Wave H1-H4 — production-default packages, custody hardening, peer-strict release CI)
 **Original draft:** 2026-05-19
 **Scope:** all `@agenticprimitives/*` packages (including `audit`, `custody`), demo apps (web, web-pro, web-recovery, a2a, mcp), contracts, deploy path, CI, architecture docs, live testnet deployment
-**Verdict:** credible alpha-track architecture; testnet-deployed end-to-end with 635 Foundry tests across 28 contracts. Most package-boundary footguns are structural rather than opt-in. Remaining launch blockers concentrate in OPERATIONAL readiness (clean production governance keys, third-party contracts audit, durable A2A audit sink) — NOT in architecture or implementation gaps. Production deferral is gating on external review + key rotation, not on code maturity.
+**Verdict:** **external-audit-ready alpha.** Testnet-deployed end-to-end with **680 Foundry tests + 7 Halmos symbolic proofs + 4 Echidna properties + 4 Medusa properties** across 37 .sol files. Substrate is sound: package boundaries, contract hardening, fail-closed defaults, symbolic + invariant + fuzz coverage, supply-chain gates. Remaining production blockers concentrate in OPERATIONAL readiness (clean production governance keys, third-party contracts audit, fail-hard audit at the mcp-runtime call site, AWS / per-tool isolation finalization, doc-dossier refresh to reference R9) — NOT in architecture or implementation gaps.
+
+**Active prioritized hardening backlog:** see [**R10 internal readiness assessment**](../audits/2026-06-01-r10-internal-readiness-assessment.md) — categorizes every remaining item into P0 (audit-blocking, ~1 day) / P1 (production-blocking, ~1 week) / P2 (post-audit) / P3 (polish). All P0 items are doc-refreshes + 2 small code fixes; the substrate work is done.
 
 ## Audit Reader's Guide (added 2026-06-01)
 
