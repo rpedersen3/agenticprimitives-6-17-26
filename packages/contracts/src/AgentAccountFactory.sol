@@ -10,7 +10,7 @@ import "./governance/GovernanceManaged.sol";
 /**
  * @title AgentAccountFactory
  * @notice Single-entry factory for AgentAccount proxies with
- *         deterministic CREATE2 addresses. Phase 6f.5 — collapsed
+ *         deterministic CREATE2 addresses. Phase 6f.5 -- collapsed
  *         createPersonAgent + createMultiSigSmartAgent into one
  *         entry point so every account on chain has the same shape;
  *         the only axis is `mode` on the init params.
@@ -32,7 +32,7 @@ import "./governance/GovernanceManaged.sol";
  *         marker check).
  *
  *         The canonical CustodyPolicy address is wired at construction
- *         (factory-immutable) — there is no per-call validator
+ *         (factory-immutable) -- there is no per-call validator
  *         override. Swapping CustodyPolicy versions means redeploying
  *         the factory, which is the same blast radius as a CREATE2
  *         salt bump.
@@ -41,7 +41,7 @@ import "./governance/GovernanceManaged.sol";
  *   `bundlerSigner` and `sessionIssuer` are factory-level capability
  *   addresses. They are NEVER custodians of any deployed account; each
  *   account reads them off this factory on demand. Phase A.5 made both
- *   mutable under governance — rotation flows through a governance
+ *   mutable under governance -- rotation flows through a governance
  *   proposal + 48h timelock and propagates automatically to every
  *   existing AgentAccount.
  */
@@ -73,6 +73,21 @@ contract AgentAccountFactory is GovernanceManaged {
     error InsufficientTrusteesForMode(uint8 mode, uint256 actual, uint256 required);
     error TrusteesRequiredForRecoverableMode(uint8 mode);
     error ZeroAddress();
+    /// @notice R9.6 / ATL-SEC-05 -- thrown when `params.custodians.length`
+    ///         exceeds `MAX_INITIAL_CUSTODIANS`. Without this cap,
+    ///         `_buildValidatorInitData` casts `nSigners` to `uint8`
+    ///         and silently truncates at 256, computing a wrong default
+    ///         threshold for a misconfigured account. A self-hurt
+    ///         footgun, not a cross-account vulnerability -- capped so
+    ///         the misconfiguration fails closed at construction.
+    error TooManyInitialCustodians(uint256 actual, uint256 max);
+
+    /// @notice R9.6 / ATL-SEC-05 -- upper bound on initial custodians
+    ///         passed via `AgentAccountInitParams`. 32 is deliberately
+    ///         generous (every smart-account substrate we surveyed
+    ///         caps well below 16) but well under the `uint8` truncation
+    ///         threshold at `_buildValidatorInitData:252`.
+    uint256 public constant MAX_INITIAL_CUSTODIANS = 32;
 
     constructor(
         IEntryPoint entryPoint_,
@@ -219,6 +234,13 @@ contract AgentAccountFactory is GovernanceManaged {
 
         bool hasPasskey = params.initialPasskeyX != 0 && params.initialPasskeyY != 0;
         if (params.custodians.length == 0 && !hasPasskey) revert NoInitialSigner();
+        // R9.6 / ATL-SEC-05: cap the initial custodian set so
+        // `_buildValidatorInitData`'s `uint8(nSigners)` cast can't
+        // silently truncate. 32 is well above any rational config and
+        // well below the uint8 boundary.
+        if (params.custodians.length > MAX_INITIAL_CUSTODIANS) {
+            revert TooManyInitialCustodians(params.custodians.length, MAX_INITIAL_CUSTODIANS);
+        }
 
         if (params.mode == 0) return;
 

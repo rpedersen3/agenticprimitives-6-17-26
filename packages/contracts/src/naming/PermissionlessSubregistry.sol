@@ -92,6 +92,14 @@ contract PermissionlessSubregistry is ReentrancyGuard {
         if (newOwner == address(0)) revert ZeroNewOwner();
         bytes32 prior = claimedBy[msg.sender];
         if (prior != bytes32(0)) revert AlreadyClaimed(prior);
+        // R9 / docs/audits/r9-static-analysis-triage.md § Slither M-1:
+        // Slither flags this as cross-function reentrancy because state is
+        // written AFTER the external call. The function is `nonReentrant`
+        // (line 89) + REGISTRY is an immutable contract we control
+        // (`AgentNameRegistry`) that does not call back into this contract.
+        // The cross-function reader (`hasClaimed`) is view-only. No invariant
+        // is violated by the pre-write-window. Triaged false positive.
+        // slither-disable-next-line reentrancy-no-eth
         childNode = REGISTRY.register(PARENT_NODE, label, newOwner, DEFAULT_RESOLVER, 0);
         claimedBy[msg.sender] = childNode;
         unchecked {

@@ -59,7 +59,58 @@ console.log('[supply-chain] local mirror of the CI security workflow');
 console.log(`[supply-chain] mode: ${WARN_ONLY ? 'WARN-ONLY (always exits 0)' : 'STRICT (fails on findings)'}`);
 
 // 1. pnpm audit — high/critical CVEs in deps.
-run('pnpm audit', 'pnpm audit --audit-level=high');
+//
+// Accepted findings (documented in docs/audits/supply-chain.md "Accepted
+// findings" table). Each row here MUST have a matching row there with
+// rationale + re-evaluate date. When a CVE drops off this list, the
+// gate becomes load-bearing again automatically.
+const ACCEPTED_PNPM_AUDIT_FINDINGS = new Set<string>([
+  // GHSA-5xrq-8626-4rwp — Vitest UI server arbitrary file read/exec
+  // (vitest <4.1.0). DEV-ONLY: exploit requires `vitest --ui` running
+  // locally; CI runs `vitest run` and shipped packages don't depend on
+  // @vitest/ui. Vitest 4.x migration scheduled R10. Re-evaluate
+  // 2026-09-01.
+  'GHSA-5xrq-8626-4rwp',
+]);
+runPnpmAuditWithAllowlist();
+
+function runPnpmAuditWithAllowlist(): void {
+  console.log(`\n[supply-chain] pnpm audit: pnpm audit --audit-level=high --json`);
+  let raw = '';
+  try {
+    raw = execSync('pnpm audit --audit-level=high --json', { stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+    console.log('[supply-chain] ✓ pnpm audit clean');
+    return;
+  } catch (e) {
+    raw = (e as { stdout?: Buffer }).stdout?.toString() ?? '';
+  }
+  // Parse pnpm-audit JSON; each line is one finding.
+  const lines = raw.split('\n').filter((l) => l.trim().startsWith('{'));
+  const unaccepted: string[] = [];
+  for (const line of lines) {
+    try {
+      const finding = JSON.parse(line);
+      const id = (finding.url || '').split('/').pop() || finding.id || '';
+      if (!ACCEPTED_PNPM_AUDIT_FINDINGS.has(id)) {
+        unaccepted.push(`${id}: ${finding.title ?? '(no title)'}`);
+      } else {
+        console.log(`[supply-chain]   ↳ allowlist hit: ${id} (see docs/audits/supply-chain.md)`);
+      }
+    } catch {
+      /* not-a-finding line */
+    }
+  }
+  if (unaccepted.length === 0) {
+    console.log(`[supply-chain] ✓ pnpm audit clean (after allowlist)`);
+    return;
+  }
+  findings.push({
+    scanner: 'pnpm audit',
+    message: `${unaccepted.length} unaccepted finding(s):\n  - ${unaccepted.join('\n  - ')}`,
+  });
+  console.error(`[supply-chain] ✗ pnpm audit flagged ${unaccepted.length} unaccepted finding(s):`);
+  for (const u of unaccepted) console.error(`    - ${u}`);
+}
 
 // 2. gitleaks — committed secrets. Optional; many devs won't have it
 //    installed. CI is the load-bearing check.

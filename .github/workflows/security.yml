@@ -78,8 +78,15 @@ jobs:
 
       # Fail on HIGH or CRITICAL CVEs. MODERATE + LOW go to logs but
       # don't block — they're triaged in the next refresh window.
-      - name: pnpm audit --audit-level=high
-        run: pnpm audit --audit-level=high
+      #
+      # Route through `pnpm check:supply-chain` (scripts/audit-supply-
+      # chain.ts) instead of raw `pnpm audit` so the allowlist for
+      # documented accepted-risk findings (docs/audits/supply-chain.md
+      # "Accepted findings" table) is honored. The script's
+      # `ACCEPTED_PNPM_AUDIT_FINDINGS` set is the single source of truth;
+      # an unaccepted finding still fails CI.
+      - name: pnpm check:supply-chain (allowlist-aware)
+        run: pnpm check:supply-chain
         # The continue-on-error trick lets us capture the full output
         # for the audit log even on failure. Set to true if you want
         # advisory-only mode; false (default) blocks PRs.

@@ -51,10 +51,14 @@ explicitly marked advisory.
 
 ## Accepted findings
 
-_Empty as of 2026-05-20._ Track each accepted CVE / dismissed alert as a row in the table below with reason + expiry.
+Track each accepted CVE / dismissed alert as a row in the table below
+with reason + expiry. Every row MUST also appear in the
+`acceptedFindings` allowlist in `scripts/audit-supply-chain.ts` for the
+strict CI gate to honor it.
 
 | Date | Scanner | Finding | Reason | Re-evaluate by |
 | --- | --- | --- | --- | --- |
+| 2026-06-01 | pnpm audit | **GHSA-5xrq-8626-4rwp** — Vitest UI server arbitrary file read/exec (vitest <4.1.0) | **Dev-only.** The exploit requires `vitest --ui` to be running locally; that's a developer-only mode and is never invoked in production builds (CI runs `vitest run`, not `vitest --ui`; shipped packages don't depend on `@vitest/ui`). Bumping vitest 2.x → 4.x is a major-version migration that would touch every test file; scheduled as a follow-up `R10` slice. The CVE has no production exploit path for our consumers. | 2026-09-01 (after the vitest 4.x migration) |
 
 ## Branch protection (manual GitHub UI step)
 
