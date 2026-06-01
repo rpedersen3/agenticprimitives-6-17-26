@@ -1,15 +1,26 @@
-# packages/contracts — demo contracts
+# `@agenticprimitives/contracts`
 
-Solidity contracts for the agenticprimitives demo. **Vendored minimum** from [`smart-agent/packages/contracts/`](https://github.com/agentictrustlabs/smart-agent/tree/003-intent-marketplace-proposal/packages/contracts). Just the contracts needed to demonstrate the end-to-end flow:
+The Solidity contracts that back the agenticprimitives stack — ERC-4337 v0.7 Smart Agent core, ERC-7710 delegation manager + 5 enforcers, ERC-7579 modular CustodyPolicy, SmartAgentPaymaster (3 modes), `.agent` / `.impact` TLD naming, ontology + profile resolvers, identity facets, and an ERC-6492-aware UniversalSignatureValidator. **All sources are present and audited under `src/`**; this is not a stub. The package publishes ABI + per-network deployments + flattened sources for downstream consumers.
 
-- `AgentAccount.sol` — ERC-4337 smart account (UUPS upgradeable, owner-based, ERC-1271)
-- `AgentAccountFactory.sol` — CREATE2 factory for deterministic addressing
-- `DelegationManager.sol` — delegation registry + revocation
-- `ICaveatEnforcer.sol` + `enforcers/*` — the four enforcers our demo uses (Timestamp, AllowedTargets, AllowedMethods, Value)
+For the security & invariant breakdown see [`AUDIT.md`](./AUDIT.md). For the architecture rationale + per-file role see [`CLAUDE.md`](./CLAUDE.md). For the current security review checklist see [`docs/audits/2026-05-packages-contracts-production-readiness.md`](../../docs/audits/2026-05-packages-contracts-production-readiness.md).
 
-Not vendored (out of scope for demo): passkey validators, paymaster, naming registry, the marketplace/funding contracts, ontology, governance, etc. Those live in smart-agent.
+**Current contract roster** (28 contracts under `src/`, 635 Foundry tests):
+- `AgentAccount.sol` — UUPSUpgradeable + ERC-7579 + ERC-1271 + WebAuthn-supporting SA
+- `AgentAccountFactory.sol` — CREATE2 deterministic deploys; salt from auth methods + scope (NEVER from a name)
+- `SmartAgentPaymaster.sol` — verifying-paymaster + allowlist + devMode (testnet only) modes
+- `agency/DelegationManager.sol` + `enforcers/{AllowedMethods,AllowedTargets,Timestamp,Value,Quorum}Enforcer.sol`
+- `custody/CustodyPolicy.sol` — 16-action ERC-7579 module, T4/T5/T6 quorum tiers + 24h default T5 timelock
+- `naming/{AgentNameRegistry,AgentNameUniversalResolver,AgentNameAttributeResolver,PermissionlessSubregistry}.sol`
+- `identity/AgentProfileResolver.sol` + `ontology/{OntologyTermRegistry,ShapeRegistry,AttributeStorage}.sol`
+- `relationships/{AgentRelationship,RelationshipTypeRegistry}.sol` (⚠ Privacy Fork — see AUDIT.md § 3.9)
+- `governance/{AgenticGovernance,GovernanceManaged}.sol` — system pause + governance base
+- `libraries/{WebAuthnLib,P256Verifier,SignatureSlotRecovery,MultiSendCallOnly}.sol`
+- `UniversalSignatureValidator.sol` — single signature entrypoint (ERC-6492 + ERC-1271 + raw ECDSA fanout per spec 214 SB-4)
+- `ApprovedHashRegistry.sol` — v=1 pre-approved hash signature path
 
-> **Status:** contracts not yet vendored in this commit. The `src/` directory is empty; vendoring lands in a follow-up commit. This commit ships the foundry scaffold so the structure is in place.
+Deployed addresses (Base Sepolia testnet): [`deployments-base-sepolia.json`](./deployments-base-sepolia.json) (committed, public; surfaced to TypeScript consumers via the generated `@agenticprimitives/contracts/deployments/base-sepolia` subpath).
+
+**Production deployment is deferred** — the testnet uses a publicly disclosed deployer EOA intentionally (keeps the demo reproducible). See [`AUDIT.md` § 4.1](./AUDIT.md#41-the-production-gate-open-audit-item-n1) for the production rotation runbook.
 
 ## Setup
 
