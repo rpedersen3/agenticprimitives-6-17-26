@@ -22,6 +22,21 @@ import "./libraries/WebAuthnLib.sol";
 interface IAgentAccountFactoryView {
     function bundlerSigner() external view returns (address);
     function sessionIssuer() external view returns (address);
+    /// @dev R6.5 — the factory inherits `GovernanceManaged`; its
+    ///      `governance()` getter returns the AgenticGovernance pointer
+    ///      shared across every account it creates. AgentAccount reads
+    ///      this address to call `IGovernanceView.isPaused()` from
+    ///      `whenNotPaused`-guarded entrypoints.
+    function governance() external view returns (address);
+}
+
+/// @dev R6.5 — minimal interface for the pause read. Mirrors the same
+///      selector `GovernanceManaged._pausedSafe()` uses so an EOA or
+///      non-conforming governance contract is treated as "not paused"
+///      (legacy / test deploys still work). Production deploys ALWAYS
+///      use `AgenticGovernance` which implements this interface.
+interface IAgentAccountPauseView {
+    function isPaused() external view returns (bool);
 }
 
 /**
@@ -127,6 +142,9 @@ contract AgentAccount is
 
     error NotFromSelf();
     error NotCustodianOrSelf();
+    /// @notice R6.5 — thrown when a `whenNotPaused`-guarded entrypoint
+    ///         is called while `AgenticGovernance.isPaused() == true`.
+    error SystemPaused();
     error CustodianAlreadyExists(address owner);
     error CustodianDoesNotExist(address owner);
     error CannotRemoveLastCustodian();
@@ -198,6 +216,48 @@ contract AgentAccount is
     modifier onlySelf() {
         if (msg.sender != address(this)) revert NotFromSelf();
         _;
+    }
+
+    // ─── R6.5 / CON-AgentAccount-005 — system-wide pause modifier ──
+    //
+    //   When `AgenticGovernance.isPaused() == true`, every mutating
+    //   external entrypoint guarded by this modifier reverts with
+    //   `SystemPaused`. Recovery-shaped entrypoints
+    //   (`uninstallModule`, `cancelPendingUpgrade`, `removeCustodian`,
+    //   the three `onlySelf` ceremonies) are deliberately NOT guarded
+    //   — an operator must always be able to remove attack surface
+    //   even during an incident.
+    //
+    //   Reads `governance()` through the factory at each check so a
+    //   factory-level governance rotation propagates to every account
+    //   without per-account migration. Legacy / direct-deploy accounts
+    //   (no factory) and EOA-governance / non-conforming-governance
+    //   deploys are treated as "not paused" so existing test fixtures
+    //   keep working — mirrors `GovernanceManaged._pausedSafe()`.
+    modifier whenNotPaused() {
+        if (_systemPaused()) revert SystemPaused();
+        _;
+    }
+
+    /// @dev R6.5 — `staticcall` chain: factory → governance.isPaused().
+    ///      Returns `false` on any non-conforming hop (legacy
+    ///      compatibility). Production deploys MUST pass a real
+    ///      `AgenticGovernance` to the factory; the production-deploy
+    ///      preflight enforces that invariant.
+    function _systemPaused() internal view returns (bool) {
+        address f = _factory;
+        if (f == address(0)) return false;
+        (bool okF, bytes memory dataF) = f.staticcall(
+            abi.encodeWithSelector(IAgentAccountFactoryView.governance.selector)
+        );
+        if (!okF || dataF.length < 32) return false;
+        address g = abi.decode(dataF, (address));
+        if (g == address(0) || g.code.length == 0) return false;
+        (bool okG, bytes memory dataG) = g.staticcall(
+            abi.encodeWithSelector(IAgentAccountPauseView.isPaused.selector)
+        );
+        if (!okG || dataG.length < 32) return false;
+        return abi.decode(dataG, (bool));
     }
 
     // ─── Constructor / Initializer ──────────────────────────────────
@@ -361,7 +421,7 @@ contract AgentAccount is
     /// @notice Execute a previously-queued upgrade. Permissionless once
     ///         the timelock has expired — anyone can pay the gas, but
     ///         the implementation address was bound at queue time.
-    function executePendingUpgrade() external {
+    function executePendingUpgrade() external whenNotPaused {
         PendingUpgrade memory p = _pendingUpgrade;
         if (p.readyAt == 0) revert NoPendingUpgrade();
         if (block.timestamp < p.readyAt) revert UpgradeNotReady(p.readyAt, block.timestamp);
@@ -689,7 +749,7 @@ contract AgentAccount is
         uint256 moduleTypeId,
         address module,
         bytes calldata initData
-    ) external onlySelfOrFactoryInit {
+    ) external onlySelfOrFactoryInit whenNotPaused {
         if (module == address(0)) revert ZeroAddress();
         if (!_isSupportedModuleType(moduleTypeId)) revert UnsupportedModuleType(moduleTypeId);
 
@@ -837,6 +897,7 @@ contract AgentAccount is
     function executeFromModule(address target, uint256 value, bytes calldata data)
         external
         nonReentrant
+        whenNotPaused
         returns (bytes memory)
     {
         ModulesStorage storage $ = _modulesStorage();
@@ -891,7 +952,7 @@ contract AgentAccount is
     ///      EntryPoint / self / DelegationManager; the guard hardens
     ///      against a malicious target re-entering through one of those
     ///      callers.
-    function execute(address target, uint256 value, bytes calldata data) external override nonReentrant {
+    function execute(address target, uint256 value, bytes calldata data) external override nonReentrant whenNotPaused {
         _requireForExecute();
 
         ModulesStorage storage $ = _modulesStorage();
@@ -944,7 +1005,7 @@ contract AgentAccount is
     ///      OUTER `execute` already holds the guard, so external re-entry
     ///      is blocked; `_requireForExecute` restricts entry to
     ///      EntryPoint / self / DM (DM has its own `nonReentrant`).
-    function executeBatch(Call[] calldata calls) external override {
+    function executeBatch(Call[] calldata calls) external override whenNotPaused {
         _requireForExecute();
 
         ModulesStorage storage $ = _modulesStorage();
@@ -1178,7 +1239,7 @@ contract AgentAccount is
     ///      agenticprimitives AgentAccount is forbidden — enforced via
     ///      the ERC-165 marker. Passkey custodians are not added here;
     ///      use `addPasskey` instead.
-    function addCustodian(address owner) external override onlySelf {
+    function addCustodian(address owner) external override onlySelf whenNotPaused {
         if (owner == address(0)) revert ZeroAddress();
         if (_externalCustodians[owner]) revert CustodianAlreadyExists(owner);
         if (_isAgenticPrimitivesAgent(owner)) {
