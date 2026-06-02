@@ -26,6 +26,21 @@ export interface MemberOrg {
   createdAt: string;
 }
 
+/** Slugify a free-text org name into a `.impact` subregistry label: lowercase,
+ *  spaces/punctuation → single hyphens, only `[a-z0-9-]`, no leading/trailing
+ *  hyphen, ≤ 63 chars. The subregistry only accepts this charset — sending a raw
+ *  "Calvary Bible" (space + caps) lands the member on the Impact home's
+ *  "Request blocked" screen, so we derive + validate the label app-side first. */
+export function toOrgLabel(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 63)
+    .replace(/-+$/g, '');
+}
+
 const key = (owner: Address, kind: MemberOrgKind) =>
   `demo-jp/member-org/${kind}/${owner.toLowerCase()}`;
 

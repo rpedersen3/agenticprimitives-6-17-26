@@ -13,7 +13,7 @@ import type { Address } from '@agenticprimitives/types';
 
 import { Card, SectionHead, Btn, Pill, Field, inputStyle, Banner, AddrLink } from './ui';
 import { MemberTrustPanel } from './MemberTrustPanel';
-import type { MemberOrg } from '../lib/member-org';
+import { toOrgLabel, type MemberOrg } from '../lib/member-org';
 
 export function MemberOrgSection({
   kind,
@@ -48,12 +48,17 @@ export function MemberOrgSection({
 function OrgClaim({ label, onCreateOrg }: { label: string; onCreateOrg: (orgName: string) => void | Promise<void> }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
-  const ok = name.trim().length >= 2;
+  const slug = toOrgLabel(name);
+  const touched = name.trim().length > 0;
+  const tooShort = slug.length < 2;
+  const ok = !tooShort;
+  // Did slugifying change the input (e.g. spaces/caps removed)? Tell the user.
+  const normalized = touched && slug !== name.trim().toLowerCase();
   const go = async () => {
     if (!ok) return;
     setBusy(true);
     try {
-      await onCreateOrg(name.trim());
+      await onCreateOrg(slug); // send the validated label, never the raw display text
     } finally {
       setBusy(false);
     }
@@ -66,8 +71,17 @@ function OrgClaim({ label, onCreateOrg }: { label: string; onCreateOrg: (orgName
           placeholder={label === 'Adopter' ? 'e.g. Grace Community Church' : 'e.g. Frontier Path Network'}
           value={name}
           onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && ok && !busy) go(); }}
         />
       </Field>
+      {touched && (
+        tooShort
+          ? <div style={{ marginBottom: '.7rem' }}><Banner tone="warn">Use at least 2 letters or numbers (the name becomes a web-safe handle).</Banner></div>
+          : <p style={{ fontSize: '.82rem', color: 'var(--c-g600)', marginBottom: '.7rem' }}>
+              Registered as <code style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--c-primary-active)', fontWeight: 700 }}>{slug}.impact</code>
+              {normalized && <span style={{ color: 'var(--c-g500)' }}> — spaces &amp; capitals are normalized to a web-safe handle.</span>}
+            </p>
+      )}
       <Btn busy={busy} disabled={!ok} onClick={go}>Create my {label} Org →</Btn>
       <p style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.7rem' }}>
         Opens your secure Impact home to confirm with your device. The org is deployed on Base Sepolia,
