@@ -9,7 +9,7 @@
 // ~150kB before any user actually used it.
 //
 // Chain support: Base Sepolia (the demo's deploy target) + mainnet for
-// any wallets that auto-resolve ENS. We don't talk to RPC from the
+// any wallets that auto-resolve external name systems. We don't talk to RPC from the
 // browser (the demo-a2a Worker relays via /a2a/account/derive-address);
 // the transports are just for wagmi's internal balance reads + chain
 // switching prompts.

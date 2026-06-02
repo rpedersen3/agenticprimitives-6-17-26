@@ -106,7 +106,7 @@ Screen sequence:
 1. Create shared wallet / treasury.
 2. Name it: "Protocol Treasury", "Marketing Budget", "Grants Wallet".
 3. Choose network.
-4. Add owners or members by wallet, ENS, email abstraction, or organization role.
+4. Add owners or members by wallet, on-chain name, email abstraction, or organization role.
 5. Label each member: Founder, Finance, Ops, External accountant.
 6. Set approvals required: 2-of-3, 3-of-5, 4-of-7.
 7. Review failure modes: unavailable signers, lost access, single-person risk.

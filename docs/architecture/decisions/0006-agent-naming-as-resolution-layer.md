@@ -36,9 +36,9 @@ Competitive signals reviewed:
 
 - **DNS / IP**: protocols sign packets to IPs; UIs render hostnames.
   Naming is the rendering layer; binding is the address layer.
-- **ENS**: addresses don't depend on ENS names. ENS records point
-  AT addresses. Name transfers don't break anything signed against
-  the address.
+- **Established on-chain name registries**: addresses don't depend on
+  names. Name records point AT addresses. Name transfers don't break
+  anything signed against the address.
 - **Lit Protocol** + **Turnkey** + **Privy** (see ADR-0002): every
   one of these puts identity/naming as injection context, not as a
   hard import dependency of authority primitives.
@@ -99,7 +99,7 @@ If `AgentAccountClient.getAddressForAgentAccount` includes name in
 the salt, then every name transfer or rotation changes the address.
 Every existing delegation, balance, custody record, and audit row
 keyed on that address becomes orphaned. The "name survives recovery"
-property of ENS-style naming relies on **address stability**. Names
+property of hierarchical on-chain naming relies on **address stability**. Names
 must point AT addresses, not the other way around.
 
 This is not a marginal preference — it's load-bearing for the

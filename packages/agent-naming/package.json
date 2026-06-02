@@ -1,7 +1,7 @@
 {
   "name": "@agenticprimitives/agent-naming",
   "version": "1.0.0-alpha.4",
-  "description": "Agent Naming Service SDK: ENS-v2-style hierarchical naming for Smart Agents (.agent TLD). Owns name normalization, namehash/labelhash, records schemas, and the AgentNamingClient (resolve / reverse / registry). Speaks naming-domain vocabulary only — no delegation / caveat / custody concepts.",
+  "description": "Agent Naming Service SDK: hierarchical naming for Smart Agents (.agent TLD). Owns name normalization, namehash/labelhash, records schemas, and the AgentNamingClient (resolve / reverse / registry). Speaks naming-domain vocabulary only — no delegation / caveat / custody concepts.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -64,7 +64,7 @@
   "keywords": [
     "agent",
     "naming",
-    "ens",
+    "namehash",
     "smart-agent",
     "agentic"
   ]

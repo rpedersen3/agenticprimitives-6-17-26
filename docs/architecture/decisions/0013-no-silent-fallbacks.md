@@ -4,7 +4,7 @@
 **Related:** [ADR-0012](./0012-no-eth-getlogs-in-product-read-paths.md),
 [spec 100](../../../specs/100-package-boundary-doctrine.md),
 [spec 215](../../../specs/215-agent-naming.md),
-[spec 222](../../../specs/222-ens-aligned-reverse-resolution.md).
+[spec 222](../../../specs/222-onchain-reverse-resolution.md).
 
 ---
 
@@ -100,5 +100,5 @@ Concretely:
 ## Cross-references
 
 - [ADR-0012 — no `eth_getLogs` in product read paths](./0012-no-eth-getlogs-in-product-read-paths.md)
-- [spec 222 — ENS-aligned reverse resolution](../../../specs/222-ens-aligned-reverse-resolution.md)
+- [spec 222 — on-chain reverse resolution](../../../specs/222-onchain-reverse-resolution.md)
 - `packages/agent-naming/src/client.ts` — `reverseResolve` (single call, no fallback)

@@ -16,7 +16,7 @@ call (~10k blocks), so the client chunks backward — but **chunking only avoids
 400 errors**. It does not fix cost, latency, incomplete history, or dependence
 on indexer-grade RPC behavior.
 
-Using logs as a **default SDK read path** is the ENS-era pattern: cheap storage,
+Using logs as a **default SDK read path** is the legacy on-chain-naming pattern: cheap storage,
 expensive reverse. We explicitly reject that for **product-facing reads** in
 `packages/*`, `apps/*`, and `scripts/*` that run during normal UX (resolve,
 display, policy, audit UI).
@@ -70,7 +70,7 @@ To remove log dependence, pick one:
 
 The single transitional exception — `_reconstructName` / `_findRegisteredEvent`
 / `_findRootEvent` / `_iterChunks` in `packages/agent-naming/src/client.ts` —
-**has been removed.** [spec/222](../../../specs/222-ens-aligned-reverse-resolution.md)
+**has been removed.** [spec/222](../../../specs/222-onchain-reverse-resolution.md)
 `reverseResolveString` landed, so `reverseResolve` is now a single view call with
 no log walk and no fallback (see [ADR-0013](./0013-no-silent-fallbacks.md)).
 There are now **zero** `eth_getLogs` walkers in any product read path.
@@ -79,20 +79,20 @@ If a future feature needs event history (audit feed, treasury timeline, edge
 log), design an indexer first or factor shared **indexer-client** utilities —
 never reintroduce an RPC log walk in a capability package.
 
-The exit path: ENS stores the reverse string on a dedicated resolver and
-returns it via a single `readContract` — no event walk required. Our
+The exit path: established on-chain name registries store the reverse string on a dedicated resolver and
+return it via a single `readContract` — no event walk required. Our
 `AgentNameRegistry` stores only the namehash node, forcing the SDK into
-log scans. [spec/222](../../../specs/222-ens-aligned-reverse-resolution.md)
-proposes the ENS-aligned fix: add `ATL_LABEL` per node (Option A,
+log scans. [spec/222](../../../specs/222-onchain-reverse-resolution.md)
+proposes the stored-label fix: add `ATL_LABEL` per node (Option A,
 incremental) or a dedicated `ReverseResolver` contract (Option B, full
-ENS-style). Either replaces `_reconstructName` with view-call-only reads.
+stored-label resolver). Either replaces `_reconstructName` with view-call-only reads.
 
 ## Consequences
 
 **Positive:**
 
 - Predictable RPC cost and provider compatibility for demos and production.
-- Forces explicit read models (storage or indexer) instead of accidental ENS
+- Forces explicit read models (storage or indexer) instead of accidental log-walk
   reverse dependencies.
 - Aligns workers and SDK on `readContract`-first discipline.
 

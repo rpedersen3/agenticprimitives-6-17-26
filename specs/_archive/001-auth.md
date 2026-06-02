@@ -79,7 +79,7 @@ NEXT_PUBLIC_CHAIN_ID
 RPC_URL
 ENTRYPOINT_ADDRESS                  # ERC-4337 v0.8 EntryPoint
 AGENT_FACTORY_ADDRESS               # AgentAccountFactory
-AGENT_NAME_REGISTRY_ADDRESS         # optional, for .agent ENS
+AGENT_NAME_REGISTRY_ADDRESS         # optional, for .agent name resolution
 SESSION_JWT_SECRETS                 # kid:hex,kid:hex
 SESSION_COOKIE_NAME                 # optional override
 SESSION_TTL_SECONDS                 # optional override (default 86400)

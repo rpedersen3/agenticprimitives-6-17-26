@@ -72,7 +72,7 @@ contract AgentNameRegistryTest is Test {
         assertEq(reg.AGENT_ROOT(), AGENT_ROOT_NODE);
     }
 
-    function test_AGENT_ROOT_matchesEnsNamehashAlgorithm() public view {
+    function test_AGENT_ROOT_matchesRecursiveNamehashAlgorithm() public view {
         // namehash("agent") = keccak256(bytes32(0) || keccak256("agent"))
         bytes32 expected = keccak256(abi.encodePacked(bytes32(0), keccak256(bytes("agent"))));
         assertEq(reg.AGENT_ROOT(), expected);
@@ -155,7 +155,7 @@ contract AgentNameRegistryTest is Test {
         assertEq(labels[0], keccak256(bytes("alice")));
     }
 
-    function test_register_namehashMatchesEnsAlgorithm() public {
+    function test_register_namehashMatchesRecursiveAlgorithm() public {
         vm.prank(deployer);
         bytes32 alice = reg.register(AGENT_ROOT_NODE, "alice", aliceAgent, address(0), 0);
         bytes32 expected = keccak256(abi.encodePacked(AGENT_ROOT_NODE, keccak256(bytes("alice"))));

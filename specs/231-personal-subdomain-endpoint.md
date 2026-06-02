@@ -27,7 +27,7 @@ Ported from `agentictrustlabs/agentic-trust` `apps/atp-agent/src/worker.ts`
 | atp-agent | here | why |
 | --- | --- | --- |
 | `extractSubdomain(host, base)` | `parseAgentSubdomain(host, base)` | same shape; pure, fail-closed, single label only |
-| subdomain → `<slug>.8004-agent.eth` via ENS | subdomain → `<label>.demo.agent` via `AgentNamingClient.resolveName` | we use our on-chain AgentNameRegistry, not ENS |
+| subdomain → `<slug>.8004-agent.eth` via an external name registry | subdomain → `<label>.demo.agent` via `AgentNamingClient.resolveName` | we use our on-chain AgentNameRegistry, not an external name registry |
 | single Worker does discovery + RPC + skills | demo-sso (Pages) owns the subdomain origin and **proxies** A2A paths to demo-a2a (the Worker) | reuse the existing relayer/session machinery; keep SSO + A2A logic in their owning apps |
 | rich skill catalogue (feedback/validation/inbox) | `skills: []` (minimal) | discovery + routing is the substrate; skills are future work |
 

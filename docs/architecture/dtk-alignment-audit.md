@@ -113,7 +113,7 @@ Per the [[mirror smart-agent patterns]] doctrine, gaps should be filled by porti
 | `DataScopeEnforcer.sol` | Read/write data-scope class gate | Port if any consumer asks; not blocking |
 | `McpToolScopeEnforcer.sol` | MCP tool allowlist | Tied to spec 204; port when first agent actually redeems via MCP path |
 | `MembershipProofEnforcer.sol` | Merkle membership proof in caveat args | Spec 208 v2 |
-| `NameScopeEnforcer.sol` | ENS/name-system scope | Defer; chain-specific |
+| `NameScopeEnforcer.sol` | name-system scope | Defer; chain-specific |
 | `PoolMandateEnforcer.sol` | Pool-specific mandate for spec 002 intent marketplace | NOT relevant to agenticprimitives' product scope |
 | `QuorumEnforcer.sol` | n-of-m sig aggregation | **already ported** (6c.1) |
 | `RecoveryEnforcer.sol` | Recovery-action gate | Conceptually overlaps spec 207 T6; defer to phase 7 recovery work |

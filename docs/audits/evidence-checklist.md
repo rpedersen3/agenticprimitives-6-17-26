@@ -129,7 +129,7 @@ Phase status:
 | ID | Control | Status | Source | Test | Audit event |
 | --- | --- | --- | --- | --- | --- |
 | **NM-1** | Name normalization deterministic. Two strings that normalize identically produce identical namehashes. | closed-2026-05-23 — NS Phase 1 | `packages/agent-naming/src/normalize.ts`; `packages/agent-naming/src/namehash.ts` | `packages/agent-naming/test/normalize.test.ts` (idempotency) + `test/namehash.test.ts` (golden vectors) | — (pure) |
-| **NM-2** | Namehash matches ENS reference algorithm (independent in-band reimplementation in test). | closed-2026-05-23 — NS Phase 1 | `packages/agent-naming/src/namehash.ts` | `test/namehash.test.ts` golden-vector table | — |
+| **NM-2** | Namehash matches the standard recursive-namehash algorithm (independent in-band reimplementation in test). | closed-2026-05-23 — NS Phase 1 | `packages/agent-naming/src/namehash.ts` | `test/namehash.test.ts` golden-vector table | — |
 | **NM-3** | Record schema fail-closed read / fail-loud write — unknown predicates dropped on decode, refused on encode. | closed-2026-05-23 — NS Phase 1 | `packages/agent-naming/src/records.ts` | `packages/agent-naming/test/records.test.ts` | — |
 | **NM-4** | No raw passkey material in records (only `passkey-credential-digest`, a hash). | closed-2026-05-23 — NS Phase 1 | `packages/agent-naming/src/types.ts:passkeyCredentialDigest`; `records.ts` encoder | `records.test.ts` accepts Hex digest only | — |
 | **NM-5** | `AgentNamingClient` skeleton methods throw `NS Phase 2 / Phase 4` instead of silent no-op. | closed-2026-05-23 — NS Phase 1 | `packages/agent-naming/src/client.ts` | — (manual; trivially verified) | — |

@@ -23,7 +23,7 @@ This package ships the **on-chain enforcement layer** for the agenticprimitives 
 | `agency/DelegationManager.sol` + `enforcers/*` | Scoped ERC-7710 delegation with on-chain caveat enforcement (AllowedTargets, AllowedMethods, Timestamp, Value, Quorum) |
 | `custody/CustodyPolicy.sol` | Multi-sig custodian / trustee quorum + scheduled-action machinery (spec 213 carve-out, ERC-7579 module) |
 | `SmartAgentPaymaster.sol` | ERC-4337 paymaster — three validation modes (dev / allowlist / verifying-paymaster) |
-| `naming/{AgentNameRegistry, PermissionlessSubregistry, AgentNameUniversalResolver}.sol` | `.agent` + `.impact` TLDs + ENSv2-style resolver |
+| `naming/{AgentNameRegistry, PermissionlessSubregistry, AgentNameUniversalResolver}.sol` | `.agent` + `.impact` TLDs + hierarchical registry + resolver |
 | `identity/AgentProfileResolver.sol` | ERC-1056-style profile / AgentCard facet resolver |
 | `ontology/{OntologyTermRegistry, ShapeRegistry, AttributeStorage}.sol` | SHACL shape + JSON-LD predicate registries |
 | `relationships/AgentRelationship.sol` | Public on-chain edge model (⚠ Privacy Fork — see EXT-019; remains *experimental* surface) |

@@ -110,7 +110,7 @@ can pack ambiguously).
 | `AgentRelationship.sol:114` | `address + address + bytes32` | All 20/32-byte fixed-widths; safe |
 | `SignatureSlotRecovery.sol:189` | `"\x19Ethereum Signed Message:\n32" + bytes32` | EIP-191 prefix; fixed-width string literal + 32-byte hash |
 | `WebAuthnLib.sol:78` | `bytes authenticatorData + bytes32 cdjHash` | **Defined by the WebAuthn spec** as `authData || sha256(cdj)`. The spec's signing-message format is the source of truth; the encoding is safe by construction (authData is structurally bounded by [§ 6.1](https://w3c.github.io/webauthn/#sctn-authenticator-data)). |
-| `AgentNameRegistry.sol:153, 160, 238` | `bytes32 + bytes32` | ENS namehash format (standardized); fixed-width |
+| `AgentNameRegistry.sol:153, 160, 238` | `bytes32 + bytes32` | recursive namehash format (standardized); fixed-width |
 | `CustodyPolicy.sol:226` | `bytes2(0x1901) + bytes32 + bytes32` | EIP-712 typed-data hash format (standardized); fixed-width |
 | `DelegationManager.sol:242` | same EIP-712 shape | Standardized; fixed-width |
 | `DelegationManager.sol:372` | `bytes32[] hashes` | Each element exactly 32 bytes; concatenation is unambiguous (no shorter-element collision possible) |

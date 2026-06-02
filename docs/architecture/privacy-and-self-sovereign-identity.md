@@ -140,7 +140,7 @@ The substrate enforces **four** vault types with **strict residency rules**:
 - SHACL shapes (`ShapeRegistry`)
 - Attestation rows (`AttestationRegistry`)
 - Agreement commitments (`AgreementRegistry`)
-- Public profile facets (ENS, ANS handles)
+- Public profile facets (on-chain names, ANS handles)
 - Public-coarse projections of opt-in intents
 
 **THE HARD RULE (D-46.1):** Personal data NEVER lives in an org vault. An org can hold a credential ABOUT a person (e.g., "Maria is member with role X") but the personal data behind that role lives in Maria's PV. Org-held credentials are ISSUANCE RECORDS (issuer's perspective); holder's copy is in PV.

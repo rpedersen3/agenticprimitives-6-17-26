@@ -42,7 +42,7 @@ not the registry.
 ## Context
 
 We have multiple identity-adjacent layers shipping at the same time —
-ERC-4337 Smart Agents, agent-naming (ENS-v2-style `.agent` TLD),
+ERC-4337 Smart Agents, agent-naming (hierarchical `.agent` TLD),
 agent-identity (typed AgentCard profiles), agent-relationships
 (trust edges), passkey custody, SIWE EOA custody — plus a road to
 ecosystem registries (ERC-8004 "Trustless Agents", GoDaddy ANS,
@@ -50,8 +50,8 @@ Hashgraph Online HCS-10 / 11 / 14 standards, DIDs, …).
 
 Without a doctrine that picks ONE canonical identifier, every package
 ends up speaking a slightly different identity vocabulary, every demo
-has to translate between them, and security invariants drift. ENS-style
-networks lived with this exact problem (`alice.eth` vs `0x…` vs ENS
+has to translate between them, and security invariants drift. Prior
+on-chain name networks lived with this exact problem (`alice.name` vs `0x…` vs
 namehash vs reverse record) and the lesson is consistent: pick an
 on-chain canonical identifier and treat everything else as a facet
 pointing AT it.
@@ -99,7 +99,7 @@ identifier does NOT change when the name changes.
 | Hashgraph Online / HCS-10 | topic id | `accountId` (CAIP-10) |
 | HCS-11 profile | topic id | profile `accountId` (CAIP-10) |
 | HCS-14 UAID | UAID string | derived from CAIP-10 locally (ADR-0008) |
-| ENS metadata | namehash | `text` records pointing back |
+| External name-registry metadata | namehash | `text` records pointing back |
 | DID document | DID URI | `verificationMethod[].controller` |
 
 A facet without a back-link is not a legitimate facet — it's a
@@ -198,7 +198,7 @@ export type FacetType =
   | 'godaddy-ans'
   | 'hashgraph-online'
   | 'hcs'
-  | 'ens'
+  | 'external-name-registry'
   | 'metadata-uri'
   | 'did';
 

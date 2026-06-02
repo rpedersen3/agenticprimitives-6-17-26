@@ -29,7 +29,7 @@ Composable primitives for building agentic web3 apps. **17 publishable `@agentic
 
 | Package | Purpose |
 | --- | --- |
-| [`@agenticprimitives/agent-naming`](./packages/agent-naming) | ENS-aligned naming registry + resolver for the `.agent` TLD (forward + reverse) |
+| [`@agenticprimitives/agent-naming`](./packages/agent-naming) | Hierarchical name registry + resolver for the `.agent` TLD (forward + reverse) |
 | [`@agenticprimitives/agent-profile`](./packages/agent-profile) | CAIP-10 profile resolver + AgentCard schema + on-chain profile reads |
 | [`@agenticprimitives/agent-relationships`](./packages/agent-relationships) | ⚠️ EXPERIMENTAL — on-chain trust-fabric edges. Public graph; **not for confidential edges** (see package README) |
 

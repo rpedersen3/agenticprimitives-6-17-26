@@ -70,7 +70,7 @@ const records = await naming.getRecords('treasury.acme.agent');
   `nativeId`). Owned by `agent-account`, not this package.
 - **AgentName**: a normalized dotted name under `.agent` (a facet label).
 - **Label**: one segment of a name, such as `treasury`.
-- **Node**: ENS-compatible `namehash(name)`.
+- **Node**: the recursive `namehash(name)`.
 - **Registry**: owns name records: owner, resolver, parent, subregistry.
 - **Resolver**: stores typed records for a node.
 - **Primary name**: reverse record for a Smart Agent address.

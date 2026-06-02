@@ -1,4 +1,4 @@
-# spec/222 — ENS-aligned on-chain reverse resolution
+# spec/222 — On-chain reverse resolution
 
 **Status:** Proposed (2026-05-24).
 **Doctrine:** [ADR-0012](../docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md).
@@ -57,19 +57,19 @@ for:
 - Alchemy rate-limits getLogs aggressively → 429 storms.
 - Alchemy free tier rejects browser CORS → blocks the call entirely.
 
-## 2. Why ENS doesn't have this problem
+## 2. Why established on-chain name registries don't have this problem
 
-ENS reverse resolution does NOT depend on event walking. It stores the
+Established on-chain reverse resolution does NOT depend on event walking. It stores the
 **string** on the reverse resolver:
 
 ```solidity
-// ENS Reverse Registrar + DefaultReverseResolver pseudocode
+// reverse-registrar + default-reverse-resolver pseudocode
 ReverseRegistrar.setName(string newName)
   → resolver.setName(node, newName)
   → resolver.name(node) returns (string)   // single readContract call
 ```
 
-ENS apps' "display Alice's primary name" path is:
+The "display Alice's primary name" display path in those systems is:
 
 ```
 node = namehash(addressToNode(agent))         // pure off-chain
@@ -79,7 +79,7 @@ verify forward(name) === agent                // ONE more chain call
 
 No event scan. No `getLogs`. No rate-limit exposure.
 
-ENS v2 keeps the same shape: hierarchical registries for forward
+Newer hierarchical registries keep the same shape: hierarchical registries for forward
 records, separate reverse resolvers holding the **string** for
 reverse. The forward / records side aligns with our universal
 resolver; the reverse side is where we diverged.
@@ -87,7 +87,7 @@ resolver; the reverse side is where we diverged.
 ## 3. Reference: smart-agent patterns to port
 
 `smart-agent` does not yet ship a reverse resolver. The agent-naming
-SDK was written before this divergence surfaced (ENS v2 reverse was
+SDK was written before this divergence surfaced (stored-string reverse was
 not yet a porting reference). This spec is the deliberate divergence
 correction.
 
@@ -135,12 +135,12 @@ for `displayName` etc.); one view call per level on read (typically
 hierarchical naming continues to work; safe to add to existing
 deployments by setting the new attribute on register.
 
-**Cons:** still N round trips on reverse (vs 1 for full ENS-style).
+**Cons:** still N round trips on reverse (vs 1 for a full stored-string resolver).
 Acceptable — N is small.
 
 ### Option B — separate ReverseResolver holding the full string
 
-Mirror ENS exactly: introduce a `ReverseResolver` contract that
+Mirror the established stored-string pattern exactly: introduce a `ReverseResolver` contract that
 stores `mapping(address => string) _primaryNameString`. The agent
 calls `reverseResolver.setName(string)` (or a combined
 `registry.setPrimaryName(bytes32 node, string name)`); the
@@ -172,7 +172,7 @@ UniversalResolver's `reverseResolve(agent)` returns a `(string name,
 bytes32 node)` pair OR a new `reverseResolveString(address)` view
 returns just the string.
 
-**Pros:** single readContract for reverse — matches ENS UX exactly.
+**Pros:** single readContract for reverse — matches the established stored-string UX exactly.
 **Cons:** two writes during registration ceremony (setPrimaryName +
 reverseResolver.setName) OR a combined call; new contract to
 deploy + audit.
@@ -188,7 +188,7 @@ deploy + audit.
 
 Phase 1 alone removes the `eth_getLogs` dependency entirely from the
 read path and unblocks the demo's free-tier RPC. Phase 2 brings UX
-parity with ENS for ecosystem familiarity.
+parity with established on-chain name registries for ecosystem familiarity.
 
 ## 6. Migration
 

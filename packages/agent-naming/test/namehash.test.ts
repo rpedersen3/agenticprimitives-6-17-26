@@ -22,8 +22,8 @@ describe('namehash', () => {
     expect(namehash('')).toBe(ZERO_NODE);
   });
 
-  it('ENS algorithm: namehash("agent") = keccak256(0x00... || labelhash("agent"))', () => {
-    // Manual computation matching the ENS reference.
+  it('matches the standard recursive-namehash algorithm: namehash("agent") = keccak256(0x00... || labelhash("agent"))', () => {
+    // Manual computation matching the standard recursive-namehash algorithm.
     // Re-encode here to keep this test ABSOLUTELY independent from src/.
     const lh = keccak256(toBytes('agent'));
     const expected = keccak256(

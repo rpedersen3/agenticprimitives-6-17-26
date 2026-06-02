@@ -88,7 +88,7 @@ Specifically:
   NOT store an unknown predicate — `_requirePredicate` reverts at
   the chain edge.
 - **Governed vocabulary.** Predicate set is a public on-chain object
-  with provenance (CURIE, URI, label, datatype). Indexers + ENS-style
+  with provenance (CURIE, URI, label, datatype). Indexers + name-resolution
   consumers can validate against the on-chain registry directly.
 - **Cross-package coherence.** Relationships + identity contracts in
   Phase 3 use the SAME ontology + shape registry — one vocabulary

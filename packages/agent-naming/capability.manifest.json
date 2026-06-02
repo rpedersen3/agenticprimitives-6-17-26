@@ -5,7 +5,7 @@
   "agentEntry": "CLAUDE.md",
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/215-agent-naming.md",
-  "summary": "ENS-v2-style hierarchical names for Smart Agents (.agent TLD). Pure helpers + record schemas + client skeleton. Phase 1: SDK only.",
+  "summary": "Hierarchical names for Smart Agents (.agent TLD). Pure helpers + record schemas + client skeleton. Phase 1: SDK only.",
   "capabilities": [
     "name-resolution",
     "reverse-resolution",

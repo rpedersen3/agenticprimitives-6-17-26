@@ -80,7 +80,7 @@ Every person, org, service, treasury, or role agent has **one** canonical identi
 
 - **`connect-auth`** = authentication and signing interfaces. Despite the name, it is **not** the canonical identity owner.
 - **`agent-profile`** = profile / AgentCard facet registry (HCS-11-aligned JSON + endpoint verification). Not login, not naming.
-- **`agent-naming`** = `.agent` name facet registry (ENS-v2-style resolution). Not the root identifier.
+- **`agent-naming`** = `.agent` name facet registry (hierarchical registry + resolver). Not the root identifier.
 - **Cross-package APIs** key off `Address` or `canonicalAgentId` (CAIP-10), never a bare `.agent` name ([ADR-0006](../docs/architecture/decisions/0006-agent-naming-as-resolution-layer.md)).
 
 **Bootstrap** (spec 220) is composed at the **app** layer: deploy SA → register naming facet → enroll custodians → optional profile facet → optional external facets. No single package owns the full orchestration.

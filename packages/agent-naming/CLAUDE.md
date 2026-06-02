@@ -8,8 +8,8 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 - The `.agent` TLD constant (`AGENT_TLD`).
 - Name normalization (`normalizeAgentName`) — NFC + lowercase + label
   validation. Rejects empty / hyphen-prefixed / non-ASCII labels in v0.
-- `labelhash` + `namehash` — ENS-compatible keccak256 hashes for
-  identifier nodes.
+- `labelhash` + `namehash` — recursive keccak256 hashes
+  (`keccak256(parentNode || labelhash)`) for identifier nodes.
 - Record schemas (`AgentNameRecords`) and predicate constants
   (subpath `/records`).
 - `AgentNamingClient` — read API (resolve / reverse-resolve / get
@@ -37,7 +37,7 @@ Names are a **facet registration** pointing AT the canonical Smart Agent ([ADR-0
 `AGENT_TLD`.
 **Disambiguation:**
 
-- **"resolver"** here = on-chain ENS-v2 resolver. Distinct from
+- **"resolver"** here = our on-chain registry + resolver. Distinct from
   any other package.
 - **"registry"** here = `AgentNameRegistry` contract. Distinct from
   the factory deploy-registry in `agent-account`.

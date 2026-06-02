@@ -43,7 +43,7 @@ This avoids Unicode spoofing until a full IDN/punycode policy exists.
 
 ## Node And Namehash
 
-A node is the ENS-compatible `bytes32` namehash of a normalized name.
+A node is the recursive `bytes32` namehash (`keccak256(parentNode || labelhash)`) of a normalized name.
 
 ```ts
 namehash('agent');

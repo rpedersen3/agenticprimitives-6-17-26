@@ -15,7 +15,7 @@ on-chain authority paths, and demo integration land in Phase 3+.
 ## Charter (what's audit-relevant in this package)
 
 - Pure helpers (`normalizeAgentName`, `labelhash`, `namehash`): MUST
-  be deterministic + match the reference ENS algorithm + reject
+  be deterministic + match the standard recursive-namehash algorithm + reject
   malformed input.
 - Record schema (`AgentNameRecords` + `records` subpath): MUST
   refuse unknown keys on encode (fail-loud write) AND drop unknown
@@ -40,9 +40,9 @@ on-chain authority paths, and demo integration land in Phase 3+.
   non-ASCII / oversize labels. Throws `InvalidNameError`. Covered in
   `test/normalize.test.ts`.
 - ✅ `normalize` is idempotent: `normalize(normalize(x)) === normalize(x)`.
-- ✅ `namehash('')` = `ZERO_NODE` (`0x00…00`) per the ENS sentinel
+- ✅ `namehash('')` = `ZERO_NODE` (`0x00…00`) per the root-sentinel
   convention.
-- ✅ `namehash` matches the ENS reference algorithm under an
+- ✅ `namehash` matches the standard recursive-namehash algorithm under an
   in-band independent reimplementation (`test/namehash.test.ts`
   golden-vector table).
 - ✅ `namehash` rejects malformed input by delegating to `normalize`.

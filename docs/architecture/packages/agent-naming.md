@@ -7,7 +7,7 @@ call builders for name-management operations.
 ## Owns
 
 - Name normalization.
-- ENS-compatible `labelhash` and `namehash`.
+- Recursive `labelhash` and `namehash` (the `keccak256(parentNode || labelhash)` convention).
 - Registry and resolver client helpers.
 - Name record types and record encoders.
 - Primary-name reverse record helpers.

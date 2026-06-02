@@ -90,4 +90,4 @@ Expected future migration areas:
 - Generated API docs or manifest-doc synchronization.
 - Example typecheck enforcement.
 - Stable deployment address package.
-- Optional compatibility layer for external ENS resolvers.
+- Optional compatibility layer for external on-chain name resolvers.

@@ -2,7 +2,8 @@ import { keccak256, encodePacked, toBytes, type Hex } from 'viem';
 import { normalizeAgentName } from './normalize';
 
 /**
- * Compute the namehash of an agent name (ENS-compatible).
+ * Compute the recursive namehash of an agent name
+ * (`keccak256(parentNode || labelhash)` convention).
  *
  *   namehash('')                = 0x00…00
  *   namehash('agent')           = keccak256(namehash('') || labelhash('agent'))
@@ -15,14 +16,14 @@ import { normalizeAgentName } from './normalize';
  *
  * Throws `InvalidNameError` (via `normalizeAgentName`) on malformed
  * input. Passing `''` returns `0x00…00` — the canonical "empty / root"
- * sentinel matching the ENS convention.
+ * sentinel matching the recursive-namehash convention.
  */
 export function namehash(name: string): Hex {
   if (name === '') return ZERO_NODE;
   const labels = normalizeAgentName(name).split('.');
   let node: Hex = ZERO_NODE;
   // Walk from rightmost (TLD-side) label inward so the root anchors
-  // the recursion — same as ENS reference impl.
+  // the recursion — the standard recursive-namehash algorithm.
   for (let i = labels.length - 1; i >= 0; i--) {
     const lh = labelhash(labels[i]!);
     node = keccak256(encodePacked(['bytes32', 'bytes32'], [node, lh]));

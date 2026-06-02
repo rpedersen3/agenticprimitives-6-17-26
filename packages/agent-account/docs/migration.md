@@ -27,7 +27,7 @@ Custody-policy ABIs and SDK helpers moved to `@agenticprimitives/account-custody
 
 ## Salt From Names
 
-If CREATE2 salt previously included ENS-style names or profile labels, stop.
+If CREATE2 salt previously included on-chain names or profile labels, stop.
 Redeployed addresses will differ — plan a one-time migration or accept new SAs
 for affected users.
 

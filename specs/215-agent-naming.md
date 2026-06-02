@@ -11,9 +11,9 @@ AccessControl/TimelockController on the registry).
 **Adapted from:** `smart-agent` branch `003-intent-marketplace-proposal`
 (`packages/contracts/src/AgentName{Registry,AttributeResolver,UniversalResolver}.sol`
 + `packages/sdk/src/naming.ts`).
-**Models:** ENS v2 principles (hierarchical registry, registry/resolver
-separation, subregistry delegation, universal resolver) without
-ENS-as-dependency.
+**Models:** a hierarchical multi-root name registry (registry/resolver
+separation, subregistry delegation, universal resolver) with no
+external naming dependency.
 
 ## 0. The architectural shape (read first — ADR-0006 summary)
 
@@ -80,7 +80,7 @@ This package speaks **naming-domain vocabulary only**.
 - The `AGENT_TLD = 'agent'` constant.
 
 **Disambiguation (critical):**
-- **"resolver"** here = the on-chain ENS-v2-style resolver that holds
+- **"resolver"** here = the on-chain resolver that holds
   records for a name. In `delegation` "resolver" doesn't exist; in
   `mcp-runtime` "resolver" is unused. Naming-domain only.
 - **"registry"** here = the hierarchical `AgentNameRegistry` contract.
@@ -162,7 +162,7 @@ Throws `InvalidNameError` on any rejection.
 
 ### Namehash
 
-Standard ENS namehash:
+Standard recursive namehash (`keccak256(parentNode || labelhash)`):
 - `namehash('')` = `bytes32(0)`.
 - `namehash('agent')` = `keccak256(namehash('') ++ labelhash('agent'))`.
 - `namehash('alice.acme.agent')` = `keccak256(namehash('acme.agent') ++ labelhash('alice'))`.
@@ -352,7 +352,7 @@ These are enforced by the spec + the client + (Phase 3) the contracts:
 
 - Renewal / expiry (will land in Phase 3 with contracts).
 - Name transfer as ERC-1155 / tradable asset.
-- ENS public-namespace bridging (`.eth` interop).
+- External public-namespace bridging (e.g. `.eth` interop).
 - Punycode / international label support (US-ASCII only in Phase 1).
 - Reverse-record contracts (Phase 3).
 - Multi-root TLD support beyond `.agent` (the contract supports it;
@@ -432,4 +432,4 @@ For Phase 5 (full demo integration):
     package follows for delegation)
   - `specs/214-production-audit-dossier.md` (audit coverage will
     extend to the agent-naming package)
-- External reference: ENS v2 design notes.
+- External reference: prior hierarchical on-chain name-registry design notes.

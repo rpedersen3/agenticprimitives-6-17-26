@@ -7,7 +7,7 @@ This is the human-readable guide to the public exports in
 
 - `AGENT_TLD`: the canonical top-level label, currently `"agent"`.
 - `AgentTld`: type of the canonical top-level label.
-- `ZERO_NODE`: the all-zero ENS root node.
+- `ZERO_NODE`: the all-zero root node.
 
 ## Name Helpers
 
@@ -15,7 +15,7 @@ This is the human-readable guide to the public exports in
   throws `InvalidNameError`.
 - `isValidAgentName(name)`: boolean wrapper around `normalizeAgentName`.
 - `labelhash(label)`: keccak256 hash of a single label.
-- `namehash(name)`: ENS-compatible recursive namehash of a normalized name.
+- `namehash(name)`: recursive namehash (`keccak256(parentNode || labelhash)`) of a normalized name.
 
 ## Client
 
