@@ -32,6 +32,7 @@ import { WEA_AFFIRMATIONS as WEA_AFFIRMATIONS_LIB, verifyWeaHash } from './lib/w
 import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from './lib/people-groups';
 import { PersonaBar } from './components/PersonaBar';
 import { PeteDashboard, JillDashboard, OrgDashboard } from './components/OperatorDashboards';
+import { MemberTrustPanel } from './components/MemberTrustPanel';
 import { loadPersona, savePersona, clearPersona, isOperator, type Persona } from './lib/persona-mode';
 
 // JP-Adopt is a RELYING APP (spec 236). JP runs the program; the member's Impact Community
@@ -1429,6 +1430,13 @@ function AdoptionSummary({ session, record, impact }: { session: Session; record
         addr={session.address}
       />
 
+      <MemberTrustPanel
+        kind="adopter"
+        address={session.address}
+        fpgIds={record.adoption ? [record.adoption.peopleGroupId] : []}
+        adopterType={record.adopterType}
+      />
+
       <JpProjectionPanel impact={impact} record={record} session={session} />
     </>
   );
@@ -2369,6 +2377,12 @@ function FacilitatorSummary({ session, record, impact, onUpdate }: { session: Se
       <PublishUpdatesPanel record={record} coverage={coverage} matchedAdopters={matchedAdopters} onUpdate={onUpdate} />
 
       <MatchedAdoptersPanel adopters={matchedAdopters} addr={session.address} />
+
+      <MemberTrustPanel
+        kind="facilitator"
+        address={session.address}
+        fpgIds={coverage.peopleGroupIds}
+      />
 
       <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
     </>
