@@ -16,7 +16,9 @@ import {
   buildAssociationAssertion,
   buildJointAgreementAssertion,
 } from '../assertion-flow.js';
+import { issueAssociation } from '../issuance-flow.js';
 import { credentialHash } from '@agenticprimitives/verifiable-credentials';
+import { CREDENTIAL_TYPE } from '@agenticprimitives/attestations';
 
 describe('demo-jp spine end-to-end (substrate composability)', () => {
   it('mints + loads Pete + Jill personas deterministically', () => {
@@ -253,5 +255,56 @@ describe('demo-jp spine end-to-end (substrate composability)', () => {
     expect(request.party1).toBe(a.address);
     expect(request.party2).toBe(b.address);
     expect(predictedUid).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it('issues a JpAssociationCredential whose hash + request + UID are self-consistent (8.8)', () => {
+    const facilitatorOrg = mintPersona('pete');
+    const jp = getJP();
+    const issued = issueAssociation({
+      issuerCaip10: `eip155:84532:${jp.saAddress}`,
+      issuer: jp.saAddress,
+      subjectOrg: facilitatorOrg.address,
+      body: {
+        associationKind: 'facilitator',
+        role: 'approved',
+        fpgIds: ['NAJDI', 'KABYLE'],
+        countries: ['SA', 'DZ'],
+      },
+      validFrom: '2026-06-02T00:00:00Z',
+      salt: 3n,
+    });
+
+    expect(issued.credential.type).toContain('AssociationCredential');
+    expect(issued.credential.credentialSubject.description).toBe('apatl:JpAssociationCredential');
+    expect(issued.credential.credentialSubject.roles.subject).toBe(facilitatorOrg.address);
+    // The on-chain request must reference the SAME hash as the credential body.
+    expect(issued.request.credentialHash).toBe(credentialHash(issued.credential));
+    expect(issued.request.credentialHash).toBe(issued.credentialHash);
+    expect(issued.request.credentialType).toBe(CREDENTIAL_TYPE.Association);
+    expect(issued.request.schemaId).toBe(JP_SHAPES.facilitator.hash);
+    expect(issued.request.subject).toBe(facilitatorOrg.address);
+    expect(issued.request.issuer).toBe(jp.saAddress);
+    expect(issued.predictedUid).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it('adopter association uses the adopter shape + carries the MOU hash (8.8)', () => {
+    const adopterOrg = mintPersona('jill');
+    const jp = getJP();
+    const issued = issueAssociation({
+      issuerCaip10: `eip155:84532:${jp.saAddress}`,
+      issuer: jp.saAddress,
+      subjectOrg: adopterOrg.address,
+      body: {
+        associationKind: 'adopter',
+        role: 'approved',
+        fpgIds: ['NAJDI'],
+        adopterType: 'church',
+        mouHash: ('0x' + 'ab'.repeat(32)) as `0x${string}`,
+      },
+      validFrom: '2026-06-02T00:00:00Z',
+      salt: 4n,
+    });
+    expect(issued.request.schemaId).toBe(JP_SHAPES.adopter.hash);
+    expect(issued.credential.credentialSubject.body.payload.adopterType).toBe('church');
   });
 });
