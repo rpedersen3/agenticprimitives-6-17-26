@@ -19,6 +19,7 @@
     "@agenticprimitives/attestations": "workspace:*",
     "@agenticprimitives/connect": "workspace:*",
     "@agenticprimitives/connect-auth": "workspace:*",
+    "@agenticprimitives/contracts": "workspace:*",
     "@agenticprimitives/delegation": "workspace:*",
     "@agenticprimitives/fulfillment": "workspace:*",
     "@agenticprimitives/identity-directory-adapters": "workspace:*",
