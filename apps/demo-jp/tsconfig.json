@@ -3,7 +3,10 @@
   "compilerOptions": {
     "outDir": "./dist",
     "jsx": "react-jsx",
-    "types": ["vite/client"],
+    // node types: tsconfig.base maps @agenticprimitives/* to src, so tsc compiles
+    // node-package src (e.g. key-custody) that uses `process`. vite 6's vite/client
+    // no longer pulls @types/node ambiently the way vite 5 did.
+    "types": ["vite/client", "node"],
     "noEmit": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },

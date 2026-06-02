@@ -9,7 +9,9 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.test.ts'],
     pool: 'forks',
-    poolOptions: { forks: { singleFork: true } },
+    // Vitest 4 pool rework: `poolOptions.forks.singleFork` → top-level
+    // `fileParallelism: false` (run all test files sequentially in one fork).
+    fileParallelism: false,
     testTimeout: 10_000,
     coverage: {
       provider: 'v8',
