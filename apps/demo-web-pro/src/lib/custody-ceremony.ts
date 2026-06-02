@@ -35,7 +35,7 @@ import {
   encodeApplyCall,
 } from './custody-flow';
 import { executeCallFromAgent, encodeExecuteCall } from './execute-call';
-import { readIsCustodian, readScheduledChange, readScheduledChangeCount } from './chain-reads';
+import { readIsCustodian, readScheduledChange, readScheduledChangeCount, derivePasskeyRpIdHash } from './chain-reads';
 import { config } from '../config';
 import { assertWithPasskey, type DemoPasskey } from './passkey';
 import { getPasskeyAuth, getSiweAuth, type SeatClaim } from './seats';
@@ -120,11 +120,18 @@ async function signCeremonyHash(args: {
   const passkeyAuth = getPasskeyAuth(signer.seat);
   if (passkeyAuth && signer.passkey) {
     const assertion = await assertWithPasskey(signer.passkey, args.hash);
+    // H7-C.1 / CON-WEBAUTHN-001: v=2 quorum slot tail body now includes
+    // rpIdHash (PR after #94, 2026-06-01). The on-chain decoder at
+    // SignatureSlotRecovery.sol:172 expects 4 fields; encoding 3 caused
+    // empty-revert AdminUnauthorizedSigner-class failures on every passkey-
+    // signed custody schedule.
+    const rpIdHash = await derivePasskeyRpIdHash();
     return {
       type: 'passkey',
       pia: passkeyAuth.pia,
       x: signer.passkey.pubKeyX,
       y: signer.passkey.pubKeyY,
+      rpIdHash,
       assertion,
     };
   }
