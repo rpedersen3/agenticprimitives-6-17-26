@@ -15,7 +15,13 @@
 
 import type { Address } from '@agenticprimitives/types';
 import type { AdopterType, AdoptionDeclaration, FacilitatorCapacity, FacilitatorCoverage } from './vault';
-import { loadImpactProfile, loadJpAdopterRecord, loadJpFacilitatorRecord } from './vault';
+import {
+  loadImpactProfile,
+  loadJpAdopterRecord,
+  loadJpFacilitatorRecord,
+  loadAllLocalJpFacilitatorAddresses,
+  loadAllLocalJpAdopterAddresses,
+} from './vault';
 
 /** What an adopter sees about a facilitator JP introduced them to. Deliberately
  *  small — fields that go beyond this (e.g. raw email) need a stronger scope. */
@@ -203,11 +209,30 @@ export function matchFacilitatorsForAdopter(
     f.peopleGroupIds.includes(adoption.peopleGroupId)
     && f.capacity.adopterTypes.includes(adopterType),
   );
-  const own = viewerAddress ? ownFacilitatorAsMatched(viewerAddress) : null;
-  const ownFits = own
-    && own.peopleGroupIds.includes(adoption.peopleGroupId)
-    && own.capacity.adopterTypes.includes(adopterType);
-  return ownFits ? [own, ...seeded] : seeded;
+  // Local-broker pool: every JpFacilitatorRecord this browser knows about.
+  // Without this, a facilitator created in one persona (SA `F`) is invisible
+  // to an adopter in another persona (SA `A`) — even though the user just
+  // declared the coverage in the same browser. JP-the-broker is what
+  // surfaces this in production; localStorage scan is its demo substitute.
+  const seenIds = new Set<string>();
+  const local: MatchedFacilitator[] = [];
+  for (const addr of loadAllLocalJpFacilitatorAddresses()) {
+    const projected = ownFacilitatorAsMatched(addr);
+    if (!projected) continue;
+    if (!projected.peopleGroupIds.includes(adoption.peopleGroupId)) continue;
+    if (!projected.capacity.adopterTypes.includes(adopterType)) continue;
+    // Stamp isSelf only when this address IS the viewer; for other addresses
+    // (other personas in the same browser), surface as a normal match.
+    const isSelf = viewerAddress ? addr.toLowerCase() === viewerAddress.toLowerCase() : false;
+    const id = isSelf ? projected.id : `fac-local-${addr.toLowerCase()}`;
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
+    local.push({ ...projected, isSelf, id });
+  }
+  // Surface viewer's own persona first (UX hint), then other local
+  // facilitators, then the seeded pool.
+  local.sort((a, b) => (a.isSelf ? -1 : b.isSelf ? 1 : 0));
+  return [...local, ...seeded];
 }
 
 export function matchAdoptersForFacilitator(
@@ -218,11 +243,25 @@ export function matchAdoptersForFacilitator(
     coverage.peopleGroupIds.includes(a.peopleGroupId)
     && coverage.capacity.adopterTypes.includes(a.adopterType),
   );
-  const own = viewerAddress ? ownAdopterAsMatched(viewerAddress) : null;
-  const ownFits = own
-    && coverage.peopleGroupIds.includes(own.peopleGroupId)
-    && coverage.capacity.adopterTypes.includes(own.adopterType);
-  return ownFits ? [own, ...seeded] : seeded;
+  // Local-broker pool: every JpAdopterRecord this browser knows about. Same
+  // rationale as the facilitator side — an adopter declared in one persona
+  // should surface to a facilitator viewing in another persona, otherwise the
+  // demo silently drops the user's own counter-party.
+  const seenIds = new Set<string>();
+  const local: MatchedAdopter[] = [];
+  for (const addr of loadAllLocalJpAdopterAddresses()) {
+    const projected = ownAdopterAsMatched(addr);
+    if (!projected) continue;
+    if (!coverage.peopleGroupIds.includes(projected.peopleGroupId)) continue;
+    if (!coverage.capacity.adopterTypes.includes(projected.adopterType)) continue;
+    const isSelf = viewerAddress ? addr.toLowerCase() === viewerAddress.toLowerCase() : false;
+    const id = isSelf ? projected.id : `adp-local-${addr.toLowerCase()}`;
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
+    local.push({ ...projected, isSelf, id });
+  }
+  local.sort((a, b) => (a.isSelf ? -1 : b.isSelf ? 1 : 0));
+  return [...local, ...seeded];
 }
 
 /** SEC-022 invariant: self-persona ids are derived ONLY from the lowercased SA

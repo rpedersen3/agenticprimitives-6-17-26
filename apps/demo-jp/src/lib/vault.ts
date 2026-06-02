@@ -353,6 +353,41 @@ export function clearJpFacilitatorRecord(addr: Address): void {
   }
 }
 
+/** Enumerate every address that has a JpFacilitatorRecord in localStorage.
+ *
+ *  Used by the demo-broker matching layer so a facilitator added in one persona
+ *  surfaces to an adopter in another persona (same browser, same JP demo) —
+ *  without this, the adopter dashboard's "matched facilitators" only includes
+ *  the seeded pool + the viewer's OWN address, so a user who onboarded as a
+ *  facilitator at SA `F` then logged in as an adopter at SA `A` couldn't see
+ *  the facilitator they just created.
+ *
+ *  In production this scan is JP's broker job — facilitators don't enumerate
+ *  each other, they publish coverage and JP matches scoped projections. The
+ *  localStorage scan is the demo's substitute for that broker pool. */
+export function loadAllLocalJpFacilitatorAddresses(): Address[] {
+  return _scanAddressesWithPrefix('agenticprimitives:demo-jp:facilitator-record:');
+}
+
+/** Same idea, opposite side: every address with a JpAdopterRecord. Used by
+ *  matchAdoptersForFacilitator so an adopter created in one persona surfaces
+ *  to a facilitator in another persona (same browser). */
+export function loadAllLocalJpAdopterAddresses(): Address[] {
+  return _scanAddressesWithPrefix('agenticprimitives:demo-jp:adopter-record:');
+}
+
+function _scanAddressesWithPrefix(prefix: string): Address[] {
+  const out: Address[] = [];
+  if (typeof localStorage === 'undefined') return out;
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || !k.startsWith(prefix)) continue;
+    const addr = k.slice(prefix.length);
+    if (/^0x[0-9a-f]{40}$/.test(addr)) out.push(addr as Address);
+  }
+  return out;
+}
+
 export type FacilitatorStep =
   | 'profile-on-file'        // ✓ Impact has contact + org fields (facilitators are always org)
   | 'wea-on-file'            // ✓ Impact has WEA (always required for facilitators)
