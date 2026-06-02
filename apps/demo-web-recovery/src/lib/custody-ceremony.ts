@@ -40,6 +40,7 @@ import {
   readIsTrustee,
   readScheduledChange,
   readScheduledChangeCount,
+  derivePasskeyRpIdHash,
 } from './chain-reads';
 import { config } from '../config';
 import { assertWithPasskey, type DemoPasskey } from './passkey';
@@ -124,10 +125,8 @@ async function signCeremonyHash(args: {
   const passkeyAuth = getPasskeyAuth(signer.seat);
   if (passkeyAuth && signer.passkey) {
     const assertion = await assertWithPasskey(signer.passkey, args.hash);
-    // H7-C.1: v=2 slot tail includes rpIdHash (2026-06-01 fix).
-    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'impact-agent.me';
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(hostname));
-    const rpIdHash = ('0x' + Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')) as Hex;
+    // H7-C.1: v=2 slot tail includes rpIdHash (PR #95).
+    const rpIdHash = await derivePasskeyRpIdHash();
     return {
       type: 'passkey',
       pia: passkeyAuth.pia,

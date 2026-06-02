@@ -198,6 +198,11 @@ export interface RecoveryPasskeyAdd {
   credentialIdDigest: Hex;
   x: bigint;
   y: bigint;
+  /** H7-C.1 / CON-WEBAUTHN-001: rpIdHash binds the passkey to its RP. Required
+   *  by the on-chain `AgentAccountRecoveryPasskeyAdd` struct (IAgentAccount.sol).
+   *  The recovery handler `CustodyPolicy._applyRecoverAccount` forwards this to
+   *  `AgentAccount.addPasskey(...)` which reverts `InvalidRpIdHash()` on zero. */
+  rpIdHash: Hex;
 }
 
 /**
@@ -233,6 +238,10 @@ export function buildRecoverAccountArgs(args: {
     }
     assertUint256('RecoverAccount.addPasskeys.x', p.x, 1n);
     assertUint256('RecoverAccount.addPasskeys.y', p.y, 1n);
+    assertBytes32('RecoverAccount.addPasskeys.rpIdHash', p.rpIdHash);
+    if (p.rpIdHash === ('0x' + '00'.repeat(32))) {
+      throw new RangeError('[custody] RecoverAccount.addPasskeys: rpIdHash must be non-zero (H7-C.1 — AgentAccount.addPasskey reverts on zero)');
+    }
   }
   for (const d of removePasskeyCredentialIdDigests) {
     assertBytes32('RecoverAccount.removePasskeyCredentialIdDigests', d);
@@ -261,6 +270,10 @@ export function buildRecoverAccountArgs(args: {
               { name: 'credentialIdDigest', type: 'bytes32' },
               { name: 'x', type: 'uint256' },
               { name: 'y', type: 'uint256' },
+              // H7-C.1 / CON-WEBAUTHN-001: AgentAccountRecoveryPasskeyAdd struct
+              // gained rpIdHash. Off-chain encoder was missing it (drift bug
+              // fixed 2026-06-01, same class as PRs #91, #92, #95).
+              { name: 'rpIdHash', type: 'bytes32' },
             ],
           },
           { name: 'removePasskeyCredentialIdDigests', type: 'bytes32[]' },

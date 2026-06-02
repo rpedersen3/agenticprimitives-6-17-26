@@ -327,9 +327,10 @@ describe('action builder range guards (audit H2)', () => {
   });
 
   describe('buildRecoverAccountArgs', () => {
+    const REAL_RPID = ('0x' + 'cd'.repeat(32)) as `0x${string}`;
     it('accepts a single-passkey atomic swap', () => {
       const out = buildRecoverAccountArgs({
-        addPasskeys: [{ credentialIdDigest: REAL_DIGEST, x: 1n, y: 2n }],
+        addPasskeys: [{ credentialIdDigest: REAL_DIGEST, x: 1n, y: 2n, rpIdHash: REAL_RPID }],
         removePasskeyCredentialIdDigests: [('0x' + 'cd'.repeat(32)) as `0x${string}`],
       });
       expect(out).toMatch(/^0x[0-9a-f]+$/);
@@ -343,16 +344,23 @@ describe('action builder range guards (audit H2)', () => {
     it('rejects zero credentialIdDigest in addPasskeys', () => {
       expect(() =>
         buildRecoverAccountArgs({
-          addPasskeys: [{ credentialIdDigest: ZERO_BYTES32, x: 1n, y: 2n }],
+          addPasskeys: [{ credentialIdDigest: ZERO_BYTES32, x: 1n, y: 2n, rpIdHash: REAL_RPID }],
         }),
       ).toThrow(/C-6/);
     });
     it('rejects x = 0 in addPasskeys', () => {
       expect(() =>
         buildRecoverAccountArgs({
-          addPasskeys: [{ credentialIdDigest: REAL_DIGEST, x: 0n, y: 2n }],
+          addPasskeys: [{ credentialIdDigest: REAL_DIGEST, x: 0n, y: 2n, rpIdHash: REAL_RPID }],
         }),
       ).toThrow(/uint256 in \[1/);
+    });
+    it('rejects zero rpIdHash in addPasskeys (H7-C.1)', () => {
+      expect(() =>
+        buildRecoverAccountArgs({
+          addPasskeys: [{ credentialIdDigest: REAL_DIGEST, x: 1n, y: 2n, rpIdHash: ZERO_BYTES32 as `0x${string}` }],
+        }),
+      ).toThrow(/rpIdHash.*non-zero/);
     });
   });
 });

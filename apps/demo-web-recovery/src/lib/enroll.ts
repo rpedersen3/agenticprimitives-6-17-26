@@ -14,6 +14,7 @@ import { config } from '../config';
 import { registerPasskeyForSeat, savePasskeyForSeat, type DemoPasskey } from './passkey';
 import { loadSeats, type AuthMethod, type SeatClaim } from './seats';
 import { getSessionSalt } from './session-salt';
+import { derivePasskeyRpIdHash } from './chain-reads';
 
 export type EnrollChoice = 'passkey' | 'siwe';
 
@@ -109,6 +110,14 @@ export async function directDeploy(args: {
 
   const isPasskey = args.credential.authMethod.kind === 'passkey';
   const pk = args.credential.passkey;
+  // H7-C.1 / CON-WEBAUTHN-001: rpIdHash MUST match the value the on-chain
+  // factory will store (sha256(hostname), same as the WebAuthn rp.id used at
+  // passkey registration). The Worker's /session/direct-deploy fail-closes
+  // when passkey is supplied without rpIdHash (PR #91, ADR-0013 single
+  // mechanism — no server-side Origin fallback). The previous code passed
+  // `(pk as { rpIdHash?: Hex }).rpIdHash` which was always undefined since
+  // DemoPasskey doesn't store it.
+  const rpIdHash = isPasskey && pk ? await derivePasskeyRpIdHash() : undefined;
   const res = await fetch(`${base}/session/direct-deploy`, {
     method: 'POST',
     credentials: 'include',
@@ -119,15 +128,12 @@ export async function directDeploy(args: {
       // stays empty and the initialPasskey* fields ARE the custodian.
       custodians: isPasskey ? [] : [args.credential.identity],
       trustees: args.trustees,
-      ...(isPasskey && pk
+      ...(isPasskey && pk && rpIdHash
         ? {
             initialPasskeyCredentialIdDigest: pk.credentialIdDigest,
             initialPasskeyX: pk.pubKeyX.toString(),
             initialPasskeyY: pk.pubKeyY.toString(),
-            // H7-C.1 / CON-WEBAUTHN-001: rpIdHash required when passkey
-            // is supplied. The Worker defaults to sha256('impact-agent.me')
-            // for the testnet demo when this field is omitted.
-            initialPasskeyRpIdHash: (pk as { rpIdHash?: Hex }).rpIdHash,
+            initialPasskeyRpIdHash: rpIdHash,
           }
         : {}),
       timelockOverrides: args.timelockOverrides,

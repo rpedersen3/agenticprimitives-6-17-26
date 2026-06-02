@@ -5,6 +5,7 @@ import { loadSeats, getPasskeyAuth, type SeatClaim } from '../lib/seats';
 import { loadRecoveryState, saveRecoveryState, credentialLabel } from '../lib/recovery-state';
 import { getPasskeyForSeat } from '../lib/passkey';
 import { scheduleAndApply, type CeremonyPhase, type CeremonySigner } from '../lib/custody-ceremony';
+import { derivePasskeyRpIdHash } from '../lib/chain-reads';
 import { promptSwitchWalletAccount } from '../components/EnrollmentChoice';
 import { NameDisplay } from '../components/NameDisplay';
 
@@ -104,13 +105,23 @@ export function Act4Recovery({ onComplete }: { onComplete: () => void }) {
       const lost = recovery.lostCredential!;
       const repl = recovery.replacementCredential!;
 
+      // H7-C.1 / CON-WEBAUTHN-001: every passkey we add via recovery needs
+      // its rpIdHash to match what the authenticator will produce at later
+      // assertion time (= sha256(window.location.hostname) for our flows).
+      // AgentAccount.addPasskey reverts InvalidRpIdHash() on zero.
+      const replRpIdHash = repl.kind === 'passkey' ? await derivePasskeyRpIdHash() : undefined;
       // Atomic add-new + remove-old, generalised across credential kinds.
       const innerArgs = buildRecoverAccountArgs({
         addOwners: repl.kind === 'eoa' ? [repl.address] : [],
         removeOwners: lost.kind === 'eoa' ? [lost.address] : [],
         addPasskeys:
-          repl.kind === 'passkey'
-            ? [{ credentialIdDigest: repl.credentialIdDigest, x: BigInt(repl.pubKeyX), y: BigInt(repl.pubKeyY) }]
+          repl.kind === 'passkey' && replRpIdHash
+            ? [{
+                credentialIdDigest: repl.credentialIdDigest,
+                x: BigInt(repl.pubKeyX),
+                y: BigInt(repl.pubKeyY),
+                rpIdHash: replRpIdHash,
+              }]
             : [],
         removePasskeyCredentialIdDigests: lost.kind === 'passkey' ? [lost.credentialIdDigest] : [],
       });
