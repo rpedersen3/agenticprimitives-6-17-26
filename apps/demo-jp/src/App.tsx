@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Address, Hex } from '@agenticprimitives/types';
 import { JP, GATEWAY } from './lib/brand';
-import { startSiteEnrollment, exchangeCode, verifyIdToken } from './connect-client';
+import { startSiteEnrollment, startOrgCreation, exchangeCode, verifyIdToken } from './connect-client';
+import { loadMemberOrg, saveMemberOrg, type MemberOrg } from './lib/member-org';
+import { MemberOrgSection } from './components/MemberOrgSection';
 import { toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
 import {
   type AdopterStep, type AdopterType, type Attestation,
@@ -31,8 +33,7 @@ import { MOU_DOC_ID, MOU_TEXT, attestDocConsentBound } from './lib/mou';
 import { WEA_AFFIRMATIONS as WEA_AFFIRMATIONS_LIB, verifyWeaHash } from './lib/wea';
 import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from './lib/people-groups';
 import { PersonaBar } from './components/PersonaBar';
-import { PeteDashboard, JillDashboard, OrgDashboard } from './components/OperatorDashboards';
-import { MemberTrustPanel } from './components/MemberTrustPanel';
+import { PeteDashboard, JillDashboard } from './components/OperatorDashboards';
 import { loadPersona, savePersona, clearPersona, isOperator, type Persona } from './lib/persona-mode';
 
 // JP-Adopt is a RELYING APP (spec 236). JP runs the program; the member's Impact Community
@@ -51,6 +52,17 @@ type Modal = null | { kind: Kind } | { kind: 'wea' };
 
 const SESSION_KEY = 'agenticprimitives:demo-jp:session';
 const ENROLL_KEY = 'agenticprimitives:demo-jp:enroll';
+/** Stash for the org-create ceremony redirect (parallel to ENROLL_KEY). */
+const ORG_KEY = 'agenticprimitives:demo-jp:org-create';
+interface OrgStash {
+  state?: string;
+  kind?: Kind;
+  owner?: Address;
+  orgName?: string;
+  authOrigin?: string;
+  codeVerifier?: string;
+  nonce?: string;
+}
 /** Handoff stashes for JP→Impact ceremonies (profile edit, WEA signing). We stash a
  *  random state in sessionStorage before redirecting and verify on return — same
  *  pattern as the OIDC enrollment state (audit F5: fail-closed on mismatch). */
@@ -184,6 +196,22 @@ export function App() {
     if ((p === 'adopter' || p === 'facilitator') && !restoreSession()) setModal({ kind: p });
   }, []);
 
+  /** Kick off the Impact org-create ceremony — the connected user custodies the new
+   *  org SA via their ROOT credential at their home; we stash the kind so the return
+   *  handler files the org under the right member-org slot. */
+  const goCreateOrg = useCallback(async (kind: Kind, orgName: string) => {
+    const s = restoreSession();
+    if (!s) { setError('Connect first, then create your organization.'); return; }
+    try {
+      const { url, state, authOrigin, codeVerifier, nonce } = await startOrgCreation(s.name, orgName);
+      const stash: OrgStash = { state, kind, owner: s.address, orgName, authOrigin, codeVerifier, nonce };
+      sessionStorage.setItem(ORG_KEY, JSON.stringify(stash));
+      window.location.href = url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't start organization creation.");
+    }
+  }, []);
+
   // SEC-019: re-verify the restored JWT's signature against the home's JWKS. If we
   // can't fetch the JWKS OR the signature doesn't verify, drop the session. Runs once
   // per mount when there's a restored token; the OIDC return path mints a fresh token
@@ -240,6 +268,38 @@ export function App() {
     for (const k of ['code', 'state', 'enroll_error']) u.searchParams.delete(k);
     window.history.replaceState({}, '', u.toString());
     if (err) { setError(`Sign-in was not completed (${err}).`); return; }
+
+    // Org-create return (template=org-create): the home deployed an org SA custodied
+    // by the user's ROOT credential + minted an org→demo-jp delegation. Check this
+    // stash FIRST — its state won't match the site-login ENROLL stash.
+    let orgStash: OrgStash = {};
+    try { orgStash = JSON.parse(sessionStorage.getItem(ORG_KEY) ?? '{}') as OrgStash; } catch { /* ignore */ }
+    if (code && orgStash.state && retState && orgStash.state === retState) {
+      sessionStorage.removeItem(ORG_KEY);
+      if (!orgStash.authOrigin || !orgStash.codeVerifier || !orgStash.kind || !orgStash.owner) {
+        setError('Organization response was incomplete. Please try again.');
+        return;
+      }
+      void (async () => {
+        try {
+          const tok = await exchangeCode(orgStash.authOrigin!, code, orgStash.codeVerifier!);
+          if (!tok.org) throw new Error('no organization returned from your home');
+          const org: MemberOrg = {
+            kind: orgStash.kind!,
+            ownerPerson: orgStash.owner!,
+            orgName: tok.org.orgName || orgStash.orgName || 'Organization',
+            orgAgent: tok.org.orgAgent,
+            orgDelegation: tok.delegation,
+            createdAt: new Date().toISOString(),
+          };
+          saveMemberOrg(org);
+          setVaultBump((n) => n + 1);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'organization creation failed');
+        }
+      })();
+      return;
+    }
 
     let stash: EnrollStash = {};
     try { stash = JSON.parse(sessionStorage.getItem(ENROLL_KEY) ?? '{}') as EnrollStash; } catch { /* ignore */ }
@@ -402,12 +462,9 @@ export function App() {
 
   const bar = <PersonaBar active={persona} onSwitch={switchPersona} />;
 
-  // Operator + org personas (Wave 8) short-circuit the SSO flow.
+  // Operator personas (Pete / Jill) short-circuit the SSO flow.
   if (persona && isOperator(persona)) {
     return <>{bar}{persona === 'pete' ? <PeteDashboard /> : <JillDashboard />}</>;
-  }
-  if (persona === 'adopter-org' || persona === 'facilitator-org') {
-    return <>{bar}<OrgDashboard kind={persona === 'adopter-org' ? 'adopter' : 'facilitator'} orgAddress={session?.address ?? null} /></>;
   }
 
   if (session) {
@@ -417,6 +474,8 @@ export function App() {
         <AdopterIntranet
           key={vaultBump}
           session={session}
+          org={loadMemberOrg(session.address, 'adopter')}
+          onCreateOrg={(name) => goCreateOrg('adopter', name)}
           onSignOut={signOut}
           onOpenWea={() => setModal({ kind: 'wea' })}
           onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
@@ -430,6 +489,8 @@ export function App() {
       <FacilitatorIntranet
         key={vaultBump}
         session={session}
+        org={loadMemberOrg(session.address, 'facilitator')}
+        onCreateOrg={(name) => goCreateOrg('facilitator', name)}
         onSignOut={signOut}
         onOpenWea={() => setModal({ kind: 'wea' })}
         onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
@@ -630,8 +691,9 @@ function OnboardPanel({ kind, busy, onClose, onConnect }: {
 // these ceremonies). Steps that Impact already satisfies show as "✓ on file";
 // JP-specific steps expand into inline forms when active.
 
-function AdopterIntranet({ session, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
-  session: Session; onSignOut: () => void; onOpenWea: () => void;
+function AdopterIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
+  session: Session; org: MemberOrg | null; onCreateOrg: (orgName: string) => void;
+  onSignOut: () => void; onOpenWea: () => void;
   onGoEditProfile: (missingKeys: string[]) => void;
   onGoSignWea: () => void;
 }) {
@@ -662,6 +724,8 @@ function AdopterIntranet({ session, onSignOut, onOpenWea, onGoEditProfile, onGoS
           <a href={homeUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--c-primary)' }}>{homeUrl}</a>.
         </div>
       )}
+
+      <MemberOrgSection kind="adopter" org={org} onCreateOrg={onCreateOrg} />
 
       {complete ? (
         <AdoptionSummary session={session} record={record} impact={impact} />
@@ -1430,13 +1494,6 @@ function AdoptionSummary({ session, record, impact }: { session: Session; record
         addr={session.address}
       />
 
-      <MemberTrustPanel
-        kind="adopter"
-        address={session.address}
-        fpgIds={record.adoption ? [record.adoption.peopleGroupId] : []}
-        adopterType={record.adopterType}
-      />
-
       <JpProjectionPanel impact={impact} record={record} session={session} />
     </>
   );
@@ -1857,8 +1914,9 @@ function ProjBox({ label, value, mono = false }: { label: string; value: string;
 
 // ── Facilitator Intranet (placeholder, wired next) ──────────────────────────
 
-function FacilitatorIntranet({ session, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
-  session: Session; onSignOut: () => void; onOpenWea: () => void;
+function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
+  session: Session; org: MemberOrg | null; onCreateOrg: (orgName: string) => void;
+  onSignOut: () => void; onOpenWea: () => void;
   onGoEditProfile: (missingKeys: string[]) => void;
   onGoSignWea: () => void;
 }) {
@@ -1892,6 +1950,8 @@ function FacilitatorIntranet({ session, onSignOut, onOpenWea, onGoEditProfile, o
           <a href={homeUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--c-primary)' }}>{homeUrl}</a>.
         </div>
       )}
+
+      <MemberOrgSection kind="facilitator" org={org} onCreateOrg={onCreateOrg} />
 
       {complete ? (
         <FacilitatorSummary session={session} record={record} impact={impact} onUpdate={update} />
@@ -2377,12 +2437,6 @@ function FacilitatorSummary({ session, record, impact, onUpdate }: { session: Se
       <PublishUpdatesPanel record={record} coverage={coverage} matchedAdopters={matchedAdopters} onUpdate={onUpdate} />
 
       <MatchedAdoptersPanel adopters={matchedAdopters} addr={session.address} />
-
-      <MemberTrustPanel
-        kind="facilitator"
-        address={session.address}
-        fpgIds={coverage.peopleGroupIds}
-      />
 
       <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
     </>

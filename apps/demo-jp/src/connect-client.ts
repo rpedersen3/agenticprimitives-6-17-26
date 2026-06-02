@@ -153,6 +153,32 @@ export async function startSiteEnrollment(
   return { ok: true, url, state, authOrigin, codeVerifier: verifier, nonce };
 }
 
+/** Start an org-creation ceremony (template=org-create) at the connected person's
+ *  secure home. The org SA is DEPLOYED + custodied by the person's ROOT credential
+ *  AT their home (same custody as their person agent — demo-jp is never a custodian);
+ *  the home mints a scoped org→demo-jp delegation and returns it with the org identity.
+ *  `orgBase` is the desired org name label (e.g. the church name). */
+export async function startOrgCreation(
+  personName: string,
+  orgBase: string,
+): Promise<{ url: string; state: string; authOrigin: string; codeVerifier: string; nonce: string }> {
+  const state = randomB64url(16);
+  const nonce = randomB64url(16);
+  const { verifier, challenge } = await generatePkce();
+  const authOrigin = await resolveAuthOrigin(personName);
+  const url = buildAuthorizeUrl({
+    authOrigin,
+    state,
+    nonce,
+    codeChallenge: challenge,
+    agentName: personName,
+    delegate: DEMO_JP_DELEGATE,
+    template: 'org-create',
+    orgBase,
+  });
+  return { url, state, authOrigin, codeVerifier: verifier, nonce };
+}
+
 /** Exchange the authorization code at /token (PKCE) → { id_token, delegation, org? } (§4.3). */
 export async function exchangeCode(authOrigin: string, code: string, codeVerifier: string): Promise<TokenResult> {
   const r = await fetch(new URL('/token', authOrigin).toString(), {
