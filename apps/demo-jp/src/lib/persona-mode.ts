@@ -11,13 +11,13 @@
 export type Persona =
   | 'pete' // Global Church custodian — the issuer operator
   | 'jill' // JP custodian — the broker operator
-  | 'adopter' // member: adopter intranet (SSO)
-  | 'facilitator' // member: facilitator intranet (SSO)
-  | 'adopter-org' // member: their adopter Org SA view
-  | 'facilitator-org'; // member: their facilitator Org SA view
+  | 'adopter' // member: adopter intranet (SSO) — creates + acts as their org
+  | 'facilitator'; // member: facilitator intranet (SSO) — creates + acts as their org
 
 export const OPERATOR_PERSONAS: Persona[] = ['pete', 'jill'];
-export const MEMBER_PERSONAS: Persona[] = ['adopter', 'facilitator', 'adopter-org', 'facilitator-org'];
+// Org views are NOT public personas — a connected adopter/facilitator creates +
+// acts as their org inside the member dashboard (not via the persona bar).
+export const MEMBER_PERSONAS: Persona[] = ['adopter', 'facilitator'];
 
 export function isOperator(p: Persona): boolean {
   return OPERATOR_PERSONAS.includes(p);
@@ -57,22 +57,8 @@ export const PERSONA_META: Record<Persona, PersonaMeta> = {
     persona: 'facilitator',
     label: 'Facilitator',
     org: 'Member',
-    blurb: 'A member facilitating adoptions on the ground.',
+    blurb: 'A member facilitating adoptions — connect, then create + act as your org.',
     glyph: '🤝',
-  },
-  'adopter-org': {
-    persona: 'adopter-org',
-    label: 'Adopter Org',
-    org: 'Org SA',
-    blurb: 'The adopter organization’s Smart Agent — its associations + agreements.',
-    glyph: '🏛️',
-  },
-  'facilitator-org': {
-    persona: 'facilitator-org',
-    label: 'Facilitator Org',
-    org: 'Org SA',
-    blurb: 'The facilitator organization’s Smart Agent — its associations + coverage.',
-    glyph: '🏢',
   },
 };
 

@@ -48,14 +48,11 @@ function OrgDeployCard({ org }: { org: OrgName }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Predict the address (no deploy) on first mount so the SA is shown immediately.
-  useEffect(() => {
-    if (!state?.saAddress) {
-      predictOrgAddress(org).then((addr) => setState({ name: org, custodian: persona.custodian.address, saAddress: addr, deployed: false })).catch(() => {});
-    }
-  }, [org, persona.custodian.address, state?.saAddress]);
-
-  const deploy = useCallback(async () => {
+  // Auto-provision (D: "not behind manual Deploy buttons"). On mount, deploy the
+  // org SA if it isn't already on chain — custody = Pete/Jill (the only association,
+  // so they can sign issuance). Idempotent: ensureOrgDeployed getCode-checks first +
+  // a cached deployed state short-circuits. On failure we surface a manual Retry.
+  const provision = useCallback(async () => {
     setBusy(true);
     setErr(null);
     try {
@@ -69,15 +66,37 @@ function OrgDeployCard({ org }: { org: OrgName }) {
     }
   }, [org]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const cached = orgChainState(org);
+    if (cached?.deployed) { setState(cached); return; }
+    // Show the predicted address immediately, then auto-provision.
+    void (async () => {
+      try {
+        const addr = await predictOrgAddress(org);
+        if (!cancelled) setState((s) => s ?? { name: org, custodian: persona.custodian.address, saAddress: addr, deployed: false });
+      } catch { /* fall through to provision, which derives too */ }
+      if (!cancelled) await provision();
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org]);
+
   const label = org === 'global-church' ? 'Global Church' : 'JP';
   return (
     <Card>
-      <SectionHead eyebrow="Organization Smart Agent" title={`${label} SA`} sub={`Mode-0, custodied by ${org === 'global-church' ? 'Pete' : 'Jill'}’s EOA (${shortHex(persona.custodian.address)}).`} />
+      <SectionHead eyebrow="Default issuer · auto-provisioned" title={`${label} SA`} sub={`Mode-0, custodied by ${org === 'global-church' ? 'Pete' : 'Jill'}’s EOA (${shortHex(persona.custodian.address)}) — the custody is the only association, so ${org === 'global-church' ? 'Pete' : 'Jill'} can sign as the issuer.`} />
       <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '.4rem 1rem', alignItems: 'center', fontSize: '.85rem' }}>
         <span style={{ color: 'var(--c-g500)' }}>Address</span>
         <span><AddrLink addr={state?.saAddress} /></span>
         <span style={{ color: 'var(--c-g500)' }}>Status</span>
-        <span>{state?.deployed ? <Pill tone="live">● Deployed on Base Sepolia</Pill> : <Pill tone="warn">Predicted (not deployed)</Pill>}</span>
+        <span>
+          {state?.deployed
+            ? <Pill tone="live">● Deployed on Base Sepolia</Pill>
+            : busy
+              ? <Pill tone="neutral">Provisioning…</Pill>
+              : <Pill tone="warn">Predicted (not deployed)</Pill>}
+        </span>
         {state?.deployTxHash && (
           <>
             <span style={{ color: 'var(--c-g500)' }}>Deploy tx</span>
@@ -85,12 +104,12 @@ function OrgDeployCard({ org }: { org: OrgName }) {
           </>
         )}
       </div>
-      {!state?.deployed && (
-        <div style={{ marginTop: '1rem' }}>
-          <Btn onClick={deploy} busy={busy}>Deploy on Base Sepolia</Btn>
+      {err && (
+        <div style={{ marginTop: '.8rem', display: 'flex', flexDirection: 'column', gap: '.6rem' }}>
+          <Banner tone="err">{err}</Banner>
+          <div><Btn onClick={provision} busy={busy}>Retry provisioning</Btn></div>
         </div>
       )}
-      {err && <div style={{ marginTop: '.8rem' }}><Banner tone="err">{err}</Banner></div>}
     </Card>
   );
 }
@@ -481,89 +500,3 @@ function IssuanceDesk() {
 // to keep the full VC body out of long-lived demo storage).
 const lastIssued: Record<string, Awaited<ReturnType<typeof registerAgreementOnChain>>['issued']> = {};
 
-// ─── Adopter-Org / Facilitator-Org views (Wave 8.12) ────────────────────────
-
-/** Read-only view of an organization Smart Agent: the Association credential JP
- *  issued it, and the agreements it's party to — each verifiable on chain. The
- *  org's confidential profile + signed docs live in Impact; this surface holds
- *  only the public anchors (the on-chain rows). */
-export function OrgDashboard({ kind, orgAddress }: { kind: 'adopter' | 'facilitator'; orgAddress: Address | null }) {
-  const [associations] = useState<AssociationRow[]>(() => loadAssociations());
-  const [issuance] = useState<IssuanceRow[]>(() => loadIssuance());
-  const [verify, setVerify] = useState<Record<string, string>>({});
-
-  const mine = useMemo(() => {
-    if (!orgAddress) return { assoc: [] as AssociationRow[], agreements: [] as IssuanceRow[] };
-    const a = orgAddress.toLowerCase();
-    return {
-      assoc: associations.filter((x) => x.subjectOrg.toLowerCase() === a && x.associationKind === kind),
-      agreements: issuance.filter((x) => x.adopterParty.toLowerCase() === a || x.facilitatorParty.toLowerCase() === a),
-    };
-  }, [orgAddress, associations, issuance, kind]);
-
-  const checkAssoc = useCallback(async (uid: Hex) => {
-    const ok = await isAttestationValid(uid);
-    setVerify((v) => ({ ...v, [uid]: ok ? 'valid on chain ✓' : 'not valid / not found' }));
-  }, []);
-  const checkAgreement = useCallback(async (commitment: Hex) => {
-    const rec = await getAgreementRecord(commitment);
-    setVerify((v) => ({ ...v, [commitment]: rec ? `status ${rec.status} ✓` : 'not registered' }));
-  }, []);
-
-  const label = kind === 'adopter' ? 'Adopter Org' : 'Facilitator Org';
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 920, margin: '0 auto', padding: '1.5rem 1rem 4rem' }}>
-      <header>
-        <div className="eyebrow">{kind === 'adopter' ? '🏛️' : '🏢'} Organization Smart Agent</div>
-        <h1 style={{ fontSize: '1.6rem', marginTop: '.3rem' }}>{label}</h1>
-        <p style={{ color: 'var(--c-g600)', marginTop: '.4rem', maxWidth: '62ch' }}>
-          The public anchors for this organization’s Smart Agent — the recognition JP issued + the agreements it’s party to. Confidential profile + signed MOU/WEA stay in the member’s Impact home.
-        </p>
-      </header>
-
-      {!orgAddress && (
-        <Card><Banner tone="warn">Sign in as a member (Adopter / Facilitator persona) so the org Smart Agent address is known. This view reads the on-chain rows scoped to that address.</Banner></Card>
-      )}
-
-      {orgAddress && (
-        <>
-          <Card>
-            <SectionHead eyebrow="Identity" title="Org SA address" />
-            <AddrLink addr={orgAddress} />
-          </Card>
-
-          <Card>
-            <SectionHead eyebrow="Agentic Trust" title="JP recognition" sub="The Association credential JP issued to this org (AttestationRegistry)." />
-            {mine.assoc.length === 0 && <p style={{ fontSize: '.85rem', color: 'var(--c-g400)' }}>No association yet. JP issues this from the broker (Jill) dashboard.</p>}
-            {mine.assoc.map((a) => (
-              <div key={a.uid} style={{ display: 'flex', gap: '.6rem', alignItems: 'center', fontSize: '.83rem', padding: '.5rem 0', borderTop: '1px solid var(--c-g100)' }}>
-                <Pill tone="ok">{a.associationKind}</Pill>
-                <span style={{ color: 'var(--c-g500)' }}>UID <Mono>{shortHex(a.uid)}</Mono></span>
-                <TxLink hash={a.txHash} />
-                <Btn variant="ghost" style={{ marginLeft: 'auto', padding: '.3rem .6rem' }} onClick={() => checkAssoc(a.uid)}>Verify</Btn>
-                {verify[a.uid] && <Pill tone="live">{verify[a.uid]}</Pill>}
-              </div>
-            ))}
-          </Card>
-
-          <Card>
-            <SectionHead eyebrow="Agreements" title="On-chain commitments" sub="The agreement rows this org is party to (AgreementRegistry, commitment-only)." />
-            {mine.agreements.length === 0 && <p style={{ fontSize: '.85rem', color: 'var(--c-g400)' }}>No agreements yet.</p>}
-            {mine.agreements.map((row) => (
-              <div key={row.agreementCommitment} style={{ fontSize: '.83rem', padding: '.5rem 0', borderTop: '1px solid var(--c-g100)' }}>
-                <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Pill>{findPeopleGroup(row.fpgId)?.name ?? row.fpgId}</Pill>
-                  <span style={{ color: 'var(--c-g500)' }}>commitment <Mono>{shortHex(row.agreementCommitment)}</Mono></span>
-                  <TxLink hash={row.registerTxHash} label="register" />
-                  {row.jointAssertionTxHash && <TxLink hash={row.jointAssertionTxHash} label="joint" />}
-                  <Btn variant="ghost" style={{ marginLeft: 'auto', padding: '.3rem .6rem' }} onClick={() => checkAgreement(row.agreementCommitment)}>Verify</Btn>
-                  {verify[row.agreementCommitment] && <Pill tone="live">{verify[row.agreementCommitment]}</Pill>}
-                </div>
-              </div>
-            ))}
-          </Card>
-        </>
-      )}
-    </div>
-  );
-}
