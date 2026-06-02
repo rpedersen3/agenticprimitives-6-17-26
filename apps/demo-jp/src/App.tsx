@@ -30,6 +30,9 @@ import type { PublishedUpdate } from './lib/vault';
 import { MOU_DOC_ID, MOU_TEXT, attestDocConsentBound } from './lib/mou';
 import { WEA_AFFIRMATIONS as WEA_AFFIRMATIONS_LIB, verifyWeaHash } from './lib/wea';
 import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from './lib/people-groups';
+import { PersonaBar } from './components/PersonaBar';
+import { PeteDashboard, JillDashboard, OrgDashboard } from './components/OperatorDashboards';
+import { loadPersona, savePersona, clearPersona, isOperator, type Persona } from './lib/persona-mode';
 
 // JP-Adopt is a RELYING APP (spec 236). JP runs the program; the member's Impact Community
 // home holds the data + delegates scoped access. Onboarding is a JOINT flow — Impact already
@@ -167,6 +170,18 @@ export function App() {
    *  member's /profile editor at their Impact home). Used as the `key` on AdopterIntranet
    *  so it re-mounts and reloads the vault from localStorage. */
   const [vaultBump, setVaultBump] = useState(0);
+  /** Active demo persona (Wave 8.13). Operator personas (Pete/Jill) render the
+   *  issuer/broker dashboards; member personas keep the SSO flow below. */
+  const [persona, setPersona] = useState<Persona | null>(loadPersona);
+
+  const switchPersona = useCallback((p: Persona | null) => {
+    setPersona(p);
+    setError(null);
+    if (p) savePersona(p);
+    else clearPersona();
+    // Selecting a member persona with no session opens that onboarding flow.
+    if ((p === 'adopter' || p === 'facilitator') && !restoreSession()) setModal({ kind: p });
+  }, []);
 
   // SEC-019: re-verify the restored JWT's signature against the home's JWKS. If we
   // can't fetch the JWKS OR the signature doesn't verify, drop the session. Runs once
@@ -384,9 +399,20 @@ export function App() {
     }
   }, []);
 
+  const bar = <PersonaBar active={persona} onSwitch={switchPersona} />;
+
+  // Operator + org personas (Wave 8) short-circuit the SSO flow.
+  if (persona && isOperator(persona)) {
+    return <>{bar}{persona === 'pete' ? <PeteDashboard /> : <JillDashboard />}</>;
+  }
+  if (persona === 'adopter-org' || persona === 'facilitator-org') {
+    return <>{bar}<OrgDashboard kind={persona === 'adopter-org' ? 'adopter' : 'facilitator'} orgAddress={session?.address ?? null} /></>;
+  }
+
   if (session) {
     if (session.kind === 'adopter') {
       return (
+        <>{bar}
         <AdopterIntranet
           key={vaultBump}
           session={session}
@@ -395,9 +421,11 @@ export function App() {
           onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
           onGoSignWea={() => goSignWeaAtImpact(session.name)}
         />
+        </>
       );
     }
     return (
+      <>{bar}
       <FacilitatorIntranet
         key={vaultBump}
         session={session}
@@ -406,12 +434,14 @@ export function App() {
         onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
         onGoSignWea={() => goSignWeaAtImpact(session.name)}
       />
+      </>
     );
   }
 
   // ── Signed-out marketing page (unchanged from the user-approved version) ────
   return (
     <>
+      {bar}
       <header className="topbar">
         <div className="wrap">
           <div className="brand">
