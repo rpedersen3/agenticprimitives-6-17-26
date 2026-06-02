@@ -7,7 +7,7 @@ import "../governance/GovernanceManaged.sol";
  * @title AgentNameRegistry
  * @notice Hierarchical multi-root name registry for Smart Agents.
  *
- * Names are keyed by `node` (the ENS-style namehash:
+ * Names are keyed by `node` (the recursive namehash:
  * `keccak256(parentNode || labelhash)`). Each node has an owner (a Smart
  * Agent address), a resolver, an optional subregistry delegate that may
  * issue children, a parent pointer, the labelhash, and an optional

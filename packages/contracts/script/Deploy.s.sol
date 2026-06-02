@@ -357,9 +357,33 @@ contract Deploy is Script {
             demoNode,
             address(nameResolver)
         );
-        console2.log("PermissionlessSubregistry: %s", address(subregistry));
+        console2.log("PermissionlessSubregistry (demo.agent): %s", address(subregistry));
         nameRegistry.setSubregistry(demoNode, address(subregistry));
         console2.log("  subregistry granted under demo.agent");
+
+        // 6.7.3. `.impact` TLD — the user-facing namespace (`<label>.impact`,
+        //        impact-agent.me). FIRST-CLASS: provisioned on every deploy
+        //        right next to `.agent` so it can never drift out of sync with
+        //        the apps (AGENT_NAME_PARENT='impact'). Multi-root registry, so
+        //        this is just another root + its own permissionless subregistry.
+        //        Root owner = deployer so the same-tx setSubregistry succeeds
+        //        (matches the demo.agent ownership shape). This is the canonical
+        //        `permissionlessSubregistry` the apps consume.
+        bytes32 impactRoot = nameRegistry.initializeRoot(
+            "impact",
+            deployer,
+            address(nameResolver),
+            nameRegistry.KIND_AGENT()
+        );
+        console2.log("  .impact root node:  %s", vm.toString(impactRoot));
+        PermissionlessSubregistry impactSubregistry = new PermissionlessSubregistry(
+            nameRegistry,
+            impactRoot,
+            address(nameResolver)
+        );
+        console2.log("PermissionlessSubregistry (.impact):    %s", address(impactSubregistry));
+        nameRegistry.setSubregistry(impactRoot, address(impactSubregistry));
+        console2.log("  subregistry granted under .impact");
 
         // 6.8. Agent Relationships (RL Phase 3, spec 216) — trust-fabric
         //      edge store + governance-gated type semantics registry.
@@ -451,7 +475,11 @@ contract Deploy is Script {
         vm.serializeAddress(key, "agentNameRegistry", address(nameRegistry));
         vm.serializeAddress(key, "agentNameResolver", address(nameResolver));
         vm.serializeAddress(key, "agentNameUniversalResolver", address(nameUniversal));
-        vm.serializeAddress(key, "permissionlessSubregistry", address(subregistry));
+        // Canonical: the apps register/resolve `<label>.impact`, so the `.impact`
+        // subregistry IS `permissionlessSubregistry`. The demo.agent one is kept
+        // under its own key for the `.agent` protocol namespace.
+        vm.serializeAddress(key, "permissionlessSubregistry", address(impactSubregistry));
+        vm.serializeAddress(key, "permissionlessSubregistryDemoAgent", address(subregistry));
         vm.serializeAddress(key, "relationshipTypeRegistry", address(relTypes));
         vm.serializeAddress(key, "agentRelationship", address(relationships));
         vm.serializeAddress(key, "agentProfileResolver", address(profileResolver));

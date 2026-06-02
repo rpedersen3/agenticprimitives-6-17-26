@@ -122,7 +122,7 @@ contract AgentNameUniversalResolver {
     /**
      * @notice Reverse-resolve a Smart Agent address to its primary name
      *         STRING in a single external call. Per spec/222 this is
-     *         the ENS-aligned reverse path — no log walks, no name
+     *         the on-chain reverse path — no log walks, no name
      *         reconstruction in the SDK, no event indexer required.
      *
      *         Walks `parent(node)` up the registry, reading `label(node)`
