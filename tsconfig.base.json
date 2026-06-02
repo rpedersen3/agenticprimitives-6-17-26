@@ -36,7 +36,14 @@
       "@agenticprimitives/ontology/artifacts": ["packages/ontology/src/artifacts.ts"],
       "@agenticprimitives/identity-directory": ["packages/identity-directory/src/index.ts"],
       "@agenticprimitives/identity-directory-adapters": ["packages/identity-directory-adapters/src/index.ts"],
-      "@agenticprimitives/connect": ["packages/connect/src/index.ts"]
+      "@agenticprimitives/connect": ["packages/connect/src/index.ts"],
+      "@agenticprimitives/verifiable-credentials": ["packages/verifiable-credentials/src/index.ts"],
+      "@agenticprimitives/attestations": ["packages/attestations/src/index.ts"],
+      "@agenticprimitives/agreements": ["packages/agreements/src/index.ts"],
+      "@agenticprimitives/intent-marketplace": ["packages/intent-marketplace/src/index.ts"],
+      "@agenticprimitives/intent-resolver": ["packages/intent-resolver/src/index.ts"],
+      "@agenticprimitives/payments": ["packages/payments/src/index.ts"],
+      "@agenticprimitives/fulfillment": ["packages/fulfillment/src/index.ts"]
     }
   }
 }

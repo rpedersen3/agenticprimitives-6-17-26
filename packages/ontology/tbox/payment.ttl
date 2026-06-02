@@ -1,0 +1,124 @@
+# T-box — payment vocabulary (spine Layer 9b).
+# x402 + AP2 + ERC-4337 paymaster aligned; spec 243.
+# Spec 225 §11.5.
+# Owning runtime SHACL: packages/payments/src/shapes/payment.shacl.ttl.
+
+@prefix appay:  <https://agenticprimitives.dev/ns/payment#> .
+@prefix apvc:   <https://agenticprimitives.dev/ns/credential#> .
+@prefix apint:  <https://agenticprimitives.dev/ns/intent#> .
+@prefix apagr:  <https://agenticprimitives.dev/ns/agreement#> .
+@prefix ap:     <https://agenticprimitives.dev/ns/core#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+appay: a owl:Ontology ;
+    rdfs:label "Agentic Primitives — payment ontology" ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment "Layer 9b of the spine. PaymentMandate + ContextBinding + MandateConstraints + Mode discrimination + PaymentReceipt." .
+
+# ─── Core classes ─────────────────────────────────────────────────────
+
+appay:PaymentMandate a owl:Class ;
+    rdfs:label "PaymentMandate" ;
+    rdfs:comment "Signed, scoped, context-bound payment authority. Distinct from PermissionGrant (which authorizes ACTIONS) and Agreement (which commits PARTIES). AP2 + x402 + ERC-4337 paymaster aligned." .
+
+appay:OpenPaymentMandate a owl:Class ;
+    rdfs:subClassOf appay:PaymentMandate ;
+    rdfs:label "OpenPaymentMandate" ;
+    rdfs:comment "Autonomous-execution-allowed mandate. Refuses final-charge (PMT-10.1); closed mandate required for terminal transactions." .
+
+appay:ClosedPaymentMandate a owl:Class ;
+    rdfs:subClassOf appay:PaymentMandate ;
+    rdfs:label "ClosedPaymentMandate" ;
+    rdfs:comment "One-shot mandate frozen to a specific target + amount. PMT-INV-14: maxRedemptions = 1 always." .
+
+appay:PaymentReceipt a owl:Class ;
+    rdfs:subClassOf apvc:VerifiableCredential ;
+    rdfs:label "PaymentReceipt" ;
+    rdfs:comment "Immutable VC issued by rail executor on successful redemption. Asserted to AttestationRegistry; PMT-INV-11: no revoke entrypoint." .
+
+appay:MandateConstraints a owl:Class ;
+    rdfs:label "MandateConstraints" ;
+    rdfs:comment "AP2-style aggregate scope: maxAggregateAmount, frequency, categories, geoFence, timeOfDay. Orthogonal to per-redemption amountPolicy." .
+
+appay:ContextBinding a owl:Class ;
+    rdfs:label "ContextBinding" ;
+    rdfs:comment "Hard substrate invariant (PMT-3): payment signatures bind to intentId / taskId / agreementCommitment / artifactHash / resource. PMT-INV-01: at least one MUST be populated." .
+
+appay:PaymentRail a owl:Class ;
+    rdfs:label "PaymentRail" ;
+    rdfs:comment "Rail discriminator: x402 | wallet | sponsored-userop | escrow (W2) | invoice (W2) | confidential-* (W2)." .
+
+# ─── Properties ───────────────────────────────────────────────────────
+
+appay:payer a owl:ObjectProperty ;
+    rdfs:domain appay:PaymentMandate ;
+    rdfs:range ap:Agent ;
+    rdfs:label "payer" .
+
+appay:payee a owl:ObjectProperty ;
+    rdfs:domain appay:PaymentMandate ;
+    rdfs:range ap:Agent ;
+    rdfs:label "payee" .
+
+appay:granter a owl:ObjectProperty ;
+    rdfs:domain appay:PaymentMandate ;
+    rdfs:range ap:Agent ;
+    rdfs:label "granter" ;
+    rdfs:comment "The SA that signed the mandate (== payer for direct; delegator for delegated)." .
+
+appay:rail a owl:DatatypeProperty ;
+    rdfs:domain appay:PaymentMandate ;
+    rdfs:range xsd:string ;
+    rdfs:label "rail" ;
+    rdfs:comment "Rail name. PMT-INV-09: x402-rail requires contextBinding.resource populated." .
+
+appay:mode a owl:DatatypeProperty ;
+    rdfs:domain appay:PaymentMandate ;
+    rdfs:range xsd:string ;
+    rdfs:label "mode" ;
+    rdfs:comment "'open' | 'closed'. AP2-aligned. PMT-10.1: open refuses final-charge." .
+
+appay:requiresClosedMandateForFinalCharge a owl:DatatypeProperty ;
+    rdfs:domain appay:OpenPaymentMandate ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "requiresClosedMandateForFinalCharge" ;
+    rdfs:comment "Default true. Refuses final-charge unless a closed mandate is presented." .
+
+appay:contextBindingIntent a owl:ObjectProperty ;
+    rdfs:domain appay:ContextBinding ;
+    rdfs:range apint:Intent ;
+    rdfs:label "contextBindingIntent" .
+
+appay:contextBindingAgreement a owl:ObjectProperty ;
+    rdfs:domain appay:ContextBinding ;
+    rdfs:range apagr:AgreementCommitment ;
+    rdfs:label "contextBindingAgreement" .
+
+appay:chain a owl:DatatypeProperty ;
+    rdfs:domain appay:PaymentMandate ;
+    rdfs:range xsd:integer ;
+    rdfs:label "chain" ;
+    rdfs:comment "Chain ID. PMT-INV-03: redemption only on this chain." .
+
+appay:maxAggregateAmount a owl:DatatypeProperty ;
+    rdfs:domain appay:MandateConstraints ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "maxAggregateAmount" .
+
+appay:nonce a owl:DatatypeProperty ;
+    rdfs:domain appay:PaymentMandate ;
+    rdfs:range xsd:integer ;
+    rdfs:label "nonce" .
+
+appay:maxRedemptions a owl:DatatypeProperty ;
+    rdfs:domain appay:PaymentMandate ;
+    rdfs:range xsd:integer ;
+    rdfs:label "maxRedemptions" ;
+    rdfs:comment "Default 1 (one-shot). For closed mandates: PMT-INV-14 always 1." .
+
+appay:expiresAt a owl:DatatypeProperty ;
+    rdfs:domain appay:PaymentMandate ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "expiresAt" .

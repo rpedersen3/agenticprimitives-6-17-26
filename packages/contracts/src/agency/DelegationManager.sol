@@ -242,6 +242,97 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
         return keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
     }
 
+    /// @notice View-only verification of a delegation chain. Returns whether
+    ///         the chain is well-formed (signatures, authority chain, not
+    ///         revoked) WITHOUT executing it.
+    ///
+    /// Spec 242 §6 (PD-9): the `attestations` package uses this to verify
+    /// bilateral-consent delegations as signed authorization predicates,
+    /// rather than redeeming them as cross-account execution. Returning
+    /// `(true, "")` means the delegation chain authorizes the named call from
+    /// `sender`. Caveat predicates (CalldataHashEnforcer, AllowedTargets,
+    /// AllowedMethods, Timestamp) are NOT executed here — callers are expected
+    /// to pin those into the delegation's caveats at issuance time, where
+    /// they're hash-bound to the delegation signature.
+    ///
+    /// @param delegations Chain (leaf first; root authority last)
+    /// @param sender The address that would be the redeemer
+    /// @return ok True if every link verifies
+    /// @return reason Empty if ok; otherwise a short rejection reason
+    function verifyAuthorization(
+        Delegation[] calldata delegations,
+        address sender
+    ) external view returns (bool ok, string memory reason) {
+        if (delegations.length == 0) return (false, "empty-chain");
+
+        for (uint256 i = 0; i < delegations.length; i++) {
+            (bool valid, string memory r) = _validateDelegationView(delegations, i, sender);
+            if (!valid) return (false, r);
+        }
+        return (true, "");
+    }
+
+    /// @dev View-only sibling of `_validateDelegation`. Same checks, no state
+    ///      writes, no events. Used by `verifyAuthorization`.
+    function _validateDelegationView(
+        Delegation[] calldata delegations,
+        uint256 i,
+        address sender
+    ) internal view returns (bool ok, string memory reason) {
+        Delegation calldata d = delegations[i];
+        bytes32 dHash = hashDelegation(d);
+
+        if (_revoked[dHash]) return (false, "revoked");
+
+        // Delegate chain
+        if (i == 0) {
+            if (d.delegate != OPEN_DELEGATION && d.delegate != sender) {
+                return (false, "invalid-delegate");
+            }
+        } else {
+            if (d.delegate != OPEN_DELEGATION && d.delegate != delegations[i - 1].delegator) {
+                return (false, "invalid-delegate-chain");
+            }
+        }
+
+        // Authority chain
+        if (d.authority != ROOT_AUTHORITY) {
+            if (i + 1 >= delegations.length) return (false, "invalid-authority");
+            bytes32 parentHash = hashDelegation(delegations[i + 1]);
+            if (d.authority != parentHash) return (false, "invalid-authority-chain");
+        }
+
+        // Signature
+        if (!_isValidSignatureBool(d.delegator, dHash, d.signature)) {
+            return (false, "invalid-signature");
+        }
+
+        return (true, "");
+    }
+
+    /// @dev Bool-returning sibling of `_validateSignature`. Returns false
+    ///      instead of reverting, so view-only callers can produce a typed
+    ///      `(ok, reason)` instead of bubbling a revert.
+    function _isValidSignatureBool(
+        address signer,
+        bytes32 digest,
+        bytes calldata signature
+    ) internal view returns (bool) {
+        // ERC-1271 path for smart accounts
+        if (signer.code.length > 0) {
+            try IERC1271(signer).isValidSignature(digest, signature) returns (bytes4 result) {
+                return result == IERC1271.isValidSignature.selector;
+            } catch {
+                return false;
+            }
+        }
+        // EOA — tryRecover the eth-signed message hash
+        bytes32 ethHash = digest.toEthSignedMessageHash();
+        (address recovered, ECDSA.RecoverError err, ) = ECDSA.tryRecover(ethHash, signature);
+        if (err != ECDSA.RecoverError.NoError) return false;
+        return recovered == signer;
+    }
+
     // ─── Internal: Validation ──────────────────────────────────────────
 
     function _validateDelegation(

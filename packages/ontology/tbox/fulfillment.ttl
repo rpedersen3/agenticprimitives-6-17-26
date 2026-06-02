@@ -1,0 +1,140 @@
+# T-box — fulfillment vocabulary (spine Layers 10–12).
+# A2A Task + Message + Artifact aligned; spec 244 + spec 245.
+# Spec 225 §11.5.
+# Owning runtime SHACL: packages/fulfillment/src/shapes/fulfillment.shacl.ttl.
+
+@prefix apful:  <https://agenticprimitives.dev/ns/fulfillment#> .
+@prefix apagr:  <https://agenticprimitives.dev/ns/agreement#> .
+@prefix appay:  <https://agenticprimitives.dev/ns/payment#> .
+@prefix apvc:   <https://agenticprimitives.dev/ns/credential#> .
+@prefix ap:     <https://agenticprimitives.dev/ns/core#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+
+apful: a owl:Ontology ;
+    rdfs:label "Agentic Primitives — fulfillment ontology" ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment "Layers 10–12 of the spine. FulfillmentCase + Task + Message + Artifact + HandoffPolicy + IntentTraceSpan." .
+
+# ─── Operational containers (Layer 10) ────────────────────────────────
+
+apful:FulfillmentCase a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    rdfs:label "FulfillmentCase" ;
+    rdfs:comment "Operational container per-Agreement. Lifecycle: drafted → clarified → expressed → acknowledged → proposed → accepted → committed → in_progress → fulfilled → validated → archived. FLF-INV-01: lifecycle synced with AgreementRegistry status." .
+
+apful:FulfillmentTopology a owl:Class ;
+    rdfs:label "FulfillmentTopology" ;
+    rdfs:comment "Task composition discriminator: 'linear' | 'parallel' | 'dag'." .
+
+# ─── Tasks (Layer 11; A2A-canonical) ──────────────────────────────────
+
+apful:Task a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    rdfs:label "Task" ;
+    rdfs:comment "Executable unit of work inside a FulfillmentCase. A2A state machine: submitted | working | completed | failed | canceled | input-required | rejected | auth-required. Spec 245 + spec 244 §5." .
+
+apful:HandoffPolicy a owl:Class ;
+    rdfs:label "HandoffPolicy" ;
+    rdfs:comment "First-class authority binding for cross-agent handoffs. allowedTargets + allowedClasses + requiresUserApproval + preservePrivacyTier + allowedScopes + maxHopCount. FLF-6." .
+
+# ─── Communication vs deliverables (Layer 12 separation) ─────────────
+
+apful:Message a owl:Class ;
+    rdfs:label "Message" ;
+    rdfs:comment "A2A-style communication artifact. Bodies in JV per D-46.1. A2A-INV-04 + FLF-INV-04: NEVER in public registry." .
+
+apful:Artifact a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "Artifact" ;
+    rdfs:comment "A2A-style deliverable. Hash-anchored; body in vault. FLF-INV-05: bodies vault-resident; only hashes in registry. Promotable to EvidenceCredential." .
+
+apful:ArtifactKind a owl:Class ;
+    rdfs:label "ArtifactKind" ;
+    rdfs:comment "Kind discriminator: document | signed-tx | validation-report | receipt | summary | proof | generated-file | attestation | custom." .
+
+# ─── Provenance tree (cross-cutting, Decision 7 of ADR-0024) ─────────
+
+apful:IntentTraceSpan a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    rdfs:label "IntentTraceSpan" ;
+    rdfs:comment "Typed trace span emitted on layer-cross transitions. Parent/child tree forms case audit (FLF-INV-15). spanType: parse | clarify | resolve | match | handoff | tool_call | wallet_simulation | user_approval | execution | validation | task_state_change | lifecycle_transition." .
+
+# ─── Properties ───────────────────────────────────────────────────────
+
+apful:hasParentAgreement a owl:ObjectProperty ;
+    rdfs:domain apful:FulfillmentCase ;
+    rdfs:range apagr:AgreementCommitment ;
+    rdfs:label "hasParentAgreement" .
+
+apful:topology a owl:DatatypeProperty ;
+    rdfs:domain apful:FulfillmentCase ;
+    rdfs:range xsd:string ;
+    rdfs:label "topology" .
+
+apful:taskState a owl:DatatypeProperty ;
+    rdfs:domain apful:Task ;
+    rdfs:range xsd:string ;
+    rdfs:label "taskState" ;
+    rdfs:comment "A2A canonical states. FLF-INV-13: no backward transitions except input-required→working and auth-required→submitted." .
+
+apful:assignee a owl:ObjectProperty ;
+    rdfs:domain apful:Task ;
+    rdfs:range ap:Agent ;
+    rdfs:label "assignee" .
+
+apful:assigneeKind a owl:DatatypeProperty ;
+    rdfs:domain apful:Task ;
+    rdfs:range xsd:string ;
+    rdfs:label "assigneeKind" ;
+    rdfs:comment "'person' | 'org' | 'agent' | 'oracle' | 'hybrid'." .
+
+apful:permissionGrantRef a owl:DatatypeProperty ;
+    rdfs:domain apful:Task ;
+    rdfs:range xsd:string ;
+    rdfs:label "permissionGrantRef" ;
+    rdfs:comment "FLF-INV-02: every Task has an authorizing delegation reference." .
+
+apful:paymentMandateRef a owl:ObjectProperty ;
+    rdfs:domain apful:Task ;
+    rdfs:range appay:PaymentMandate ;
+    rdfs:label "paymentMandateRef" ;
+    rdfs:comment "FLF-INV-11: payment mandate bound to this task via PMT-3 context binding (taskId)." .
+
+apful:sender a owl:ObjectProperty ;
+    rdfs:domain apful:Message ;
+    rdfs:range ap:Agent ;
+    rdfs:label "sender" .
+
+apful:bodyRef a owl:DatatypeProperty ;
+    rdfs:domain apful:Message ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "bodyRef" .
+
+apful:bodyHash a owl:DatatypeProperty ;
+    rdfs:domain apful:Artifact ;
+    rdfs:range xsd:hexBinary ;
+    rdfs:label "bodyHash" .
+
+apful:artifactKind a owl:DatatypeProperty ;
+    rdfs:domain apful:Artifact ;
+    rdfs:range xsd:string ;
+    rdfs:label "artifactKind" .
+
+apful:disclosurePolicy a owl:DatatypeProperty ;
+    rdfs:domain apful:Artifact ;
+    rdfs:range xsd:string ;
+    rdfs:label "disclosurePolicy" ;
+    rdfs:comment "Per-field DisclosurePolicy (D-42). JSON-encoded." .
+
+apful:spanType a owl:DatatypeProperty ;
+    rdfs:domain apful:IntentTraceSpan ;
+    rdfs:range xsd:string ;
+    rdfs:label "spanType" .
+
+apful:parentSpan a owl:ObjectProperty ;
+    rdfs:domain apful:IntentTraceSpan ;
+    rdfs:range apful:IntentTraceSpan ;
+    rdfs:label "parentSpan" .

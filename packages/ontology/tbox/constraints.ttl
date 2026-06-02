@@ -1,0 +1,150 @@
+# T-box — constraint + assumption vocabulary (spine Layer 3).
+# Anoma CSP-shaped + ERC-7683 resolver-assumption pattern.
+# Spec 225 §11.5; D-38 + D-39 + D-43.
+# Owning runtime SHACL: packages/intent-marketplace/src/shapes/constraints.shacl.ttl.
+
+@prefix ap:     <https://agenticprimitives.dev/ns/core#> .
+@prefix apcst:  <https://agenticprimitives.dev/ns/constraint#> .
+@prefix apint:  <https://agenticprimitives.dev/ns/intent#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+
+apcst: a owl:Ontology ;
+    rdfs:label "Agentic Primitives — constraint + assumption ontology" ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment "First-class typed constraints (Anoma CSP-shape) + resolver-assumption set (ERC-7683 parallel). Spec 225 §11.5." .
+
+# ─── ConstraintSet classes ────────────────────────────────────────────
+
+apcst:ConstraintSet a owl:Class ;
+    rdfs:label "ConstraintSet" ;
+    rdfs:comment "A typed bag of Constraints (hard + soft) + per-field DisclosurePolicy. CSP-shaped. NOT freeform payload (D-38)." .
+
+apcst:Constraint a owl:Class ;
+    rdfs:label "Constraint" ;
+    rdfs:comment "A single typed constraint: variable + domain + source + rationale. Discriminated by domain.kind." .
+
+apcst:HardConstraint a owl:Class ;
+    rdfs:subClassOf apcst:Constraint ;
+    rdfs:label "HardConstraint" ;
+    rdfs:comment "Enforceable invariant; matchmaker MUST reject if violated." .
+
+apcst:SoftConstraint a owl:Class ;
+    rdfs:subClassOf apcst:Constraint ;
+    rdfs:label "SoftConstraint" ;
+    rdfs:comment "Scorer preference; contributes to composite score (per spec 239 §7.2)." .
+
+# ─── Constraint domain classes (CSP-shaped) ───────────────────────────
+
+apcst:ConstraintDomain a owl:Class ;
+    rdfs:label "ConstraintDomain" ;
+    rdfs:comment "Abstract CSP domain. Subclasses: EnumDomain, RangeDomain, SetDomain, PredicateDomain." .
+
+apcst:EnumDomain a owl:Class ;
+    rdfs:subClassOf apcst:ConstraintDomain ;
+    rdfs:label "EnumDomain" ;
+    rdfs:comment "Constraint domain over a fixed enumeration of allowed string values." .
+
+apcst:RangeDomain a owl:Class ;
+    rdfs:subClassOf apcst:ConstraintDomain ;
+    rdfs:label "RangeDomain" ;
+    rdfs:comment "Constraint domain over a numeric/temporal range [min, max] in a named unit." .
+
+apcst:SetDomain a owl:Class ;
+    rdfs:subClassOf apcst:ConstraintDomain ;
+    rdfs:label "SetDomain" ;
+    rdfs:comment "Constraint domain over an allowed-set (optionally with a denied-set)." .
+
+apcst:PredicateDomain a owl:Class ;
+    rdfs:subClassOf apcst:ConstraintDomain ;
+    rdfs:label "PredicateDomain" ;
+    rdfs:comment "Constraint domain expressed as a SHACL or JSONPath predicate body." .
+
+# ─── AssumptionSet classes (ERC-7683 parallel) ────────────────────────
+
+apcst:AssumptionSet a owl:Class ;
+    rdfs:label "AssumptionSet" ;
+    rdfs:comment "Resolver-asserted assumptions + risks + required validations. Solvers MUST validate before bidding. ERC-7683 pattern." .
+
+apcst:NamedAssumption a owl:Class ;
+    rdfs:label "NamedAssumption" ;
+    rdfs:comment "A specific resolver assumption: name + trustLevel + optional evidence ref." .
+
+apcst:ValidationRequirement a owl:Class ;
+    rdfs:label "ValidationRequirement" ;
+    rdfs:comment "Something that MUST be validated before commitment / payment / fulfillment. Links to Layer 14 (Validation)." .
+
+# ─── Properties ───────────────────────────────────────────────────────
+
+apcst:variable a owl:DatatypeProperty ;
+    rdfs:domain apcst:Constraint ;
+    rdfs:range xsd:string ;
+    rdfs:label "variable" ;
+    rdfs:comment "The CSP variable name (e.g. 'geo', 'requiredCredential', 'capacity')." .
+
+apcst:domain a owl:ObjectProperty ;
+    rdfs:domain apcst:Constraint ;
+    rdfs:range apcst:ConstraintDomain ;
+    rdfs:label "domain" .
+
+apcst:source a owl:DatatypeProperty ;
+    rdfs:domain apcst:Constraint ;
+    rdfs:range xsd:string ;
+    rdfs:label "source" ;
+    rdfs:comment "Constraint source provenance (D-43): 'user-asserted' | 'llm-inferred' | 'policy-imposed'. Inferred + sensitive constraints redactable before publication." .
+
+apcst:rationale a owl:DatatypeProperty ;
+    rdfs:domain apcst:Constraint ;
+    rdfs:range xsd:string ;
+    rdfs:label "rationale" ;
+    rdfs:comment "Human-readable explanation (esp. for llm-inferred / policy-imposed constraints)." .
+
+apcst:strength a owl:DatatypeProperty ;
+    rdfs:domain apcst:Constraint ;
+    rdfs:range xsd:string ;
+    rdfs:label "strength" ;
+    rdfs:comment "'hard' | 'soft' — discriminator for HardConstraint vs SoftConstraint subclassing." .
+
+apcst:enforcement a owl:DatatypeProperty ;
+    rdfs:domain apcst:Constraint ;
+    rdfs:range xsd:string ;
+    rdfs:label "enforcement" ;
+    rdfs:comment "Where the constraint is enforced: 'pre-execution' | 'agreement' | 'ranking' (per AI-engagement-model semantic-caveats pattern)." .
+
+apcst:fieldDisclosure a owl:DatatypeProperty ;
+    rdfs:domain apcst:ConstraintSet ;
+    rdfs:range xsd:string ;
+    rdfs:label "fieldDisclosure" ;
+    rdfs:comment "JSON-encoded { fieldPath → VisibilityTier } map. Per-field DisclosurePolicy (D-42)." .
+
+apcst:resolverId a owl:DatatypeProperty ;
+    rdfs:domain apcst:AssumptionSet ;
+    rdfs:range xsd:string ;
+    rdfs:label "resolverId" ;
+    rdfs:comment "The Resolver agent's identifier (version-pinned)." .
+
+apcst:trustLevel a owl:DatatypeProperty ;
+    rdfs:domain apcst:NamedAssumption ;
+    rdfs:range xsd:string ;
+    rdfs:label "trustLevel" ;
+    rdfs:comment "'asserted' | 'verified' | 'oracle' | 'zkp'." .
+
+apcst:risk a owl:DatatypeProperty ;
+    rdfs:domain apcst:NamedAssumption ;
+    rdfs:range xsd:string ;
+    rdfs:label "risk" ;
+    rdfs:comment "Human-readable risk tag (e.g. 'inventory', 'sla', 'merchant-trust')." .
+
+apcst:evidenceRef a owl:ObjectProperty ;
+    rdfs:domain apcst:NamedAssumption ;
+    rdfs:range prov:Entity ;
+    rdfs:label "evidenceRef" ;
+    rdfs:comment "Optional pointer to a VC / attestation backing the assumption." .
+
+apcst:expiresAt a owl:DatatypeProperty ;
+    rdfs:domain apcst:NamedAssumption ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "expiresAt" ;
+    rdfs:comment "Assumption validity expiration. Downstream consumers MUST recheck if expired." .

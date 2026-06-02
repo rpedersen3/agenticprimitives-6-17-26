@@ -1,0 +1,44 @@
+{
+  "name": "@agenticprimitives/verifiable-credentials",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/242-trust-credentials-and-public-assertions.md",
+  "summary": "W3C VC 2.0 envelope + Eip712Signature2026 proof + DOLCE+DnS Situation bases + ontology-shape schema registration. Substrate for layers 12-15 credential types.",
+  "spineLayers": ["envelope-for-12-15"],
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"],
+    "shapes": []
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/ontology"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/ontology",
+    "viem",
+    "@noble/hashes"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/attestations",
+    "@agenticprimitives/agreements",
+    "@agenticprimitives/intent-marketplace",
+    "@agenticprimitives/intent-resolver",
+    "@agenticprimitives/payments",
+    "@agenticprimitives/fulfillment",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/connect-auth",
+    "@agenticprimitives/account-custody",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/identity-directory",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy"
+  ]
+}

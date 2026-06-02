@@ -1,0 +1,108 @@
+# T-box — resolution + ResolutionReceipt vocabulary (spine Layer 4; skeleton W1).
+# ERC-7683 Resolver pattern; W2 grows the full surface.
+# RR-INV-01..05 enforced by intent-marketplace + intent-resolver runtime SHACL.
+
+@prefix apres:  <https://agenticprimitives.dev/ns/resolution#> .
+@prefix apint:  <https://agenticprimitives.dev/ns/intent#> .
+@prefix apcst:  <https://agenticprimitives.dev/ns/constraint#> .
+@prefix ap:     <https://agenticprimitives.dev/ns/core#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+
+apres: a owl:Ontology ;
+    rdfs:label "Agentic Primitives — resolution ontology" ;
+    owl:versionInfo "0.1.0-skeleton" ;
+    rdfs:comment "Layer 4 of the spine. W1 ships skeleton (types + PassThroughResolver); full vocabulary lands W2 when resolver implementations ship." .
+
+# ─── Resolver classes ─────────────────────────────────────────────────
+
+apres:Resolver a owl:Class ;
+    rdfs:subClassOf ap:Agent ;
+    rdfs:label "Resolver" ;
+    rdfs:comment "An Agent that performs Intent resolution — translates opaque expressed Intent → ResolvedOrder. ERC-7683 Resolver-contract parallel." .
+
+apres:ResolvedOrder a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "ResolvedOrder" ;
+    rdfs:comment "Normalized executable form of an Intent. Layer 4 output. Bridges from CSP-shaped Intent to Solver-fillable Order (Layer 5+6)." .
+
+apres:ResolutionReceipt a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "ResolutionReceipt" ;
+    rdfs:comment "Provenance + invariant record for a resolution: model + version + prompt hash + tool calls + confidence + policyChecks + requiresUserConfirmation. Authority-gating per RR-INV-01..05. NOT itself an authority object — provenance only." .
+
+apres:PolicyCheckResult a owl:Class ;
+    rdfs:label "PolicyCheckResult" ;
+    rdfs:comment "A single policy check + pass/fail + rationale; recorded in a ResolutionReceipt." .
+
+apres:ToolCallTrace a owl:Class ;
+    rdfs:label "ToolCallTrace" ;
+    rdfs:comment "An MCP tool call invocation captured for resolution provenance (toolName + inputHash + outputHash + durationMs)." .
+
+# ─── Properties ───────────────────────────────────────────────────────
+
+apres:resolvedFrom a owl:ObjectProperty ;
+    rdfs:domain apres:ResolvedOrder ;
+    rdfs:range apint:Intent ;
+    rdfs:label "resolvedFrom" .
+
+apres:canonicalConstraints a owl:ObjectProperty ;
+    rdfs:domain apres:ResolvedOrder ;
+    rdfs:range apcst:ConstraintSet ;
+    rdfs:label "canonicalConstraints" .
+
+apres:expandedAssumptions a owl:ObjectProperty ;
+    rdfs:domain apres:ResolvedOrder ;
+    rdfs:range apcst:AssumptionSet ;
+    rdfs:label "expandedAssumptions" .
+
+apres:resolverAgent a owl:ObjectProperty ;
+    rdfs:domain apres:ResolutionReceipt ;
+    rdfs:range apres:Resolver ;
+    rdfs:label "resolverAgent" .
+
+apres:resolverVersion a owl:DatatypeProperty ;
+    rdfs:domain apres:ResolutionReceipt ;
+    rdfs:range xsd:string ;
+    rdfs:label "resolverVersion" .
+
+apres:modelName a owl:DatatypeProperty ;
+    rdfs:domain apres:ResolutionReceipt ;
+    rdfs:range xsd:string ;
+    rdfs:label "modelName" ;
+    rdfs:comment "LLM model name when present (e.g. 'claude-opus-4-7', 'gpt-4.1'). Null for PassThrough." .
+
+apres:confidence a owl:DatatypeProperty ;
+    rdfs:domain apres:ResolutionReceipt ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "confidence" ;
+    rdfs:comment "0..1. Substrate threshold determines requiresUserConfirmation." .
+
+apres:requiresUserConfirmation a owl:DatatypeProperty ;
+    rdfs:domain apres:ResolutionReceipt ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "requiresUserConfirmation" ;
+    rdfs:comment "Authority gate (RR-INV-01). TRUE blocks downstream layers until user signs the canonical Intent + ConstraintSet bytes." .
+
+apres:userConfirmedAt a owl:DatatypeProperty ;
+    rdfs:domain apres:ResolutionReceipt ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "userConfirmedAt" .
+
+apres:policyVersion a owl:DatatypeProperty ;
+    rdfs:domain apres:ResolutionReceipt ;
+    rdfs:range xsd:string ;
+    rdfs:label "policyVersion" ;
+    rdfs:comment "Hash of the resolver policy at resolution time. Audit replay." .
+
+apres:hasPolicyCheck a owl:ObjectProperty ;
+    rdfs:domain apres:ResolutionReceipt ;
+    rdfs:range apres:PolicyCheckResult ;
+    rdfs:label "hasPolicyCheck" .
+
+apres:hasToolCall a owl:ObjectProperty ;
+    rdfs:domain apres:ResolutionReceipt ;
+    rdfs:range apres:ToolCallTrace ;
+    rdfs:label "hasToolCall" .

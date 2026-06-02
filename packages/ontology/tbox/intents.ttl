@@ -1,0 +1,137 @@
+# T-box — intent vocabulary (spine Layer 2 + 7).
+# Anoma CSP alignment + ERC-7521 + UFO-C/ValueFlows.
+# Spec 225 §11.5 (substrate spine vocabulary scope expansion).
+# Owning runtime SHACL shapes: packages/intent-marketplace/src/shapes/ (PD-19).
+
+@prefix ap:     <https://agenticprimitives.dev/ns/core#> .
+@prefix apint:  <https://agenticprimitives.dev/ns/intent#> .
+@prefix apcst:  <https://agenticprimitives.dev/ns/constraint#> .
+@prefix apres:  <https://agenticprimitives.dev/ns/resolution#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+@prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
+@prefix vf:     <https://w3id.org/valueflows#> .
+@prefix ufo-c:  <http://purl.org/nemo/ufo-c#> .
+
+apint: a owl:Ontology ;
+    rdfs:label "Agentic Primitives — intent ontology" ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment "T-box for the intent-marketplace substrate. Anoma CSP-aligned + ERC-7521 + ERC-7683 + UFO-C/ValueFlows. Spec 225 §11.5." .
+
+# ─── Intent + lifecycle classes ────────────────────────────────────────
+
+apint:Desire a owl:Class ;
+    rdfs:subClassOf ufo-c:Intention ;
+    rdfs:label "Desire" ;
+    rdfs:comment "An actor's latent want — internal BDI state. NOT addressable; NOT a commitment. Becomes actionable only when committed to an Intent. Layer 1 of the spine; out-of-scope for W1 substrate (engagement plane only)." .
+
+apint:Intent a owl:Class ;
+    rdfs:subClassOf ufo-c:Intention , vf:Intent ;
+    rdfs:label "Intent" ;
+    rdfs:comment "An actor's signed declarative statement of a desired end-state — direction + object (SKOS) + topic + constraints + expectedOutcome. NOT a plan; not a transaction; not a task. CSP-shaped per Anoma alignment. Layer 2 of the spine." .
+
+apint:ReceiveIntent a owl:Class ;
+    rdfs:subClassOf apint:Intent ;
+    rdfs:label "ReceiveIntent" ;
+    rdfs:comment "Intent with direction='receive': actor wants to be the recipient of the object." .
+
+apint:GiveIntent a owl:Class ;
+    rdfs:subClassOf apint:Intent ;
+    rdfs:label "GiveIntent" ;
+    rdfs:comment "Intent with direction='give': actor wants to be the provider of the object." .
+
+apint:MatchInitiation a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    rdfs:label "MatchInitiation" ;
+    rdfs:comment "A broker's act of initiating a match between two compatible Intents. Distinct from IntentMatch (the accepted relation). Smart-agent SS-03 invariant." .
+
+apint:IntentMatch a owl:Class ;
+    rdfs:subClassOf prov:Activity ;
+    rdfs:label "IntentMatch" ;
+    rdfs:comment "An accepted compatibility relation between two Intents. Layer 7 of the spine. Smart-agent SS-02 invariant: both parties signal acceptance before promotion." .
+
+apint:Commitment a owl:Class ;
+    rdfs:subClassOf vf:Commitment ;
+    rdfs:label "Commitment" ;
+    rdfs:comment "A dual-signed envelope produced from an IntentMatch; the input to the Agreement layer (spec 241). Layer 7→8 bridge." .
+
+apint:Proposal a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "Proposal" ;
+    rdfs:comment "A signed candidate solution to an expressed Intent. UniswapX-Order / CoW-Order-book-entry shape. Layer 5 of the spine. Pool Lane (W2)." .
+
+apint:SolverBid a owl:Class ;
+    rdfs:subClassOf apint:Proposal ;
+    rdfs:label "SolverBid" ;
+    rdfs:comment "A solver's competitive bid + match score + reason + predicted outcome + cost estimate + trust certificate. Layer 6 of the spine. CoW / UniswapX / ERC-7683 solver competition. Pool/Proposal Lane (W2)." .
+
+# ─── Intent properties ────────────────────────────────────────────────
+
+apint:direction a owl:DatatypeProperty ;
+    rdfs:domain apint:Intent ;
+    rdfs:range xsd:string ;
+    rdfs:label "direction" ;
+    rdfs:comment "'receive' or 'give'. Single-class on Intent (Smart-agent SS-01 invariant). Matching rule: direction MUST be opposite + object MUST be equal." .
+
+apint:object a owl:ObjectProperty ;
+    rdfs:domain apint:Intent ;
+    rdfs:range skos:Concept ;
+    rdfs:label "object" ;
+    rdfs:comment "The SKOS concept (e.g. apint:NeedCoaching) describing WHAT is wanted/offered. Matching rule: must be exactly equal between matched pair." .
+
+apint:topic a owl:DatatypeProperty ;
+    rdfs:domain apint:Intent ;
+    rdfs:range xsd:string ;
+    rdfs:label "topic" ;
+    rdfs:comment "Free-text topic refinement; matched by topicSimilarity score (not equality)." .
+
+apint:expressedBy a owl:ObjectProperty ;
+    rdfs:domain apint:Intent ;
+    rdfs:range ap:Agent ;
+    rdfs:label "expressedBy" ;
+    rdfs:comment "The Agent SA address that signed the Intent." .
+
+apint:addressedTo a owl:ObjectProperty ;
+    rdfs:domain apint:Intent ;
+    rdfs:range ap:Agent ;
+    rdfs:label "addressedTo" ;
+    rdfs:comment "The intended recipients/audience of the Intent (broker, counterparty class, etc.)." .
+
+apint:hasConstraintSet a owl:ObjectProperty ;
+    rdfs:domain apint:Intent ;
+    rdfs:range apcst:ConstraintSet ;
+    rdfs:label "hasConstraintSet" ;
+    rdfs:comment "Anoma-CSP-shaped constraints. First-class typed structure, NOT freeform payload (D-38)." .
+
+apint:hasAssumptionSet a owl:ObjectProperty ;
+    rdfs:domain apint:Intent ;
+    rdfs:range apcst:AssumptionSet ;
+    rdfs:label "hasAssumptionSet" ;
+    rdfs:comment "Resolver-asserted assumptions (ERC-7683 pattern). Solvers MUST validate before bidding." .
+
+apint:expectedOutcome a owl:ObjectProperty ;
+    rdfs:domain apint:Intent ;
+    rdfs:range prov:Entity ;
+    rdfs:label "expectedOutcome" ;
+    rdfs:comment "What success looks like — referenced when constructing OutcomeCredential at Layer 13." .
+
+apint:visibility a owl:DatatypeProperty ;
+    rdfs:domain apint:Intent ;
+    rdfs:range xsd:string ;
+    rdfs:label "visibility" ;
+    rdfs:comment "Five-tier visibility: Public | PublicCoarse | PrivateCommitment | PrivateZK | OffchainOnly. Per privacy doc §4 Layer 2." .
+
+apint:status a owl:DatatypeProperty ;
+    rdfs:domain apint:Intent ;
+    rdfs:range xsd:string ;
+    rdfs:label "status" ;
+    rdfs:comment "Intent state-machine status (per spec 239 §5)." .
+
+apint:matchedWith a owl:ObjectProperty ;
+    rdfs:domain apint:IntentMatch ;
+    rdfs:range apint:Intent ;
+    rdfs:label "matchedWith" ;
+    rdfs:comment "An IntentMatch links exactly two compatible Intents (cardinality 2; enforced by SHACL in intent-marketplace)." .

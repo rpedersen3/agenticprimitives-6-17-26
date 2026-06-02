@@ -14,8 +14,21 @@ import { fileURLToPath } from 'node:url';
  */
 export const ARTIFACTS = {
   context: 'context.jsonld',
-  tbox: ['tbox/core.ttl', 'tbox/identity.ttl'],
+  tbox: [
+    // Phase-1 (identity + core)
+    'tbox/core.ttl',
+    'tbox/identity.ttl',
+    // Phase-1.5 (v2 coordination substrate spine; spec 225 §11.5)
+    'tbox/intents.ttl',
+    'tbox/constraints.ttl',
+    'tbox/resolution.ttl',
+    'tbox/agreement.ttl',
+    'tbox/payment.ttl',
+    'tbox/fulfillment.ttl',
+    'tbox/attestation.ttl',
+  ],
   cbox: ['cbox/canonical-agent-id-shape.shacl.ttl', 'cbox/controlled-vocabularies.ttl'],
+  mappings: ['mappings/spine-standards.ttl'],
 } as const;
 
 /**

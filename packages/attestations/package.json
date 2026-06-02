@@ -1,0 +1,59 @@
+{
+  "name": "@agenticprimitives/attestations",
+  "version": "0.0.0-stub.0",
+  "description": "AttestationRegistry SDK — EAS-aligned with bilateral consent. Owns Association + JointAgreement + Evidence + Outcome + Validation + TrustUpdate credential types asserted into a single on-chain registry per ADR-0023.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/attestations"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/attestations",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run test/unit --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
+    "viem": "^2.50.0"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.5.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "viem": "^2.50.0"
+  },
+  "keywords": [
+    "agentic",
+    "primitives",
+    "attestations"
+  ]
+}

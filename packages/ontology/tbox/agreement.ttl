@@ -1,0 +1,77 @@
+# T-box — agreement vocabulary (spine Layer 8).
+# Hyperledger Indy commitments + Sidetree anchor pattern; W3C VC envelope.
+# Spec 225 §11.5; ADR-0024 Decision 2 (single-row commitment-only).
+# Owning runtime SHACL: packages/agreements/src/shapes/agreement.shacl.ttl.
+
+@prefix apagr:  <https://agenticprimitives.dev/ns/agreement#> .
+@prefix apvc:   <https://agenticprimitives.dev/ns/credential#> .
+@prefix apint:  <https://agenticprimitives.dev/ns/intent#> .
+@prefix ap:     <https://agenticprimitives.dev/ns/core#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix vf:     <https://w3id.org/valueflows#> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+
+apagr: a owl:Ontology ;
+    rdfs:label "Agentic Primitives — agreement ontology" ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment "Layer 8 of the spine. Commitment-only on chain; body in vaults." .
+
+apagr:AgreementCommitment a owl:Class ;
+    rdfs:subClassOf vf:Commitment ;
+    rdfs:label "AgreementCommitment" ;
+    rdfs:comment "On-chain commitment-only row in AgreementRegistry.sol. Body in vaults; only commitment hash + issuer + schema + status + epoch on chain. AR-12: party SA addresses never in calldata." .
+
+apagr:AgreementCredential a owl:Class ;
+    rdfs:subClassOf apvc:VerifiableCredential ;
+    rdfs:label "AgreementCredential" ;
+    rdfs:comment "DOLCE+DnS Situation — the off-chain VC describing a two-party agreement. Issued by an issuer Agent (e.g. Global Church). Held in each party's PV. Per PD-22 — lives in agreements package." .
+
+apagr:AgreementStatus a owl:Class ;
+    rdfs:label "AgreementStatus" ;
+    rdfs:comment "Status state-machine codelist: ACTIVE | COMPLETED | DISPUTED | REVOKED (per spec 241 §5.4.1)." .
+
+# ─── Properties ───────────────────────────────────────────────────────
+
+apagr:hasIssuer a owl:ObjectProperty ;
+    rdfs:domain apagr:AgreementCommitment ;
+    rdfs:range ap:Agent ;
+    rdfs:label "hasIssuer" ;
+    rdfs:comment "The issuer SA whose EIP-712 attestation backs the commitment." .
+
+apagr:hasParty a owl:ObjectProperty ;
+    rdfs:domain apagr:AgreementCredential ;
+    rdfs:range ap:Agent ;
+    rdfs:label "hasParty" ;
+    rdfs:comment "The two parties to the agreement. Cardinality 2 (enforced by SHACL in agreements package)." .
+
+apagr:agreementCommitmentHash a owl:DatatypeProperty ;
+    rdfs:domain apagr:AgreementCommitment ;
+    rdfs:range xsd:hexBinary ;
+    rdfs:label "agreementCommitmentHash" ;
+    rdfs:comment "The canonical commitment hash (per spec 241 §3 + IA §10)." .
+
+apagr:schemaHash a owl:DatatypeProperty ;
+    rdfs:domain apagr:AgreementCommitment ;
+    rdfs:range xsd:hexBinary ;
+    rdfs:label "schemaHash" ;
+    rdfs:comment "Reference to the on-chain ShapeRegistry SHACL shape (PD-12)." .
+
+apagr:status a owl:DatatypeProperty ;
+    rdfs:domain apagr:AgreementCommitment ;
+    rdfs:range xsd:string ;
+    rdfs:label "status" ;
+    rdfs:comment "ACTIVE | COMPLETED | DISPUTED | REVOKED. Bilateral signing for ACTIVE→COMPLETED/REVOKED; either party for ACTIVE→DISPUTED." .
+
+apagr:createdEpochBucket a owl:DatatypeProperty ;
+    rdfs:domain apagr:AgreementCommitment ;
+    rdfs:range xsd:integer ;
+    rdfs:label "createdEpochBucket" ;
+    rdfs:comment "Creation time in EPOCH_SECONDS buckets. Raw block.timestamp never stored." .
+
+apagr:fromIntentMatch a owl:ObjectProperty ;
+    rdfs:domain apagr:AgreementCommitment ;
+    rdfs:range apint:IntentMatch ;
+    rdfs:label "fromIntentMatch" ;
+    rdfs:comment "Optional reference to the IntentMatch (Layer 7) that produced the Commitment input." .

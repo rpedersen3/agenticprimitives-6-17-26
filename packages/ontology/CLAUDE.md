@@ -65,8 +65,20 @@ this is the vocabulary root; depending on a consumer would invert the graph.
   `agent-profile`; auth → `connect`/`account-custody`.
 - "Mirror a codelist as a TS `const` array here" — **STOP.** The `.ttl` C-box is
   the source of truth; a generator derives TS later (avoid hand-duplication).
-- "Add marketplace/intents/geo vocabulary" — **STOP.** Out of the spec 225 §11
-  scope bound (identity/credential/custody/delegation/audit/naming/org).
+- "Add **runtime SHACL shapes** for marketplace / intents / fulfillment /
+  payments / agreements / attestations" — **STOP.** Those live in their owning
+  packages per [PD-19](../../apps/demo-jp/docs/packages.md); the ontology
+  package ships T-box class definitions only. See
+  [`docs/architecture/spine-ontology-extensions.md`](../../docs/architecture/spine-ontology-extensions.md)
+  for the hybrid model.
+- "Add **T-box class definitions** for spine substrate concepts (`apint:` /
+  `apcst:` / `apres:` / `apagr:` / `appay:` / `apful:` / `apatt:` / `apvc:`)" —
+  explicitly **in scope** per spec 225 §11.5 (broadened 2026-06-02b after the
+  v2 coordination substrate landed). The substrate spine vocabulary IS
+  monorepo-wide formal ontology and lives here.
+- "Add **vocabulary for verticals / branding / white-label content** (faith,
+  health, education, geo-specific domain terms)" — **STOP.** Out of scope; lives
+  in apps per [ADR-0021](../../docs/architecture/decisions/0021-generic-packages-vs-white-label-apps.md).
 
 ## Before you write code
 - [ ] Is the change a vocabulary artifact (`tbox`/`cbox`/`abox`/`context`) or an

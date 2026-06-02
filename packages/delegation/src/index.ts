@@ -25,6 +25,14 @@ export { evaluateCaveats } from './evaluator';
 export { DelegationClient } from './client';
 export { SessionManager, createMemorySessionStore } from './session-manager';
 
+/**
+ * Spec 242 PD-9 — SDK helper for the `verifyAuthorization(...)` view entrypoint
+ * on DelegationManager.sol. View-only verification of a delegation chain.
+ * Consumed by `@agenticprimitives/attestations` for the bilateral-consent path.
+ */
+export { verifyAuthorization } from './verify-authorization';
+export type { VerifyAuthorizationResult } from './verify-authorization';
+
 // H7-B.8: `verifyCrossDelegation` removed from the public surface (XPKG-002 /
 // EXT-024 closure). The stub unconditionally returned a "not implemented"
 // error string — a public symbol that lies about runtime capability. When the

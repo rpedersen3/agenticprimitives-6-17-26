@@ -5,8 +5,8 @@
     "jsx": "react-jsx",
     "types": ["vite/client"],
     "noEmit": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "paths": {}
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*"]
 }
+

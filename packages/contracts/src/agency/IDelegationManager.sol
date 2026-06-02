@@ -66,4 +66,18 @@ interface IDelegationManager {
 
     /// @notice Check if a delegation has been revoked.
     function isRevoked(bytes32 delegationHash) external view returns (bool);
+
+    /// @notice View-only verification of a delegation chain. Returns whether
+    ///         the chain authorizes `sender` to redeem WITHOUT executing it.
+    ///         Used by trust-substrate contracts (e.g. AttestationRegistry's
+    ///         bilateral-consent path per spec 242 PD-9) to validate a packed
+    ///         delegation as a signed authorization predicate.
+    /// @param delegations Delegation chain, leaf first
+    /// @param sender The address that would be the redeemer
+    /// @return ok True if the chain verifies
+    /// @return reason Empty if ok; otherwise short rejection reason
+    function verifyAuthorization(
+        Delegation[] calldata delegations,
+        address sender
+    ) external view returns (bool ok, string memory reason);
 }

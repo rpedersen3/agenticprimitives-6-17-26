@@ -1,0 +1,100 @@
+# C-box — SHACL shapes for Intent + MatchInitiation + IntentMatch + Commitment.
+# Spec 239 §11.3 (intent-marketplace SHACL shape registration).
+# T-box class definitions live in packages/ontology/tbox/intents.ttl per PD-19.
+
+@prefix apint:  <https://agenticprimitives.dev/ns/intent#> .
+@prefix apcst:  <https://agenticprimitives.dev/ns/constraint#> .
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# ─── Intent shape — enforces D-38 + SS-01 + RR-INV-01 ────────────────
+
+apint:IntentShape a sh:NodeShape ;
+    sh:targetClass apint:Intent ;
+
+    # SS-01: direction is single-class on Intent
+    sh:property [
+        sh:path apint:direction ;
+        sh:datatype xsd:string ;
+        sh:in ( "receive" "give" ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Intent.direction MUST be exactly one of 'receive' | 'give' (SS-01)."
+    ] ;
+
+    # Object must be a SKOS concept IRI; matched by equality
+    sh:property [
+        sh:path apint:object ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Intent.object MUST be an IRI; matcher requires equality."
+    ] ;
+
+    # D-38: ConstraintSet is first-class (cardinality 1)
+    sh:property [
+        sh:path apint:hasConstraintSet ;
+        sh:node apcst:ConstraintSetShape ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Intent MUST have exactly one ConstraintSet (D-38). Constraints buried in payload are rejected."
+    ] ;
+
+    # AssumptionSet is optional (zero in W1 Direct Lane; required for resolved intents)
+    sh:property [
+        sh:path apint:hasAssumptionSet ;
+        sh:node apcst:AssumptionSetShape ;
+        sh:maxCount 1
+    ] ;
+
+    # 5-tier visibility
+    sh:property [
+        sh:path apint:visibility ;
+        sh:datatype xsd:string ;
+        sh:in ( "Public" "PublicCoarse" "PrivateCommitment" "PrivateZK" "OffchainOnly" ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Intent.visibility MUST be a valid tier (privacy doc §4)."
+    ] ;
+
+    # expressedBy MUST be present
+    sh:property [
+        sh:path apint:expressedBy ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1
+    ] .
+
+# ─── MatchInitiation shape — SS-03 invariant ──────────────────────────
+
+apint:MatchInitiationShape a sh:NodeShape ;
+    sh:targetClass apint:MatchInitiation ;
+    sh:description "Smart-agent SS-03: MatchInitiation is the broker's act; it is NOT an IntentMatch (which requires both parties' acceptance signals)." ;
+
+    sh:property [
+        sh:path apint:matchedWith ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 2 ;
+        sh:maxCount 2 ;
+        sh:message "MatchInitiation links exactly two Intents."
+    ] .
+
+# ─── IntentMatch shape — SS-02 invariant ─────────────────────────────
+
+apint:IntentMatchShape a sh:NodeShape ;
+    sh:targetClass apint:IntentMatch ;
+    sh:description "Smart-agent SS-02: IntentMatch requires bilateral acceptance before promotion to Commitment." ;
+
+    sh:property [
+        sh:path apint:matchedWith ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 2 ;
+        sh:maxCount 2 ;
+        sh:message "IntentMatch links exactly two compatible Intents."
+    ] .
+
+# ─── Commitment shape ─────────────────────────────────────────────────
+
+apint:CommitmentShape a sh:NodeShape ;
+    sh:targetClass apint:Commitment ;
+    sh:description "Commitment is the dual-signed envelope; downstream consumer is AgreementRegistry (spec 241)." .

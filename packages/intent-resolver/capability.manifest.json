@@ -1,0 +1,33 @@
+{
+  "name": "@agenticprimitives/intent-resolver",
+  "kind": "capability",
+  "stability": "skeleton",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/239-intent-spine.md",
+  "summary": "Resolver layer skeleton (W1) — IIntentResolver + ResolvedOrder + PassThroughResolver only. Full resolver engine deferred to W2.",
+  "spineLayers": [4],
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"],
+    "shapes": ["src/shapes/resolution.shacl.ttl"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/ontology"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/ontology"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/intent-marketplace",
+    "@agenticprimitives/attestations",
+    "@agenticprimitives/agreements",
+    "@agenticprimitives/payments",
+    "@agenticprimitives/fulfillment",
+    "@agenticprimitives/delegation"
+  ]
+}

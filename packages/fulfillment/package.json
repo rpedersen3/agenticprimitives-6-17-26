@@ -1,0 +1,61 @@
+{
+  "name": "@agenticprimitives/fulfillment",
+  "version": "0.0.0-stub.0",
+  "description": "FulfillmentCase lifecycle + Task/Message/Artifact (re-exported from mcp-runtime/a2a) + HandoffPolicy + EvidenceCredential + OutcomeCredential issuance.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/fulfillment"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/fulfillment",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run test/unit --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
+    "@agenticprimitives/attestations": "workspace:*",
+    "@agenticprimitives/agreements": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
+    "viem": "^2.50.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "viem": "^2.50.0"
+  },
+  "keywords": [
+    "agentic",
+    "primitives",
+    "fulfillment"
+  ],
+  "dependencies": {
+    "@noble/hashes": "^1.5.0"
+  }
+}

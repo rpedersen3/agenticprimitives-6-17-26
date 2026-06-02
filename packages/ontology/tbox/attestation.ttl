@@ -1,0 +1,135 @@
+# T-box — attestation vocabulary (spine Layers 12–15 credential types).
+# EAS-aligned per ADR-0023. Spec 225 §11.5.
+# Owning runtime SHACL: packages/attestations/src/shapes/credentials.shacl.ttl.
+# All credential types share AttestationRegistry.sol per ADR-0024 Decision 2
+# (architectural inverse of the smart-contract-per-credential anti-pattern).
+
+@prefix apatt:  <https://agenticprimitives.dev/ns/attestation#> .
+@prefix apvc:   <https://agenticprimitives.dev/ns/credential#> .
+@prefix apint:  <https://agenticprimitives.dev/ns/intent#> .
+@prefix apagr:  <https://agenticprimitives.dev/ns/agreement#> .
+@prefix apful:  <https://agenticprimitives.dev/ns/fulfillment#> .
+@prefix ap:     <https://agenticprimitives.dev/ns/core#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+
+apatt: a owl:Ontology ;
+    rdfs:label "Agentic Primitives — attestation ontology" ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment "Credential types for layers 12–15. All share one on-chain AttestationRegistry per ADR-0024 Decision 2." .
+
+# ─── On-chain row type ────────────────────────────────────────────────
+
+apatt:Attestation a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "Attestation" ;
+    rdfs:comment "On-chain row in AttestationRegistry.sol. EAS-aligned: deterministic UID + refUID + EIP-712 + ERC-1271. Per-credential-class discrimination via credentialType. ADR-0023." .
+
+# ─── Credential types (Layer 12: Evidence) ────────────────────────────
+
+apatt:EvidenceCredential a owl:Class ;
+    rdfs:subClassOf apvc:VerifiableCredential ;
+    rdfs:label "EvidenceCredential" ;
+    rdfs:comment "Holder-asserted evidence credential bound to an Artifact. Holder-only on-chain revoke (D-18 + AR-10). Layer 12." .
+
+# ─── Credential types (Layer 13: Outcome) ─────────────────────────────
+
+apatt:OutcomeCredential a owl:Class ;
+    rdfs:subClassOf apvc:VerifiableCredential ;
+    rdfs:label "OutcomeCredential" ;
+    rdfs:comment "Outcome credential bound to an Intent. FLF-OUT-1: MUST cite at least one EvidenceCredential UID. Holder-only revoke. Layer 13." .
+
+# ─── Credential types (Layer 14: Validation) ──────────────────────────
+
+apatt:ValidationCredential a owl:Class ;
+    rdfs:subClassOf apvc:VerifiableCredential ;
+    rdfs:label "ValidationCredential" ;
+    rdfs:comment "Validator's attestation of an Outcome. Validator-type discriminated (human | agent | oracle | TEE | zkML | re-execution per ERC-8004). Validator-only revoke. Layer 14." .
+
+apatt:Validator a owl:Class ;
+    rdfs:subClassOf ap:Agent ;
+    rdfs:label "Validator" ;
+    rdfs:comment "An Agent that produces ValidationCredentials. Independence requirement: validator SA ≠ executor SA." .
+
+apatt:ValidatorKind a owl:Class ;
+    rdfs:label "ValidatorKind" ;
+    rdfs:comment "Discriminator: human | agent | oracle | TEE | zkML | re-execution." .
+
+# ─── Credential types (Layer 15: TrustUpdate) ─────────────────────────
+
+apatt:TrustUpdate a owl:Class ;
+    rdfs:subClassOf apvc:VerifiableCredential ;
+    rdfs:label "TrustUpdate" ;
+    rdfs:comment "Reputation mutation. D-40 hard substrate invariant: MUST cite at least one ValidationCredential UID. Sybil resistance via credential-cost, never KYC. Validator-only revoke. Layer 15." .
+
+apatt:AssociationCredential a owl:Class ;
+    rdfs:subClassOf apvc:VerifiableCredential ;
+    rdfs:label "AssociationCredential" ;
+    rdfs:comment "Holder asserts membership/association with an issuer. Holder-only revoke. Substrate-generic; vertical instances (JpAssociationCredential, etc.) compose on top." .
+
+# ─── Properties ───────────────────────────────────────────────────────
+
+apatt:uid a owl:DatatypeProperty ;
+    rdfs:domain apatt:Attestation ;
+    rdfs:range xsd:hexBinary ;
+    rdfs:label "uid" ;
+    rdfs:comment "Deterministic UID per EAS pattern." .
+
+apatt:credentialType a owl:DatatypeProperty ;
+    rdfs:domain apatt:Attestation ;
+    rdfs:range xsd:hexBinary ;
+    rdfs:label "credentialType" ;
+    rdfs:comment "keccak256 hash discriminator (AssociationCredential / EvidenceCredential / OutcomeCredential / ValidationCredential / TrustUpdate / PaymentReceipt)." .
+
+apatt:credentialHash a owl:DatatypeProperty ;
+    rdfs:domain apatt:Attestation ;
+    rdfs:range xsd:hexBinary ;
+    rdfs:label "credentialHash" ;
+    rdfs:comment "RFC 8785 JCS canonical hash of off-chain VC body." .
+
+apatt:refUID a owl:DatatypeProperty ;
+    rdfs:domain apatt:Attestation ;
+    rdfs:range xsd:hexBinary ;
+    rdfs:label "refUID" ;
+    rdfs:comment "EAS-style single back-pointer. Used by JointAgreement to reference AgreementCommitment." .
+
+apatt:bilateralConsentRef a owl:DatatypeProperty ;
+    rdfs:domain apatt:Attestation ;
+    rdfs:range xsd:hexBinary ;
+    rdfs:label "bilateralConsentRef" ;
+    rdfs:comment "References signatures-bundle hash OR pinned-delegation hash for joint attestations. 0 for unilateral." .
+
+apatt:basedOnIntent a owl:ObjectProperty ;
+    rdfs:domain apatt:OutcomeCredential ;
+    rdfs:range apint:Intent ;
+    rdfs:label "basedOnIntent" .
+
+apatt:basedOnArtifact a owl:ObjectProperty ;
+    rdfs:domain apatt:EvidenceCredential ;
+    rdfs:range apful:Artifact ;
+    rdfs:label "basedOnArtifact" .
+
+apatt:citesEvidence a owl:ObjectProperty ;
+    rdfs:domain apatt:OutcomeCredential ;
+    rdfs:range apatt:EvidenceCredential ;
+    rdfs:label "citesEvidence" ;
+    rdfs:comment "FLF-OUT-1: MANDATORY. At least one EvidenceCredential UID citation required." .
+
+apatt:citesValidation a owl:ObjectProperty ;
+    rdfs:domain apatt:TrustUpdate ;
+    rdfs:range apatt:ValidationCredential ;
+    rdfs:label "citesValidation" ;
+    rdfs:comment "D-40: MANDATORY. TrustUpdate cannot precede ValidationCredential." .
+
+apatt:validatorKind a owl:DatatypeProperty ;
+    rdfs:domain apatt:ValidationCredential ;
+    rdfs:range xsd:string ;
+    rdfs:label "validatorKind" .
+
+apatt:offchainCredentialStatusList a owl:DatatypeProperty ;
+    rdfs:domain apatt:Attestation ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "offchainCredentialStatusList" ;
+    rdfs:comment "W3C VC StatusList2021 pointer. Holder revocation on-chain ≠ issuer revocation off-chain — independently meaningful." .

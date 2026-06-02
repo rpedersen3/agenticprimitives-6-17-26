@@ -1,0 +1,38 @@
+{
+  "name": "@agenticprimitives/payments",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/243-payments.md",
+  "summary": "PaymentMandate + ContextBinding + MandateConstraints + open/closed mode discrimination. Three W1 rails (x402, wallet, sponsored-userop). PaymentReceipt asserted into AttestationRegistry.",
+  "spineLayers": [9.5],
+  "owns": {
+    "source": ["src/**", "rails/**"],
+    "tests": ["test/**"],
+    "shapes": ["src/shapes/payment.shacl.ttl"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/attestations",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/ontology"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/attestations",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/ontology",
+    "viem",
+    "@noble/hashes"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/intent-marketplace",
+    "@agenticprimitives/intent-resolver",
+    "@agenticprimitives/agreements",
+    "@agenticprimitives/fulfillment"
+  ]
+}

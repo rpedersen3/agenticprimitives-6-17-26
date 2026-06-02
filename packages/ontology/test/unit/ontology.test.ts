@@ -5,8 +5,10 @@ import { ARTIFACTS, artifactPath } from '../../src/artifacts.js';
 
 describe('ontology IRI constants', () => {
   it('namespaces share the pinned base', () => {
+    // Phase-1.5 (spec 225 §11.5) added namespaces like `verifiable-credential#`
+    // — hyphenated locals are valid per RFC 3986 + JSON-LD compaction conventions.
     for (const iri of Object.values(NS)) {
-      expect(iri).toMatch(/^https:\/\/agenticprimitives\.dev\/ns\/[a-z]+#$/);
+      expect(iri).toMatch(/^https:\/\/agenticprimitives\.dev\/ns\/[a-z][a-z-]*#$/);
     }
   });
 

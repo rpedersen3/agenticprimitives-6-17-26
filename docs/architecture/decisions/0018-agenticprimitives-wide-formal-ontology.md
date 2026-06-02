@@ -83,6 +83,35 @@ This ADR adds that; it does not unwind ADR-0009.
   `check:ontology-lockstep` CI gate enforces it once code + a deployed registry
   exist.
 
+## Acknowledgment 2026-06-02b — v2 coordination substrate vocabulary IS monorepo-wide
+
+When this ADR was originally accepted, "monorepo-wide" effectively meant the
+identity / credential / custody / delegation / audit / naming / org substrate
+that existed at the time. The v2 coordination substrate introduced by
+[ADR-0024](./0024-intent-coordination-substrate.md) (15-layer spine; six W1
+packages) materially expands the substrate's scope with **intent / constraint /
+resolution / agreement / payment / fulfillment / attestation** vocabulary.
+
+This ADR's "monorepo-wide formal ontology" claim **explicitly covers** that v2
+vocabulary. The T-box class definitions for the v2 spine live in this package
+under `tbox/intents.ttl`, `tbox/constraints.ttl`, `tbox/resolution.ttl`,
+`tbox/agreement.ttl`, `tbox/payment.ttl`, `tbox/fulfillment.ttl`, and
+`tbox/attestation.ttl`. Cross-standard crosswalks live in
+`mappings/spine-standards.ttl`.
+
+**What does NOT change.** The runtime SHACL shapes for these vocabularies live
+in their owning packages (`intent-marketplace`, `agreements`, `payments`,
+`fulfillment`, `attestations`, `mcp-runtime`) per [PD-19](../../../apps/demo-jp/docs/packages.md).
+The hybrid model — T-box centralized; SHACL shapes distributed — preserves the
+"one ontology, one package" property (the ontology root) while keeping
+runtime-validation concerns local to each package's flows.
+
+**Reference:**
+- [spec 225 §11.5](../../../specs/225-ontology.md) — scope expansion
+- [docs/architecture/spine-ontology-extensions.md](../spine-ontology-extensions.md) — TTL drafts + migration plan
+- [docs/architecture/coordination-substrate.md](../coordination-substrate.md) — 15-layer spine
+- [ADR-0024](./0024-intent-coordination-substrate.md) — substrate decisions
+
 ## Consequences
 
 **Positive:** vocabulary becomes machine-checkable and externally mappable; the

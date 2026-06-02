@@ -1,0 +1,83 @@
+# Mappings — substrate spine ↔ industry-standard crosswalks.
+# Spec 225 §11.5; the substrate's external-standard bridge.
+# Lets a downstream consumer reason that "an apint:Intent is an erc7521:UserIntent"
+# without reading our spec text.
+
+@prefix apint:   <https://agenticprimitives.dev/ns/intent#> .
+@prefix apcst:   <https://agenticprimitives.dev/ns/constraint#> .
+@prefix apres:   <https://agenticprimitives.dev/ns/resolution#> .
+@prefix apful:   <https://agenticprimitives.dev/ns/fulfillment#> .
+@prefix apagr:   <https://agenticprimitives.dev/ns/agreement#> .
+@prefix appay:   <https://agenticprimitives.dev/ns/payment#> .
+@prefix apatt:   <https://agenticprimitives.dev/ns/attestation#> .
+@prefix apvc:    <https://agenticprimitives.dev/ns/credential#> .
+
+@prefix erc7521: <https://eips.ethereum.org/EIPS/eip-7521#> .
+@prefix erc7683: <https://www.erc7683.org/spec#> .
+@prefix erc7710: <https://eips.ethereum.org/EIPS/eip-7710#> .
+@prefix erc7715: <https://eips.ethereum.org/EIPS/eip-7715#> .
+@prefix erc8004: <https://eips.ethereum.org/EIPS/eip-8004#> .
+@prefix eas:     <https://docs.attest.org/spec#> .
+@prefix a2a:     <https://google.github.io/A2A/specification#> .
+@prefix anoma:   <https://anoma.net/spec#> .
+@prefix x402:    <https://www.x402.org/spec#> .
+@prefix ap2:     <https://google.github.io/A2A/ap2#> .
+@prefix vf:      <https://w3id.org/valueflows#> .
+@prefix ufo-c:   <http://purl.org/nemo/ufo-c#> .
+@prefix w3cvc:   <https://www.w3.org/2018/credentials#> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+
+# ─── Intent crosswalks (Layer 2) ──────────────────────────────────────
+
+apint:Intent owl:equivalentClass anoma:Intent ;
+             owl:equivalentClass erc7521:UserIntent ;
+             owl:equivalentClass erc7683:Order ;
+             rdfs:subClassOf vf:Intent , ufo-c:Intention .
+
+# ─── Constraint + Assumption (Layer 3 — ERC-7683 resolver-assumption parallel) ──
+
+apcst:AssumptionSet rdfs:subClassOf erc7683:ResolverAssumptionSet .
+apcst:NamedAssumption rdfs:subClassOf erc7683:NamedAssumption .
+
+# ─── Resolution (Layer 4) ─────────────────────────────────────────────
+
+apres:Resolver rdfs:subClassOf erc7683:Resolver .
+apres:ResolvedOrder rdfs:subClassOf erc7683:CanonicalOrder .
+
+# ─── Agreement (Layer 8) ──────────────────────────────────────────────
+
+apagr:AgreementCredential rdfs:subClassOf w3cvc:VerifiableCredential .
+
+# ─── Payment (Layer 9b) ───────────────────────────────────────────────
+
+appay:PaymentMandate rdfs:subClassOf ap2:Mandate ;
+                     rdfs:subClassOf x402:PaymentRequirement .
+appay:OpenPaymentMandate rdfs:subClassOf ap2:IntentMandate .
+appay:ClosedPaymentMandate rdfs:subClassOf ap2:CheckoutMandate .
+appay:PaymentReceipt rdfs:subClassOf w3cvc:VerifiableCredential .
+
+# ─── Fulfillment crosswalks (Layers 10–12 — A2A alignment) ───────────
+
+apful:Task owl:equivalentClass a2a:Task .
+apful:Message owl:equivalentClass a2a:Message .
+apful:Artifact owl:equivalentClass a2a:Artifact .
+apful:HandoffPolicy rdfs:subClassOf a2a:HandoffPolicy .
+
+# ─── Validation + reputation crosswalks (Layers 14–15; ERC-8004) ─────
+
+apatt:Attestation rdfs:subClassOf eas:Attestation .
+apatt:ValidationCredential owl:equivalentClass erc8004:ValidationRecord .
+apatt:TrustUpdate owl:equivalentClass erc8004:ReputationRecord .
+apatt:Validator rdfs:subClassOf erc8004:Validator .
+
+# ─── Provenance crosswalks ────────────────────────────────────────────
+
+apful:IntentTraceSpan rdfs:subClassOf prov:Activity .
+apres:ResolutionReceipt rdfs:subClassOf prov:Entity .
+
+# ─── VC envelope crosswalk ────────────────────────────────────────────
+
+apvc:VerifiableCredential owl:equivalentClass w3cvc:VerifiableCredential .

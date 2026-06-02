@@ -28,6 +28,15 @@ import {ShapeRegistry} from "../src/ontology/ShapeRegistry.sol";
 import {AttributeStorage} from "../src/ontology/AttributeStorage.sol";
 import {AgentRelationship} from "../src/relationships/AgentRelationship.sol";
 import {RelationshipTypeRegistry} from "../src/relationships/RelationshipTypeRegistry.sol";
+
+// R10 — W1 substrate registries (ADR-0023 + spec 241). Two new on-chain
+// contracts that close out the spine: AttestationRegistry (Layers 12-15
+// credential types in one EAS-aligned registry + bilateral consent) and
+// AgreementRegistry (commitment-only Layer 8 anchor + bilateral status
+// transitions). Neither takes constructor arguments; both are
+// non-upgradeable.
+import {AttestationRegistry} from "../src/attestation/AttestationRegistry.sol";
+import {AgreementRegistry} from "../src/agreement/AgreementRegistry.sol";
 import {AgentRelationshipPredicates} from "../src/relationships/AgentRelationshipPredicates.sol";
 import {AgentProfileResolver} from "../src/identity/AgentProfileResolver.sol";
 import {AgentProfilePredicates} from "../src/identity/AgentProfilePredicates.sol";
@@ -368,6 +377,37 @@ contract Deploy is Script {
         console2.log("AgentProfileResolver: %s", address(profileResolver));
         _bootstrapAgentProfileOntology(ontology, shapes, address(profileResolver));
 
+        // 7. R10 — W1 substrate registries.
+        //
+        //    AttestationRegistry — EAS-aligned + bilateral-consent (ADR-0023).
+        //      Carries credential types Association / Evidence / Outcome /
+        //      Validation / TrustUpdate / JointAgreement / PaymentReceipt in
+        //      ONE registry per ADR-0024 Decision 2 (the architectural inverse
+        //      of the smart-contract-per-credential anti-pattern). Hard
+        //      invariants: deterministic UID, refUID single back-pointer,
+        //      EIP-712 + ERC-1271 issuer signature, no `issuerRevoke`
+        //      entrypoint, epoch-bucket timestamps, four indexed event topics.
+        AttestationRegistry attestationRegistry = new AttestationRegistry();
+        console2.log("AttestationRegistry:  %s", address(attestationRegistry));
+
+        //    AgreementRegistry — commitment-only registry per spec 241.
+        //      The on-chain row holds the commitment hash + issuer + schema +
+        //      status + epoch buckets ONLY. Party SAs never appear in
+        //      register() calldata (AR-11). Status state-machine: ACTIVE →
+        //      COMPLETED | DISPUTED | REVOKED with bilateral signing matrix.
+        //      Nullifier set for replay protection. The public
+        //      isAssertableCommitment(...) view is the gateway that the
+        //      AttestationRegistry.assertJointAgreement path consumes off-
+        //      chain to validate refUID back-pointers.
+        AgreementRegistry agreementRegistry = new AgreementRegistry();
+        console2.log("AgreementRegistry:    %s", address(agreementRegistry));
+
+        // Note: the new `DelegationManager.verifyAuthorization(...)` view
+        // entrypoint (spec 242 PD-9) is part of the redeployed DM bytecode
+        // that already happened at step 2 above — no separate deploy line
+        // here. The substrate's `attestations` SDK calls this view as a
+        // read-only check off-chain.
+
         // Stake + deposit so the paymaster can sponsor UserOps immediately.
         // - addStake locks ETH for the unstake-delay window (anti-DoS for bundlers
         //   that want to know the paymaster has skin in the game).
@@ -414,7 +454,12 @@ contract Deploy is Script {
         vm.serializeAddress(key, "permissionlessSubregistry", address(subregistry));
         vm.serializeAddress(key, "relationshipTypeRegistry", address(relTypes));
         vm.serializeAddress(key, "agentRelationship", address(relationships));
-        string memory out = vm.serializeAddress(key, "agentProfileResolver", address(profileResolver));
+        vm.serializeAddress(key, "agentProfileResolver", address(profileResolver));
+        // R10 — W1 substrate registries (ADR-0023 + spec 241). Appended at
+        // the end so the chained `vm.serializeAddress` returns the full
+        // JSON with all R9 + R10 keys present.
+        vm.serializeAddress(key, "attestationRegistry", address(attestationRegistry));
+        string memory out = vm.serializeAddress(key, "agreementRegistry", address(agreementRegistry));
 
         string memory path = string.concat("deployments-", network, ".json");
         vm.writeFile(path, out);

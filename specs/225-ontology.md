@@ -206,8 +206,13 @@ CAIP-10 `CanonicalAgentId`s, with `hedera:*` admitted as identifier-only.
 Phase-1 scope: **identity + credential + custody + delegation + audit + naming +
 org** (`org` is in scope, not deferred — spec 223 §4 makes `Org`/`memberOf`
 first-class directory nodes and many-agent disambiguation references org
-membership; audit P2-3). Defer marketplace/intents/needs/geo (not our domain).
-Do not boil the ocean.
+membership; audit P2-3).
+
+**Phase-1.5 scope addition (added 2026-06-02b — see §11.5 below):** the v2
+coordination substrate spine vocabulary (intent / constraint / resolution /
+agreement / payment / fulfillment / attestation) per
+[ADR-0024](../docs/architecture/decisions/0024-intent-coordination-substrate.md).
+Still defer marketplace UI / branding / vertical content. Do not boil the ocean.
 
 1. `context.jsonld` + `tbox/core.ttl` + `tbox/identity.ttl` + the
    `CanonicalAgentIdShape` (cbox) — enough for spec 223 to conform.
@@ -218,3 +223,58 @@ Do not boil the ocean.
    `check:ontology-lockstep` gate (the §8 "shape match" definition: every
    on-chain term has an IRI here AND every on-chain shape property matches a
    `cbox/` `sh:property`).
+
+### 11.5 Substrate spine vocabulary (added 2026-06-02b — scope expansion)
+
+The monorepo-wide formal ontology (per
+[ADR-0018](../docs/architecture/decisions/0018-agenticprimitives-wide-formal-ontology.md))
+includes T-box class definitions, properties, and external-standard crosswalks
+for the v2 15-layer coordination spine introduced by
+[ADR-0024](../docs/architecture/decisions/0024-intent-coordination-substrate.md)
+and detailed in
+[docs/architecture/coordination-substrate.md](../docs/architecture/coordination-substrate.md).
+
+**In-scope (new T-box files in `packages/ontology/tbox/`):**
+
+- `tbox/intents.ttl` — Intent + IntentMatch + Commitment + Desire (per [ADR-0024](../docs/architecture/decisions/0024-intent-coordination-substrate.md) Layer 2 + 7)
+- `tbox/constraints.ttl` — ConstraintSet + AssumptionSet + Constraint domains (Layer 3, Anoma CSP-shaped)
+- `tbox/resolution.ttl` — Resolver + ResolvedOrder (Layer 4 — skeleton W1)
+- `tbox/agreement.ttl` — AgreementCommitment + AgreementCredential (Layer 8)
+- `tbox/payment.ttl` — PaymentMandate + PaymentReceipt + ContextBinding + MandateConstraints (Layer 9b)
+- `tbox/fulfillment.ttl` — FulfillmentCase + Task + Message + Artifact + HandoffPolicy + IntentTraceSpan (Layers 10–12)
+- `tbox/attestation.ttl` — Association + Evidence + Outcome + Validation + TrustUpdate credential types (Layers 12–15)
+
+**In-scope (new crosswalks):**
+
+- `mappings/spine-standards.ttl` — `owl:equivalentClass` + `rdfs:subClassOf` to ERC-7521 / ERC-7683 / ERC-8004 / A2A / Anoma / x402 / W3C VC / UFO-C / ValueFlows / PROV-O.
+
+**Out-of-scope (NOT moved into this package):**
+
+- **Runtime SHACL shapes** for these vocabularies — live in their owning
+  packages per [PD-19](../apps/demo-jp/docs/packages.md):
+  `packages/intent-marketplace/src/shapes/*.shacl.ttl`,
+  `packages/agreements/src/shapes/*.shacl.ttl`,
+  `packages/payments/src/shapes/*.shacl.ttl`,
+  `packages/fulfillment/src/shapes/*.shacl.ttl`,
+  `packages/attestations/src/shapes/*.shacl.ttl`,
+  `packages/mcp-runtime/src/shapes/a2a-task.shacl.ttl`.
+- **Vertical / branding / white-label content** (faith, health, education,
+  geo-specific domain terms) — lives in apps per
+  [ADR-0021](../docs/architecture/decisions/0021-generic-packages-vs-white-label-apps.md).
+
+**Why expanded.** When §11 was originally written, the substrate's vocabulary
+was effectively just identity + credential + custody + delegation + audit +
+naming + org. The v2 coordination substrate doubles the substrate vocabulary
+with the spine concepts above. Because they're substrate-wide (six W1 packages
+consume them), they belong in the monorepo-wide formal ontology root per
+ADR-0018, not scattered across each owning package's TTL files. The
+hybrid model (T-box centralized; SHACL distributed) preserves both: one
+ontology root + per-package runtime SHACL validation.
+
+**Implementation plan + TTL drafts:** see
+[`docs/architecture/spine-ontology-extensions.md`](../docs/architecture/spine-ontology-extensions.md).
+
+**Lockstep.** Every new T-box term registered here MUST be registered on chain
+via `ShapeRegistry.defineShape(...)` per the existing
+[ADR-0009](../docs/architecture/decisions/0009-on-chain-ontology-shacl-naming.md)
+lockstep convention. The `check:ontology-lockstep` gate covers all new shapes.

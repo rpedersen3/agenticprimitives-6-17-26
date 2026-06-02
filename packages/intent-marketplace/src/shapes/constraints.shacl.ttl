@@ -1,0 +1,161 @@
+# C-box — SHACL shapes for ConstraintSet, AssumptionSet, Constraint, NamedAssumption.
+# Enforces Anoma CSP shape + D-38/D-39/D-43 first-class structure + per-field DisclosurePolicy.
+# T-box classes live in packages/ontology/tbox/constraints.ttl per PD-19.
+
+@prefix apcst:  <https://agenticprimitives.dev/ns/constraint#> .
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# ─── ConstraintSet shape ──────────────────────────────────────────────
+
+apcst:ConstraintSetShape a sh:NodeShape ;
+    sh:targetClass apcst:ConstraintSet ;
+    sh:property [
+        sh:path apcst:hasHardConstraint ;
+        sh:node apcst:ConstraintShape ;
+        sh:minCount 0 ;
+        sh:description "Hard constraints — enforceable invariants; matcher MUST reject if violated."
+    ] ;
+    sh:property [
+        sh:path apcst:hasSoftConstraint ;
+        sh:node apcst:ConstraintShape ;
+        sh:minCount 0 ;
+        sh:description "Soft constraints — scorer preferences; contribute to composite score (spec 239 §7.2)."
+    ] ;
+    sh:property [
+        sh:path apcst:fieldDisclosure ;
+        sh:datatype xsd:string ;
+        sh:description "Per-field VisibilityTier mapping (D-42). JSON-encoded { fieldPath → tier }."
+    ] .
+
+# ─── Constraint shape (CSP variable + domain) ─────────────────────────
+
+apcst:ConstraintShape a sh:NodeShape ;
+    sh:targetClass apcst:Constraint ;
+
+    sh:property [
+        sh:path apcst:variable ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Constraint.variable MUST name a CSP variable (e.g. 'geo', 'requiredCredential')."
+    ] ;
+
+    sh:property [
+        sh:path apcst:domain ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:or (
+            [ sh:node apcst:EnumDomainShape ]
+            [ sh:node apcst:RangeDomainShape ]
+            [ sh:node apcst:SetDomainShape ]
+            [ sh:node apcst:PredicateDomainShape ]
+        ) ;
+        sh:message "Constraint.domain MUST be one of the four CSP-shaped domain types."
+    ] ;
+
+    sh:property [
+        sh:path apcst:source ;
+        sh:datatype xsd:string ;
+        sh:in ( "user-asserted" "llm-inferred" "policy-imposed" ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Constraint.source MUST identify provenance (D-43). Inferred + sensitive constraints redactable before publication."
+    ] ;
+
+    sh:property [
+        sh:path apcst:strength ;
+        sh:datatype xsd:string ;
+        sh:in ( "hard" "soft" ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1
+    ] ;
+
+    sh:property [
+        sh:path apcst:enforcement ;
+        sh:datatype xsd:string ;
+        sh:in ( "pre-execution" "agreement" "ranking" ) ;
+        sh:maxCount 1
+    ] ;
+
+    sh:property [
+        sh:path apcst:rationale ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1
+    ] .
+
+# ─── Domain shapes (CSP-style) ────────────────────────────────────────
+
+apcst:EnumDomainShape a sh:NodeShape ;
+    sh:targetClass apcst:EnumDomain ;
+    sh:property [ sh:path apcst:enumValues ; sh:datatype xsd:string ; sh:minCount 1 ] .
+
+apcst:RangeDomainShape a sh:NodeShape ;
+    sh:targetClass apcst:RangeDomain ;
+    sh:property [ sh:path apcst:minValue ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path apcst:maxValue ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path apcst:unit     ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+apcst:SetDomainShape a sh:NodeShape ;
+    sh:targetClass apcst:SetDomain ;
+    sh:property [ sh:path apcst:allowedSet ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+    sh:property [ sh:path apcst:deniedSet  ; sh:datatype xsd:string ] .
+
+apcst:PredicateDomainShape a sh:NodeShape ;
+    sh:targetClass apcst:PredicateDomain ;
+    sh:property [
+        sh:path apcst:expression ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:description "SHACL or JSONPath predicate body."
+    ] .
+
+# ─── AssumptionSet shape (ERC-7683 resolver-assumption parallel) ──────
+
+apcst:AssumptionSetShape a sh:NodeShape ;
+    sh:targetClass apcst:AssumptionSet ;
+    sh:property [
+        sh:path apcst:resolverId ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1
+    ] ;
+    sh:property [
+        sh:path apcst:hasNamedAssumption ;
+        sh:node apcst:NamedAssumptionShape ;
+        sh:minCount 0
+    ] ;
+    sh:property [
+        sh:path apcst:risk ;
+        sh:datatype xsd:string ;
+        sh:minCount 0
+    ] ;
+    sh:property [
+        sh:path apcst:hasValidationRequirement ;
+        sh:minCount 0
+    ] .
+
+apcst:NamedAssumptionShape a sh:NodeShape ;
+    sh:targetClass apcst:NamedAssumption ;
+    sh:property [
+        sh:path apcst:name ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1
+    ] ;
+    sh:property [
+        sh:path apcst:trustLevel ;
+        sh:datatype xsd:string ;
+        sh:in ( "asserted" "verified" "oracle" "zkp" ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1
+    ] ;
+    sh:property [
+        sh:path apcst:evidenceRef ;
+        sh:datatype xsd:anyURI
+    ] ;
+    sh:property [
+        sh:path apcst:expiresAt ;
+        sh:datatype xsd:dateTime
+    ] .

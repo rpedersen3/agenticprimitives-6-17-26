@@ -1,0 +1,35 @@
+{
+  "name": "@agenticprimitives/agreements",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/241-agreement-commitment-registry.md",
+  "summary": "Commitment-only AgreementRegistry SDK. Owns AgreementCredential shape (PD-22) + commitment math + bilateral status transitions + joint-assertion gateway.",
+  "spineLayers": [8],
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"],
+    "shapes": ["src/shapes/agreement.shacl.ttl"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/ontology"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/ontology",
+    "viem",
+    "@noble/hashes"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/attestations",
+    "@agenticprimitives/intent-marketplace",
+    "@agenticprimitives/intent-resolver",
+    "@agenticprimitives/payments",
+    "@agenticprimitives/fulfillment"
+  ]
+}

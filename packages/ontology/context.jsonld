@@ -10,12 +10,24 @@
     "aprel": "https://agenticprimitives.dev/ns/relationships#",
     "aporg": "https://agenticprimitives.dev/ns/org#",
 
+    "apint": "https://agenticprimitives.dev/ns/intent#",
+    "apcst": "https://agenticprimitives.dev/ns/constraint#",
+    "apres": "https://agenticprimitives.dev/ns/resolution#",
+    "apagr": "https://agenticprimitives.dev/ns/agreement#",
+    "appay": "https://agenticprimitives.dev/ns/payment#",
+    "apful": "https://agenticprimitives.dev/ns/fulfillment#",
+    "apatt": "https://agenticprimitives.dev/ns/attestation#",
+    "apvc":  "https://agenticprimitives.dev/ns/verifiable-credential#",
+
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
     "owl": "http://www.w3.org/2002/07/owl#",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
     "sh": "http://www.w3.org/ns/shacl#",
     "skos": "http://www.w3.org/2004/02/skos/core#",
-    "prov": "http://www.w3.org/ns/prov#"
+    "prov": "http://www.w3.org/ns/prov#",
+    "vf": "https://w3id.org/valueflows#",
+    "ufo-c": "http://purl.org/nemo/ufo-c#",
+    "w3cvc": "https://www.w3.org/2018/credentials#"
   }
 }

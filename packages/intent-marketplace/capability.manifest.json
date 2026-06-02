@@ -1,0 +1,41 @@
+{
+  "name": "@agenticprimitives/intent-marketplace",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/239-intent-spine.md",
+  "summary": "Direct Lane intent marketplace — Intent + ConstraintSet (CSP-shaped) + AssumptionSet + ResolutionReceipt + IntentMatch + composite-score matchmaker. Pool/Proposal lanes deferred.",
+  "spineLayers": [2, 3, 5, 6, 7],
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"],
+    "shapes": [
+      "src/shapes/intents.shacl.ttl",
+      "src/shapes/constraints.shacl.ttl"
+    ]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/intent-resolver",
+    "@agenticprimitives/ontology"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/intent-resolver",
+    "@agenticprimitives/ontology",
+    "viem",
+    "@noble/hashes"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/attestations",
+    "@agenticprimitives/agreements",
+    "@agenticprimitives/payments",
+    "@agenticprimitives/fulfillment"
+  ]
+}

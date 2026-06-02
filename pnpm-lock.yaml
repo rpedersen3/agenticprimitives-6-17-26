@@ -101,6 +101,12 @@ importers:
       '@agenticprimitives/agent-relationships':
         specifier: workspace:*
         version: link:../../packages/agent-relationships
+      '@agenticprimitives/agreements':
+        specifier: workspace:*
+        version: link:../../packages/agreements
+      '@agenticprimitives/attestations':
+        specifier: workspace:*
+        version: link:../../packages/attestations
       '@agenticprimitives/connect':
         specifier: workspace:*
         version: link:../../packages/connect
@@ -110,12 +116,27 @@ importers:
       '@agenticprimitives/delegation':
         specifier: workspace:*
         version: link:../../packages/delegation
+      '@agenticprimitives/fulfillment':
+        specifier: workspace:*
+        version: link:../../packages/fulfillment
       '@agenticprimitives/identity-directory-adapters':
         specifier: workspace:*
         version: link:../../packages/identity-directory-adapters
+      '@agenticprimitives/intent-marketplace':
+        specifier: workspace:*
+        version: link:../../packages/intent-marketplace
+      '@agenticprimitives/intent-resolver':
+        specifier: workspace:*
+        version: link:../../packages/intent-resolver
+      '@agenticprimitives/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@agenticprimitives/verifiable-credentials':
+        specifier: workspace:*
+        version: link:../../packages/verifiable-credentials
       react:
         specifier: ^18.3.0
         version: 18.3.1
@@ -141,6 +162,9 @@ importers:
       vite:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@22.19.19)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
 
   apps/demo-mcp:
     dependencies:
@@ -390,10 +414,10 @@ importers:
         version: 18.3.1(react@18.3.1)
       viem:
         specifier: ^2.50.0
-        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
       wagmi:
         specifier: ^2.12.0
-        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@19.2.15)(@upstash/redis@1.38.0)(bufferutil@4.1.0)(encoding@0.1.13)(react@18.3.1)(typescript@5.7.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@3.25.76))(zod@3.25.76)
+        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@19.2.15)(@upstash/redis@1.38.0)(bufferutil@4.1.0)(encoding@0.1.13)(react@18.3.1)(typescript@5.7.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@4.4.3)
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -448,10 +472,10 @@ importers:
         version: 18.3.1(react@18.3.1)
       viem:
         specifier: ^2.50.0
-        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@3.25.76)
       wagmi:
         specifier: ^2.12.0
-        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@19.2.15)(@upstash/redis@1.38.0)(bufferutil@4.1.0)(encoding@0.1.13)(react@18.3.1)(typescript@5.7.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@4.4.3)
+        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@19.2.15)(@upstash/redis@1.38.0)(bufferutil@4.1.0)(encoding@0.1.13)(react@18.3.1)(typescript@5.7.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@3.25.76))(zod@3.25.76)
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -619,6 +643,47 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
 
+  packages/agreements:
+    dependencies:
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      '@agenticprimitives/verifiable-credentials':
+        specifier: workspace:*
+        version: link:../verifiable-credentials
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+    devDependencies:
+      viem:
+        specifier: ^2.50.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
+  packages/attestations:
+    dependencies:
+      '@agenticprimitives/delegation':
+        specifier: workspace:*
+        version: link:../delegation
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      '@agenticprimitives/verifiable-credentials':
+        specifier: workspace:*
+        version: link:../verifiable-credentials
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+    devDependencies:
+      viem:
+        specifier: ^2.50.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
   packages/audit:
     dependencies:
       '@agenticprimitives/types':
@@ -701,6 +766,34 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
 
+  packages/fulfillment:
+    dependencies:
+      '@agenticprimitives/agreements':
+        specifier: workspace:*
+        version: link:../agreements
+      '@agenticprimitives/attestations':
+        specifier: workspace:*
+        version: link:../attestations
+      '@agenticprimitives/delegation':
+        specifier: workspace:*
+        version: link:../delegation
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      '@agenticprimitives/verifiable-credentials':
+        specifier: workspace:*
+        version: link:../verifiable-credentials
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+    devDependencies:
+      viem:
+        specifier: ^2.50.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
   packages/identity-directory:
     dependencies:
       '@agenticprimitives/audit':
@@ -732,6 +825,50 @@ importers:
         specifier: ^2.50.0
         version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
     devDependencies:
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
+  packages/intent-marketplace:
+    dependencies:
+      '@agenticprimitives/delegation':
+        specifier: workspace:*
+        version: link:../delegation
+      '@agenticprimitives/intent-resolver':
+        specifier: workspace:*
+        version: link:../intent-resolver
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      '@agenticprimitives/verifiable-credentials':
+        specifier: workspace:*
+        version: link:../verifiable-credentials
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+    devDependencies:
+      viem:
+        specifier: ^2.50.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
+  packages/intent-resolver:
+    dependencies:
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      '@agenticprimitives/verifiable-credentials':
+        specifier: workspace:*
+        version: link:../verifiable-credentials
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+    devDependencies:
+      viem:
+        specifier: ^2.50.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
       vitest:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
@@ -798,6 +935,31 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
 
+  packages/payments:
+    dependencies:
+      '@agenticprimitives/attestations':
+        specifier: workspace:*
+        version: link:../attestations
+      '@agenticprimitives/delegation':
+        specifier: workspace:*
+        version: link:../delegation
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      '@agenticprimitives/verifiable-credentials':
+        specifier: workspace:*
+        version: link:../verifiable-credentials
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+    devDependencies:
+      viem:
+        specifier: ^2.50.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
+
   packages/tool-policy:
     dependencies:
       '@agenticprimitives/types':
@@ -815,6 +977,25 @@ importers:
         version: 2.1.9(@types/node@22.19.19)
 
   packages/types: {}
+
+  packages/verifiable-credentials:
+    dependencies:
+      '@agenticprimitives/ontology':
+        specifier: workspace:*
+        version: link:../ontology
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+    devDependencies:
+      viem:
+        specifier: ^2.50.0
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.19)
 
   tests/e2e:
     devDependencies:

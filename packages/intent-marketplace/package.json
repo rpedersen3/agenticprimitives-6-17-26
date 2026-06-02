@@ -1,0 +1,60 @@
+{
+  "name": "@agenticprimitives/intent-marketplace",
+  "version": "0.0.0-stub.0",
+  "description": "Direct Lane intent matchmaking. Intent + ConstraintSet + AssumptionSet + ResolutionReceipt + IntentMatch + composite-score ranking. Resolver layer 4 folded into PassThrough stub in W1.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/intent-marketplace"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/intent-marketplace",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run test/unit --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
+    "@agenticprimitives/intent-resolver": "workspace:*",
+    "viem": "^2.50.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "viem": "^2.50.0"
+  },
+  "keywords": [
+    "agentic",
+    "primitives",
+    "intent-marketplace"
+  ],
+  "dependencies": {
+    "@noble/hashes": "^1.5.0"
+  }
+}
