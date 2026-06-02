@@ -58,6 +58,14 @@ const ALLOWED_IN: ReadonlySet<string> = new Set([
   // A2A_KMS_BACKEND=local-aes (default for local Anvil + wrangler dev).
   // Production deploys with A2A_KMS_BACKEND=gcp-kms never read this var.
   'apps/demo-a2a/src/config.ts',
+  // demo-jp Pete + Jill personas (IA §1 D-1 / demo-jp memory note):
+  // for the demo, Pete (custodies Global Church SA) and Jill (custodies JP SA)
+  // hold raw EOA private keys in localStorage — DEMO ONLY, intentionally
+  // surfaced in the UI per D-1. Production deployments custody org agents
+  // via KMS-backed signers (spec 235 google-kms-custody pattern); the
+  // personas.ts helper is the testnet-only equivalent. Lives only in the
+  // demo-jp app; never imported by packages.
+  'apps/demo-jp/src/lib/personas.ts',
 ]);
 
 // Env-var names that are tolerated EVERYWHERE in apps/. Reserved for the
