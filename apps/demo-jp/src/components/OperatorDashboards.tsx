@@ -240,8 +240,8 @@ export function JillDashboard() {
       <OperatorHomeCard who="jill" />
       <OrgDeployCard org="jp" />
       <DelegatedOrgsPanel />
-      <IntentBoard />
       <AssociationIssuer />
+      <IntentBoard />
       <AgreementsBoard
         source="jp"
         title="Agreements you brokered"
@@ -303,6 +303,7 @@ function IntentBoard() {
   const [intents, setIntents] = useState<BoardIntent[]>([]);
   const [matches, setMatches] = useState<BoardMatch[]>([]);
   const [drafts, setDrafts] = useState<AgreementDraft[]>([]);
+  const [associations, setAssociations] = useState<AssociationRow[]>([]);
 
   const [err, setErr] = useState<string | null>(null);
 
@@ -317,12 +318,21 @@ function IntentBoard() {
     void (async () => {
       try { await ensureOrgDeployed('jp'); } catch { /* deploy card surfaces errors */ }
       if (cancelled) return;
-      const [i, m, d] = await Promise.all([loadIntents(), loadMatches(), loadDrafts()]);
+      const [i, m, d, a] = await Promise.all([loadIntents(), loadMatches(), loadDrafts(), loadAssociations()]);
       if (cancelled) return;
-      setIntents(i); setMatches(m); setDrafts(d);
+      setIntents(i); setMatches(m); setDrafts(d); setAssociations(a);
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Recognition gate (D-flow): JP may only broker a match once BOTH parties hold a valid
+  // JP Association for that people group — adopter recognized as 'adopter', facilitator as
+  // 'facilitator'. Issue recognition in the "Issue Association credential" card above.
+  const isRecognized = useCallback(
+    (addr: Address, kind: 'adopter' | 'facilitator', fpgId: string) =>
+      associations.some((x) => x.subjectOrg.toLowerCase() === addr.toLowerCase() && x.associationKind === kind && x.fpgIds.includes(fpgId)),
+    [associations],
+  );
 
   const persist = async (next: { i?: BoardIntent[]; m?: BoardMatch[]; d?: AgreementDraft[] }) => {
     if (next.i) { setIntents(next.i); await saveIntents(next.i); }
@@ -333,6 +343,15 @@ function IntentBoard() {
   const runMatch = useCallback(async (need: BoardIntent, offer: BoardIntent) => {
     setErr(null);
     if (need.fpgId !== offer.fpgId) { setErr('Intents must share the same FPG to match.'); return; }
+    // Recognition gate: refuse to broker until JP has recognized both parties on chain.
+    if (!isRecognized(need.expressedBy, 'adopter', need.fpgId)) {
+      setErr('Adopter is not recognized yet — issue an Association credential (Adopter) for this org + people group above, then match.');
+      return;
+    }
+    if (!isRecognized(offer.expressedBy, 'facilitator', offer.fpgId)) {
+      setErr('Facilitator is not recognized yet — issue an Association credential (Facilitator) for this org + people group above, then match.');
+      return;
+    }
     const broker = orgChainState('jp')?.saAddress ?? loadOrMintOrgPersona('jp').saAddress;
     // Rebuild the substrate intents to feed tryMatch (opposite direction + same object).
     const needIntent = await expressIntent({ id: need.id, expressedBy: need.expressedBy, object: JP_INTENT_OBJECT.NeedFacilitator, payload: { fpgId: need.fpgId } });
@@ -357,7 +376,7 @@ function IntentBoard() {
       m: [...matches.filter((x) => x.id !== row.id), row],
       i: intents.map((x) => (x.id === need.id || x.id === offer.id ? { ...x, state: 'matched' } : x)),
     });
-  }, [matches, intents]);
+  }, [matches, intents, isRecognized]);
 
   const draftFor = useCallback((m: BoardMatch) => {
     const fpg = findPeopleGroup(m.fpgId);
@@ -390,13 +409,25 @@ function IntentBoard() {
       {needs.length > 0 && offers.length > 0 && (
         <div style={{ marginTop: '1rem' }}>
           <h3 style={{ fontSize: '.95rem', marginBottom: '.5rem' }}>Broker a match</h3>
-          {needs.flatMap((n) => offers.filter((o) => o.fpgId === n.fpgId).map((o) => (
-            <div key={`${n.id}:${o.id}`} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', padding: '.5rem 0', borderTop: '1px solid var(--c-g100)', fontSize: '.84rem' }}>
-              <Pill>{findPeopleGroup(n.fpgId)?.name ?? n.fpgId}</Pill>
-              <span style={{ color: 'var(--c-g600)' }}><AddrLink addr={n.expressedBy} /> ↔ <AddrLink addr={o.expressedBy} /></span>
-              <Btn variant="ghost" style={{ marginLeft: 'auto', padding: '.35rem .7rem' }} onClick={() => runMatch(n, o)}>Run match</Btn>
-            </div>
-          )))}
+          <p style={{ fontSize: '.78rem', color: 'var(--c-g500)', margin: '0 0 .5rem' }}>
+            Both parties must be JP-recognized for the people group first (issue the Association above).
+          </p>
+          {needs.flatMap((n) => offers.filter((o) => o.fpgId === n.fpgId).map((o) => {
+            const aOk = isRecognized(n.expressedBy, 'adopter', n.fpgId);
+            const fOk = isRecognized(o.expressedBy, 'facilitator', o.fpgId);
+            const ready = aOk && fOk;
+            return (
+              <div key={`${n.id}:${o.id}`} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', padding: '.5rem 0', borderTop: '1px solid var(--c-g100)', fontSize: '.84rem', flexWrap: 'wrap' }}>
+                <Pill>{findPeopleGroup(n.fpgId)?.name ?? n.fpgId}</Pill>
+                <span style={{ color: 'var(--c-g600)' }}><AddrLink addr={n.expressedBy} /> ↔ <AddrLink addr={o.expressedBy} /></span>
+                <Pill tone={aOk ? 'ok' : 'neutral'}>adopter {aOk ? 'recognized ✓' : 'not recognized'}</Pill>
+                <Pill tone={fOk ? 'ok' : 'neutral'}>facilitator {fOk ? 'recognized ✓' : 'not recognized'}</Pill>
+                <Btn variant="ghost" disabled={!ready} style={{ marginLeft: 'auto', padding: '.35rem .7rem', opacity: ready ? 1 : 0.5 }} onClick={() => runMatch(n, o)}>
+                  {ready ? 'Run match' : 'Recognize first'}
+                </Btn>
+              </div>
+            );
+          }))}
         </div>
       )}
 
