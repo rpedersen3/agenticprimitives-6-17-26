@@ -30,7 +30,7 @@ import {
 import { getAgreementRecord, isAttestationValid } from '../lib/chain';
 import { loadReceivedDelegations, type ReceivedOrgDelegation } from '../lib/vault';
 import { setupOperatorHome, operatorSignInUrl } from '../lib/operator-home';
-import { personChainState, type PersonChainState } from '../lib/person-sa';
+import { personChainState, resolvePersonState, type PersonChainState } from '../lib/person-sa';
 import type { PersonaName } from '../lib/personas';
 import { expressIntent, tryMatch, buildCommitment } from '../lib/intent-flow';
 import { JP_INTENT_OBJECT } from '../lib/intent-payload';
@@ -134,6 +134,15 @@ function OperatorHomeCard({ who }: { who: PersonaName }) {
   const [err, setErr] = useState<string | null>(null);
 
   const [opening, setOpening] = useState(false);
+
+  // Resolve the deployed state from chain on mount (read-only, no deploy) so the
+  // "Sign in at impact-agent.me" link is shown immediately — without first running
+  // "Set up your home" on a fresh browser.
+  useEffect(() => {
+    let cancelled = false;
+    void resolvePersonState(who).then((s) => { if (!cancelled) setState(s); }).catch(() => { /* keep cached/empty */ });
+    return () => { cancelled = true; };
+  }, [who]);
 
   const connect = useCallback(async () => {
     setBusy(true);
