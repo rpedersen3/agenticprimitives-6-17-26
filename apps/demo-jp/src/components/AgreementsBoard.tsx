@@ -70,29 +70,37 @@ export function AgreementsBoard({ title, sub, source }: { title: string; sub: st
       ) : (
         rows.map((r) => {
           const st = statusLabel(r.status);
+          // Registration is the key fact. The joint assertion is an extra tag — when present
+          // we DO have more (the public bilateral parties + the assertion), so we show it.
+          // When NOT attested, keep the card minimal: just the registration.
+          const attested = !!r.jointAssertionTxHash;
           return (
             <div key={r.agreementCommitment} style={{ border: '1px solid var(--c-g200)', borderRadius: 10, padding: '.8rem 1rem', marginBottom: '.6rem', fontSize: '.83rem' }}>
               <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <Pill>{findPeopleGroup(r.fpgId)?.name ?? r.fpgId}</Pill>
                 <Pill tone={st.tone}>{st.text}</Pill>
-                {r.jointAssertionTxHash && (
-                  r.assertionValid === null
-                    ? <Pill tone="ok">joint asserted</Pill>
-                    : <Pill tone={r.assertionValid ? 'live' : 'neutral'}>{r.assertionValid ? 'assertion valid ✓' : 'assertion revoked'}</Pill>
-                )}
+                {attested
+                  ? <Pill tone={r.assertionValid === false ? 'neutral' : 'live'}>{r.assertionValid === false ? 'assertion revoked' : 'asserted ✓'}</Pill>
+                  : <Pill tone="neutral">not asserted</Pill>}
               </div>
-              <div style={{ margin: '.55rem 0', color: 'var(--c-g600)', display: 'flex', gap: '.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--c-g400)' }}>Adopter</span>
-                {party(r.adopterName, r.adopterParty)}
-                <span style={{ color: 'var(--c-g400)' }}>↔</span>
-                <span style={{ fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--c-g400)' }}>Facilitator</span>
-                {party(r.facName, r.facilitatorParty)}
-              </div>
-              <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', color: 'var(--c-g500)' }}>
+
+              {/* Extra detail ONLY when attested — the assertion is what makes the bilateral
+                  parties public + verifiable. Until then, the card shows just the registration. */}
+              {attested && (
+                <div style={{ margin: '.55rem 0', color: 'var(--c-g600)', display: 'flex', gap: '.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--c-g400)' }}>Adopter</span>
+                  {party(r.adopterName, r.adopterParty)}
+                  <span style={{ color: 'var(--c-g400)' }}>↔</span>
+                  <span style={{ fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--c-g400)' }}>Facilitator</span>
+                  {party(r.facName, r.facilitatorParty)}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', color: 'var(--c-g500)', marginTop: attested ? 0 : '.5rem' }}>
                 <span>commitment <Mono>{shortHex(r.agreementCommitment)}</Mono></span>
-                {r.issuer && <span>issuer {r.issuerName ? <b style={{ color: 'var(--c-g800)' }} title={r.issuer}>{r.issuerName}</b> : <Mono>{shortHex(r.issuer)}</Mono>}</span>}
+                {attested && r.issuer && <span>issuer {r.issuerName ? <b style={{ color: 'var(--c-g800)' }} title={r.issuer}>{r.issuerName}</b> : <Mono>{shortHex(r.issuer)}</Mono>}</span>}
                 {r.registerTxHash && <TxLink hash={r.registerTxHash} label="register" />}
-                {r.jointAssertionTxHash && <TxLink hash={r.jointAssertionTxHash} label="assertion" />}
+                {attested && r.jointAssertionTxHash && <TxLink hash={r.jointAssertionTxHash} label="assertion" />}
               </div>
             </div>
           );
