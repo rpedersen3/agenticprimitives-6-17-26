@@ -9,7 +9,7 @@
 
 import type { Address, Hex } from '@agenticprimitives/types';
 import { deployOrgSa, deriveOrgSaAddress, isContractDeployed } from './chain.js';
-import { buildNameClaimCallData } from './naming.js';
+import { buildNameClaimCallData, reverseName } from './naming.js';
 import { loadOrMintPersona, type PersonaName } from './personas.js';
 
 /** Salt 0 = the operator's own person SA (demo-sso SIWE convention). Orgs use salt 1. */
@@ -92,4 +92,19 @@ export async function ensurePersonDeployed(name: PersonaName): Promise<PersonCha
 
 export function personChainState(name: PersonaName): PersonChainState | null {
   return loadState(name);
+}
+
+/** Read-only: resolve the operator's person SA state FROM CHAIN (no deploy) — derive
+ *  the SA, check it's deployed, and reverse-resolve its name. Lets the dashboard show
+ *  the "Sign in at impact-agent.me" link immediately, without first running setup. */
+export async function resolvePersonState(name: PersonaName): Promise<PersonChainState> {
+  const cached = loadState(name);
+  if (cached?.deployed) return cached;
+  const persona = loadOrMintPersona(name);
+  const saAddress = await deriveOrgSaAddress(persona.address, PERSON_SALT);
+  const deployed = await isContractDeployed(saAddress);
+  const agentName = deployed ? ((await reverseName(saAddress)) ?? undefined) : undefined;
+  const state: PersonChainState = { name, custodian: persona.address, saAddress, deployed, agentName };
+  if (deployed) saveState(state);
+  return state;
 }
