@@ -950,6 +950,16 @@ function IntranetTopbar({
               {hasFriendly ? `${session.name} · ${short}` : short}
             </span>
           </div>
+          <a
+            className="btn btn-ghost"
+            style={{ padding: '.5rem 1rem', fontSize: '.85rem' }}
+            href={`${personalAuthOrigin(nameLabel(session.name))}/you`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Your home + data vault on Impact"
+          >
+            Your {JP.impactName} home ↗
+          </a>
           <button className="btn btn-ghost" style={{ padding: '.5rem 1rem', fontSize: '.85rem' }} onClick={onSignOut}>Sign out</button>
         </div>
       </div>

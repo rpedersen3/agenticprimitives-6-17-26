@@ -14,6 +14,7 @@ import type { Address } from '@agenticprimitives/types';
 import { Card, SectionHead, Btn, Pill, Field, inputStyle, Banner, AddrLink } from './ui';
 import { MemberTrustPanel } from './MemberTrustPanel';
 import { toOrgLabel } from '../lib/member-org';
+import { loadImpactProfile, type ImpactProfile } from '../lib/vault';
 import type { RelatedOrgLink } from '../connect-client';
 
 export function MemberOrgSection({
@@ -109,7 +110,82 @@ function OrgActive({ kind, org }: { kind: 'adopter' | 'facilitator'; org: Relate
         )}
       </Card>
 
+      <OrgMemberReadPanel org={org} />
+
       <MemberTrustPanel kind={kind} orgAgent={org.orgAgent as Address} orgName={org.orgName} />
     </div>
+  );
+}
+
+/** What the org can read about its MEMBER, via the membership delegation (person→org,
+ *  spec 246). The org presents that delegation to the per-agent vault; the data owner is
+ *  the member (the delegator), so the relayer reads the member's own vault — the org sees
+ *  its member without custodying their data. This is the concrete consume of the membership
+ *  delegation (the stewardship direction is consumed on the person's Impact home /you). */
+function OrgMemberReadPanel({ org }: { org: RelatedOrgLink }) {
+  const d = org.membershipDelegation;
+  const [open, setOpen] = useState(false);
+  const [profile, setProfile] = useState<ImpactProfile | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  if (!d) return null; // older / operator-registered orgs carry no membership delegation
+
+  const load = async () => {
+    setOpen(true);
+    if (profile) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      setProfile(await loadImpactProfile(d));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'read failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const c = profile?.contact;
+  const name = [c?.firstName, c?.lastName].filter(Boolean).join(' ');
+  const fields: Array<[string, string | undefined]> = [
+    ['Name', name || undefined],
+    ['Email', c?.email],
+    ['Country', c?.country],
+    ['WEA Statement of Faith', profile?.attestations.wea ? 'signed ✓' : undefined],
+  ];
+  const known = fields.filter(([, v]) => v);
+
+  return (
+    <Card>
+      <SectionHead
+        eyebrow="Membership · what your org reads about you"
+        title="Your org's view of you, its member"
+        sub="As the organization, you hold a scoped membership delegation to read your member's community profile from their Impact vault — the data stays with the member."
+      />
+      {!open ? (
+        <Btn variant="ghost" onClick={load}>Read my member profile (via membership delegation) →</Btn>
+      ) : busy ? (
+        <p style={{ fontSize: '.85rem', color: 'var(--c-g400)' }}>Reading the member&rsquo;s vault over the delegation…</p>
+      ) : err ? (
+        <Banner tone="warn">Couldn&rsquo;t read: {err}</Banner>
+      ) : known.length === 0 ? (
+        <p style={{ fontSize: '.85rem', color: 'var(--c-g400)' }}>
+          The membership read succeeded — the member&rsquo;s community profile is empty so far. Once they add contact
+          details or sign the WEA at their Impact home, the org sees them here.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
+          {known.map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', gap: '.6rem', fontSize: '.85rem', borderTop: '1px solid var(--c-g100)', padding: '.4rem 0' }}>
+              <span style={{ color: 'var(--c-g500)', minWidth: 170 }}>{k}</span>
+              <span style={{ color: 'var(--c-g800)', fontWeight: 600 }}>{v}</span>
+            </div>
+          ))}
+          <p style={{ fontSize: '.72rem', color: 'var(--c-g500)', marginTop: '.3rem' }}>
+            Read from the member&rsquo;s own vault via the membership delegation — never copied into the org.
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }
