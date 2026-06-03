@@ -91,6 +91,8 @@ function OrgDeployCard({ org }: { org: OrgName }) {
     <Card>
       <SectionHead eyebrow="Default issuer · auto-provisioned" title={`${label} SA`} sub={`Mode-0, custodied by ${org === 'global-church' ? 'Pete' : 'Jill'}’s EOA (${shortHex(persona.custodian.address)}) — the custody is the only association, so ${org === 'global-church' ? 'Pete' : 'Jill'} can sign as the issuer.`} />
       <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '.4rem 1rem', alignItems: 'center', fontSize: '.85rem' }}>
+        <span style={{ color: 'var(--c-g500)' }}>Name</span>
+        <span>{state?.agentName ? <Mono>{state.agentName}</Mono> : '—'}</span>
         <span style={{ color: 'var(--c-g500)' }}>Address</span>
         <span><AddrLink addr={state?.saAddress} /></span>
         <span style={{ color: 'var(--c-g500)' }}>Status</span>
@@ -190,13 +192,13 @@ function OperatorHomeCard({ who }: { who: PersonaName }) {
       <div style={{ marginTop: '.8rem', display: 'flex', gap: '.7rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <Btn onClick={connect} busy={busy}>{state?.deployed ? 'Re-sync home' : `Set up ${label}’s home`}</Btn>
         {state?.deployed && (
-          <Btn onClick={openHome} busy={opening}>Open {label}’s home ↗</Btn>
+          <Btn onClick={openHome} busy={opening}>Sign in at impact-agent.me ↗</Btn>
         )}
       </div>
       {state?.deployed && (
         <p style={{ marginTop: '.55rem', fontSize: '.8rem', color: 'var(--c-g500)' }}>
-          Signs you in at {state.agentName ?? 'your home'} with this device’s key — see {label === 'Jill' ? 'JP' : 'Global Church'}’s
-          delegations under “Received by your organizations”.
+          Signs you in at impact-agent.me with this device’s key (no wallet) and opens your home — see{' '}
+          {label === 'Jill' ? 'JP' : 'Global Church'}’s delegations under “Received by your organizations”.
         </p>
       )}
       {err && <div style={{ marginTop: '.8rem' }}><Banner tone="err">{err}</Banner></div>}

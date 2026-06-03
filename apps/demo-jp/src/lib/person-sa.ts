@@ -8,21 +8,8 @@
 // also own an MCP vault. No nested custody: the EOA owns both SAs directly.
 
 import type { Address, Hex } from '@agenticprimitives/types';
-import {
-  AgentNamingClient,
-  namehash,
-  buildSubregistryRegisterCall,
-  buildSetPrimaryNameCall,
-} from '@agenticprimitives/agent-naming';
-import { buildExecuteBatchCallData } from '@agenticprimitives/agent-account';
-import {
-  CHAIN_ID,
-  CONTRACTS,
-  RPC_URL,
-  deployOrgSa,
-  deriveOrgSaAddress,
-  isContractDeployed,
-} from './chain.js';
+import { deployOrgSa, deriveOrgSaAddress, isContractDeployed } from './chain.js';
+import { buildNameClaimCallData } from './naming.js';
 import { loadOrMintPersona, type PersonaName } from './personas.js';
 
 /** Salt 0 = the operator's own person SA (demo-sso SIWE convention). Orgs use salt 1. */
@@ -65,24 +52,6 @@ export async function personSaAddress(name: PersonaName): Promise<Address> {
   return deriveOrgSaAddress(persona.address, PERSON_SALT);
 }
 
-/** Forced-unique `<base>[N].impact` pick — mirrors Connect's /connect/name, run locally
- *  so demo-jp needs no cross-origin call (one read mechanism, ADR-0013). */
-async function pickFreeName(base: string): Promise<{ label: string; name: string; node: Hex }> {
-  const naming = new AgentNamingClient({
-    rpcUrl: RPC_URL,
-    chainId: CHAIN_ID,
-    registry: CONTRACTS.agentNameRegistry,
-    universalResolver: CONTRACTS.agentNameUniversalResolver,
-  });
-  const s = base.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '') || 'agent';
-  for (let i = 1; i < 50; i++) {
-    const label = i === 1 ? s : `${s}${i}`;
-    const name = `${label}.impact`;
-    if (!(await naming.resolveName(name))) return { label, name, node: namehash(name) };
-  }
-  throw new Error('no free name');
-}
-
 /** Derive → deploy (if needed) → name the operator's person SA. Idempotent: a cached
  *  deployed state short-circuits, and an already-on-chain SA (e.g. created when the
  *  operator first connected at their `.me` home) is adopted rather than re-deployed. */
@@ -101,25 +70,19 @@ export async function ensurePersonDeployed(name: PersonaName): Promise<PersonCha
     return adopted;
   }
 
-  const picked = await pickFreeName(name); // base = 'pete' / 'jill'
-  const register = buildSubregistryRegisterCall({
-    subregistry: CONTRACTS.permissionlessSubregistry,
-    label: picked.label,
-    newOwner: saAddress,
-  });
-  const setPrimary = buildSetPrimaryNameCall({ registry: CONTRACTS.agentNameRegistry, node: picked.node });
-  const callData = buildExecuteBatchCallData([register, setPrimary]);
+  // Reserve a `<name>.impact` name and claim it atomically in the deploy userOp.
+  const { callData, name: agentName } = await buildNameClaimCallData(saAddress, name); // base = 'pete' / 'jill'
 
   const res = await deployOrgSa({ custodian: persona, salt: PERSON_SALT, callData });
   if (!res.ok || !res.deployedAddress) {
-    saveState({ name, custodian: persona.address, saAddress, deployed: false, agentName: picked.name });
+    saveState({ name, custodian: persona.address, saAddress, deployed: false, agentName });
     throw new Error(res.error ?? 'person deploy failed');
   }
   const state: PersonChainState = {
     name,
     custodian: persona.address,
     saAddress: res.deployedAddress,
-    agentName: picked.name,
+    agentName,
     deployed: true,
     deployTxHash: res.txHash,
   };

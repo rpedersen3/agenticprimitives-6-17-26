@@ -31,7 +31,7 @@ import {
   AgreementRegistry as AGREEMENT_REGISTRY_JSON,
   AttestationRegistry as ATTESTATION_REGISTRY_JSON,
 } from '@agenticprimitives/contracts/abi';
-import { buildExecuteCallData } from '@agenticprimitives/agent-account';
+import { buildExecuteCallData, buildExecuteBatchCallData } from '@agenticprimitives/agent-account';
 import type {
   AgreementIssuancePayload,
 } from '@agenticprimitives/agreements';
@@ -176,18 +176,16 @@ export interface ExecuteResult {
   error?: string;
 }
 
-/** Build → nonce-gate → sign once → submit a `sender.execute(to, value, data)`
- *  userOp through the relayer. Mirrors demo-org's executeCall (the post-deploy
- *  nonce-lag dance: poll the build until the relayer's nonce view reaches
- *  `minNonce`, then sign exactly once). */
-export async function executeViaSa(args: {
+/** Build → nonce-gate → sign once → submit a userOp running `callData` from `sender`
+ *  through the relayer. The post-deploy nonce-lag dance: poll the build until the
+ *  relayer's nonce view reaches `minNonce`, then sign exactly once. */
+async function submitCallData(args: {
   sender: Address;
   signHash: SignHash;
-  call: { to: Address; value?: bigint; data: Hex };
+  callData: Hex;
   minNonce?: bigint;
   attempts?: number;
 }): Promise<ExecuteResult> {
-  const callData = buildExecuteCallData({ to: args.call.to, value: args.call.value ?? 0n, data: args.call.data });
   const attempts = args.attempts ?? 4;
   await ensureCsrfToken();
   let lastErr = 'execute failed';
@@ -198,7 +196,7 @@ export async function executeViaSa(args: {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', ...csrfHeaders() },
-      body: JSON.stringify({ sender: args.sender, callData }),
+      body: JSON.stringify({ sender: args.sender, callData: args.callData }),
     });
     const b = (await buildRes.json().catch(() => null)) as {
       ok?: boolean; userOpHash?: Hex; userOp?: Record<string, unknown> & { nonce?: string }; error?: string; detail?: string;
@@ -223,6 +221,31 @@ export async function executeViaSa(args: {
     lastErr = [submitted?.error, submitted?.detail].filter(Boolean).join(' — ') || `submit-call failed (HTTP ${submitRes.status})`;
   }
   return { ok: false, error: lastErr };
+}
+
+/** Execute a single `sender.execute(to, value, data)` via the relayer. */
+export function executeViaSa(args: {
+  sender: Address;
+  signHash: SignHash;
+  call: { to: Address; value?: bigint; data: Hex };
+  minNonce?: bigint;
+  attempts?: number;
+}): Promise<ExecuteResult> {
+  const callData = buildExecuteCallData({ to: args.call.to, value: args.call.value ?? 0n, data: args.call.data });
+  return submitCallData({ sender: args.sender, signHash: args.signHash, callData, minNonce: args.minNonce, attempts: args.attempts });
+}
+
+/** Execute `sender.executeBatch([calls])` via the relayer — e.g. a name-claim
+ *  (subregistry register + setPrimaryName) for an already-deployed SA. */
+export function executeBatchViaSa(args: {
+  sender: Address;
+  signHash: SignHash;
+  calls: { to: Address; value?: bigint; data: Hex }[];
+  minNonce?: bigint;
+  attempts?: number;
+}): Promise<ExecuteResult> {
+  const callData = buildExecuteBatchCallData(args.calls.map((c) => ({ to: c.to, value: c.value ?? 0n, data: c.data })));
+  return submitCallData({ sender: args.sender, signHash: args.signHash, callData, minNonce: args.minNonce, attempts: args.attempts });
 }
 
 // ─── Registry WRITES (issuer SA executes the permissionless registry call) ──
