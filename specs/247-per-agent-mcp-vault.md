@@ -57,16 +57,26 @@ agent at `owner_address`; **the owner is always the delegation's delegator**, wh
    template) and POST to the `/a2a/mcp/vault/*` proxy. Kept in the app; promoted to a package only if
    demo-org/demo-sso need it.
 
-## 3. Data residency (who owns what)
+## 3. Data residency — delegated member records (who owns what)
 
-| Data | Owner vault |
-| --- | --- |
-| member community profile (name, contact, WEA) | **Impact** person MCP — read over the member's delegation (`get_pii`), unchanged from spec 236 |
-| ALL JP-program data — adopter/facilitator records, MOU attestation, adoption declaration, contact-exchange, broker intents/matches/drafts/issuance/associations | **JP Org's vault** (`record_type` `jp:adopter:<memberSA>`, `jp:broker:intents`, …), written by JP's custodian |
-| delegations an org received (e.g. adopter-org→JP) | **the recipient org's vault** (`record_type` `delegation-received:<grantorOrg>`) — single source, replaces the Connect-home `delegated-idx` KV (ADR-0013) |
-| GC-specific facilitator data | GC Org's vault |
+A member's data lives in the **member's own vault**; JP holds a **delegation** the member
+granted (not a copy of the data). On onboarding (the create/site-login ceremony at the member's
+home), the member grants JP a **scoped read+write delegation** via an explicit permission screen;
+JP writes + reads the member's JP-program records into the member's own vault **through that grant**
+(the relayer verifies the member's ERC-1271 signature and mints a token with `sub = the member`, so
+the MCP keys by the member). What JP stores in its own vault is the **grant**, keyed by member —
+that set IS the broker pool.
 
-Only the member's community-wide profile is not JP's; every JP datum lives in JP Org's MCP vault.
+| Data | Where it lives | Accessed by |
+| --- | --- | --- |
+| member profile (name, contact, WEA), adopter/facilitator records, MOU + adoption, contact-exchange | the **member's own vault** (`impact:profile`, `jp:adopter`, `jp:facilitator`, `jp:exchange`) | JP, through the member's grant |
+| the member→JP read+write grant (the broker pool) | **JP Org's vault** (`jp:grant:<memberSA>`), Jill-written | the broker, to read every participating member |
+| broker working state (intents/matches/drafts/issuance/associations) | **JP Org's vault** (`jp:broker:*`) — JP's own operational data | JP (Jill's key) |
+| delegations an org received (e.g. adopter-org→JP) | **the recipient org's vault** (`delegation-received:<grantorOrg>`) — replaces the Connect-home `delegated-idx` KV (ADR-0013) | the org, via its custodian |
+
+The broker reads any member's records by iterating its stored grants — the data never leaves the
+member's vault; JP holds delegations, not data. (The explicit `jp-data-access` consent template +
+permission screen at the member's home is the consent surface; see §4.)
 
 ## 4. Operator identity: sibling custody + SIWE-connect
 

@@ -102,3 +102,31 @@ export async function vaultList(o: VaultOwner): Promise<Array<{ record_type: str
   const j = await postVault('list', { delegation, requester: o.custodian.address });
   return (j.records ?? []) as Array<{ record_type: string; updated_at: string }>;
 }
+
+// ── Reads/writes on a MEMBER's vault via a delegation they already granted ─────
+//
+// spec 247 / the delegated-member-records model: when a member onboards through
+// demo-jp, they grant JP a scoped read+write delegation (delegator = the member
+// SA, delegate = JP's delegate). JP stores that delegation and uses it to write +
+// read the member's JP-program records into the MEMBER's OWN vault — the data
+// lives with the member, JP holds only the delegation. The relayer verifies the
+// member's ERC-1271 signature and mints a token with sub = the member, so the MCP
+// keys by the member (principal == owner == the member's namespace).
+
+/** Read a record from the delegation's DELEGATOR vault (the member's own namespace). */
+export async function vaultReadWithDelegation<T = unknown>(
+  delegation: DelegationWire,
+  recordType: string,
+): Promise<T | null> {
+  const j = await postVault('get', { delegation, requester: delegation.delegate, recordType });
+  return (j.data ?? null) as T | null;
+}
+
+/** Upsert a record in the delegation's DELEGATOR vault. `data === null` soft-deletes. */
+export async function vaultWriteWithDelegation(
+  delegation: DelegationWire,
+  recordType: string,
+  data: unknown,
+): Promise<void> {
+  await postVault('set', { delegation, requester: delegation.delegate, recordType, data });
+}

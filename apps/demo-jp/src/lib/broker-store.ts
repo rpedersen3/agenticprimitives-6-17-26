@@ -7,9 +7,8 @@
 // Direct-Lane W1 subset (D-27).
 
 import type { Address, Hex } from '@agenticprimitives/types';
-import { vaultRead, vaultWrite, type VaultOwner } from './vault-client.js';
-import { orgChainState } from './onchain.js';
-import { loadOrMintOrgPersona } from './org-personas.js';
+import { vaultRead, vaultWrite } from './vault-client.js';
+import { jpVaultOwner } from './onchain.js';
 
 export type IntentDirection = 'receive' | 'give';
 
@@ -91,21 +90,13 @@ const RT = {
   associations: 'jp:broker:associations',
 } as const;
 
-/** The JP Org vault owner (Jill custodian) — null until JP is deployed (the broker
- *  dashboard auto-provisions it on mount, so it's cached by the time of any read). */
-function brokerVault(): VaultOwner | null {
-  const s = orgChainState('jp');
-  if (!s?.deployed) return null;
-  return { owner: s.saAddress, custodian: loadOrMintOrgPersona('jp').custodian };
-}
-
 async function loadRows<T>(rt: string): Promise<T[]> {
-  const jp = brokerVault();
+  const jp = jpVaultOwner();
   if (!jp) return [];
   return (await vaultRead<T[]>(jp, rt)) ?? [];
 }
 async function saveRows<T>(rt: string, rows: T[]): Promise<void> {
-  const jp = brokerVault();
+  const jp = jpVaultOwner();
   if (!jp) throw new Error('JP org not deployed — cannot write broker vault');
   await vaultWrite(jp, rt, rows);
 }

@@ -27,6 +27,7 @@ import {
   type ExecuteResult,
 } from './chain.js';
 import { loadOrMintOrgPersona, type OrgName, type OrgPersona } from './org-personas.js';
+import type { VaultOwner } from './vault-client.js';
 import { issueAgreement } from './agreement-flow.js';
 import type { JpAgreementPayload } from './agreement-payload.js';
 import { issueAssociation, type JpAssociationBody } from './issuance-flow.js';
@@ -130,6 +131,16 @@ export async function predictOrgAddress(name: OrgName): Promise<Address> {
 
 export function orgChainState(name: OrgName): OrgChainState | null {
   return loadDeployState(name);
+}
+
+/** The JP Org vault owner (Jill custodian) for spec-247 vault reads/writes — null
+ *  until JP is deployed + cached. JP is the data custodian (spec 236), so all
+ *  JP-program records (broker state + member records) live in JP's vault, keyed by
+ *  record_type and written/read with Jill's custodian key (held in the demo browser). */
+export function jpVaultOwner(): VaultOwner | null {
+  const s = loadDeployState('jp');
+  if (!s?.deployed) return null;
+  return { owner: s.saAddress, custodian: loadOrMintOrgPersona('jp').custodian };
 }
 
 // ─── Issuance / registration orchestrations ─────────────────────────────────

@@ -18,8 +18,10 @@ import {
   loadJpFacilitatorRecord,
   nextAdopterStep, nextFacilitatorStep, profileCompleteness,
   projectFacilitatorForJp, projectForJp, recordContactExchange, requiresWea,
-  saveImpactProfile, saveJpAdopterRecord, saveJpFacilitatorRecord,
+  saveImpactProfile, saveJpAdopterRecord, saveJpFacilitatorRecord, storeMemberGrant,
 } from './lib/vault';
+import type { DelegationWire } from './lib/delegation';
+import { ensureOrgDeployed } from './lib/onchain';
 import {
   ADOPTER_TYPE_OPTIONS_FAC, MINISTRY_AREA_OPTIONS, SIZE_BAND_OPTIONS,
   FACILITATOR_ADOPTER_TYPE_LABEL, MINISTRY_AREA_LABEL, SIZE_BAND_LABEL,
@@ -85,6 +87,10 @@ interface Session {
   address: Address;
   kind: Kind;
   fresh: boolean;
+  /** The scoped read+write delegation the member granted JP at sign-in (spec 247).
+   *  JP reads/writes the member's JP-program records in the MEMBER's own vault
+   *  through this grant — the data lives with the member, JP holds the delegation. */
+  grant?: DelegationWire;
 }
 
 interface EnrollStash {
@@ -115,7 +121,7 @@ function restoreSession(): Session | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
-    const s = JSON.parse(raw) as { token?: string; name?: string; kind?: Kind };
+    const s = JSON.parse(raw) as { token?: string; name?: string; kind?: Kind; grant?: DelegationWire };
     if (!s.token || !s.name || (s.kind !== 'adopter' && s.kind !== 'facilitator')) return null;
     const dec = decodeToken(s.token);
     const addr = addrFromSub(dec?.sub);
@@ -126,7 +132,7 @@ function restoreSession(): Session | null {
     // SEC-019: localStorage gives us a tentative session (we still gate exp here so a
     // visibly-stale token never opens the dashboard). A useEffect at mount re-verifies
     // the JWT signature against the home's JWKS — if it fails, the session is dropped.
-    return { token: s.token, name: s.name, address: addr, kind: s.kind, fresh: false };
+    return { token: s.token, name: s.name, address: addr, kind: s.kind, fresh: false, grant: s.grant };
   } catch {
     return null;
   }
@@ -256,17 +262,28 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const openSession = useCallback((token: string, name: string, kind: Kind, fresh: boolean) => {
+  const openSession = useCallback((token: string, name: string, kind: Kind, fresh: boolean, grant?: DelegationWire) => {
     const addr = addrFromSub(decodeToken(token)?.sub);
     if (!addr) {
       setError("We couldn't read your agent address from the session token.");
       return;
     }
-    setSession({ token, name, address: addr, kind, fresh });
+    setSession({ token, name, address: addr, kind, fresh, grant });
     try {
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ token, name, kind }));
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ token, name, kind, grant }));
     } catch {
       /* ignore */
+    }
+    // spec 247: register the member's grant in JP's vault (the broker pool), so the
+    // broker can later read this member's records through it. Idempotent; deploys JP
+    // (Jill's key, in this demo browser) if needed.
+    if (grant) {
+      void (async () => {
+        try {
+          await ensureOrgDeployed('jp');
+          await storeMemberGrant(addr, grant);
+        } catch { /* broker pool registration is best-effort in the demo */ }
+      })();
     }
   }, []);
 
@@ -328,7 +345,7 @@ export function App() {
         const tok = await exchangeCode(stash.authOrigin!, code, stash.codeVerifier!);
         const claims = await verifyIdToken(stash.authOrigin!, tok.idToken, stash.nonce ?? '');
         const name = claims.agent_name ?? stash.name ?? '';
-        openSession(tok.idToken, name, stash.kind!, true);
+        openSession(tok.idToken, name, stash.kind!, true, tok.delegation);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'sign-in failed');
       }
@@ -368,14 +385,17 @@ export function App() {
     sessionStorage.removeItem(PROFILE_HANDOFF_KEY);
 
     const restored = restoreSession();
-    if (!restored) return;
-    const existing = loadImpactProfile(restored.address, restored.name);
-    const nextProfile: ImpactProfile = {
-      ...existing,
-      contact: { ...(existing.contact ?? {}), ...collected },
-    };
-    saveImpactProfile(restored.address, nextProfile);
-    setVaultBump((b) => b + 1);
+    if (!restored?.grant) return;
+    const grant = restored.grant;
+    void (async () => {
+      const existing = await loadImpactProfile(grant);
+      const nextProfile: ImpactProfile = {
+        ...existing,
+        contact: { ...(existing.contact ?? {}), ...collected },
+      };
+      await saveImpactProfile(grant, nextProfile);
+      setVaultBump((b) => b + 1);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -442,8 +462,9 @@ export function App() {
         return;
       }
       const restored = restoreSession();
-      if (!restored) return;
-      const existing = loadImpactProfile(restored.address, restored.name);
+      if (!restored?.grant) return;
+      const grant = restored.grant;
+      const existing = await loadImpactProfile(grant);
       const nextProfile: ImpactProfile = {
         ...existing,
         attestations: {
@@ -451,7 +472,7 @@ export function App() {
           wea: { docHash: docHash as Hex, docId, signedAt, consentBoundTo: consentBoundTo as Hex },
         },
       };
-      saveImpactProfile(restored.address, nextProfile);
+      await saveImpactProfile(grant, nextProfile);
       setVaultBump((b) => b + 1);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -708,9 +729,24 @@ function AdopterIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, onGo
   onGoEditProfile: (missingKeys: string[]) => void;
   onGoSignWea: () => void;
 }) {
-  const [impact] = useState<ImpactProfile>(() => loadImpactProfile(session.address, session.name));
-  const [record, setRecord] = useState<JpAdopterRecord>(() => loadJpAdopterRecord(session.address));
-  const update = useCallback((next: JpAdopterRecord) => { saveJpAdopterRecord(session.address, next); setRecord(next); }, [session.address]);
+  const [impact, setImpact] = useState<ImpactProfile>({ v: 1, attestations: {} });
+  const [record, setRecord] = useState<JpAdopterRecord>({ v: 1, attestations: {} });
+  // Profile + JP record live in JP Org's vault (spec 247); load on mount (the parent
+  // re-mounts this on vaultBump after handoff-return merges, so edits reload).
+  useEffect(() => {
+    const grant = session.grant;
+    if (!grant) return;
+    let cancelled = false;
+    void (async () => {
+      const [i, r] = await Promise.all([loadImpactProfile(grant), loadJpAdopterRecord(grant)]);
+      if (!cancelled) { setImpact(i); setRecord(r); }
+    })();
+    return () => { cancelled = true; };
+  }, [session.grant]);
+  const update = useCallback((next: JpAdopterRecord) => {
+    if (session.grant) void saveJpAdopterRecord(session.grant, next);
+    setRecord(next);
+  }, [session.grant]);
 
   const steps = useMemo(() => adopterSteps(impact, record), [impact, record]);
   const activeStep = useMemo(() => nextAdopterStep(impact, record), [impact, record]);
@@ -1450,13 +1486,20 @@ function AdoptionSummary({ session, record, impact }: { session: Session; record
   // If the adopter asked to be matched, look up facilitators serving this FPG with capacity
   // for this adopter type. The match runs over `MatchedFacilitator` (the released scoped
   // projection), not the raw seed data — same surface the production broker would expose.
-  const facilitators = useMemo(() => {
-    if (!record.adoption || !record.adopterType) return [] as MatchedFacilitator[];
-    if (!record.adoption.requestFacilitator) return [] as MatchedFacilitator[];
-    // Pass the viewer's own address so their own facilitator persona (if any) is
-    // included in the match pool — same-browser dual-persona case (your own
-    // declared coverage shows up alongside the seeded facilitators).
-    return matchFacilitatorsForAdopter(record.adoption, record.adopterType, session.address);
+  // JP brokers the match from its vault pool (spec 247) — an async read, so resolve
+  // into state. Pass the viewer's own address so their own facilitator persona (if
+  // any) is included (same-browser dual-persona case).
+  const [facilitators, setFacilitators] = useState<MatchedFacilitator[]>([]);
+  useEffect(() => {
+    if (!record.adoption || !record.adopterType || !record.adoption.requestFacilitator) {
+      setFacilitators([]);
+      return;
+    }
+    let cancelled = false;
+    void matchFacilitatorsForAdopter(record.adoption, record.adopterType, session.address)
+      .then((f) => { if (!cancelled) setFacilitators(f); })
+      .catch(() => { if (!cancelled) setFacilitators([]); });
+    return () => { cancelled = true; };
   }, [record.adoption, record.adopterType, session.address]);
   return (
     <>
@@ -1502,7 +1545,7 @@ function AdoptionSummary({ session, record, impact }: { session: Session; record
         sharedPgId={record.adoption?.peopleGroupId}
         requestedMatch={!!record.adoption?.requestFacilitator}
         homeUrl={homeUrl}
-        addr={session.address}
+        grant={session.grant}
       />
 
       <JpProjectionPanel impact={impact} record={record} session={session} />
@@ -1515,13 +1558,13 @@ function MatchedFacilitatorsPanel({
   sharedPgId,
   requestedMatch,
   homeUrl,
-  addr,
+  grant,
 }: {
   facilitators: MatchedFacilitator[];
   sharedPgId: string | undefined;
   requestedMatch: boolean;
   homeUrl: string;
-  addr: Address;
+  grant: DelegationWire | undefined;
 }) {
   if (!requestedMatch) {
     return (
@@ -1561,7 +1604,7 @@ function MatchedFacilitatorsPanel({
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.25rem' }}>
         {facilitators.map((f) => (
-          <MatchedFacilitatorCard key={f.id} f={f} sharedPgId={sharedPgId} addr={addr} />
+          <MatchedFacilitatorCard key={f.id} f={f} sharedPgId={sharedPgId} grant={grant} />
         ))}
       </div>
       <DisclosureManifest
@@ -1574,7 +1617,7 @@ function MatchedFacilitatorsPanel({
   );
 }
 
-function MatchedFacilitatorCard({ f, sharedPgId, addr }: { f: MatchedFacilitator; sharedPgId: string | undefined; addr: Address }) {
+function MatchedFacilitatorCard({ f, sharedPgId, grant }: { f: MatchedFacilitator; sharedPgId: string | undefined; grant: DelegationWire | undefined }) {
   const shared = sharedPgId ? findPeopleGroup(sharedPgId) : undefined;
   const otherGroups = f.peopleGroupIds
     .filter((id) => id !== sharedPgId)
@@ -1639,10 +1682,10 @@ function MatchedFacilitatorCard({ f, sharedPgId, addr }: { f: MatchedFacilitator
         </div>
       )}
 
-      {sharedPgId && <UpdatesFromFacilitator facilitatorId={f.id} peopleGroupId={sharedPgId} viewerAddress={addr} />}
+      {sharedPgId && <UpdatesFromFacilitator facilitatorId={f.id} peopleGroupId={sharedPgId} viewerGrant={grant} />}
 
       <ContactExchangeWidget
-        addr={addr}
+        grant={grant}
         matchId={f.id}
         partyLabel={`${f.facilitatorFirstName} at ${f.orgName}`}
         firstName={f.facilitatorFirstName}
@@ -1660,7 +1703,7 @@ function MatchedFacilitatorCard({ f, sharedPgId, addr }: { f: MatchedFacilitator
  *  email + phone with a "scope upgrade" note. The consent fact is persisted in
  *  the member's own localStorage so the exchange survives navigation + refresh. */
 function ContactExchangeWidget({
-  addr,
+  grant,
   matchId,
   partyLabel,
   firstName,
@@ -1668,7 +1711,7 @@ function ContactExchangeWidget({
   email,
   phone,
 }: {
-  addr: Address;
+  grant: DelegationWire | undefined;
   matchId: string;
   partyLabel: string;
   firstName: string;
@@ -1676,19 +1719,31 @@ function ContactExchangeWidget({
   email?: string;
   phone?: string;
 }) {
-  const [exchanged, setExchanged] = useState<boolean>(() => loadContactExchanges(addr).includes(matchId));
+  const [exchanged, setExchanged] = useState<boolean>(false);
   const [requesting, setRequesting] = useState(false);
 
+  // Contact-exchange consent lives in the member's own vault (spec 247), read
+  // through the member's grant; resolve on mount.
+  useEffect(() => {
+    if (!grant) return;
+    let cancelled = false;
+    void loadContactExchanges(grant).then((list) => { if (!cancelled) setExchanged(list.includes(matchId)); });
+    return () => { cancelled = true; };
+  }, [grant, matchId]);
+
   const request = useCallback(() => {
+    if (!grant) return;
     setRequesting(true);
     // Brief delay sells the "awaiting their consent" beat for the demo. Seeded
     // counter-parties are pre-opted-in, so it always resolves to accepted.
     window.setTimeout(() => {
-      recordContactExchange(addr, matchId);
-      setExchanged(true);
-      setRequesting(false);
+      void (async () => {
+        await recordContactExchange(grant, matchId);
+        setExchanged(true);
+        setRequesting(false);
+      })();
     }, 700);
-  }, [addr, matchId]);
+  }, [grant, matchId]);
 
   if (exchanged) {
     return (
@@ -1772,11 +1827,14 @@ const dlVal: React.CSSProperties = { color: 'var(--c-g800)', alignSelf: 'center'
  *  update flows via the introduction's existing scoped delegation (no new
  *  scope required). Most-recent first; the latest expands inline, older ones
  *  collapse behind a "show all" toggle. */
-function UpdatesFromFacilitator({ facilitatorId, peopleGroupId, viewerAddress }: { facilitatorId: string; peopleGroupId: string; viewerAddress: Address }) {
-  const updates = useMemo(
-    () => updatesForAdopter(facilitatorId, peopleGroupId, viewerAddress),
-    [facilitatorId, peopleGroupId, viewerAddress],
-  );
+function UpdatesFromFacilitator({ facilitatorId, peopleGroupId, viewerGrant }: { facilitatorId: string; peopleGroupId: string; viewerGrant: DelegationWire | undefined }) {
+  const [updates, setUpdates] = useState<MatchedFacilitatorUpdate[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void updatesForAdopter(facilitatorId, peopleGroupId, viewerGrant)
+      .then((u) => { if (!cancelled) setUpdates(u); });
+    return () => { cancelled = true; };
+  }, [facilitatorId, peopleGroupId, viewerGrant]);
   const [showAll, setShowAll] = useState(false);
   if (updates.length === 0) return null;
   const head = updates[0]!;
@@ -1931,12 +1989,24 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, 
   onGoEditProfile: (missingKeys: string[]) => void;
   onGoSignWea: () => void;
 }) {
-  const [impact] = useState<ImpactProfile>(() => loadImpactProfile(session.address, session.name));
-  const [record, setRecord] = useState<JpFacilitatorRecord>(() => loadJpFacilitatorRecord(session.address));
+  const [impact, setImpact] = useState<ImpactProfile>({ v: 1, attestations: {} });
+  const [record, setRecord] = useState<JpFacilitatorRecord>({ v: 1, attestations: {} });
+  // Profile + JP facilitator record live in the member's own vault (spec 247), read
+  // through the member's grant; load on mount.
+  useEffect(() => {
+    const grant = session.grant;
+    if (!grant) return;
+    let cancelled = false;
+    void (async () => {
+      const [i, r] = await Promise.all([loadImpactProfile(grant), loadJpFacilitatorRecord(grant)]);
+      if (!cancelled) { setImpact(i); setRecord(r); }
+    })();
+    return () => { cancelled = true; };
+  }, [session.grant]);
   const update = useCallback((next: JpFacilitatorRecord) => {
-    saveJpFacilitatorRecord(session.address, next);
+    if (session.grant) void saveJpFacilitatorRecord(session.grant, next);
     setRecord(next);
-  }, [session.address]);
+  }, [session.grant]);
 
   const steps = useMemo(() => facilitatorSteps(impact, record), [impact, record]);
   const activeStep = useMemo(() => nextFacilitatorStep(impact, record), [impact, record]);
@@ -2371,10 +2441,14 @@ function FacilitatorSummary({ session, record, impact, onUpdate }: { session: Se
   // Adopters JP introduced to this facilitator — intersect on FPG + adopter type.
   // Pass the viewer's own address so their own adopter persona (if any) is
   // included alongside the seeded adopters — same-browser dual-persona case.
-  const matchedAdopters = useMemo(
-    () => matchAdoptersForFacilitator(coverage, session.address),
-    [coverage, session.address],
-  );
+  const [matchedAdopters, setMatchedAdopters] = useState<MatchedAdopter[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void matchAdoptersForFacilitator(coverage, session.address)
+      .then((a) => { if (!cancelled) setMatchedAdopters(a); })
+      .catch(() => { if (!cancelled) setMatchedAdopters([]); });
+    return () => { cancelled = true; };
+  }, [coverage, session.address]);
 
   return (
     <>
@@ -2447,14 +2521,14 @@ function FacilitatorSummary({ session, record, impact, onUpdate }: { session: Se
 
       <PublishUpdatesPanel record={record} coverage={coverage} matchedAdopters={matchedAdopters} onUpdate={onUpdate} />
 
-      <MatchedAdoptersPanel adopters={matchedAdopters} addr={session.address} />
+      <MatchedAdoptersPanel adopters={matchedAdopters} grant={session.grant} />
 
       <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
     </>
   );
 }
 
-function MatchedAdoptersPanel({ adopters, addr }: { adopters: MatchedAdopter[]; addr: Address }) {
+function MatchedAdoptersPanel({ adopters, grant }: { adopters: MatchedAdopter[]; grant: DelegationWire | undefined }) {
   if (adopters.length === 0) {
     return (
       <section className="section wrap" style={{ paddingTop: 0 }}>
@@ -2504,7 +2578,7 @@ function MatchedAdoptersPanel({ adopters, addr }: { adopters: MatchedAdopter[]; 
                 }}>{list.length} adopter{list.length === 1 ? '' : 's'}</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '.6rem' }}>
-                {list.map((a) => <MatchedAdopterCard key={a.id} a={a} addr={addr} />)}
+                {list.map((a) => <MatchedAdopterCard key={a.id} a={a} grant={grant} />)}
               </div>
             </div>
           );
@@ -2520,7 +2594,7 @@ function MatchedAdoptersPanel({ adopters, addr }: { adopters: MatchedAdopter[]; 
   );
 }
 
-function MatchedAdopterCard({ a, addr }: { a: MatchedAdopter; addr: Address }) {
+function MatchedAdopterCard({ a, grant }: { a: MatchedAdopter; grant: DelegationWire | undefined }) {
   const declared = new Date(a.declaredAt * 1000);
   const daysAgo = Math.max(0, Math.floor((Date.now() - declared.getTime()) / 86_400_000));
   const ago = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : daysAgo < 30 ? `${daysAgo} days ago` : daysAgo < 60 ? '~1 month ago' : `~${Math.round(daysAgo / 30)} months ago`;
@@ -2543,7 +2617,7 @@ function MatchedAdopterCard({ a, addr }: { a: MatchedAdopter; addr: Address }) {
       <div style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.5rem' }}>Declared {ago}</div>
 
       <ContactExchangeWidget
-        addr={addr}
+        grant={grant}
         matchId={a.id}
         partyLabel={`${a.firstName} ${a.lastInitial}`}
         firstName={a.firstName}
