@@ -7,8 +7,12 @@
   "specEntry": "../../specs/202-delegation.md",
   "summary": "EIP-712 delegations spanning web app → agent → MCP. Caveats, token envelope, validation, session lifecycle.",
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"]
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ]
   },
   "imports": [
     "@agenticprimitives/types",
@@ -37,17 +41,11 @@
   ],
   "publicExports": [
     "ROOT_AUTHORITY",
-    "DelegationClient",
-    "DelegationClientOpts",
-    "SessionManager",
-    "SessionStore",
-    "createMemorySessionStore",
     "buildCaveat",
     "buildMcpToolScopeCaveat",
     "buildDataScopeCaveat",
     "buildDelegateBindingCaveat",
     "buildQuorumCaveat",
-    "QuorumCaveatOpts",
     "encodeTimestampTerms",
     "encodeValueTerms",
     "encodeAllowedTargetsTerms",
@@ -55,33 +53,41 @@
     "MCP_TOOL_SCOPE_ENFORCER",
     "DATA_SCOPE_ENFORCER",
     "DELEGATE_BINDING_ENFORCER",
+    "QuorumCaveatOpts",
     "hashDelegation",
     "hashCaveats",
     "DELEGATION_EIP712_TYPES",
     "delegationDomain",
     "evaluateCaveats",
+    "DelegationClient",
+    "SessionManager",
+    "createMemorySessionStore",
+    "verifyAuthorization",
+    "VerifyAuthorizationResult",
     "mintDelegationToken",
     "verifyDelegationToken",
     "isRevoked",
     "revokeDelegation",
-    "Delegation",
+    "Address",
+    "Hex",
     "Caveat",
+    "CaveatContext",
     "CaveatVerdict",
+    "Delegation",
     "DataScopeGrant",
+    "DelegationClientOpts",
     "DelegationTokenClaims",
     "EnforcerAddressMap",
     "EvaluateOpts",
     "JtiStore",
-    "CaveatContext",
-    "VerifyOpts",
-    "VerifyOptsExt",
-    "VerifyError",
-    "TxContext",
-    "SessionRow",
-    "SessionPackage",
     "SessionMeta",
-    "Address",
-    "Hex"
+    "SessionPackage",
+    "SessionRow",
+    "SessionStore",
+    "TxContext",
+    "VerifyError",
+    "VerifyOpts",
+    "VerifyOptsExt"
   ],
   "forbiddenTerms": [
     {
@@ -127,7 +133,10 @@
       "term": "RiskTier",
       "reason": "Policy taxonomy belongs in tool-policy. Consume requiredCaveatsForRiskTier from there; don't redefine levels.",
       "owningPackage": "@agenticprimitives/tool-policy",
-      "allowInPaths": ["spec.md", "README.md"]
+      "allowInPaths": [
+        "spec.md",
+        "README.md"
+      ]
     },
     {
       "term": "evaluatePolicy",
@@ -156,13 +165,20 @@
       "term": "passkey",
       "reason": "Auth method internals belong in connect-auth.",
       "owningPackage": "@agenticprimitives/connect-auth",
-      "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"]
+      "allowInPaths": [
+        "spec.md",
+        "README.md",
+        "CLAUDE.md"
+      ]
     },
     {
       "term": "SIWE",
       "reason": "Auth method belongs in connect-auth.",
       "owningPackage": "@agenticprimitives/connect-auth",
-      "allowInPaths": ["spec.md", "README.md"]
+      "allowInPaths": [
+        "spec.md",
+        "README.md"
+      ]
     }
   ],
   "ignoreForAgentContext": [

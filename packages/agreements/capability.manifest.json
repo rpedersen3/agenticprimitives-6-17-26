@@ -6,16 +6,23 @@
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/241-agreement-commitment-registry.md",
   "summary": "Commitment-only AgreementRegistry SDK. Owns AgreementCredential shape (PD-22) + commitment math + bilateral status transitions + joint-assertion gateway.",
-  "spineLayers": [8],
+  "spineLayers": [
+    8
+  ],
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"],
-    "shapes": ["src/shapes/agreement.shacl.ttl"]
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ],
+    "shapes": [
+      "src/shapes/agreement.shacl.ttl"
+    ]
   },
   "imports": [
     "@agenticprimitives/types",
-    "@agenticprimitives/verifiable-credentials",
-    "@agenticprimitives/ontology"
+    "@agenticprimitives/verifiable-credentials"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
@@ -30,6 +37,35 @@
     "@agenticprimitives/intent-marketplace",
     "@agenticprimitives/intent-resolver",
     "@agenticprimitives/payments",
-    "@agenticprimitives/fulfillment"
-  ]
+    "@agenticprimitives/fulfillment",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "Hex32",
+    "STATUS",
+    "AgreementStatus",
+    "computeAgreementCommitment",
+    "partySetCommitment",
+    "issuerCommitment",
+    "bytesCommitment",
+    "nullifierFor",
+    "AgreementIssuancePayload",
+    "StatusUpdatePayload"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1500,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
 }

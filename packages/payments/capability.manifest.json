@@ -6,18 +6,26 @@
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/243-payments.md",
   "summary": "PaymentMandate + ContextBinding + MandateConstraints + open/closed mode discrimination. Three W1 rails (x402, wallet, sponsored-userop). PaymentReceipt asserted into AttestationRegistry.",
-  "spineLayers": [9.5],
+  "spineLayers": [
+    9.5
+  ],
   "owns": {
-    "source": ["src/**", "rails/**"],
-    "tests": ["test/**"],
-    "shapes": ["src/shapes/payment.shacl.ttl"]
+    "source": [
+      "src/**",
+      "rails/**"
+    ],
+    "tests": [
+      "test/**"
+    ],
+    "shapes": [
+      "src/shapes/payment.shacl.ttl"
+    ]
   },
   "imports": [
     "@agenticprimitives/types",
     "@agenticprimitives/verifiable-credentials",
     "@agenticprimitives/attestations",
-    "@agenticprimitives/delegation",
-    "@agenticprimitives/ontology"
+    "@agenticprimitives/delegation"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
@@ -33,6 +41,39 @@
     "@agenticprimitives/intent-marketplace",
     "@agenticprimitives/intent-resolver",
     "@agenticprimitives/agreements",
-    "@agenticprimitives/fulfillment"
-  ]
+    "@agenticprimitives/fulfillment",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "Hex32",
+    "PaymentRail",
+    "AssetRef",
+    "AmountPolicy",
+    "MandateConstraints",
+    "ContextBinding",
+    "PaymentMandateMode",
+    "PaymentMandate",
+    "assertContextBindingValid",
+    "assertClosedMandateInvariants",
+    "computeMandateId",
+    "PaymentRailExecutor",
+    "registerRail",
+    "getRail"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1500,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
 }

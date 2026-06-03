@@ -6,10 +6,16 @@
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/242-trust-credentials-and-public-assertions.md",
   "summary": "W3C VC 2.0 envelope + Eip712Signature2026 proof + DOLCE+DnS Situation bases + ontology-shape schema registration. Substrate for layers 12-15 credential types.",
-  "spineLayers": ["envelope-for-12-15"],
+  "spineLayers": [
+    "envelope-for-12-15"
+  ],
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"],
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ],
     "shapes": []
   },
   "imports": [
@@ -39,6 +45,58 @@
     "@agenticprimitives/agent-profile",
     "@agenticprimitives/agent-naming",
     "@agenticprimitives/mcp-runtime",
-    "@agenticprimitives/tool-policy"
-  ]
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/agent-relationships"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "VC_CONTEXT_V2",
+    "EIP712_SIG_2026_CONTEXT",
+    "VC_DOMAIN_NAME",
+    "VC_DOMAIN_VERSION",
+    "VC_EIP712_TYPES",
+    "Hex32",
+    "ISODate",
+    "ProofType",
+    "Eip712Signature2026Proof",
+    "Proof",
+    "CredentialStatus2021",
+    "VisibilityTier",
+    "DisclosurePolicy",
+    "VerifiableCredential",
+    "UnsignedCredential",
+    "jcsCanonicalize",
+    "canonicalHash",
+    "JcsError",
+    "assertSituationRolesPresent",
+    "buildSituation",
+    "Situation",
+    "DescriptionRef",
+    "RoleName",
+    "credentialHash",
+    "eip712Digest",
+    "isoToSeconds",
+    "signCredential",
+    "viemSignerFromWallet",
+    "CredentialSigner",
+    "verifyCredentialStructural",
+    "VerificationResult",
+    "SHAPE_DID_PREFIX",
+    "buildShapeUri",
+    "parseShapeUri",
+    "shapeHash"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1500,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
 }
