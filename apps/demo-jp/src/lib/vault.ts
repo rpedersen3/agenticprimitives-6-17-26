@@ -129,6 +129,38 @@ export async function loadMemberGrants(): Promise<Array<{ addr: Address; grant: 
   return out;
 }
 
+// ── Org→org delegations JP received (in JP's own vault) ───────────────────────
+//
+// When an adopter/facilitator org delegates scoped access to JP (the org→broker
+// grant minted at org-create), JP holds it in its OWN vault keyed by the grantor
+// org — `delegation-received:<grantorOrg>`. This is the single source for "orgs
+// delegated to JP" (ADR-0013), replacing the Connect-home `delegated-idx` index.
+
+export interface ReceivedOrgDelegation {
+  orgAgent: Address;
+  orgName: string;
+  delegation: DelegationWire;
+}
+
+export async function storeReceivedDelegation(rec: ReceivedOrgDelegation): Promise<void> {
+  const jp = jpVaultOwner();
+  if (!jp) throw new Error('JP org not deployed — cannot store received delegation');
+  await vaultWrite(jp, `delegation-received:${rec.orgAgent.toLowerCase()}`, rec);
+}
+
+export async function loadReceivedDelegations(): Promise<ReceivedOrgDelegation[]> {
+  const jp = jpVaultOwner();
+  if (!jp) return [];
+  const rows = await vaultList(jp);
+  const out: ReceivedOrgDelegation[] = [];
+  for (const row of rows) {
+    if (!row.record_type.startsWith('delegation-received:')) continue;
+    const rec = await vaultRead<ReceivedOrgDelegation>(jp, row.record_type);
+    if (rec?.orgAgent) out.push(rec);
+  }
+  return out;
+}
+
 // ── JP-owned adopter record (program-specific) ────────────────────────────────
 
 export interface JpAdopterRecord {

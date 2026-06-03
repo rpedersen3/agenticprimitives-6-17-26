@@ -19,6 +19,7 @@ import {
   nextAdopterStep, nextFacilitatorStep, profileCompleteness,
   projectFacilitatorForJp, projectForJp, recordContactExchange, requiresWea,
   saveImpactProfile, saveJpAdopterRecord, saveJpFacilitatorRecord, storeMemberGrant,
+  storeReceivedDelegation,
 } from './lib/vault';
 import type { DelegationWire } from './lib/delegation';
 import { ensureOrgDeployed } from './lib/onchain';
@@ -321,6 +322,19 @@ export function App() {
           const tok = await exchangeCode(orgStash.authOrigin!, code, orgStash.codeVerifier!);
           if (!tok.org) throw new Error('no organization returned from your home');
           // ADR-0025: no local person→org save — re-query Connect for the related orgs.
+          // spec 247: if the org delegated scoped access to JP (the broker grant), JP
+          // holds it in its OWN vault as a received delegation — the single source for
+          // "orgs delegated to JP" (replaces the Connect delegated-idx index).
+          if (tok.org.brokerDelegation) {
+            try {
+              await ensureOrgDeployed('jp');
+              await storeReceivedDelegation({
+                orgAgent: tok.org.orgAgent,
+                orgName: tok.org.orgName,
+                delegation: tok.org.brokerDelegation,
+              });
+            } catch { /* received-delegation registration is best-effort in the demo */ }
+          }
           setVaultBump((n) => n + 1);
         } catch (e) {
           setError(e instanceof Error ? e.message : 'organization creation failed');

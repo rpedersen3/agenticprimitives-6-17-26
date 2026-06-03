@@ -27,12 +27,11 @@ import {
   submitJointAssertionOnChain,
   type OrgChainState,
 } from '../lib/onchain';
-import { getAgreementRecord, isAttestationValid, personaSignHash } from '../lib/chain';
-import { listDelegatedOrgs, type DelegatedOrgLink } from '../connect-client';
+import { getAgreementRecord, isAttestationValid } from '../lib/chain';
+import { loadReceivedDelegations, type ReceivedOrgDelegation } from '../lib/vault';
 import { setupOperatorHome, operatorHomeUrl } from '../lib/operator-home';
 import { personChainState, type PersonChainState } from '../lib/person-sa';
 import type { PersonaName } from '../lib/personas';
-import { PLATFORM_AUTH_ORIGIN } from '../lib/domain';
 import { expressIntent, tryMatch, buildCommitment } from '../lib/intent-flow';
 import { JP_INTENT_OBJECT } from '../lib/intent-payload';
 import {
@@ -213,26 +212,23 @@ export function JillDashboard() {
   );
 }
 
-/** spec 246 §5: list the adopter/facilitator orgs that delegated scoped access to JP.
- *  Authorized by proving control of the JP org SA (Jill's custodian signs the fixed
- *  challenge; the Connect endpoint verifies via ERC-1271). No person identity exposed. */
+/** spec 247: list the adopter/facilitator orgs that delegated scoped access to JP —
+ *  read from JP's OWN vault (`delegation-received:<org>`), the single source. JP holds
+ *  the org→broker grant it received; the broker reads it with JP's custodian key. */
 function DelegatedOrgsPanel() {
-  const [orgs, setOrgs] = useState<DelegatedOrgLink[]>([]);
+  const [orgs, setOrgs] = useState<ReceivedOrgDelegation[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setBusy(true); setMsg(null);
     try {
-      // JP org SA must be deployed for the ERC-1271 auth check (the OrgDeployCard
-      // auto-provisions it above).
-      const jp = await ensureOrgDeployed('jp');
-      const persona = loadOrMintOrgPersona('jp');
-      const challenge = keccak256(toBytes(`delegated-orgs:${jp.saAddress.toLowerCase()}`));
-      const sig = await personaSignHash(persona.custodian)(challenge);
-      const list = await listDelegatedOrgs(PLATFORM_AUTH_ORIGIN, jp.saAddress, sig);
+      // JP org SA must be deployed so its vault is addressable (the OrgDeployCard
+      // auto-provisions it above; ensureOrgDeployed is idempotent + deduped).
+      await ensureOrgDeployed('jp');
+      const list = await loadReceivedDelegations();
       setOrgs(list);
-      if (list.length === 0) setMsg('No orgs have delegated to JP yet. They are added when an adopter/facilitator creates an org via demo-jp.');
+      if (list.length === 0) setMsg('No orgs have delegated to JP yet. They are added to JP’s vault when an adopter/facilitator creates an org via demo-jp.');
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
     } finally {
@@ -243,9 +239,9 @@ function DelegatedOrgsPanel() {
   return (
     <Card>
       <SectionHead
-        eyebrow="Spec 246 §5 · scoped delegations"
+        eyebrow="Spec 247 · received delegations"
         title="Orgs delegated to JP"
-        sub="Adopter/facilitator orgs that granted JP scoped access during org creation — the broker's view of participating orgs. Authorized by proving control of the JP org SA (ERC-1271); no person identity is exposed."
+        sub="Adopter/facilitator orgs that granted JP scoped access during org creation — read from JP’s own vault (the single source). No person identity is exposed."
       />
       <Btn onClick={load} busy={busy}>Refresh delegated orgs</Btn>
       {msg && <div style={{ marginTop: '.8rem' }}><Banner tone="warn">{msg}</Banner></div>}

@@ -48,27 +48,26 @@ export interface OrgChainState {
   deployTxHash?: Hex;
 }
 
-const DEPLOY_KEY = (name: OrgName) => `demo-jp/org-deploy/${name}`;
 /** Stable per-org salt (D-5: address reproduces across reloads). Salt 0 under each
  *  custodian EOA is RESERVED for that operator's own PERSON SA (spec 247 — it matches
  *  demo-sso's SIWE derivation `{mode:0, custodians:[eoa], salt:0}`), so the org SAs sit
  *  at salt 1. GC + JP are under different custodians (Pete / Jill), so both can be 1n. */
 const ORG_SALT: Record<OrgName, bigint> = { 'global-church': 1n, jp: 1n };
 
+// Org-deploy state is DERIVED FROM CHAIN (spec 247): the SA address is the
+// deterministic CREATE2 prediction, and "deployed" is `isContractDeployed` (a
+// chain read) — not persisted in localStorage. This module-level map is a pure
+// per-session transient hint so the sync `orgChainState`/`jpVaultOwner` accessors
+// have an answer after `ensureOrgDeployed` has run; it's rebuilt from chain on
+// reload (the deploy card + panels call `ensureOrgDeployed` on mount).
+const _deployCache = new Map<OrgName, OrgChainState>();
+
 function loadDeployState(name: OrgName): OrgChainState | null {
-  if (typeof localStorage === 'undefined') return null;
-  const raw = localStorage.getItem(DEPLOY_KEY(name));
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as OrgChainState;
-  } catch {
-    return null;
-  }
+  return _deployCache.get(name) ?? null;
 }
 
 function saveDeployState(s: OrgChainState): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(DEPLOY_KEY(s.name), JSON.stringify(s));
+  _deployCache.set(s.name, s);
 }
 
 /** Resolve the canonical (factory-derived) org SA address, deploying if needed.

@@ -138,6 +138,9 @@ export interface OrgTokenPayload {
   orgName: string;
   edgeId: string;
   governed: boolean;
+  /** spec 247: the org→broker(JP) delegation minted at org-create, for JP to hold in
+   *  its vault as a received delegation (`delegation-received:<orgAgent>`). */
+  brokerDelegation?: DelegationWire | null;
 }
 export interface TokenResult {
   idToken: string;
