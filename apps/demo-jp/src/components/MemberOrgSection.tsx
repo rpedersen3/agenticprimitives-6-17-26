@@ -13,7 +13,8 @@ import type { Address } from '@agenticprimitives/types';
 
 import { Card, SectionHead, Btn, Pill, Field, inputStyle, Banner, AddrLink } from './ui';
 import { MemberTrustPanel } from './MemberTrustPanel';
-import { toOrgLabel, type MemberOrg } from '../lib/member-org';
+import { toOrgLabel } from '../lib/member-org';
+import type { RelatedOrgLink } from '../connect-client';
 
 export function MemberOrgSection({
   kind,
@@ -21,7 +22,7 @@ export function MemberOrgSection({
   onCreateOrg,
 }: {
   kind: 'adopter' | 'facilitator';
-  org: MemberOrg | null;
+  org: RelatedOrgLink | null;
   /** Kicks off the Impact org-create ceremony with the given org name. */
   onCreateOrg: (orgName: string) => void | Promise<void>;
 }) {
@@ -91,7 +92,7 @@ function OrgClaim({ label, onCreateOrg }: { label: string; onCreateOrg: (orgName
   );
 }
 
-function OrgActive({ kind, org }: { kind: 'adopter' | 'facilitator'; org: MemberOrg }) {
+function OrgActive({ kind, org }: { kind: 'adopter' | 'facilitator'; org: RelatedOrgLink }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <Card>
@@ -101,7 +102,7 @@ function OrgActive({ kind, org }: { kind: 'adopter' | 'facilitator'; org: Member
           <span style={{ color: 'var(--c-g500)', fontSize: '.85rem' }}><AddrLink addr={org.orgAgent as Address} /></span>
           <Pill tone="neutral">custodied by you</Pill>
         </div>
-        {org.orgDelegation && (
+        {org.delegation && (
           <p style={{ fontSize: '.78rem', color: 'var(--c-g500)', marginTop: '.5rem' }}>
             demo-jp holds a scoped org→app delegation (for reads) — not custody. Disconnect at your home and its access goes to zero.
           </p>

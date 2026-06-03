@@ -26,6 +26,7 @@
     "@agenticprimitives/intent-marketplace": "workspace:*",
     "@agenticprimitives/intent-resolver": "workspace:*",
     "@agenticprimitives/payments": "workspace:*",
+    "@agenticprimitives/related-agents": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
     "@agenticprimitives/verifiable-credentials": "workspace:*",
     "react": "^18.3.0",

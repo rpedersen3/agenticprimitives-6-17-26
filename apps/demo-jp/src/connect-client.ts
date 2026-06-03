@@ -86,6 +86,7 @@ interface AuthorizeParams {
   delegate: Address;
   template: 'site-login' | 'org-create';
   orgBase?: string;
+  purpose?: string;
 }
 /** Build the OIDC `/authorize` URL (the OP's consent UI is the SPA at the origin root). */
 function buildAuthorizeUrl(p: AuthorizeParams): string {
@@ -102,7 +103,30 @@ function buildAuthorizeUrl(p: AuthorizeParams): string {
   u.searchParams.set('delegate', p.delegate);
   u.searchParams.set('delegation_template', p.template);
   if (p.orgBase) u.searchParams.set('org_base', p.orgBase);
+  if (p.purpose) u.searchParams.set('org_purpose', p.purpose);
   return u.toString();
+}
+
+/** Wire shape of a related-org link the person's vault returns (spec 246). Carries NO
+ *  person→org mapping — just the org metadata + the scoped delegation demo-jp received. */
+export interface RelatedOrgLink {
+  orgAgent: Address;
+  orgName: string;
+  purpose: string;
+  delegation?: DelegationWire;
+  proofHash?: string;
+}
+
+/** ADR-0025: ask Connect (the person's home) for the orgs related to THIS app — instead
+ *  of reading a local person→org store. Person-session-authorized (the id_token). */
+export async function listRelatedOrgs(name: string, idToken: string): Promise<RelatedOrgLink[]> {
+  const authOrigin = await resolveAuthOrigin(name);
+  const url = new URL('/connect/related-orgs', authOrigin);
+  url.searchParams.set('client_id', CLIENT_ID);
+  const r = await fetch(url.toString(), { headers: { authorization: `Bearer ${idToken}` } });
+  if (!r.ok) return [];
+  const b = (await r.json().catch(() => ({}))) as { orgs?: RelatedOrgLink[] };
+  return b.orgs ?? [];
 }
 
 // ── Wire shapes ────────────────────────────────────────────────────────
@@ -161,6 +185,7 @@ export async function startSiteEnrollment(
 export async function startOrgCreation(
   personName: string,
   orgBase: string,
+  purpose?: string,
 ): Promise<{ url: string; state: string; authOrigin: string; codeVerifier: string; nonce: string }> {
   const state = randomB64url(16);
   const nonce = randomB64url(16);
@@ -175,6 +200,7 @@ export async function startOrgCreation(
     delegate: DEMO_JP_DELEGATE,
     template: 'org-create',
     orgBase,
+    purpose,
   });
   return { url, state, authOrigin, codeVerifier: verifier, nonce };
 }

@@ -137,6 +137,9 @@ importers:
       '@agenticprimitives/payments':
         specifier: workspace:*
         version: link:../../packages/payments
+      '@agenticprimitives/related-agents':
+        specifier: workspace:*
+        version: link:../../packages/related-agents
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -360,9 +363,15 @@ importers:
       '@agenticprimitives/identity-directory-adapters':
         specifier: workspace:*
         version: link:../../packages/identity-directory-adapters
+      '@agenticprimitives/related-agents':
+        specifier: workspace:*
+        version: link:../../packages/related-agents
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@agenticprimitives/verifiable-credentials':
+        specifier: workspace:*
+        version: link:../../packages/verifiable-credentials
       '@upstash/redis':
         specifier: ^1.34.0
         version: 1.38.0

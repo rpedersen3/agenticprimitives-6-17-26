@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Address, Hex } from '@agenticprimitives/types';
 import { JP, GATEWAY } from './lib/brand';
-import { startSiteEnrollment, startOrgCreation, exchangeCode, verifyIdToken } from './connect-client';
-import { loadMemberOrg, saveMemberOrg, type MemberOrg } from './lib/member-org';
+import { startSiteEnrollment, startOrgCreation, exchangeCode, verifyIdToken, listRelatedOrgs, type RelatedOrgLink } from './connect-client';
+import { orgPurpose } from './lib/member-org';
 import { MemberOrgSection } from './components/MemberOrgSection';
 import { toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
 import {
@@ -57,7 +57,6 @@ const ORG_KEY = 'agenticprimitives:demo-jp:org-create';
 interface OrgStash {
   state?: string;
   kind?: Kind;
-  owner?: Address;
   orgName?: string;
   authOrigin?: string;
   codeVerifier?: string;
@@ -196,15 +195,28 @@ export function App() {
     if ((p === 'adopter' || p === 'facilitator') && !restoreSession()) setModal({ kind: p });
   }, []);
 
+  /** ADR-0025 / spec 246: demo-jp keeps NO local person→org store. It asks Connect
+   *  (the person's home) for the orgs related to THIS app, authorized by the person's
+   *  session id_token. Re-queries on `vaultBump` (e.g. after an org-create return). */
+  const [relatedOrgs, setRelatedOrgs] = useState<RelatedOrgLink[]>([]);
+  useEffect(() => {
+    const s = restoreSession();
+    if (!s) { setRelatedOrgs([]); return; }
+    let cancelled = false;
+    void listRelatedOrgs(s.name, s.token).then((orgs) => { if (!cancelled) setRelatedOrgs(orgs); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [vaultBump]);
+
   /** Kick off the Impact org-create ceremony — the connected user custodies the new
-   *  org SA via their ROOT credential at their home; we stash the kind so the return
-   *  handler files the org under the right member-org slot. */
+   *  org SA via their ROOT credential at their home. We tag the org with a purpose
+   *  (jp-adopter-org / jp-facilitator-org) so the private vault link is scoped; on
+   *  return we re-query Connect (no local person→org store — ADR-0025). */
   const goCreateOrg = useCallback(async (kind: Kind, orgName: string) => {
     const s = restoreSession();
     if (!s) { setError('Connect first, then create your organization.'); return; }
     try {
-      const { url, state, authOrigin, codeVerifier, nonce } = await startOrgCreation(s.name, orgName);
-      const stash: OrgStash = { state, kind, owner: s.address, orgName, authOrigin, codeVerifier, nonce };
+      const { url, state, authOrigin, codeVerifier, nonce } = await startOrgCreation(s.name, orgName, orgPurpose(kind));
+      const stash: OrgStash = { state, kind, orgName, authOrigin, codeVerifier, nonce };
       sessionStorage.setItem(ORG_KEY, JSON.stringify(stash));
       window.location.href = url;
     } catch (e) {
@@ -276,23 +288,16 @@ export function App() {
     try { orgStash = JSON.parse(sessionStorage.getItem(ORG_KEY) ?? '{}') as OrgStash; } catch { /* ignore */ }
     if (code && orgStash.state && retState && orgStash.state === retState) {
       sessionStorage.removeItem(ORG_KEY);
-      if (!orgStash.authOrigin || !orgStash.codeVerifier || !orgStash.kind || !orgStash.owner) {
+      if (!orgStash.authOrigin || !orgStash.codeVerifier || !orgStash.kind) {
         setError('Organization response was incomplete. Please try again.');
         return;
       }
       void (async () => {
         try {
+          // Complete the exchange (the home already wrote the private vault link).
           const tok = await exchangeCode(orgStash.authOrigin!, code, orgStash.codeVerifier!);
           if (!tok.org) throw new Error('no organization returned from your home');
-          const org: MemberOrg = {
-            kind: orgStash.kind!,
-            ownerPerson: orgStash.owner!,
-            orgName: tok.org.orgName || orgStash.orgName || 'Organization',
-            orgAgent: tok.org.orgAgent,
-            orgDelegation: tok.delegation,
-            createdAt: new Date().toISOString(),
-          };
-          saveMemberOrg(org);
+          // ADR-0025: no local person→org save — re-query Connect for the related orgs.
           setVaultBump((n) => n + 1);
         } catch (e) {
           setError(e instanceof Error ? e.message : 'organization creation failed');
@@ -474,7 +479,7 @@ export function App() {
         <AdopterIntranet
           key={vaultBump}
           session={session}
-          org={loadMemberOrg(session.address, 'adopter')}
+          org={relatedOrgs.find((o) => o.purpose === orgPurpose('adopter')) ?? null}
           onCreateOrg={(name) => goCreateOrg('adopter', name)}
           onSignOut={signOut}
           onOpenWea={() => setModal({ kind: 'wea' })}
@@ -489,7 +494,7 @@ export function App() {
       <FacilitatorIntranet
         key={vaultBump}
         session={session}
-        org={loadMemberOrg(session.address, 'facilitator')}
+        org={relatedOrgs.find((o) => o.purpose === orgPurpose('facilitator')) ?? null}
         onCreateOrg={(name) => goCreateOrg('facilitator', name)}
         onSignOut={signOut}
         onOpenWea={() => setModal({ kind: 'wea' })}
@@ -692,7 +697,7 @@ function OnboardPanel({ kind, busy, onClose, onConnect }: {
 // JP-specific steps expand into inline forms when active.
 
 function AdopterIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
-  session: Session; org: MemberOrg | null; onCreateOrg: (orgName: string) => void;
+  session: Session; org: RelatedOrgLink | null; onCreateOrg: (orgName: string) => void;
   onSignOut: () => void; onOpenWea: () => void;
   onGoEditProfile: (missingKeys: string[]) => void;
   onGoSignWea: () => void;
@@ -1915,7 +1920,7 @@ function ProjBox({ label, value, mono = false }: { label: string; value: string;
 // ── Facilitator Intranet (placeholder, wired next) ──────────────────────────
 
 function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
-  session: Session; org: MemberOrg | null; onCreateOrg: (orgName: string) => void;
+  session: Session; org: RelatedOrgLink | null; onCreateOrg: (orgName: string) => void;
   onSignOut: () => void; onOpenWea: () => void;
   onGoEditProfile: (missingKeys: string[]) => void;
   onGoSignWea: () => void;
