@@ -87,6 +87,7 @@ interface AuthorizeParams {
   template: 'site-login' | 'org-create';
   orgBase?: string;
   purpose?: string;
+  grantOrg?: Address;
 }
 /** Build the OIDC `/authorize` URL (the OP's consent UI is the SPA at the origin root). */
 function buildAuthorizeUrl(p: AuthorizeParams): string {
@@ -104,6 +105,7 @@ function buildAuthorizeUrl(p: AuthorizeParams): string {
   u.searchParams.set('delegation_template', p.template);
   if (p.orgBase) u.searchParams.set('org_base', p.orgBase);
   if (p.purpose) u.searchParams.set('org_purpose', p.purpose);
+  if (p.grantOrg) u.searchParams.set('grant_org', p.grantOrg);
   return u.toString();
 }
 
@@ -186,6 +188,7 @@ export async function startOrgCreation(
   personName: string,
   orgBase: string,
   purpose?: string,
+  grantOrg?: Address,
 ): Promise<{ url: string; state: string; authOrigin: string; codeVerifier: string; nonce: string }> {
   const state = randomB64url(16);
   const nonce = randomB64url(16);
@@ -201,8 +204,27 @@ export async function startOrgCreation(
     template: 'org-create',
     orgBase,
     purpose,
+    grantOrg,
   });
   return { url, state, authOrigin, codeVerifier: verifier, nonce };
+}
+
+/** spec 246 §5: the broker org (JP) lists the orgs that delegated scoped access to it.
+ *  The caller proves control of `delegate` via an ERC-1271 signature over the fixed
+ *  challenge. `connectOrigin` is any Connect home origin (the vault KV is shared). */
+export interface DelegatedOrgLink {
+  orgAgent: Address;
+  orgName: string;
+  delegation?: DelegationWire;
+}
+export async function listDelegatedOrgs(connectOrigin: string, delegate: Address, sig: Hex): Promise<DelegatedOrgLink[]> {
+  const url = new URL('/connect/delegated-orgs', connectOrigin);
+  url.searchParams.set('delegate', delegate);
+  url.searchParams.set('sig', sig);
+  const r = await fetch(url.toString());
+  if (!r.ok) return [];
+  const b = (await r.json().catch(() => ({}))) as { orgs?: DelegatedOrgLink[] };
+  return b.orgs ?? [];
 }
 
 /** Exchange the authorization code at /token (PKCE) → { id_token, delegation, org? } (§4.3). */

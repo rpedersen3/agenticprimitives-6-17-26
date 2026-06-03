@@ -27,7 +27,9 @@ import {
   submitJointAssertionOnChain,
   type OrgChainState,
 } from '../lib/onchain';
-import { getAgreementRecord, isAttestationValid } from '../lib/chain';
+import { getAgreementRecord, isAttestationValid, personaSignHash } from '../lib/chain';
+import { listDelegatedOrgs, type DelegatedOrgLink } from '../connect-client';
+import { PLATFORM_AUTH_ORIGIN } from '../lib/domain';
 import { expressIntent, tryMatch, buildCommitment } from '../lib/intent-flow';
 import { JP_INTENT_OBJECT } from '../lib/intent-payload';
 import {
@@ -136,9 +138,61 @@ export function JillDashboard() {
         <p style={{ color: 'var(--c-g600)', marginTop: '.4rem', maxWidth: '60ch' }}>{meta.blurb} Direct Lane only (D-27): adopter need ↔ facilitator offer.</p>
       </header>
       <OrgDeployCard org="jp" />
+      <DelegatedOrgsPanel />
       <IntentBoard />
       <AssociationIssuer />
     </div>
+  );
+}
+
+/** spec 246 §5: list the adopter/facilitator orgs that delegated scoped access to JP.
+ *  Authorized by proving control of the JP org SA (Jill's custodian signs the fixed
+ *  challenge; the Connect endpoint verifies via ERC-1271). No person identity exposed. */
+function DelegatedOrgsPanel() {
+  const [orgs, setOrgs] = useState<DelegatedOrgLink[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setBusy(true); setMsg(null);
+    try {
+      // JP org SA must be deployed for the ERC-1271 auth check (the OrgDeployCard
+      // auto-provisions it above).
+      const jp = await ensureOrgDeployed('jp');
+      const persona = loadOrMintOrgPersona('jp');
+      const challenge = keccak256(toBytes(`delegated-orgs:${jp.saAddress.toLowerCase()}`));
+      const sig = await personaSignHash(persona.custodian)(challenge);
+      const list = await listDelegatedOrgs(PLATFORM_AUTH_ORIGIN, jp.saAddress, sig);
+      setOrgs(list);
+      if (list.length === 0) setMsg('No orgs have delegated to JP yet. They are added when an adopter/facilitator creates an org via demo-jp.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  return (
+    <Card>
+      <SectionHead
+        eyebrow="Spec 246 §5 · scoped delegations"
+        title="Orgs delegated to JP"
+        sub="Adopter/facilitator orgs that granted JP scoped access during org creation — the broker's view of participating orgs. Authorized by proving control of the JP org SA (ERC-1271); no person identity is exposed."
+      />
+      <Btn onClick={load} busy={busy}>Refresh delegated orgs</Btn>
+      {msg && <div style={{ marginTop: '.8rem' }}><Banner tone="warn">{msg}</Banner></div>}
+      {orgs.length > 0 && (
+        <div style={{ marginTop: '1rem' }}>
+          {orgs.map((o) => (
+            <div key={o.orgAgent} style={{ display: 'flex', gap: '.6rem', alignItems: 'center', fontSize: '.84rem', padding: '.5rem 0', borderTop: '1px solid var(--c-g100)' }}>
+              <Pill tone="ok">org</Pill>
+              <span style={{ fontWeight: 700, color: 'var(--c-g800)' }}>{o.orgName || '(unnamed org)'}</span>
+              <span style={{ marginLeft: 'auto' }}><AddrLink addr={o.orgAgent} /></span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 

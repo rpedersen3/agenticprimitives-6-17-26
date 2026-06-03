@@ -3,6 +3,7 @@ import type { Address, Hex } from '@agenticprimitives/types';
 import { JP, GATEWAY } from './lib/brand';
 import { startSiteEnrollment, startOrgCreation, exchangeCode, verifyIdToken, listRelatedOrgs, type RelatedOrgLink } from './connect-client';
 import { orgPurpose } from './lib/member-org';
+import { predictOrgAddress } from './lib/onchain';
 import { MemberOrgSection } from './components/MemberOrgSection';
 import { toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
 import {
@@ -215,7 +216,12 @@ export function App() {
     const s = restoreSession();
     if (!s) { setError('Connect first, then create your organization.'); return; }
     try {
-      const { url, state, authOrigin, codeVerifier, nonce } = await startOrgCreation(s.name, orgName, orgPurpose(kind));
+      // Grant the JP broker org scoped read access to the new org (spec 246 §5) so
+      // Jill can later list the orgs delegated to JP. Optional — derive its address;
+      // if the relayer is unreachable we proceed without the broker grant.
+      let grantOrg: Address | undefined;
+      try { grantOrg = await predictOrgAddress('jp'); } catch { /* broker grant optional */ }
+      const { url, state, authOrigin, codeVerifier, nonce } = await startOrgCreation(s.name, orgName, orgPurpose(kind), grantOrg);
       const stash: OrgStash = { state, kind, orgName, authOrigin, codeVerifier, nonce };
       sessionStorage.setItem(ORG_KEY, JSON.stringify(stash));
       window.location.href = url;
