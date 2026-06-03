@@ -30,7 +30,7 @@ import {
 } from '../lib/onchain';
 import { getAgreementRecord, isAttestationValid } from '../lib/chain';
 import { loadReceivedDelegations, type ReceivedOrgDelegation } from '../lib/vault';
-import { vaultWriteWithDelegation } from '../lib/vault-client';
+import { vaultWriteWithDelegation, vaultReadWithDelegation } from '../lib/vault-client';
 import { setupOperatorHome, operatorSignInUrl } from '../lib/operator-home';
 import { personChainState, resolvePersonState, type PersonChainState } from '../lib/person-sa';
 import type { PersonaName } from '../lib/personas';
@@ -344,13 +344,10 @@ function IntentBoard() {
   const runMatch = useCallback(async (need: BoardIntent, offer: BoardIntent) => {
     setErr(null);
     if (need.fpgId !== offer.fpgId) { setErr('Intents must share the same FPG to match.'); return; }
-    // Recognition gate: refuse to broker until JP has recognized both parties on chain.
-    if (!isRecognized(need.expressedBy, 'adopter', need.fpgId)) {
-      setErr('Adopter is not recognized yet — issue an Association credential (Adopter) for this org + people group above, then match.');
-      return;
-    }
+    // Recognition gate: only the FACILITATOR needs JP recognition for the people group.
+    // Adopters express intent for any people group freely — no recognition required.
     if (!isRecognized(offer.expressedBy, 'facilitator', offer.fpgId)) {
-      setErr('Facilitator is not recognized yet — issue an Association credential (Facilitator) for this org + people group above, then match.');
+      setErr('Facilitator is not recognized yet — issue a recognition credential for this facilitator org + people group above, then match.');
       return;
     }
     const broker = orgChainState('jp')?.saAddress ?? loadOrMintOrgPersona('jp').saAddress;
@@ -411,20 +408,18 @@ function IntentBoard() {
         <div style={{ marginTop: '1rem' }}>
           <h3 style={{ fontSize: '.95rem', marginBottom: '.5rem' }}>Broker a match</h3>
           <p style={{ fontSize: '.78rem', color: 'var(--c-g500)', margin: '0 0 .5rem' }}>
-            Both parties must be JP-recognized for the people group first (issue the Association above).
+            The facilitator must be JP-recognized for the people group first (recognize above). Adopters
+            need no recognition — they request for any people group.
           </p>
           {needs.flatMap((n) => offers.filter((o) => o.fpgId === n.fpgId).map((o) => {
-            const aOk = isRecognized(n.expressedBy, 'adopter', n.fpgId);
             const fOk = isRecognized(o.expressedBy, 'facilitator', o.fpgId);
-            const ready = aOk && fOk;
             return (
               <div key={`${n.id}:${o.id}`} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', padding: '.5rem 0', borderTop: '1px solid var(--c-g100)', fontSize: '.84rem', flexWrap: 'wrap' }}>
                 <Pill>{findPeopleGroup(n.fpgId)?.name ?? n.fpgId}</Pill>
                 <span style={{ color: 'var(--c-g600)' }}><AddrLink addr={n.expressedBy} /> ↔ <AddrLink addr={o.expressedBy} /></span>
-                <Pill tone={aOk ? 'ok' : 'neutral'}>adopter {aOk ? 'recognized ✓' : 'not recognized'}</Pill>
                 <Pill tone={fOk ? 'ok' : 'neutral'}>facilitator {fOk ? 'recognized ✓' : 'not recognized'}</Pill>
-                <Btn variant="ghost" disabled={!ready} style={{ marginLeft: 'auto', padding: '.35rem .7rem', opacity: ready ? 1 : 0.5 }} onClick={() => runMatch(n, o)}>
-                  {ready ? 'Run match' : 'Recognize first'}
+                <Btn variant="ghost" disabled={!fOk} style={{ marginLeft: 'auto', padding: '.35rem .7rem', opacity: fOk ? 1 : 0.5 }} onClick={() => runMatch(n, o)}>
+                  {fOk ? 'Run match' : 'Recognize facilitator first'}
                 </Btn>
               </div>
             );
@@ -475,7 +470,9 @@ function AssociationIssuer() {
   const [associations, setAssociations] = useState<AssociationRow[]>([]);
   const [members, setMembers] = useState<ReceivedOrgDelegation[]>([]);
   const [manual, setManual] = useState(false);
-  const [kind, setKind] = useState<'facilitator' | 'adopter'>('facilitator');
+  // Recognition is FACILITATOR-only — adopters need no JP recognition (they request for any
+  // people group). So there's no kind picker; every credential here is a facilitator one.
+  const kind = 'facilitator' as const;
   const [subject, setSubject] = useState('');
   const [fpgId, setFpgId] = useState(FPG_SEED[0]?.id ?? 'NAJDI');
   const [busy, setBusy] = useState(false);
@@ -503,26 +500,34 @@ function AssociationIssuer() {
       // OFF-CHAIN recognition: JP builds + signs the credential. No AttestationRegistry tx.
       const issued = await issueAssociationCredential({
         subjectOrg,
-        body: { associationKind: kind, role: 'approved', fpgIds: [fpgId], ...(kind === 'adopter' ? { adopterType: 'church', mouHash: ZERO32 } : { countries: [findPeopleGroup(fpgId)?.country ?? 'XX'] }) },
+        body: { associationKind: kind, role: 'approved', fpgIds: [fpgId], countries: [findPeopleGroup(fpgId)?.country ?? 'XX'] },
         validFrom: new Date().toISOString(),
         salt: BigInt(Date.now()),
       });
       const issuedAt = new Date().toISOString();
       // JP STORES the signed credential in its own vault (its recognition record + the gate).
+      // One recognition per (facilitator, people group): replace any existing row for this
+      // org+FPG so re-recognizing refreshes rather than duplicates. A facilitator accumulates
+      // recognitions across people groups by issuing once per group.
       const row: AssociationRow = { uid: issued.credentialHash, subjectOrg, associationKind: kind, fpgIds: [fpgId], issuedAt, credential: issued.credential, issuerSignature: issued.issuerSignature };
-      const next = [row, ...associations];
+      const next = [
+        row,
+        ...associations.filter((x) => !(x.subjectOrg.toLowerCase() === subjectOrg.toLowerCase() && x.associationKind === kind && x.fpgIds.includes(fpgId))),
+      ];
       setAssociations(next); await saveAssociations(next);
-      // ISSUE THE CREDENTIAL BACK TO THE ORG: deliver it into the org's OWN vault over the
-      // broker delegation that org granted JP (delegator = the org), so the org holds its
-      // recognition. Best-effort: if the org hasn't delegated to JP yet, JP still has it.
+      // ISSUE THE CREDENTIAL BACK TO THE ORG: deliver into the org's OWN vault over the broker
+      // delegation it granted JP (delegator = the org). Accumulate across people groups — the
+      // org holds ALL its recognitions, keyed by FPG. Best-effort.
       const member = members.find((m) => m.orgAgent.toLowerCase() === subjectOrg.toLowerCase());
       let delivered = false;
       if (member?.delegation) {
         try {
-          await vaultWriteWithDelegation(member.delegation, 'jp:recognition', {
-            credential: issued.credential, issuerSignature: issued.issuerSignature, credentialHash: issued.credentialHash,
-            associationKind: kind, fpgIds: [fpgId], issuer: issued.issuer, issuedAt,
-          });
+          const prior = (await vaultReadWithDelegation<Array<Record<string, unknown>>>(member.delegation, 'jp:recognition')) ?? [];
+          const kept = prior.filter((p) => !(Array.isArray(p.fpgIds) && (p.fpgIds as string[]).includes(fpgId)));
+          await vaultWriteWithDelegation(member.delegation, 'jp:recognition', [
+            { credential: issued.credential, issuerSignature: issued.issuerSignature, credentialHash: issued.credentialHash, associationKind: kind, fpgIds: [fpgId], issuer: issued.issuer, issuedAt },
+            ...kept,
+          ]);
           delivered = true;
         } catch { /* delivery is best-effort; JP's own copy still gates brokering */ }
       }
@@ -536,17 +541,9 @@ function AssociationIssuer() {
 
   return (
     <Card>
-      <SectionHead eyebrow="Recognition · off-chain credential" title="Issue Association credential" sub="JP recognizes an org as an approved facilitator/adopter by issuing a JP-signed credential (subject = org, issuer = JP). JP stores it in its own vault and delivers a copy to the org — NOT asserted on chain. Recognition is what unlocks brokering for that org + people group." />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <Field label="Kind">
-          <select style={inputStyle} value={kind} onChange={(e) => setKind(e.target.value as 'facilitator' | 'adopter')}>
-            <option value="facilitator">Facilitator</option>
-            <option value="adopter">Adopter</option>
-          </select>
-        </Field>
-        <Field label="People group"><FpgSelect value={fpgId} onChange={setFpgId} /></Field>
-      </div>
-      <Field label="Organization to recognize">
+      <SectionHead eyebrow="Recognition · off-chain credential" title="Recognize a facilitator" sub="JP recognizes a FACILITATOR org for a specific people group by issuing a JP-signed credential (subject = org, issuer = JP). Issue once per people group — a facilitator can be recognized for many. JP stores it in its own vault and delivers a copy to the org — NOT on chain. Recognition is what lets JP broker that facilitator for that people group. (Adopters need no recognition.)" />
+      <Field label="People group"><FpgSelect value={fpgId} onChange={setFpgId} /></Field>
+      <Field label="Facilitator organization to recognize">
         {members.length === 0 || manual ? (
           <input style={inputStyle} placeholder="0x…" value={subject} onChange={(e) => setSubject(e.target.value)} />
         ) : (

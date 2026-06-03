@@ -126,9 +126,11 @@ export function MemberTrustPanel({
 
       {/* 2. JP recognition */}
       <Card>
-        <SectionHead eyebrow="Step 2 · Recognition" title="JP's recognition of your org" sub="A JP-signed Association credential held off-chain — JP keeps it in its vault and delivered a copy to your org. It's not on the AttestationRegistry; this credential is what lets JP broker matches for you." />
-        {myAssoc.length === 0
-          ? <p style={{ fontSize: '.85rem', color: 'var(--c-g400)' }}>Not recognized yet. Once JP approves your org as {kind === 'adopter' ? 'an adopter' : 'a facilitator'}, the credential appears here.</p>
+        <SectionHead eyebrow="Step 2 · Recognition" title={kind === 'adopter' ? 'No recognition needed' : "JP's recognition of your org"} sub={kind === 'adopter' ? 'Adopters don’t need JP recognition — you can request a facilitator for any people group. Recognition only applies to facilitators.' : 'A JP-signed Association credential per people group, held off-chain — JP keeps it in its vault and delivered a copy to your org. It’s not on the AttestationRegistry; this is what lets JP broker matches for you. You can be recognized for many people groups.'} />
+        {kind === 'adopter'
+          ? null
+          : myAssoc.length === 0
+          ? <p style={{ fontSize: '.85rem', color: 'var(--c-g400)' }}>Not recognized for any people group yet. Once JP recognizes your facilitator org for a people group, the credential appears here.</p>
           : myAssoc.map((x) => (
             <div key={x.uid} style={{ display: 'flex', gap: '.6rem', alignItems: 'center', fontSize: '.83rem', padding: '.5rem 0', borderTop: '1px solid var(--c-g100)', flexWrap: 'wrap' }}>
               <Pill tone="ok">{x.associationKind}</Pill>
