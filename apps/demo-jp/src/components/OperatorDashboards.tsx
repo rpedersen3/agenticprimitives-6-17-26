@@ -565,7 +565,7 @@ function AssociationIssuer() {
           </button>
         )}
       </Field>
-      <Btn onClick={issue} busy={busy}>Issue + assert on chain</Btn>
+      <Btn onClick={issue} busy={busy}>Issue recognition credential (off-chain)</Btn>
       {msg && <div style={{ marginTop: '.8rem' }}><Banner tone={msg.tone}>{msg.text} {msg.tx && <TxLink hash={msg.tx} />}</Banner></div>}
 
       {associations.length > 0 && (
