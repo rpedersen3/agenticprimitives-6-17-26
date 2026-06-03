@@ -58,6 +58,12 @@ export const CONTRACTS = {
   entryPoint: DEPLOYED.entryPoint as Address,
   permissionlessSubregistry: DEPLOYED.permissionlessSubregistry as Address,
   agentNameRegistry: DEPLOYED.agentNameRegistry as Address,
+  // Delegation manager + enforcers — used to build the owner-issued vault
+  // delegation (spec 247). The enforcers gate the off-chain MCP token, not an
+  // on-chain redemption, so the vault delegation carries only timestamp + value.
+  delegationManager: DEPLOYED.delegationManager as Address,
+  timestampEnforcer: DEPLOYED.timestampEnforcer as Address,
+  valueEnforcer: DEPLOYED.valueEnforcer as Address,
 } as const;
 
 export const AGREEMENT_REGISTRY_ABI = AGREEMENT_REGISTRY_JSON as Abi;
