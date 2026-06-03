@@ -25,6 +25,37 @@ export const STATUS = {
 } as const;
 export type AgreementStatus = (typeof STATUS)[keyof typeof STATUS];
 
+/**
+ * RW1-3 (ADR-0027) — canonical transition typehash. MUST byte-equal
+ * `AgreementRegistry.TRANSITION_TYPEHASH`; enforced by the cross-stack
+ * typehash-equality gate (`check:eip712-typehash-equality`).
+ */
+export const TRANSITION_TYPEHASH: Hex32 = toHex32(
+  keccak_256(
+    utf8ToBytes('AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier)'),
+  ),
+);
+
+/**
+ * Recompute the transition digest the parties sign (RW1-3). Equals the
+ * contract's `keccak256(abi.encode(TRANSITION_TYPEHASH, agreementCommitment,
+ * toStatus, nullifier))` — the on-chain `updateStatus` recomputes the same
+ * digest and verifies the party signatures against it.
+ */
+export function transitionDigest(args: {
+  agreementCommitment: Hex32;
+  toStatus: AgreementStatus;
+  nullifier: Hex32;
+}): Hex32 {
+  const buf = new Uint8Array(4 * 32);
+  writeHex32(buf, 0, TRANSITION_TYPEHASH);
+  writeHex32(buf, 32, args.agreementCommitment);
+  // uint8 toStatus, abi-encoded as a left-padded 32-byte word.
+  buf[95] = args.toStatus & 0xff;
+  writeHex32(buf, 96, args.nullifier);
+  return toHex32(keccak_256(buf));
+}
+
 /** Recompute the commitment per spec 241 §3 (AR-01). */
 export function computeAgreementCommitment(args: {
   partySetCommitment: Hex32;
@@ -94,11 +125,21 @@ export interface StatusUpdatePayload {
   agreementCommitment: Hex32;
   toStatus: AgreementStatus;
   nullifier: Hex32;
-  transitionStructHash: Hex32;
+  /** Signatures over the recomputed {@link transitionDigest} (RW1-3) — the
+   *  contract no longer accepts a caller-supplied `transitionStructHash`. */
   signature1: Hex;
   signature2: Hex;
   signer1: Address;
   signer2: Address;
+  /** RW1-2 (ADR-0027): the revealed parties + commitment components. The
+   *  contract recomputes the agreement commitment from these and requires each
+   *  signer to be one of the two parties. */
+  party1: Address;
+  party2: Address;
+  issuerCommitment: Hex32;
+  termsCommitment: Hex32;
+  scheduleCommitment: Hex32;
+  commitmentSalt: bigint;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────

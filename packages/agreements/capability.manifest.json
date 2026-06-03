@@ -71,6 +71,8 @@
     "Hex32",
     "STATUS",
     "AgreementStatus",
+    "TRANSITION_TYPEHASH",
+    "transitionDigest",
     "computeAgreementCommitment",
     "partySetCommitment",
     "issuerCommitment",
