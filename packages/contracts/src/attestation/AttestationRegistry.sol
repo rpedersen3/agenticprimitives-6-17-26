@@ -42,7 +42,15 @@ contract AttestationRegistry {
     error NotParty();
     error AlreadyRevoked();
     error InvalidParties();
+    error InvalidPartyConsent();
     error EmptyCredentialHash();
+
+    /// @dev RW1-1 (ADR-0027) — the canonical consent payload each party signs to consent to a
+    ///      joint agreement. The contract RECOMPUTES this digest from calldata; a stored/supplied
+    ///      reference is not consent. Binds the consent to the exact parties + agreement + credential.
+    bytes32 internal constant JOINT_CONSENT_TYPEHASH = keccak256(
+        "JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash)"
+    );
 
     // ─── Storage ────────────────────────────────────────────────────────
 
@@ -84,12 +92,16 @@ contract AttestationRegistry {
         bytes32 credentialType;
         bytes32 credentialHash;
         bytes32 refUID; // AgreementCommitment hash (spec 241)
-        bytes32 bilateralConsentRef; // hash of bundled signatures OR pinned delegation
+        bytes32 bilateralConsentRef; // DEPRECATED / IGNORED (RW1-1, ADR-0027): consent is now
+            // VERIFIED on-chain from party1Signature + party2Signature over the RECOMPUTED
+            // consent digest; the stored `bilateralConsentRef` is that recomputed digest, not this.
         bytes32 offchainCredentialStatusList;
         address party1;
         address party2;
         address issuer;
         bytes issuerSignature;
+        bytes party1Signature; // RW1-1: party1's consent over JOINT_CONSENT_TYPEHASH digest
+        bytes party2Signature; // RW1-1: party2's consent over JOINT_CONSENT_TYPEHASH digest
         uint256 salt;
     }
 
@@ -165,23 +177,31 @@ contract AttestationRegistry {
     }
 
     /// @notice Joint attestation by two parties against an agreement.
-    ///         `bilateralConsentRef` MUST be a hash of either:
-    ///           - both parties' EIP-712 signatures bundled, OR
-    ///           - a pinned delegation hash that DelegationManager.verifyAuthorization
-    ///             confirmed authorizes this exact call (off-chain verification).
-    ///         AR-04: bilateral consent verification is the caller's responsibility
-    ///         at the off-chain layer (spec 242 §6 + DelegationManager PD-9 view).
+    /// @dev RW1-1 (ADR-0027) — bilateral consent is VERIFIED on-chain, not trusted. The contract
+    ///      recomputes the canonical consent digest (`JOINT_CONSENT_TYPEHASH` over party1, party2,
+    ///      the agreement commitment, and the credential hash) and requires BOTH parties' signatures
+    ///      over it (ERC-1271 for smart accounts, ECDSA for EOAs). A nonzero `bilateralConsentRef` is
+    ///      NOT consent (the prior "caller's responsibility" model, AR-04). The recomputed digest is
+    ///      what gets stored. Alternative consent proof via `DelegationManager.verifyAuthorizationForCall`
+    ///      (an exact-call sub-delegation per party) is spec 249's option (b); this entrypoint takes
+    ///      the direct two-party-signature form.
     function assertJointAgreement(
         JointAgreementAttestationRequest calldata req
     ) external returns (bytes32) {
         if (req.credentialHash == bytes32(0)) revert EmptyCredentialHash();
         if (req.party1 == address(0) || req.party2 == address(0)) revert InvalidParties();
         if (req.party1 == req.party2) revert InvalidParties();
-        if (req.bilateralConsentRef == bytes32(0)) revert InvalidParties();
 
         if (!_isValidSignatureBool(req.issuer, req.credentialHash, req.issuerSignature)) {
             revert InvalidIssuerSignature();
         }
+
+        // VERIFY bilateral consent: recompute the digest, require both parties' signatures over it.
+        bytes32 consentDigest = keccak256(
+            abi.encode(JOINT_CONSENT_TYPEHASH, req.party1, req.party2, req.refUID, req.credentialHash)
+        );
+        if (!_isValidSignatureBool(req.party1, consentDigest, req.party1Signature)) revert InvalidPartyConsent();
+        if (!_isValidSignatureBool(req.party2, consentDigest, req.party2Signature)) revert InvalidPartyConsent();
 
         bytes32 uid = _computeUid(
             req.party1,
@@ -202,7 +222,7 @@ contract AttestationRegistry {
             credentialType: req.credentialType,
             credentialHash: req.credentialHash,
             refUID: req.refUID,
-            bilateralConsentRef: req.bilateralConsentRef,
+            bilateralConsentRef: consentDigest, // the VERIFIED, recomputed consent digest (RW1-1)
             offchainCredentialStatusList: req.offchainCredentialStatusList,
             epochBucket: bucket,
             revocationEpochBucket: 0,

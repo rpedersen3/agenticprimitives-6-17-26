@@ -42,13 +42,23 @@ Semantics:
   RW1-1 needs.
 - Pure addition — no existing entrypoint changes; `redeemDelegation` behaviour is untouched.
 
-### RW1-1 (next) — `AttestationRegistry.assertJointAgreement` proves consent
+### RW1-1 — `AttestationRegistry.assertJointAgreement` proves consent — **CONTRACT DONE**
 
-Replace "bilateralConsentRef != 0 + issuer signature, consent is the caller's responsibility" with a
-verified two-party consent: either (a) both party signatures over the canonical joint-agreement digest,
-or (b) a `DelegationManager.verifyAuthorizationForCall(...)` authorization for the exact
-`assertJointAgreement` call (an exact-call sub-delegation from each party). Storing a nonzero ref is not
-consent (ADR-0027 corollary 2).
+Replaced "bilateralConsentRef != 0 + issuer signature, consent is the caller's responsibility" with
+verified two-party consent (option a): the contract **recomputes** the canonical consent digest
+(`JOINT_CONSENT_TYPEHASH` over party1, party2, the agreement commitment, and the credential hash) and
+requires BOTH parties' signatures over it (`_isValidSignatureBool` → ERC-1271 / ECDSA). The supplied
+`bilateralConsentRef` is now ignored (deprecated field); the stored ref is the recomputed, verified
+digest. Storing a nonzero ref is no longer consent (ADR-0027 corollary 2). New error
+`InvalidPartyConsent`. Foundry: happy-path now signs as both parties; new
+`missingPartyConsent`/`wrongPartyConsent` reverts; full suite 726 green.
+
+**Deferred to the wave redeploy** (no redeploy until the wave is green): the TS encoder
+(`encodeAssertJointAgreement`) + the demo-jp caller (`submitJointAssertionOnChain`) must add the two
+party-consent signatures and drop the supplied ref. Until redeploy the live demo runs on the OLD
+deployed registry + OLD encoder, unaffected. Option (b) (verifyAuthorizationForCall exact-call
+sub-delegation, using RW1-4 + the RW1-4b CallDataHashEnforcer) remains available for a future
+delegation-based consent variant.
 
 ### RW1-2 / RW1-3 (later) — Agreement status party-binding + canonical digest recompute
 
