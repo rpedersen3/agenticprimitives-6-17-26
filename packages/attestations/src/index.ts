@@ -58,6 +58,40 @@ export function computeAttestationUid(args: {
   return hex as Hex32;
 }
 
+/**
+ * RW1-1 (ADR-0027) — canonical joint-agreement consent typehash. MUST byte-equal
+ * `AttestationRegistry.JOINT_CONSENT_TYPEHASH`; enforced by the cross-stack
+ * typehash-equality gate (`check:eip712-typehash-equality`).
+ */
+export const JOINT_CONSENT_TYPEHASH: Hex32 = hashName(
+  'JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash)',
+);
+
+/**
+ * Recompute the consent digest each party signs to consent to a joint agreement
+ * (RW1-1). Equals the contract's `keccak256(abi.encode(JOINT_CONSENT_TYPEHASH,
+ * party1, party2, agreementCommitment, credentialHash))`. `assertJointAgreement`
+ * recomputes the same digest on-chain and verifies BOTH party signatures (ERC-1271
+ * / ECDSA) against it — a stored or supplied consent reference is not consent.
+ */
+export function jointConsentDigest(args: {
+  party1: Address;
+  party2: Address;
+  agreementCommitment: Hex32;
+  credentialHash: Hex32;
+}): Hex32 {
+  const buf = new Uint8Array(5 * 32);
+  writeHex32(buf, 0, JOINT_CONSENT_TYPEHASH);
+  writeAddress(buf, 32, args.party1);
+  writeAddress(buf, 64, args.party2);
+  writeHex32(buf, 96, args.agreementCommitment);
+  writeHex32(buf, 128, args.credentialHash);
+  const digest = keccak_256(buf);
+  let hex = '0x';
+  for (const v of digest) hex += v.toString(16).padStart(2, '0');
+  return hex as Hex32;
+}
+
 function writeAddress(buf: Uint8Array, offset: number, addr: Address): void {
   const clean = addr.toLowerCase().replace(/^0x/, '');
   if (clean.length !== 40) throw new Error(`bad address length: ${addr}`);
@@ -93,17 +127,23 @@ export interface AssociationAttestationRequest {
   salt: bigint;
 }
 
-/** Payload shape for `AttestationRegistry.assertJointAgreement(...)`. */
+/** Payload shape for `AttestationRegistry.assertJointAgreement(...)`.
+ *  RW1-1 (ADR-0027): consent is VERIFIED on-chain from two party signatures over
+ *  the recomputed {@link jointConsentDigest}; `bilateralConsentRef` is ignored by
+ *  the contract (kept in the ABI tuple — pass `bytes32(0)`). */
 export interface JointAgreementAttestationRequest {
   schemaId: Hex32;
   credentialType: Hex32;
   credentialHash: Hex32;
   refUID: Hex32;
-  bilateralConsentRef: Hex32;
   offchainCredentialStatusList: Hex32;
   party1: Address;
   party2: Address;
   issuer: Address;
   issuerSignature: Hex;
+  /** party1's consent signature over {@link jointConsentDigest} (ERC-1271 / ECDSA). */
+  party1Signature: Hex;
+  /** party2's consent signature over {@link jointConsentDigest} (ERC-1271 / ECDSA). */
+  party2Signature: Hex;
   salt: bigint;
 }
