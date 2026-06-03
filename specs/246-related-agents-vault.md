@@ -43,6 +43,17 @@ When a relying app asks Connect to create (or link) a **related agent** for the 
 5. **Connect also mints an `org→broker-org` delegation** so a designated broker org SA can later
    **list the orgs delegated to it** (`/connect/delegated-orgs?delegate=`). This is how the JP broker
    org enumerates the adopter/facilitator orgs that granted it scoped access — no person→org exposure.
+6. **Connect mints the two person↔org read delegations** (the stewardship + membership pair). Both are
+   signed by the person's ROOT credential, which custodies BOTH the person SA and the created org SA
+   (the org is custodied by the person's ROOT), so each side's ERC-1271 validates the same credential:
+   - **Membership — `person → org`:** the created ORG can read the MEMBER person's data (its member).
+   - **Stewardship — `org → person`:** the PERSON can read / oversee the created ORG's data.
+   Both are persisted in the person's related-agent vault link (`related:<person>:<org>`) and returned by
+   `GET /connect/related-orgs`. The reads themselves go through the per-agent MCP vault over the
+   delegation (spec 247): present the delegation whose delegator is the data owner → the relayer mints a
+   token with `sub = owner` → the MCP keys by the owner. (Both delegations are signed at create time, so
+   each adds a credential ceremony; batching the org-create signatures is a follow-up — see spec 226 /
+   the value-steps-not-signatures guidance.)
 
 ## 3. Confidentiality
 
