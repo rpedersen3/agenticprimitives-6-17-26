@@ -5,6 +5,7 @@ import { startSiteEnrollment, startOrgCreation, exchangeCode, verifyIdToken, lis
 import { orgPurpose } from './lib/member-org';
 import { predictOrgAddress } from './lib/onchain';
 import { MemberOrgSection } from './components/MemberOrgSection';
+import { IntentRequest } from './components/IntentRequest';
 import { toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
 import {
   type AdopterStep, type AdopterType, type Attestation,
@@ -521,6 +522,7 @@ export function App() {
           key={vaultBump}
           session={session}
           org={relatedOrgs.find((o) => o.purpose === orgPurpose('adopter')) ?? null}
+          relatedOrgs={relatedOrgs}
           onCreateOrg={(name) => goCreateOrg('adopter', name)}
           onSignOut={signOut}
           onOpenWea={() => setModal({ kind: 'wea' })}
@@ -737,8 +739,8 @@ function OnboardPanel({ kind, busy, onClose, onConnect }: {
 // these ceremonies). Steps that Impact already satisfies show as "✓ on file";
 // JP-specific steps expand into inline forms when active.
 
-function AdopterIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
-  session: Session; org: RelatedOrgLink | null; onCreateOrg: (orgName: string) => void;
+function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
+  session: Session; org: RelatedOrgLink | null; relatedOrgs: RelatedOrgLink[]; onCreateOrg: (orgName: string) => void;
   onSignOut: () => void; onOpenWea: () => void;
   onGoEditProfile: (missingKeys: string[]) => void;
   onGoSignWea: () => void;
@@ -787,6 +789,10 @@ function AdopterIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, onGo
       )}
 
       <MemberOrgSection kind="adopter" org={org} onCreateOrg={onCreateOrg} />
+
+      <section className="section wrap" style={{ paddingTop: 0 }}>
+        <IntentRequest personSa={session.address} personName={session.name} orgs={relatedOrgs} />
+      </section>
 
       {complete ? (
         <AdoptionSummary session={session} record={record} impact={impact} />
