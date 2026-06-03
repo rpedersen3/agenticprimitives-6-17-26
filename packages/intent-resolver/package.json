@@ -1,7 +1,8 @@
 {
   "name": "@agenticprimitives/intent-resolver",
   "version": "0.0.0-stub.0",
-  "description": "Resolver layer skeleton (W1) \u2014 types + PassThroughResolver only. Full resolver engine deferred to W2.",
+  "private": true,
+  "description": "Resolver layer skeleton (W1) — types + PassThroughResolver only. Full resolver engine deferred to W2.",
   "license": "MIT",
   "repository": {
     "type": "git",
