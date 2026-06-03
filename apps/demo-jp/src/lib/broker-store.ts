@@ -8,7 +8,7 @@
 
 import type { Address, Hex } from '@agenticprimitives/types';
 import { vaultRead, vaultWrite } from './vault-client.js';
-import { jpVaultOwner } from './onchain.js';
+import { jpVaultOwner, gcVaultOwner } from './onchain.js';
 
 export type IntentDirection = 'receive' | 'give';
 
@@ -109,6 +109,22 @@ export const loadDrafts = () => loadRows<AgreementDraft>(RT.drafts);
 export const saveDrafts = (r: AgreementDraft[]) => saveRows(RT.drafts, r);
 export const loadIssuance = () => loadRows<IssuanceRow>(RT.issuance);
 export const saveIssuance = (r: IssuanceRow[]) => saveRows(RT.issuance, r);
+
+// GC's OWN issuance index — GC is the issuer, so this is GC's record, kept in GC's
+// vault (read/written with Pete's key). GC's dashboard reads THIS (not JP's vault),
+// keeping GC's view to data it owns + on-chain. The receipt mirrored into JP's vault
+// (`saveIssuance`) is the broker's org-level copy of what it brokered.
+const RT_GC_ISSUANCE = 'gc:issuance';
+export async function loadGcIssuance(): Promise<IssuanceRow[]> {
+  const gc = gcVaultOwner();
+  if (!gc) return [];
+  return (await vaultRead<IssuanceRow[]>(gc, RT_GC_ISSUANCE)) ?? [];
+}
+export async function saveGcIssuance(rows: IssuanceRow[]): Promise<void> {
+  const gc = gcVaultOwner();
+  if (!gc) throw new Error('Global Church org not deployed — cannot write its issuance vault');
+  await vaultWrite(gc, RT_GC_ISSUANCE, rows);
+}
 export const loadAssociations = () => loadRows<AssociationRow>(RT.associations);
 export const saveAssociations = (r: AssociationRow[]) => saveRows(RT.associations, r);
 

@@ -37,7 +37,7 @@ import { expressIntent, tryMatch, buildCommitment } from '../lib/intent-flow';
 import { JP_INTENT_OBJECT } from '../lib/intent-payload';
 import {
   loadIntents, saveIntents, loadMatches, saveMatches, loadDrafts, saveDrafts,
-  loadIssuance, saveIssuance, loadAssociations, saveAssociations,
+  loadIssuance, saveIssuance, loadGcIssuance, saveGcIssuance, loadAssociations, saveAssociations,
   type BoardIntent, type BoardMatch, type AgreementDraft, type IssuanceRow, type AssociationRow,
 } from '../lib/broker-store';
 import { FPG_SEED, findPeopleGroup, type PeopleGroup } from '../lib/people-groups';
@@ -243,8 +243,9 @@ export function JillDashboard() {
       <IntentBoard />
       <AssociationIssuer />
       <AgreementsBoard
+        source="jp"
         title="Agreements you brokered"
-        sub="The agreements Global Church issued from your matches + their joint assertions — read live from chain. The terms and member details live in the parties' vaults (JP holds no delegation to them); this view is limited to on-chain truth."
+        sub="The agreements Global Church issued from your matches + their joint assertions — read live from chain, keyed by the org-level receipt in JP's own vault. The terms and member details live in the parties' vaults (JP holds no delegation to them); this view is limited to on-chain truth."
       />
     </div>
   );
@@ -440,19 +441,23 @@ function IntentColumn({ title, rows }: { title: string; rows: BoardIntent[] }) {
 
 function AssociationIssuer() {
   const [associations, setAssociations] = useState<AssociationRow[]>([]);
+  const [members, setMembers] = useState<ReceivedOrgDelegation[]>([]);
+  const [manual, setManual] = useState(false);
   const [kind, setKind] = useState<'facilitator' | 'adopter'>('facilitator');
   const [subject, setSubject] = useState('');
   const [fpgId, setFpgId] = useState(FPG_SEED[0]?.id ?? 'NAJDI');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string; tx?: Hex } | null>(null);
 
-  // Associations are JP's records → JP Org vault (spec 247); load once JP is up.
+  // Associations are JP's records → JP Org vault (spec 247); load once JP is up. The
+  // member orgs (those that delegated to JP) populate the recognition dropdown so JP
+  // recognizes a known member by name rather than pasting an address.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try { await ensureOrgDeployed('jp'); } catch { /* deploy card surfaces errors */ }
-      const rows = await loadAssociations();
-      if (!cancelled) setAssociations(rows);
+      const [rows, mem] = await Promise.all([loadAssociations(), loadReceivedDelegations()]);
+      if (!cancelled) { setAssociations(rows); setMembers(mem); }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -492,7 +497,25 @@ function AssociationIssuer() {
         </Field>
         <Field label="People group"><FpgSelect value={fpgId} onChange={setFpgId} /></Field>
       </div>
-      <Field label="Subject org SA"><input style={inputStyle} placeholder="0x…" value={subject} onChange={(e) => setSubject(e.target.value)} /></Field>
+      <Field label="Organization to recognize">
+        {members.length === 0 || manual ? (
+          <input style={inputStyle} placeholder="0x…" value={subject} onChange={(e) => setSubject(e.target.value)} />
+        ) : (
+          <select style={inputStyle} value={subject} onChange={(e) => setSubject(e.target.value)}>
+            <option value="">Select a JP member org…</option>
+            {members.map((m) => <option key={m.orgAgent} value={m.orgAgent}>{m.orgName || shortHex(m.orgAgent)}</option>)}
+          </select>
+        )}
+        {members.length > 0 && (
+          <button
+            type="button"
+            onClick={() => { setManual(!manual); setSubject(''); }}
+            style={{ background: 'none', border: 'none', color: 'var(--c-primary)', cursor: 'pointer', fontSize: '.74rem', padding: '.25rem 0' }}
+          >
+            {manual ? '↳ pick from JP members' : '↳ enter an address manually'}
+          </button>
+        )}
+      </Field>
       <Btn onClick={issue} busy={busy}>Issue + assert on chain</Btn>
       {msg && <div style={{ marginTop: '.8rem' }}><Banner tone={msg.tone}>{msg.text} {msg.tx && <TxLink hash={msg.tx} />}</Banner></div>}
 
@@ -528,8 +551,9 @@ export function PeteDashboard() {
       <OrgDeployCard org="global-church" />
       <IssuanceDesk />
       <AgreementsBoard
+        source="gc"
         title="Agreements & assertions you issued"
-        sub="Live on-chain truth for every commitment Global Church registered + the bilateral joint assertions it published. The off-chain terms and member details stay in the parties' own vaults — GC holds no delegation to them, so only on-chain facts appear here."
+        sub="Live on-chain truth for every commitment Global Church registered + the bilateral joint assertions it published. Read from GC's OWN issuance index (its vault) + the public chain. The off-chain terms and member details stay in the parties' own vaults — GC holds no delegation to them, so only on-chain facts appear here."
       />
     </div>
   );
@@ -548,7 +572,9 @@ function IssuanceDesk() {
     let cancelled = false;
     void (async () => {
       try { await ensureOrgDeployed('jp'); } catch { /* surfaced elsewhere */ }
-      const [d, i] = await Promise.all([loadDrafts(), loadIssuance()]);
+      // Drafts arrive FROM JP (the D-8 hand-off, JP's vault). The issuance index is
+      // GC's OWN record (GC's vault) — GC reads what it issued, never JP's broker board.
+      const [d, i] = await Promise.all([loadDrafts(), loadGcIssuance()]);
       if (cancelled) return;
       setDrafts(d); setIssuance(i);
     })();
@@ -567,7 +593,9 @@ function IssuanceDesk() {
       if (!res.ok || !res.id) { setMsg({ tone: 'err', text: res.error ?? 'register failed' }); return; }
       const row: IssuanceRow = { agreementCommitment: res.id, adopterParty: d.adopterParty, facilitatorParty: d.facilitatorParty, fpgId: d.fpgId, registeredAt: new Date().toISOString(), registerTxHash: res.txHash };
       const next = [row, ...issuance];
-      setIssuance(next); await saveIssuance(next);
+      setIssuance(next);
+      await saveGcIssuance(next); // GC's own index (source of truth)
+      await saveIssuance(next).catch(() => {}); // org-level receipt to the broker (JP)
       // Consume the draft + remember the issued credential for the joint assertion.
       lastIssued[res.id] = res.issued;
       const remaining = drafts.filter((x) => x.id !== d.id);
@@ -593,8 +621,10 @@ function IssuanceDesk() {
         salt: BigInt(Date.now()),
       });
       if (!res.ok) { setMsg({ tone: 'err', text: res.error ?? 'joint assertion failed' }); return; }
-      const next = issuance.map((x) => x.agreementCommitment === row.agreementCommitment ? { ...x, jointAssertionTxHash: res.txHash } : x);
-      setIssuance(next); await saveIssuance(next);
+      const next = issuance.map((x) => x.agreementCommitment === row.agreementCommitment ? { ...x, jointAssertionTxHash: res.txHash, jointAssertionUid: res.id } : x);
+      setIssuance(next);
+      await saveGcIssuance(next); // GC's own index
+      await saveIssuance(next).catch(() => {}); // broker receipt
       setMsg({ tone: 'ok', text: 'Bilateral joint assertion published on chain.', tx: res.txHash });
     } catch (e) {
       setMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
