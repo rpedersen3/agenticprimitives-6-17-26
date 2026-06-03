@@ -69,3 +69,24 @@ an agent — reads or writes its own namespace, by presenting a delegation it is
 - **Anonymous inbox writes (any agent appends to another's namespace).** Breaks the owner==principal
   invariant and opens a spam/spoof surface; received grants are written by the recipient's custodian or
   under an explicit append-grant instead.
+
+## Deliberate divergence in demo-jp (testnet demo — on record per the 2026-06-03 audit)
+
+Two demo-jp realities knowingly diverge from this ADR. They are accepted **only** for the testnet
+demo; the hardening is scoped in [spec 248](../../specs/248-demo-jp-custody-and-vault-scope-hardening.md)
+and the exposure is catalogued in [`apps/demo-jp/AUDIT.md`](../../apps/demo-jp/AUDIT.md).
+
+1. **`owner == principal` does NOT hold for the operator orgs (GC, JP).** demo-jp derives the Pete/Jill
+   operator EOAs from **hardcoded seeds** (`apps/demo-jp/src/lib/personas.ts`) so the demo survives a
+   cleared browser. Because every browser re-derives the same keys, *any* visitor can sign the
+   owner-issued vault delegation for GC's and JP's vaults — i.e. the invariant this ADR relies on is
+   void for those two orgs. This is a demo custody shortcut, not the model: real custody is per-operator
+   SIWE/KMS (spec 235 / spec 248). Member vaults are unaffected (a member still controls its own key).
+
+2. **A bilateral event may be recorded in BOTH parties' vaults** (carve-out of "single source, no
+   duplication"). GC keeps its agreement issuance index in GC's vault (`gc:issuance`) and JP keeps an
+   **org-level receipt** of the same event in JP's vault. Each org owns *its own ledger* of the shared
+   on-chain event; this is not a cache of the other's record (no read-through, no fallback — ADR-0013
+   intact). The "no duplication" rule still forbids one agent *caching another's* record; it does not
+   forbid each party recording its own view of a shared event. Spec 247 §3's residency table should
+   state this explicitly.

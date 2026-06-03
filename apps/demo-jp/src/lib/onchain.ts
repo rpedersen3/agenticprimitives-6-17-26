@@ -23,7 +23,6 @@ import {
   personaSignHash,
   isContractDeployed,
   encodeRegisterAgreement,
-  encodeAssertAssociation,
   encodeAssertJointAgreement,
   type ExecuteResult,
 } from './chain.js';
@@ -207,36 +206,6 @@ export async function issueAssociationCredential(args: {
   });
   const issuerSignature = await personaSignHash(persona.custodian)(issued.credentialHash);
   return { credential: issued.credential, credentialHash: issued.credentialHash as Hex, issuerSignature, issuer: jp.saAddress };
-}
-
-/** @deprecated on-chain assertion path — recognition is now an off-chain credential
- *  (issueAssociationCredential). Kept for reference; not used by the demo flow. */
-export async function issueAssociationOnChain(args: {
-  subjectOrg: Address;
-  body: JpAssociationBody;
-  validFrom: string;
-  validUntil?: string;
-  salt: bigint;
-}): Promise<OnchainResult & { credential: ReturnType<typeof issueAssociation>['credential'] }> {
-  const jp = await ensureOrgDeployed('jp');
-  const persona = loadOrMintOrgPersona('jp');
-  const issued = issueAssociation({
-    issuerCaip10: `eip155:84532:${jp.saAddress}`,
-    issuer: jp.saAddress,
-    subjectOrg: args.subjectOrg,
-    body: args.body,
-    validFrom: args.validFrom,
-    validUntil: args.validUntil,
-    salt: args.salt,
-  });
-  const issuerSignature = await personaSignHash(persona.custodian)(issued.credentialHash);
-  const data = encodeAssertAssociation({ ...issued.request, issuerSignature });
-  const res = await executeViaSa({
-    sender: jp.saAddress,
-    signHash: personaSignHash(persona.custodian),
-    call: { to: CONTRACTS.attestationRegistry, data },
-  });
-  return { ...res, id: issued.predictedUid, credential: issued.credential };
 }
 
 /** Pete-as-Global-Church registers a two-party agreement commitment. */
