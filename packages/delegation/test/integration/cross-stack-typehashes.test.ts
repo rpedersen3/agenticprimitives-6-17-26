@@ -15,9 +15,22 @@
 // Original D9 finding history is captured in
 // docs/audits/2026-05-packages-contracts-production-readiness.md.
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { keccak256, stringToBytes, encodeAbiParameters, type Hex } from 'viem';
 import { DELEGATION_EIP712_TYPES } from '../../src/hash';
+
+// The LIVE Solidity source (not a hardcoded mirror) — so a Solidity-side edit to the typehash
+// string is caught here, closing the gap where this suite only compared TS to a constant copy.
+const DM_SOL = join(dirname(fileURLToPath(import.meta.url)), '../../../contracts/src/agency/DelegationManager.sol');
+function solTypeString(constant: string): string {
+  const src = readFileSync(DM_SOL, 'utf8');
+  const m = new RegExp(`${constant}\\s*=\\s*keccak256\\(\\s*"([^"]*)"`).exec(src);
+  if (!m) throw new Error(`${constant} keccak256("...") not found in DelegationManager.sol`);
+  return m[1];
+}
 
 // The standard EIP-712 type string for `Delegation` is the primary
 // struct followed by the (alphabetically-sorted, deduped) referenced
@@ -112,6 +125,20 @@ describe('R1 / CROSS-STACK-001 closure — Delegation typehash convergence', () 
     expect(tsHash).toBe(
       '0x52f4b7596c22f77177e8e563e6502ad014a696bfc92f9c6cabcaf5738c4ed265',
     );
+  });
+});
+
+describe('R11 — typehash strings match the LIVE DelegationManager.sol (not a hardcoded mirror)', () => {
+  it('contract DELEGATION_TYPEHASH literal == canonical == TS-derived', () => {
+    const onChain = solTypeString('DELEGATION_TYPEHASH');
+    expect(onChain).toBe(CANONICAL_DELEGATION_TYPE_STRING);
+    expect(onChain).toBe(encodeTypeWithDeps('Delegation', DELEGATION_EIP712_TYPES as unknown as EipTypes));
+  });
+
+  it('contract CAVEAT_TYPEHASH literal == canonical == TS-derived (args still excluded)', () => {
+    const onChain = solTypeString('CAVEAT_TYPEHASH');
+    expect(onChain).toBe(CANONICAL_CAVEAT_TYPE_STRING);
+    expect(onChain).toBe(encodeStruct('Caveat', DELEGATION_EIP712_TYPES.Caveat));
   });
 });
 
