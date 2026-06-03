@@ -117,6 +117,10 @@ export interface RelatedOrgLink {
   purpose: string;
   delegation?: DelegationWire;
   proofHash?: string;
+  /** spec 246 person↔org read delegations: membership = person→org (the org reads its
+   *  member's data); stewardship = org→person (the person reads/oversees the org). */
+  membershipDelegation?: DelegationWire;
+  stewardshipDelegation?: DelegationWire;
 }
 
 /** ADR-0025: ask Connect (the person's home) for the orgs related to THIS app — instead
