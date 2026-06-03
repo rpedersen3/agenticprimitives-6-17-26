@@ -237,7 +237,8 @@ describe('demo-jp spine end-to-end (substrate composability)', () => {
     });
 
     const sigOverHash = hashMessage('demo-signature') as `0x${string}`;
-    const bilateralConsentRef = hashMessage('bilateral-signatures-bundle') as `0x${string}`;
+    const party1Signature = hashMessage('party1-consent') as `0x${string}`;
+    const party2Signature = hashMessage('party2-consent') as `0x${string}`;
     const signedVc = { ...issued.credential, proof: undefined } as Parameters<typeof buildJointAgreementAssertion>[0]['credential'];
 
     const { request, predictedUid } = buildJointAgreementAssertion({
@@ -246,12 +247,14 @@ describe('demo-jp spine end-to-end (substrate composability)', () => {
       party2: b.address,
       issuer: gc.saAddress,
       issuerSignatureOverCredentialHash: sigOverHash,
-      bilateralConsentRef,
+      party1Signature,
+      party2Signature,
       agreementCommitment: issued.registryPayload.agreementCommitment,
       salt: 1n,
     });
     expect(request.refUID).toBe(issued.registryPayload.agreementCommitment);
-    expect(request.bilateralConsentRef).toBe(bilateralConsentRef);
+    expect(request.party1Signature).toBe(party1Signature);
+    expect(request.party2Signature).toBe(party2Signature);
     expect(request.party1).toBe(a.address);
     expect(request.party2).toBe(b.address);
     expect(predictedUid).toMatch(/^0x[0-9a-f]{64}$/);

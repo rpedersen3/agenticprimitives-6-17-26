@@ -61,9 +61,9 @@ describe('demo-jp full lifecycle (IA §4) + on-chain payload shapes', () => {
       salt: 42n,
     });
 
-    // 5. Bilateral joint assertion back-points to the commitment row.
+    // 5. Bilateral joint assertion back-points to the commitment row. RW1-1:
+    //    each party signs the JOINT_CONSENT digest (stubbed here — unit test).
     const sig = hashMessage('issuer-sig') as Hex32;
-    const consent = keccak256(encodePacked(['address', 'address'], [adopterOrg.address, facilitatorOrg.address])) as Hex32;
     const signedVc = { ...issued.credential, proof: undefined } as Parameters<typeof buildJointAgreementAssertion>[0]['credential'];
     const joint = buildJointAgreementAssertion({
       credential: signedVc,
@@ -71,7 +71,8 @@ describe('demo-jp full lifecycle (IA §4) + on-chain payload shapes', () => {
       party2: facilitatorOrg.address,
       issuer: gc.saAddress,
       issuerSignatureOverCredentialHash: sig,
-      bilateralConsentRef: consent,
+      party1Signature: hashMessage('party1-consent') as Hex32,
+      party2Signature: hashMessage('party2-consent') as Hex32,
       agreementCommitment: issued.registryPayload.agreementCommitment,
       salt: 1n,
     });
@@ -127,12 +128,13 @@ describe('demo-jp full lifecycle (IA §4) + on-chain payload shapes', () => {
       credentialType: ('0x' + '22'.repeat(32)) as Hex32,
       credentialHash: ('0x' + '33'.repeat(32)) as Hex32,
       refUID: ('0x' + '44'.repeat(32)) as Hex32,
-      bilateralConsentRef: ('0x' + '55'.repeat(32)) as Hex32,
       offchainCredentialStatusList: ('0x' + '00'.repeat(32)) as Hex32,
       party1: org.address,
       party2: jp.saAddress,
       issuer: jp.saAddress,
       issuerSignature: '0xdead',
+      party1Signature: '0xbeef',
+      party2Signature: '0xcafe',
       salt: 7n,
     });
     const dj = decodeFunctionData({ abi: ATTESTATION_REGISTRY_ABI, data: jointCalldata });

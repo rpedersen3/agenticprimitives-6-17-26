@@ -288,7 +288,10 @@ export function encodeAssertAssociation(req: AssociationAttestationRequest): Hex
   });
 }
 
-/** Encode AttestationRegistry.assertJointAgreement(req) calldata. */
+/** Encode AttestationRegistry.assertJointAgreement(req) calldata.
+ *  RW1-1 (ADR-0027): consent is VERIFIED on-chain from party1Signature +
+ *  party2Signature over the recomputed JOINT_CONSENT digest; `bilateralConsentRef`
+ *  is ignored by the contract (kept in the ABI tuple — we pass bytes32(0)). */
 export function encodeAssertJointAgreement(req: JointAgreementAttestationRequest): Hex {
   return encodeFunctionData({
     abi: ATTESTATION_REGISTRY_ABI,
@@ -298,12 +301,14 @@ export function encodeAssertJointAgreement(req: JointAgreementAttestationRequest
       credentialType: req.credentialType,
       credentialHash: req.credentialHash,
       refUID: req.refUID,
-      bilateralConsentRef: req.bilateralConsentRef,
+      bilateralConsentRef: ('0x' + '00'.repeat(32)) as Hex, // ignored (RW1-1)
       offchainCredentialStatusList: req.offchainCredentialStatusList,
       party1: req.party1,
       party2: req.party2,
       issuer: req.issuer,
       issuerSignature: req.issuerSignature,
+      party1Signature: req.party1Signature,
+      party2Signature: req.party2Signature,
       salt: req.salt,
     }],
   });

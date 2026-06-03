@@ -667,30 +667,18 @@ function IssuanceDesk() {
     } finally { setBusyId(null); }
   }, [drafts, issuance]);
 
-  const publishJoint = useCallback(async (row: IssuanceRow) => {
-    setBusyId(row.agreementCommitment); setMsg(null);
-    try {
-      const issued = lastIssued[row.agreementCommitment];
-      if (!issued) { setMsg({ tone: 'err', text: 'Re-register first (issued credential not cached this session).' }); return; }
-      const bilateralConsentRef = keccak256(toBytes(`bilateral:${row.adopterParty}:${row.facilitatorParty}:${row.agreementCommitment}`)) as Hex32;
-      const res = await submitJointAssertionOnChain({
-        credential: issued.credential,
-        party1: row.adopterParty,
-        party2: row.facilitatorParty,
-        agreementCommitment: row.agreementCommitment as Hex32,
-        bilateralConsentRef,
-        salt: BigInt(Date.now()),
-      });
-      if (!res.ok) { setMsg({ tone: 'err', text: res.error ?? 'joint assertion failed' }); return; }
-      const next = issuance.map((x) => x.agreementCommitment === row.agreementCommitment ? { ...x, jointAssertionTxHash: res.txHash, jointAssertionUid: res.id } : x);
-      setIssuance(next);
-      await saveGcIssuance(next); // GC's own index
-      await saveIssuance(next).catch(() => {}); // broker receipt
-      setMsg({ tone: 'ok', text: 'Bilateral joint assertion published on chain.', tx: res.txHash });
-    } catch (e) {
-      setMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
-    } finally { setBusyId(null); }
-  }, [issuance]);
+  const publishJoint = useCallback((row: IssuanceRow) => {
+    // RW1-1 (ADR-0027): the on-chain joint assertion now REQUIRES both parties'
+    // consent signatures over the JOINT_CONSENT digest. The two-party consent
+    // ceremony (each party signs at their home) lands in the next drop; until then
+    // publish is gated. The agreement COMMITMENT is already registered + verifiable
+    // on chain — only the public bilateral assertion waits on consent.
+    void row;
+    setMsg({
+      tone: 'ok',
+      text: 'Bilateral consent required: both parties must sign at their home before Global Church can publish the joint assertion. Coming in the next drop — the agreement commitment is already registered on chain.',
+    });
+  }, []);
 
   const verify = useCallback(async (row: IssuanceRow) => {
     setBusyId(row.agreementCommitment); setMsg(null);
