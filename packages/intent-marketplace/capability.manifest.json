@@ -6,10 +6,20 @@
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/239-intent-spine.md",
   "summary": "Direct Lane intent marketplace — Intent + ConstraintSet (CSP-shaped) + AssumptionSet + ResolutionReceipt + IntentMatch + composite-score matchmaker. Pool/Proposal lanes deferred.",
-  "spineLayers": [2, 3, 5, 6, 7],
+  "spineLayers": [
+    2,
+    3,
+    5,
+    6,
+    7
+  ],
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"],
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ],
     "shapes": [
       "src/shapes/intents.shacl.ttl",
       "src/shapes/constraints.shacl.ttl"
@@ -19,8 +29,7 @@
     "@agenticprimitives/types",
     "@agenticprimitives/verifiable-credentials",
     "@agenticprimitives/delegation",
-    "@agenticprimitives/intent-resolver",
-    "@agenticprimitives/ontology"
+    "@agenticprimitives/intent-resolver"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
@@ -36,6 +45,45 @@
     "@agenticprimitives/attestations",
     "@agenticprimitives/agreements",
     "@agenticprimitives/payments",
-    "@agenticprimitives/fulfillment"
-  ]
+    "@agenticprimitives/fulfillment",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "Hex32",
+    "IRI",
+    "IntentDirection",
+    "IntentStatus",
+    "VisibilityTier",
+    "Intent",
+    "ConstraintSource",
+    "ConstraintStrength",
+    "ConstraintEnforcement",
+    "ConstraintDomain",
+    "Constraint",
+    "ConstraintSet",
+    "NamedAssumption",
+    "AssumptionSet",
+    "ResolutionReceipt",
+    "IntentMatch",
+    "Commitment",
+    "isCompatible",
+    "composite",
+    "toMatchScore"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1500,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
 }

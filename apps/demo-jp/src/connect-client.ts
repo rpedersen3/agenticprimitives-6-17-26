@@ -84,7 +84,7 @@ interface AuthorizeParams {
   codeChallenge: string;
   agentName: string;
   delegate: Address;
-  template: 'site-login' | 'org-create';
+  template: 'site-login' | 'org-create' | 'jp-data-access';
   orgBase?: string;
   purpose?: string;
   grantOrg?: Address;
@@ -138,6 +138,9 @@ export interface OrgTokenPayload {
   orgName: string;
   edgeId: string;
   governed: boolean;
+  /** spec 247: the org→broker(JP) delegation minted at org-create, for JP to hold in
+   *  its vault as a received delegation (`delegation-received:<orgAgent>`). */
+  brokerDelegation?: DelegationWire | null;
 }
 export interface TokenResult {
   idToken: string;
@@ -157,9 +160,11 @@ export interface IdTokenClaims {
 
 // ── Public surface ─────────────────────────────────────────────────────
 
-/** Build the OIDC `/authorize` request to the person's secure home (template=site-login).
+/** Build the OIDC `/authorize` request to the person's secure home (template=jp-data-access).
  *  demo-jp creates NOTHING locally — no passkey, no account, ZERO prompts on this origin.
- *  The home runs the ceremony, signs the delegation, redirects back with `?code=…&state=…`. */
+ *  The home runs the ceremony, shows the explicit JP data-access consent (read+write your
+ *  profile + adoption records in YOUR vault — spec 247), signs the grant, and redirects back
+ *  with `?code=…&state=…`. demo-jp uses that grant to read/write the member's records. */
 export async function startSiteEnrollment(
   name: string,
 ): Promise<{ ok: true; url: string; state: string; authOrigin: string; codeVerifier: string; nonce: string }> {
@@ -174,7 +179,7 @@ export async function startSiteEnrollment(
     codeChallenge: challenge,
     agentName: name,
     delegate: DEMO_JP_DELEGATE,
-    template: 'site-login',
+    template: 'jp-data-access',
   });
   return { ok: true, url, state, authOrigin, codeVerifier: verifier, nonce };
 }
@@ -225,6 +230,23 @@ export async function listDelegatedOrgs(connectOrigin: string, delegate: Address
   if (!r.ok) return [];
   const b = (await r.json().catch(() => ({}))) as { orgs?: DelegatedOrgLink[] };
   return b.orgs ?? [];
+}
+
+/** spec 247: register a person→org link the operator already governs (their GC/JP org,
+ *  created outside the Connect org-create ceremony) into the person's home vault, so
+ *  /you lists it via the existing related-orgs query. Authorized by control of the person
+ *  SA — `sig` is an ERC-1271 signature over `keccak256("related-orgs:write:<person>")`. */
+export async function registerRelatedOrg(
+  connectOrigin: string,
+  link: { person: Address; orgAgent: Address; orgName: string; purpose: string; requestedBy: string },
+  sig: Hex,
+): Promise<boolean> {
+  const r = await fetch(new URL('/connect/related-orgs', connectOrigin).toString(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...link, sig }),
+  });
+  return r.ok;
 }
 
 /** Exchange the authorization code at /token (PKCE) → { id_token, delegation, org? } (§4.3). */

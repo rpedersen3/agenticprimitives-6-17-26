@@ -1,0 +1,21 @@
+const PACKAGE_STATUS: "w1-foundational"
+function composite(args:
+function isCompatible(a: Intent, b: Intent, opts?:
+function toMatchScore(composite: number): number
+interface AssumptionSet
+interface Commitment
+interface Constraint
+interface ConstraintSet
+interface Intent<TPayload extends Record<string, unknown> = Record<string, unknown>>
+interface IntentMatch
+interface NamedAssumption
+interface ResolutionReceipt
+type ConstraintDomain = { kind: 'enum'
+type ConstraintEnforcement = 'pre-execution' | 'agreement' | 'ranking'
+type ConstraintSource = 'user-asserted' | 'llm-inferred' | 'policy-imposed'
+type ConstraintStrength = 'hard' | 'soft'
+type Hex32 = `0x${string}`
+type IRI = `${string}:${string}`
+type IntentDirection = 'receive' | 'give'
+type IntentStatus = 'drafted' | 'expressed' | 'acknowledged' | 'matched' | 'committed' | 'completed' | 'withdrawn' | 'expired'
+type VisibilityTier = 'Public' | 'PublicCoarse' | 'PrivateCommitment' | 'PrivateZK' | 'OffchainOnly'

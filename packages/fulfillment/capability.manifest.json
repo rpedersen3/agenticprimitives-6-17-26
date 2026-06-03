@@ -6,20 +6,28 @@
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/244-fulfillment.md",
   "summary": "FulfillmentCase lifecycle + Task/Message/Artifact (re-exported from mcp-runtime/a2a) + HandoffPolicy + EvidenceCredential + OutcomeCredential issuance.",
-  "spineLayers": [10, 11, 12],
+  "spineLayers": [
+    10,
+    11,
+    12
+  ],
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"],
-    "shapes": ["src/shapes/fulfillment.shacl.ttl"]
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ],
+    "shapes": [
+      "src/shapes/fulfillment.shacl.ttl"
+    ]
   },
   "imports": [
     "@agenticprimitives/types",
     "@agenticprimitives/verifiable-credentials",
     "@agenticprimitives/attestations",
     "@agenticprimitives/agreements",
-    "@agenticprimitives/delegation",
-    "@agenticprimitives/mcp-runtime",
-    "@agenticprimitives/ontology"
+    "@agenticprimitives/delegation"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
@@ -36,6 +44,39 @@
     "apps/*",
     "@agenticprimitives/intent-marketplace",
     "@agenticprimitives/intent-resolver",
-    "@agenticprimitives/payments"
-  ]
+    "@agenticprimitives/payments",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "Hex32",
+    "FulfillmentLifecycle",
+    "canTransition",
+    "TaskState",
+    "canTaskTransition",
+    "FulfillmentCase",
+    "Task",
+    "HandoffPolicy",
+    "isHandoffAllowed",
+    "Artifact",
+    "OutcomeCredentialSubject",
+    "assertOutcomeCitations",
+    "SpanType",
+    "IntentTraceSpan"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1500,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
 }

@@ -7,8 +7,12 @@
   "specEntry": "../../specs/246-related-agents-vault.md",
   "summary": "Private, holder-resident related-agent credentials (person↔org links as vault situation credentials, never on-chain edges — ADR-0025) + scoped-delegation read caveats + list-query shapes.",
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"]
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ]
   },
   "imports": [
     "@agenticprimitives/types",
@@ -30,14 +34,23 @@
     "@agenticprimitives/tool-policy"
   ],
   "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "RELATED_AGENT_DESCRIPTION",
+    "RelatedAgentBody",
+    "RelatedAgentCredential",
+    "BuildRelatedAgentCredentialArgs",
     "buildRelatedAgentCredential",
     "relatedAgentProofHash",
+    "RelatedAgentReadCaveatArgs",
     "relatedAgentReadCaveats",
-    "RELATED_AGENT_DESCRIPTION",
-    "RelatedAgentCredential",
     "RelatedAgentLink",
     "ListRelatedAgentsResponse",
-    "ListDelegatedAgentsResponse"
+    "DelegatedAgentLink",
+    "ListDelegatedAgentsResponse",
+    "Address",
+    "Hex"
   ],
   "ignoreForAgentContext": [
     "dist/**",

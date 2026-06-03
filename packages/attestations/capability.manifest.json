@@ -6,17 +6,27 @@
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/242-trust-credentials-and-public-assertions.md",
   "summary": "AttestationRegistry SDK (EAS-aligned, bilateral-consent) — Association + JointAgreement + Evidence + Outcome + Validation + TrustUpdate credential types in one on-chain registry per ADR-0023.",
-  "spineLayers": [12, 13, 14, 15],
+  "spineLayers": [
+    12,
+    13,
+    14,
+    15
+  ],
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"],
-    "shapes": ["src/shapes/credentials.shacl.ttl"]
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ],
+    "shapes": [
+      "src/shapes/credentials.shacl.ttl"
+    ]
   },
   "imports": [
     "@agenticprimitives/types",
     "@agenticprimitives/verifiable-credentials",
-    "@agenticprimitives/delegation",
-    "@agenticprimitives/ontology"
+    "@agenticprimitives/delegation"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
@@ -32,6 +42,30 @@
     "@agenticprimitives/intent-resolver",
     "@agenticprimitives/payments",
     "@agenticprimitives/fulfillment",
-    "@agenticprimitives/agreements"
-  ]
+    "@agenticprimitives/agreements",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "Hex32",
+    "CREDENTIAL_TYPE",
+    "computeAttestationUid",
+    "AssociationAttestationRequest",
+    "JointAgreementAttestationRequest"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1500,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
 }

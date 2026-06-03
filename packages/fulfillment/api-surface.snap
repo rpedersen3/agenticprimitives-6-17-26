@@ -1,0 +1,15 @@
+const PACKAGE_STATUS: "w1-foundational"
+function assertOutcomeCitations(subject: OutcomeCredentialSubject): void
+function canTaskTransition(from: TaskState, to: TaskState): boolean
+function canTransition(from: FulfillmentLifecycle, to: FulfillmentLifecycle): boolean
+function isHandoffAllowed(policy: HandoffPolicy, target: Address, targetClass?: string): boolean
+interface Artifact
+interface FulfillmentCase
+interface HandoffPolicy
+interface IntentTraceSpan
+interface OutcomeCredentialSubject
+interface Task
+type FulfillmentLifecycle = 'drafted' | 'clarified' | 'expressed' | 'acknowledged' | 'proposed' | 'accepted' | 'committed' | 'in_progress' | 'fulfilled' | 'validated' | 'archived' | 'canceled' | 'disputed'
+type Hex32 = `0x${string}`
+type SpanType = 'parse' | 'clarify' | 'resolve' | 'match' | 'handoff' | 'tool_call' | 'wallet_simulation' | 'user_approval' | 'execution' | 'validation' | 'task_state_change' | 'lifecycle_transition'
+type TaskState = 'submitted' | 'working' | 'completed' | 'failed' | 'canceled' | 'input-required' | 'rejected' | 'auth-required'

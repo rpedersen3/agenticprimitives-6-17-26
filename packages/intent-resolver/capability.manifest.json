@@ -1,20 +1,28 @@
 {
   "name": "@agenticprimitives/intent-resolver",
   "kind": "capability",
-  "stability": "skeleton",
+  "stability": "experimental",
   "agentEntry": "CLAUDE.md",
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/239-intent-spine.md",
   "summary": "Resolver layer skeleton (W1) — IIntentResolver + ResolvedOrder + PassThroughResolver only. Full resolver engine deferred to W2.",
-  "spineLayers": [4],
+  "spineLayers": [
+    4
+  ],
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"],
-    "shapes": ["src/shapes/resolution.shacl.ttl"]
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ],
+    "shapes": [
+      "src/shapes/resolution.shacl.ttl"
+    ]
   },
   "imports": [
     "@agenticprimitives/types",
-    "@agenticprimitives/ontology"
+    "@agenticprimitives/verifiable-credentials"
   ],
   "allowedImports": [
     "@agenticprimitives/types",
@@ -28,6 +36,28 @@
     "@agenticprimitives/agreements",
     "@agenticprimitives/payments",
     "@agenticprimitives/fulfillment",
-    "@agenticprimitives/delegation"
-  ]
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "IIntentResolver",
+    "ResolvedOrder",
+    "PassThroughResolver"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1500,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
 }

@@ -1,0 +1,11 @@
+const PACKAGE_STATUS: "w1-foundational"
+const STATUS: { readonly NONE: 0
+function bytesCommitment(value: string): Hex32
+function computeAgreementCommitment(args:
+function issuerCommitment(issuer: Address): Hex32
+function nullifierFor(args:
+function partySetCommitment(party1: Address, party2: Address): Hex32
+interface AgreementIssuancePayload
+interface StatusUpdatePayload
+type AgreementStatus = (typeof STATUS)[keyof typeof STATUS]
+type Hex32 = `0x${string}`

@@ -15,8 +15,24 @@
 // projection (vaultProjection) is the small derived view that flows over the delegation.
 
 import type { Address, Hex } from '@agenticprimitives/types';
+import { vaultRead, vaultWrite, vaultList, vaultReadWithDelegation, vaultWriteWithDelegation } from './vault-client.js';
+import { jpVaultOwner } from './onchain.js';
+import type { DelegationWire } from './delegation.js';
 
 export type AdopterType = 'individual' | 'family' | 'group' | 'church' | 'organization' | 'network';
+
+// Delegated-member-records model (spec 247): a member's profile + JP-program records
+// live in the MEMBER's OWN vault. On onboarding the member grants JP a scoped
+// read+write delegation; JP writes/reads these records THROUGH that delegation (the
+// data stays with the member, JP holds only the grant). In the member's own vault
+// the records aren't address-keyed — the member IS the vault owner (principal).
+const RT_ADOPTER = 'jp:adopter';
+const RT_FACILITATOR = 'jp:facilitator';
+const RT_EXCHANGE = 'jp:exchange';
+const RT_PROFILE = 'impact:profile';
+// JP's OWN vault holds the delegations it received, keyed by member SA — this is
+// the broker pool (who delegated access to JP). Written/read with Jill's key.
+const RT_GRANT = (addr: Address) => `jp:grant:${addr.toLowerCase()}`;
 
 export interface ContactProfile {
   /** Display name — first/last let community apps render a friendly header ("Rich
@@ -70,30 +86,79 @@ export interface ImpactProfile {
   };
 }
 
-const IMPACT_KEY = (addr: Address): string => `agenticprimitives:demo-jp:impact-profile:${addr.toLowerCase()}`;
+// The member's community profile — held in the MEMBER's OWN vault, read/written by
+// JP through the member's grant. "Held at your home, re-used across community apps."
+// An empty profile (the demo doesn't seed contact info) keeps the "missing fields"
+// path observable.
+const EMPTY_PROFILE: ImpactProfile = { v: 1, attestations: {} };
 
-/** Empty starting profile — the demo intentionally does NOT seed contact info so the
- *  "missing fields" path is observable. In production this would represent a brand-new
- *  member who hasn't filled in their profile at their Impact home yet. */
-export function loadImpactProfile(addr: Address, _name: string): ImpactProfile {
-  try {
-    const raw = localStorage.getItem(IMPACT_KEY(addr));
-    if (raw) {
-      const p = JSON.parse(raw) as ImpactProfile;
-      if (p.v === 1) return p;
-    }
-  } catch {
-    /* ignore */
-  }
-  return { v: 1, attestations: {} };
+export async function loadImpactProfile(grant: DelegationWire): Promise<ImpactProfile> {
+  const p = await vaultReadWithDelegation<ImpactProfile>(grant, RT_PROFILE);
+  return p && p.v === 1 ? p : EMPTY_PROFILE;
 }
 
-export function saveImpactProfile(addr: Address, profile: ImpactProfile): void {
-  try {
-    localStorage.setItem(IMPACT_KEY(addr), JSON.stringify(profile));
-  } catch {
-    /* ignore */
+export async function saveImpactProfile(grant: DelegationWire, profile: ImpactProfile): Promise<void> {
+  await vaultWriteWithDelegation(grant, RT_PROFILE, profile);
+}
+
+// ── JP's received member grants (the broker pool, in JP's own vault) ───────────
+
+/** Persist the read+write delegation a member granted JP at onboarding, keyed by the
+ *  member SA, in JP's own vault. This is what lets the broker later read every
+ *  participating member's records (through their grant). */
+export async function storeMemberGrant(memberAddr: Address, grant: DelegationWire): Promise<void> {
+  const jp = jpVaultOwner();
+  if (!jp) throw new Error('JP org not deployed — cannot store member grant');
+  await vaultWrite(jp, RT_GRANT(memberAddr), grant);
+}
+
+/** Every member grant JP holds — the broker pool. Each entry carries the member SA +
+ *  the delegation through which JP reads that member's records. */
+export async function loadMemberGrants(): Promise<Array<{ addr: Address; grant: DelegationWire }>> {
+  const jp = jpVaultOwner();
+  if (!jp) return [];
+  const rows = await vaultList(jp);
+  const out: Array<{ addr: Address; grant: DelegationWire }> = [];
+  for (const row of rows) {
+    if (!row.record_type.startsWith('jp:grant:')) continue;
+    const addr = row.record_type.slice('jp:grant:'.length);
+    if (!/^0x[0-9a-f]{40}$/.test(addr)) continue;
+    const grant = await vaultRead<DelegationWire>(jp, row.record_type);
+    if (grant) out.push({ addr: addr as Address, grant });
   }
+  return out;
+}
+
+// ── Org→org delegations JP received (in JP's own vault) ───────────────────────
+//
+// When an adopter/facilitator org delegates scoped access to JP (the org→broker
+// grant minted at org-create), JP holds it in its OWN vault keyed by the grantor
+// org — `delegation-received:<grantorOrg>`. This is the single source for "orgs
+// delegated to JP" (ADR-0013), replacing the Connect-home `delegated-idx` index.
+
+export interface ReceivedOrgDelegation {
+  orgAgent: Address;
+  orgName: string;
+  delegation: DelegationWire;
+}
+
+export async function storeReceivedDelegation(rec: ReceivedOrgDelegation): Promise<void> {
+  const jp = jpVaultOwner();
+  if (!jp) throw new Error('JP org not deployed — cannot store received delegation');
+  await vaultWrite(jp, `delegation-received:${rec.orgAgent.toLowerCase()}`, rec);
+}
+
+export async function loadReceivedDelegations(): Promise<ReceivedOrgDelegation[]> {
+  const jp = jpVaultOwner();
+  if (!jp) return [];
+  const rows = await vaultList(jp);
+  const out: ReceivedOrgDelegation[] = [];
+  for (const row of rows) {
+    if (!row.record_type.startsWith('delegation-received:')) continue;
+    const rec = await vaultRead<ReceivedOrgDelegation>(jp, row.record_type);
+    if (rec?.orgAgent) out.push(rec);
+  }
+  return out;
 }
 
 // ── JP-owned adopter record (program-specific) ────────────────────────────────
@@ -107,35 +172,19 @@ export interface JpAdopterRecord {
   adoption?: AdoptionDeclaration;
 }
 
-const JP_KEY = (addr: Address): string => `agenticprimitives:demo-jp:adopter-record:${addr.toLowerCase()}`;
+const EMPTY_ADOPTER: JpAdopterRecord = { v: 1, attestations: {} };
 
-export function loadJpAdopterRecord(addr: Address): JpAdopterRecord {
-  try {
-    const raw = localStorage.getItem(JP_KEY(addr));
-    if (raw) {
-      const r = JSON.parse(raw) as JpAdopterRecord;
-      if (r.v === 1) return r;
-    }
-  } catch {
-    /* ignore */
-  }
-  return { v: 1, attestations: {} };
+export async function loadJpAdopterRecord(grant: DelegationWire): Promise<JpAdopterRecord> {
+  const r = await vaultReadWithDelegation<JpAdopterRecord>(grant, RT_ADOPTER);
+  return r && r.v === 1 ? r : EMPTY_ADOPTER;
 }
 
-export function saveJpAdopterRecord(addr: Address, record: JpAdopterRecord): void {
-  try {
-    localStorage.setItem(JP_KEY(addr), JSON.stringify(record));
-  } catch {
-    /* ignore */
-  }
+export async function saveJpAdopterRecord(grant: DelegationWire, record: JpAdopterRecord): Promise<void> {
+  await vaultWriteWithDelegation(grant, RT_ADOPTER, record);
 }
 
-export function clearJpAdopterRecord(addr: Address): void {
-  try {
-    localStorage.removeItem(JP_KEY(addr));
-  } catch {
-    /* ignore */
-  }
+export async function clearJpAdopterRecord(grant: DelegationWire): Promise<void> {
+  await vaultWriteWithDelegation(grant, RT_ADOPTER, null);
 }
 
 // ── JP requirements ───────────────────────────────────────────────────────────
@@ -322,35 +371,19 @@ export interface JpFacilitatorRecord {
   publishedUpdates?: PublishedUpdate[];
 }
 
-const FAC_KEY = (addr: Address): string => `agenticprimitives:demo-jp:facilitator-record:${addr.toLowerCase()}`;
+const EMPTY_FACILITATOR: JpFacilitatorRecord = { v: 1, attestations: {} };
 
-export function loadJpFacilitatorRecord(addr: Address): JpFacilitatorRecord {
-  try {
-    const raw = localStorage.getItem(FAC_KEY(addr));
-    if (raw) {
-      const r = JSON.parse(raw) as JpFacilitatorRecord;
-      if (r.v === 1) return r;
-    }
-  } catch {
-    /* ignore */
-  }
-  return { v: 1, attestations: {} };
+export async function loadJpFacilitatorRecord(grant: DelegationWire): Promise<JpFacilitatorRecord> {
+  const r = await vaultReadWithDelegation<JpFacilitatorRecord>(grant, RT_FACILITATOR);
+  return r && r.v === 1 ? r : EMPTY_FACILITATOR;
 }
 
-export function saveJpFacilitatorRecord(addr: Address, record: JpFacilitatorRecord): void {
-  try {
-    localStorage.setItem(FAC_KEY(addr), JSON.stringify(record));
-  } catch {
-    /* ignore */
-  }
+export async function saveJpFacilitatorRecord(grant: DelegationWire, record: JpFacilitatorRecord): Promise<void> {
+  await vaultWriteWithDelegation(grant, RT_FACILITATOR, record);
 }
 
-export function clearJpFacilitatorRecord(addr: Address): void {
-  try {
-    localStorage.removeItem(FAC_KEY(addr));
-  } catch {
-    /* ignore */
-  }
+export async function clearJpFacilitatorRecord(grant: DelegationWire): Promise<void> {
+  await vaultWriteWithDelegation(grant, RT_FACILITATOR, null);
 }
 
 /** Enumerate every address that has a JpFacilitatorRecord in localStorage.
@@ -365,29 +398,6 @@ export function clearJpFacilitatorRecord(addr: Address): void {
  *  In production this scan is JP's broker job — facilitators don't enumerate
  *  each other, they publish coverage and JP matches scoped projections. The
  *  localStorage scan is the demo's substitute for that broker pool. */
-export function loadAllLocalJpFacilitatorAddresses(): Address[] {
-  return _scanAddressesWithPrefix('agenticprimitives:demo-jp:facilitator-record:');
-}
-
-/** Same idea, opposite side: every address with a JpAdopterRecord. Used by
- *  matchAdoptersForFacilitator so an adopter created in one persona surfaces
- *  to a facilitator in another persona (same browser). */
-export function loadAllLocalJpAdopterAddresses(): Address[] {
-  return _scanAddressesWithPrefix('agenticprimitives:demo-jp:adopter-record:');
-}
-
-function _scanAddressesWithPrefix(prefix: string): Address[] {
-  const out: Address[] = [];
-  if (typeof localStorage === 'undefined') return out;
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k || !k.startsWith(prefix)) continue;
-    const addr = k.slice(prefix.length);
-    if (/^0x[0-9a-f]{40}$/.test(addr)) out.push(addr as Address);
-  }
-  return out;
-}
-
 export type FacilitatorStep =
   | 'profile-on-file'        // ✓ Impact has contact + org fields (facilitators are always org)
   | 'wea-on-file'            // ✓ Impact has WEA (always required for facilitators)
@@ -471,37 +481,19 @@ export interface FacilitatorProjection {
 // EIP-712 attestations; for the prototype, seeded counter-parties are pre-opted-in, so a
 // member's click flips the match to "exchanged" immediately.
 
-const EXCHANGE_KEY = (addr: Address): string => `agenticprimitives:demo-jp:contact-exchange:${addr.toLowerCase()}`;
-
-export function loadContactExchanges(addr: Address): string[] {
-  try {
-    const raw = localStorage.getItem(EXCHANGE_KEY(addr));
-    if (raw) {
-      const arr = JSON.parse(raw) as unknown;
-      if (Array.isArray(arr)) return arr.filter((s): s is string => typeof s === 'string');
-    }
-  } catch {
-    /* ignore */
-  }
-  return [];
+export async function loadContactExchanges(grant: DelegationWire): Promise<string[]> {
+  const arr = await vaultReadWithDelegation<unknown>(grant, RT_EXCHANGE);
+  return Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string') : [];
 }
 
-export function recordContactExchange(addr: Address, matchId: string): void {
-  const list = loadContactExchanges(addr);
+export async function recordContactExchange(grant: DelegationWire, matchId: string): Promise<void> {
+  const list = await loadContactExchanges(grant);
   if (list.includes(matchId)) return;
-  try {
-    localStorage.setItem(EXCHANGE_KEY(addr), JSON.stringify([...list, matchId]));
-  } catch {
-    /* ignore */
-  }
+  await vaultWriteWithDelegation(grant, RT_EXCHANGE, [...list, matchId]);
 }
 
-export function clearContactExchanges(addr: Address): void {
-  try {
-    localStorage.removeItem(EXCHANGE_KEY(addr));
-  } catch {
-    /* ignore */
-  }
+export async function clearContactExchanges(grant: DelegationWire): Promise<void> {
+  await vaultWriteWithDelegation(grant, RT_EXCHANGE, null);
 }
 
 export function projectFacilitatorForJp(impact: ImpactProfile, record: JpFacilitatorRecord): FacilitatorProjection {

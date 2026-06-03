@@ -27,9 +27,11 @@ import {
   submitJointAssertionOnChain,
   type OrgChainState,
 } from '../lib/onchain';
-import { getAgreementRecord, isAttestationValid, personaSignHash } from '../lib/chain';
-import { listDelegatedOrgs, type DelegatedOrgLink } from '../connect-client';
-import { PLATFORM_AUTH_ORIGIN } from '../lib/domain';
+import { getAgreementRecord, isAttestationValid } from '../lib/chain';
+import { loadReceivedDelegations, type ReceivedOrgDelegation } from '../lib/vault';
+import { setupOperatorHome, operatorHomeUrl } from '../lib/operator-home';
+import { personChainState, type PersonChainState } from '../lib/person-sa';
+import type { PersonaName } from '../lib/personas';
 import { expressIntent, tryMatch, buildCommitment } from '../lib/intent-flow';
 import { JP_INTENT_OBJECT } from '../lib/intent-payload';
 import {
@@ -116,6 +118,70 @@ function OrgDeployCard({ org }: { org: OrgName }) {
   );
 }
 
+// ─── Operator's own person agent + home (spec 247) ───────────────────────────
+//
+// Pete + Jill are real PERSON Smart Agents — siblings of their org, custodied by
+// the same EOA (person SA @ salt 0, org SA @ salt 1). "Set up" deploys + names the
+// person SA and registers the person→org link at their Connect home; "Open home"
+// deep-links to `<handle>.impact-agent.me/you`, where they sign in with the SAME
+// key and see their org + delegations (deep-link + sign-in-at-home; no handoff).
+function OperatorHomeCard({ who }: { who: PersonaName }) {
+  const [state, setState] = useState<PersonChainState | null>(() => personChainState(who));
+  const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const connect = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const p = await setupOperatorHome(who, setStep);
+      setState(p);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setState(personChainState(who));
+    } finally {
+      setBusy(false);
+      setStep(null);
+    }
+  }, [who]);
+
+  const label = who === 'pete' ? 'Pete' : 'Jill';
+  const homeUrl = state?.deployed ? operatorHomeUrl(state) : null;
+  return (
+    <Card>
+      <SectionHead
+        eyebrow="Your person agent · spec 247"
+        title={`${label}’s home`}
+        sub={`${label} is a real person Smart Agent — a sibling of the org, custodied by the same key. Set it up, then open ${label}’s own home to sign in and see the org + delegations.`}
+      />
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '.4rem 1rem', alignItems: 'center', fontSize: '.85rem' }}>
+        <span style={{ color: 'var(--c-g500)' }}>Name</span>
+        <span>{state?.agentName ? <Mono>{state.agentName}</Mono> : '—'}</span>
+        <span style={{ color: 'var(--c-g500)' }}>Address</span>
+        <span><AddrLink addr={state?.saAddress} /></span>
+        <span style={{ color: 'var(--c-g500)' }}>Status</span>
+        <span>
+          {state?.deployed
+            ? <Pill tone="live">● Deployed + named</Pill>
+            : busy
+              ? <Pill tone="neutral">{step ?? 'Working…'}</Pill>
+              : <Pill tone="warn">Not set up</Pill>}
+        </span>
+      </div>
+      <div style={{ marginTop: '.8rem', display: 'flex', gap: '.7rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <Btn onClick={connect} busy={busy}>{state?.deployed ? 'Re-sync home' : `Set up ${label}’s home`}</Btn>
+        {homeUrl && (
+          <a href={homeUrl} target="_blank" rel="noreferrer" style={{ fontSize: '.85rem', fontWeight: 600, color: 'var(--c-accent, #2563eb)' }}>
+            Open {label}’s home ↗
+          </a>
+        )}
+      </div>
+      {err && <div style={{ marginTop: '.8rem' }}><Banner tone="err">{err}</Banner></div>}
+    </Card>
+  );
+}
+
 function FpgSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <select style={inputStyle} value={value} onChange={(e) => onChange(e.target.value)}>
@@ -137,6 +203,7 @@ export function JillDashboard() {
         <h1 style={{ fontSize: '1.6rem', marginTop: '.3rem' }}>JP — match brokerage</h1>
         <p style={{ color: 'var(--c-g600)', marginTop: '.4rem', maxWidth: '60ch' }}>{meta.blurb} Direct Lane only (D-27): adopter need ↔ facilitator offer.</p>
       </header>
+      <OperatorHomeCard who="jill" />
       <OrgDeployCard org="jp" />
       <DelegatedOrgsPanel />
       <IntentBoard />
@@ -145,26 +212,23 @@ export function JillDashboard() {
   );
 }
 
-/** spec 246 §5: list the adopter/facilitator orgs that delegated scoped access to JP.
- *  Authorized by proving control of the JP org SA (Jill's custodian signs the fixed
- *  challenge; the Connect endpoint verifies via ERC-1271). No person identity exposed. */
+/** spec 247: list the adopter/facilitator orgs that delegated scoped access to JP —
+ *  read from JP's OWN vault (`delegation-received:<org>`), the single source. JP holds
+ *  the org→broker grant it received; the broker reads it with JP's custodian key. */
 function DelegatedOrgsPanel() {
-  const [orgs, setOrgs] = useState<DelegatedOrgLink[]>([]);
+  const [orgs, setOrgs] = useState<ReceivedOrgDelegation[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setBusy(true); setMsg(null);
     try {
-      // JP org SA must be deployed for the ERC-1271 auth check (the OrgDeployCard
-      // auto-provisions it above).
-      const jp = await ensureOrgDeployed('jp');
-      const persona = loadOrMintOrgPersona('jp');
-      const challenge = keccak256(toBytes(`delegated-orgs:${jp.saAddress.toLowerCase()}`));
-      const sig = await personaSignHash(persona.custodian)(challenge);
-      const list = await listDelegatedOrgs(PLATFORM_AUTH_ORIGIN, jp.saAddress, sig);
+      // JP org SA must be deployed so its vault is addressable (the OrgDeployCard
+      // auto-provisions it above; ensureOrgDeployed is idempotent + deduped).
+      await ensureOrgDeployed('jp');
+      const list = await loadReceivedDelegations();
       setOrgs(list);
-      if (list.length === 0) setMsg('No orgs have delegated to JP yet. They are added when an adopter/facilitator creates an org via demo-jp.');
+      if (list.length === 0) setMsg('No orgs have delegated to JP yet. They are added to JP’s vault when an adopter/facilitator creates an org via demo-jp.');
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
     } finally {
@@ -175,9 +239,9 @@ function DelegatedOrgsPanel() {
   return (
     <Card>
       <SectionHead
-        eyebrow="Spec 246 §5 · scoped delegations"
+        eyebrow="Spec 247 · received delegations"
         title="Orgs delegated to JP"
-        sub="Adopter/facilitator orgs that granted JP scoped access during org creation — the broker's view of participating orgs. Authorized by proving control of the JP org SA (ERC-1271); no person identity is exposed."
+        sub="Adopter/facilitator orgs that granted JP scoped access during org creation — read from JP’s own vault (the single source). No person identity is exposed."
       />
       <Btn onClick={load} busy={busy}>Refresh delegated orgs</Btn>
       {msg && <div style={{ marginTop: '.8rem' }}><Banner tone="warn">{msg}</Banner></div>}
@@ -197,9 +261,9 @@ function DelegatedOrgsPanel() {
 }
 
 function IntentBoard() {
-  const [intents, setIntents] = useState<BoardIntent[]>(() => loadIntents());
-  const [matches, setMatches] = useState<BoardMatch[]>(() => loadMatches());
-  const [drafts, setDrafts] = useState<AgreementDraft[]>(() => loadDrafts());
+  const [intents, setIntents] = useState<BoardIntent[]>([]);
+  const [matches, setMatches] = useState<BoardMatch[]>([]);
+  const [drafts, setDrafts] = useState<AgreementDraft[]>([]);
 
   const [fpgId, setFpgId] = useState(FPG_SEED[0]?.id ?? 'NAJDI');
   const [adopterAddr, setAdopterAddr] = useState('');
@@ -207,10 +271,25 @@ function IntentBoard() {
   const [adopterType, setAdopterType] = useState('church');
   const [err, setErr] = useState<string | null>(null);
 
-  const persist = (next: { i?: BoardIntent[]; m?: BoardMatch[]; d?: AgreementDraft[] }) => {
-    if (next.i) { setIntents(next.i); saveIntents(next.i); }
-    if (next.m) { setMatches(next.m); saveMatches(next.m); }
-    if (next.d) { setDrafts(next.d); saveDrafts(next.d); }
+  // The broker board lives in JP Org's vault (spec 247) — load it once JP is
+  // deployed (ensureOrgDeployed is idempotent + deduped, so this shares the
+  // deploy card's provisioning rather than racing it).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try { await ensureOrgDeployed('jp'); } catch { /* deploy card surfaces errors */ }
+      if (cancelled) return;
+      const [i, m, d] = await Promise.all([loadIntents(), loadMatches(), loadDrafts()]);
+      if (cancelled) return;
+      setIntents(i); setMatches(m); setDrafts(d);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const persist = async (next: { i?: BoardIntent[]; m?: BoardMatch[]; d?: AgreementDraft[] }) => {
+    if (next.i) { setIntents(next.i); await saveIntents(next.i); }
+    if (next.m) { setMatches(next.m); await saveMatches(next.m); }
+    if (next.d) { setDrafts(next.d); await saveDrafts(next.d); }
   };
 
   const express = useCallback(async (direction: 'receive' | 'give') => {
@@ -230,7 +309,7 @@ function IntentBoard() {
       createdAt: new Date().toISOString(),
       state: 'expressed',
     };
-    persist({ i: [...intents, row] });
+    await persist({ i: [...intents, row] });
   }, [adopterAddr, facilitatorAddr, fpgId, adopterType, intents]);
 
   const runMatch = useCallback(async (need: BoardIntent, offer: BoardIntent) => {
@@ -256,7 +335,7 @@ function IntentBoard() {
       adopterParty: need.expressedBy, facilitatorParty: offer.expressedBy, fpgId: need.fpgId,
     };
     void commitment;
-    persist({
+    await persist({
       m: [...matches.filter((x) => x.id !== row.id), row],
       i: intents.map((x) => (x.id === need.id || x.id === offer.id ? { ...x, state: 'matched' } : x)),
     });
@@ -274,7 +353,7 @@ function IntentBoard() {
       capabilityList: ['receive-quarterly-updates', 'send-monthly-support', 'request-prayer-focus'],
       draftedAt: new Date().toISOString(),
     };
-    persist({ d: [...drafts.filter((x) => x.matchId !== m.id), draft] });
+    void persist({ d: [...drafts.filter((x) => x.matchId !== m.id), draft] });
   }, [drafts]);
 
   const needs = intents.filter((i) => i.direction === 'receive');
@@ -360,12 +439,23 @@ function IntentColumn({ title, rows }: { title: string; rows: BoardIntent[] }) {
 }
 
 function AssociationIssuer() {
-  const [associations, setAssociations] = useState<AssociationRow[]>(() => loadAssociations());
+  const [associations, setAssociations] = useState<AssociationRow[]>([]);
   const [kind, setKind] = useState<'facilitator' | 'adopter'>('facilitator');
   const [subject, setSubject] = useState('');
   const [fpgId, setFpgId] = useState(FPG_SEED[0]?.id ?? 'NAJDI');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string; tx?: Hex } | null>(null);
+
+  // Associations are JP's records → JP Org vault (spec 247); load once JP is up.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try { await ensureOrgDeployed('jp'); } catch { /* deploy card surfaces errors */ }
+      const rows = await loadAssociations();
+      if (!cancelled) setAssociations(rows);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const issue = useCallback(async () => {
     setMsg(null);
@@ -381,7 +471,7 @@ function AssociationIssuer() {
       if (!res.ok) { setMsg({ tone: 'err', text: res.error ?? 'issuance failed' }); return; }
       const row: AssociationRow = { uid: res.id ?? ('0x' as Hex), subjectOrg: subject.trim() as Address, associationKind: kind, fpgIds: [fpgId], issuedAt: new Date().toISOString(), txHash: res.txHash };
       const next = [row, ...associations];
-      setAssociations(next); saveAssociations(next);
+      setAssociations(next); await saveAssociations(next);
       setMsg({ tone: 'ok', text: `Association issued + asserted on Base Sepolia.`, tx: res.txHash });
     } catch (e) {
       setMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
@@ -434,6 +524,7 @@ export function PeteDashboard() {
         <h1 style={{ fontSize: '1.6rem', marginTop: '.3rem' }}>Global Church — agreement issuance</h1>
         <p style={{ color: 'var(--c-g600)', marginTop: '.4rem', maxWidth: '60ch' }}>{meta.blurb} Issues the AgreementCredential + registers the commitment-only row, then publishes the bilateral joint assertion.</p>
       </header>
+      <OperatorHomeCard who="pete" />
       <OrgDeployCard org="global-church" />
       <IssuanceDesk />
     </div>
@@ -441,13 +532,24 @@ export function PeteDashboard() {
 }
 
 function IssuanceDesk() {
-  const [drafts, setDrafts] = useState<AgreementDraft[]>(() => loadDrafts());
-  const [issuance, setIssuance] = useState<IssuanceRow[]>(() => loadIssuance());
+  const [drafts, setDrafts] = useState<AgreementDraft[]>([]);
+  const [issuance, setIssuance] = useState<IssuanceRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string; tx?: Hex } | null>(null);
 
-  // Refresh from the broker store on mount (drafts arrive from Jill).
-  useEffect(() => { setDrafts(loadDrafts()); }, []);
+  // Drafts + issuance live in JP Org's vault (spec 247) — drafts arrive from Jill;
+  // Pete (Global Church) reads them via JP's custodian key (held in this demo
+  // browser). Load once JP is up.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try { await ensureOrgDeployed('jp'); } catch { /* surfaced elsewhere */ }
+      const [d, i] = await Promise.all([loadDrafts(), loadIssuance()]);
+      if (cancelled) return;
+      setDrafts(d); setIssuance(i);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const register = useCallback(async (d: AgreementDraft) => {
     setBusyId(d.id); setMsg(null);
@@ -461,11 +563,11 @@ function IssuanceDesk() {
       if (!res.ok || !res.id) { setMsg({ tone: 'err', text: res.error ?? 'register failed' }); return; }
       const row: IssuanceRow = { agreementCommitment: res.id, adopterParty: d.adopterParty, facilitatorParty: d.facilitatorParty, fpgId: d.fpgId, registeredAt: new Date().toISOString(), registerTxHash: res.txHash };
       const next = [row, ...issuance];
-      setIssuance(next); saveIssuance(next);
+      setIssuance(next); await saveIssuance(next);
       // Consume the draft + remember the issued credential for the joint assertion.
       lastIssued[res.id] = res.issued;
       const remaining = drafts.filter((x) => x.id !== d.id);
-      setDrafts(remaining); saveDrafts(remaining);
+      setDrafts(remaining); await saveDrafts(remaining);
       setMsg({ tone: 'ok', text: 'Agreement commitment registered on chain.', tx: res.txHash });
     } catch (e) {
       setMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
@@ -488,7 +590,7 @@ function IssuanceDesk() {
       });
       if (!res.ok) { setMsg({ tone: 'err', text: res.error ?? 'joint assertion failed' }); return; }
       const next = issuance.map((x) => x.agreementCommitment === row.agreementCommitment ? { ...x, jointAssertionTxHash: res.txHash } : x);
-      setIssuance(next); saveIssuance(next);
+      setIssuance(next); await saveIssuance(next);
       setMsg({ tone: 'ok', text: 'Bilateral joint assertion published on chain.', tx: res.txHash });
     } catch (e) {
       setMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });

@@ -14,13 +14,13 @@
 // stay sealed.
 
 import type { Address } from '@agenticprimitives/types';
+import type { DelegationWire } from './delegation';
 import type { AdopterType, AdoptionDeclaration, FacilitatorCapacity, FacilitatorCoverage } from './vault';
 import {
   loadImpactProfile,
   loadJpAdopterRecord,
   loadJpFacilitatorRecord,
-  loadAllLocalJpFacilitatorAddresses,
-  loadAllLocalJpAdopterAddresses,
+  loadMemberGrants,
 } from './vault';
 
 /** What an adopter sees about a facilitator JP introduced them to. Deliberately
@@ -200,11 +200,11 @@ function daysAgo(d: number): number {
  *  from `JpFacilitatorRecord` + `ImpactProfile` at that address) — important when
  *  the same person uses one browser to onboard as both adopter and facilitator,
  *  so the demo doesn't silently drop their own persona out of the match pool. */
-export function matchFacilitatorsForAdopter(
+export async function matchFacilitatorsForAdopter(
   adoption: AdoptionDeclaration,
   adopterType: AdopterType,
   viewerAddress?: Address,
-): MatchedFacilitator[] {
+): Promise<MatchedFacilitator[]> {
   const seeded = SEED_FACILITATORS.filter((f) =>
     f.peopleGroupIds.includes(adoption.peopleGroupId)
     && f.capacity.adopterTypes.includes(adopterType),
@@ -216,8 +216,8 @@ export function matchFacilitatorsForAdopter(
   // surfaces this in production; localStorage scan is its demo substitute.
   const seenIds = new Set<string>();
   const local: MatchedFacilitator[] = [];
-  for (const addr of loadAllLocalJpFacilitatorAddresses()) {
-    const projected = ownFacilitatorAsMatched(addr);
+  for (const { addr, grant } of await loadMemberGrants()) {
+    const projected = await ownFacilitatorAsMatched(grant);
     if (!projected) continue;
     if (!projected.peopleGroupIds.includes(adoption.peopleGroupId)) continue;
     if (!projected.capacity.adopterTypes.includes(adopterType)) continue;
@@ -235,10 +235,10 @@ export function matchFacilitatorsForAdopter(
   return [...local, ...seeded];
 }
 
-export function matchAdoptersForFacilitator(
+export async function matchAdoptersForFacilitator(
   coverage: FacilitatorCoverage,
   viewerAddress?: Address,
-): MatchedAdopter[] {
+): Promise<MatchedAdopter[]> {
   const seeded = SEED_ADOPTERS.filter((a) =>
     coverage.peopleGroupIds.includes(a.peopleGroupId)
     && coverage.capacity.adopterTypes.includes(a.adopterType),
@@ -249,8 +249,8 @@ export function matchAdoptersForFacilitator(
   // demo silently drops the user's own counter-party.
   const seenIds = new Set<string>();
   const local: MatchedAdopter[] = [];
-  for (const addr of loadAllLocalJpAdopterAddresses()) {
-    const projected = ownAdopterAsMatched(addr);
+  for (const { addr, grant } of await loadMemberGrants()) {
+    const projected = await ownAdopterAsMatched(grant);
     if (!projected) continue;
     if (!coverage.peopleGroupIds.includes(projected.peopleGroupId)) continue;
     if (!coverage.capacity.adopterTypes.includes(projected.adopterType)) continue;
@@ -286,10 +286,11 @@ function selfAdopterId(addr: Address): string {
 
 /** Build a `MatchedFacilitator` projection from the viewer's own facilitator
  *  record + Impact profile. Returns null when they aren't (yet) a facilitator. */
-function ownFacilitatorAsMatched(addr: Address): MatchedFacilitator | null {
-  const record = loadJpFacilitatorRecord(addr);
+async function ownFacilitatorAsMatched(grant: DelegationWire): Promise<MatchedFacilitator | null> {
+  const addr = grant.delegator;
+  const record = await loadJpFacilitatorRecord(grant);
   if (!record.coverage) return null;
-  const impact = loadImpactProfile(addr, '');
+  const impact = await loadImpactProfile(grant);
   const c = impact.contact ?? {};
   const orgName = c.organizationName?.trim();
   const orgCountry = c.organizationCountry?.trim();
@@ -315,10 +316,11 @@ function ownFacilitatorAsMatched(addr: Address): MatchedFacilitator | null {
 
 /** Build a `MatchedAdopter` projection from the viewer's own adopter record +
  *  Impact profile. Returns null when they don't (yet) have a declared adoption. */
-function ownAdopterAsMatched(addr: Address): MatchedAdopter | null {
-  const record = loadJpAdopterRecord(addr);
+async function ownAdopterAsMatched(grant: DelegationWire): Promise<MatchedAdopter | null> {
+  const addr = grant.delegator;
+  const record = await loadJpAdopterRecord(grant);
   if (!record.adoption || !record.adopterType) return null;
-  const impact = loadImpactProfile(addr, '');
+  const impact = await loadImpactProfile(grant);
   const c = impact.contact ?? {};
   const firstName = c.firstName?.trim() ?? '—';
   const lastInitial = (c.lastName ?? '').trim().charAt(0).toUpperCase();
@@ -417,21 +419,22 @@ export const SEED_FACILITATOR_UPDATES: MatchedFacilitatorUpdate[] = [
  *  in. Without this, an adopter who is also a facilitator (same browser, same SA)
  *  would never see their own published updates on their adopter dashboard — even
  *  though the facilitator+adopter records sit in the same localStorage. */
-export function updatesForAdopter(
+export async function updatesForAdopter(
   facilitatorId: string,
   peopleGroupId: string,
-  viewerAddress?: Address,
-): MatchedFacilitatorUpdate[] {
+  viewerGrant?: DelegationWire,
+): Promise<MatchedFacilitatorUpdate[]> {
   const seeded = SEED_FACILITATOR_UPDATES
     .filter((u) => u.facilitatorId === facilitatorId && u.peopleGroupId === peopleGroupId);
 
   // Self-persona: if the matched facilitator is the viewer's own persona, fold in
-  // their record's published updates filtered to the same FPG.
-  // SEC-022: derive via the central helper so the matching invariant holds.
+  // their record's published updates (read through the viewer's own grant) filtered
+  // to the same FPG. SEC-022: derive via the central helper so the invariant holds.
+  const viewerAddress = viewerGrant?.delegator;
   const selfPersonaId = viewerAddress ? selfFacilitatorId(viewerAddress) : null;
   const own: MatchedFacilitatorUpdate[] = [];
-  if (selfPersonaId === facilitatorId && viewerAddress) {
-    const record = loadJpFacilitatorRecord(viewerAddress);
+  if (selfPersonaId === facilitatorId && viewerGrant) {
+    const record = await loadJpFacilitatorRecord(viewerGrant);
     for (const u of record.publishedUpdates ?? []) {
       if (u.peopleGroupId !== peopleGroupId) continue;
       own.push({

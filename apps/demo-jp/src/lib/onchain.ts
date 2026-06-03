@@ -27,6 +27,7 @@ import {
   type ExecuteResult,
 } from './chain.js';
 import { loadOrMintOrgPersona, type OrgName, type OrgPersona } from './org-personas.js';
+import type { VaultOwner } from './vault-client.js';
 import { issueAgreement } from './agreement-flow.js';
 import type { JpAgreementPayload } from './agreement-payload.js';
 import { issueAssociation, type JpAssociationBody } from './issuance-flow.js';
@@ -47,29 +48,43 @@ export interface OrgChainState {
   deployTxHash?: Hex;
 }
 
-const DEPLOY_KEY = (name: OrgName) => `demo-jp/org-deploy/${name}`;
-/** Stable per-org salt (D-5: address reproduces across reloads). */
-const ORG_SALT: Record<OrgName, bigint> = { 'global-church': 0n, jp: 1n };
+/** Stable per-org salt (D-5: address reproduces across reloads). Salt 0 under each
+ *  custodian EOA is RESERVED for that operator's own PERSON SA (spec 247 — it matches
+ *  demo-sso's SIWE derivation `{mode:0, custodians:[eoa], salt:0}`), so the org SAs sit
+ *  at salt 1. GC + JP are under different custodians (Pete / Jill), so both can be 1n. */
+const ORG_SALT: Record<OrgName, bigint> = { 'global-church': 1n, jp: 1n };
+
+// Org-deploy state is DERIVED FROM CHAIN (spec 247): the SA address is the
+// deterministic CREATE2 prediction, and "deployed" is `isContractDeployed` (a
+// chain read) — not persisted in localStorage. This module-level map is a pure
+// per-session transient hint so the sync `orgChainState`/`jpVaultOwner` accessors
+// have an answer after `ensureOrgDeployed` has run; it's rebuilt from chain on
+// reload (the deploy card + panels call `ensureOrgDeployed` on mount).
+const _deployCache = new Map<OrgName, OrgChainState>();
 
 function loadDeployState(name: OrgName): OrgChainState | null {
-  if (typeof localStorage === 'undefined') return null;
-  const raw = localStorage.getItem(DEPLOY_KEY(name));
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as OrgChainState;
-  } catch {
-    return null;
-  }
+  return _deployCache.get(name) ?? null;
 }
 
 function saveDeployState(s: OrgChainState): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(DEPLOY_KEY(s.name), JSON.stringify(s));
+  _deployCache.set(s.name, s);
 }
 
 /** Resolve the canonical (factory-derived) org SA address, deploying if needed.
- *  Idempotent: a cached deployed state short-circuits. Returns the chain state. */
-export async function ensureOrgDeployed(name: OrgName): Promise<OrgChainState> {
+ *  Idempotent: a cached deployed state short-circuits. Concurrent callers (the
+ *  deploy card + each broker panel on mount) share ONE in-flight deploy via the
+ *  promise cache below — otherwise they'd each pass the not-yet-deployed check and
+ *  race two deploys (nonce conflict / duplicate). Returns the chain state. */
+const _inflight = new Map<OrgName, Promise<OrgChainState>>();
+export function ensureOrgDeployed(name: OrgName): Promise<OrgChainState> {
+  const existing = _inflight.get(name);
+  if (existing) return existing;
+  const p = _ensureOrgDeployed(name).finally(() => _inflight.delete(name));
+  _inflight.set(name, p);
+  return p;
+}
+
+async function _ensureOrgDeployed(name: OrgName): Promise<OrgChainState> {
   const persona: OrgPersona = loadOrMintOrgPersona(name);
   const cached = loadDeployState(name);
   if (cached?.deployed) return cached;
@@ -115,6 +130,16 @@ export async function predictOrgAddress(name: OrgName): Promise<Address> {
 
 export function orgChainState(name: OrgName): OrgChainState | null {
   return loadDeployState(name);
+}
+
+/** The JP Org vault owner (Jill custodian) for spec-247 vault reads/writes — null
+ *  until JP is deployed + cached. JP is the data custodian (spec 236), so all
+ *  JP-program records (broker state + member records) live in JP's vault, keyed by
+ *  record_type and written/read with Jill's custodian key (held in the demo browser). */
+export function jpVaultOwner(): VaultOwner | null {
+  const s = loadDeployState('jp');
+  if (!s?.deployed) return null;
+  return { owner: s.saAddress, custodian: loadOrMintOrgPersona('jp').custodian };
 }
 
 // ─── Issuance / registration orchestrations ─────────────────────────────────

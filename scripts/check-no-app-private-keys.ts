@@ -66,6 +66,11 @@ const ALLOWED_IN: ReadonlySet<string> = new Set([
   // personas.ts helper is the testnet-only equivalent. Lives only in the
   // demo-jp app; never imported by packages.
   'apps/demo-jp/src/lib/personas.ts',
+  // chain.ts `personaSignHash` converts a Pete/Jill persona's raw EOA key into a
+  // viem signer (privateKeyToAccount) to sign as the org/person SA custodian —
+  // the SAME testnet-only demo custody path as personas.ts (D-1). Production
+  // custodies via KMS-backed signers (spec 235); never imported by packages.
+  'apps/demo-jp/src/lib/chain.ts',
 ]);
 
 // Env-var names that are tolerated EVERYWHERE in apps/. Reserved for the

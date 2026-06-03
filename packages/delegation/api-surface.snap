@@ -23,6 +23,7 @@ re-export SessionPackage from ./types
 re-export SessionRow from ./types
 re-export SessionStore from ./types
 re-export TxContext from ./types
+re-export VerifyAuthorizationResult from ./verify-authorization
 re-export VerifyError from ./types
 re-export VerifyOpts from ./types
 re-export VerifyOptsExt from ./token
@@ -43,4 +44,5 @@ re-export hashDelegation from ./hash
 re-export isRevoked from ./onchain
 re-export mintDelegationToken from ./token
 re-export revokeDelegation from ./onchain
+re-export verifyAuthorization from ./verify-authorization
 re-export verifyDelegationToken from ./token

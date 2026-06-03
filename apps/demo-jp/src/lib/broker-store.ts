@@ -7,6 +7,8 @@
 // Direct-Lane W1 subset (D-27).
 
 import type { Address, Hex } from '@agenticprimitives/types';
+import { vaultRead, vaultWrite } from './vault-client.js';
+import { jpVaultOwner } from './onchain.js';
 
 export type IntentDirection = 'receive' | 'give';
 
@@ -76,41 +78,42 @@ export interface AssociationRow {
   txHash?: Hex;
 }
 
-const K = {
-  intents: 'demo-jp/broker/intents',
-  matches: 'demo-jp/broker/matches',
-  drafts: 'demo-jp/broker/drafts',
-  issuance: 'demo-jp/broker/issuance',
-  associations: 'demo-jp/broker/associations',
+// All broker working state lives in JP Org's own MCP vault (spec 247) — JP is the
+// data custodian (spec 236), so these are JP's records, keyed by record_type and
+// written/read with Jill's custodian key. The vault is the single source; React
+// state in the dashboards is just the rendered view.
+const RT = {
+  intents: 'jp:broker:intents',
+  matches: 'jp:broker:matches',
+  drafts: 'jp:broker:drafts',
+  issuance: 'jp:broker:issuance',
+  associations: 'jp:broker:associations',
 } as const;
 
-function load<T>(key: string): T[] {
-  if (typeof localStorage === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem(key) ?? '[]') as T[];
-  } catch {
-    return [];
-  }
+async function loadRows<T>(rt: string): Promise<T[]> {
+  const jp = jpVaultOwner();
+  if (!jp) return [];
+  return (await vaultRead<T[]>(jp, rt)) ?? [];
 }
-function save<T>(key: string, rows: T[]): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(key, JSON.stringify(rows));
+async function saveRows<T>(rt: string, rows: T[]): Promise<void> {
+  const jp = jpVaultOwner();
+  if (!jp) throw new Error('JP org not deployed — cannot write broker vault');
+  await vaultWrite(jp, rt, rows);
 }
 
-export const loadIntents = () => load<BoardIntent>(K.intents);
-export const saveIntents = (r: BoardIntent[]) => save(K.intents, r);
-export const loadMatches = () => load<BoardMatch>(K.matches);
-export const saveMatches = (r: BoardMatch[]) => save(K.matches, r);
-export const loadDrafts = () => load<AgreementDraft>(K.drafts);
-export const saveDrafts = (r: AgreementDraft[]) => save(K.drafts, r);
-export const loadIssuance = () => load<IssuanceRow>(K.issuance);
-export const saveIssuance = (r: IssuanceRow[]) => save(K.issuance, r);
-export const loadAssociations = () => load<AssociationRow>(K.associations);
-export const saveAssociations = (r: AssociationRow[]) => save(K.associations, r);
+export const loadIntents = () => loadRows<BoardIntent>(RT.intents);
+export const saveIntents = (r: BoardIntent[]) => saveRows(RT.intents, r);
+export const loadMatches = () => loadRows<BoardMatch>(RT.matches);
+export const saveMatches = (r: BoardMatch[]) => saveRows(RT.matches, r);
+export const loadDrafts = () => loadRows<AgreementDraft>(RT.drafts);
+export const saveDrafts = (r: AgreementDraft[]) => saveRows(RT.drafts, r);
+export const loadIssuance = () => loadRows<IssuanceRow>(RT.issuance);
+export const saveIssuance = (r: IssuanceRow[]) => saveRows(RT.issuance, r);
+export const loadAssociations = () => loadRows<AssociationRow>(RT.associations);
+export const saveAssociations = (r: AssociationRow[]) => saveRows(RT.associations, r);
 
-export function resetBrokerStore(): void {
-  if (typeof localStorage === 'undefined') return;
-  for (const key of Object.values(K)) localStorage.removeItem(key);
+export async function resetBrokerStore(): Promise<void> {
+  await Promise.all(Object.values(RT).map((rt) => saveRows(rt, [])));
 }
 
 /** Stable-ish id helper that avoids Math.random (kept deterministic per call site
