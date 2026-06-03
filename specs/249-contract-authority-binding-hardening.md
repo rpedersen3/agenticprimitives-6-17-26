@@ -60,12 +60,40 @@ deployed registry + OLD encoder, unaffected. Option (b) (verifyAuthorizationForC
 sub-delegation, using RW1-4 + the RW1-4b CallDataHashEnforcer) remains available for a future
 delegation-based consent variant.
 
-### RW1-2 / RW1-3 (later) — Agreement status party-binding + canonical digest recompute
+### RW1-2 — `AgreementRegistry.updateStatus` proves the signers are the parties — **CONTRACT DONE**
 
-`updateStatus` proves the signers are members of the party commitment (reveal or membership proof), and
-every registry recomputes the EIP-712 digest from calldata + domain constants rather than accepting a
-caller-supplied `attestationStructHash` (one canonical digest model; gate-checked by
-`check:eip712-typehash-equality` once both sides exist).
+`updateStatus` previously took a caller-supplied `signer1`/`signer2` set and verified only their
+signatures over an off-chain `transitionStructHash` — the contract conceded (in its own docstring) that
+it "DOES NOT enforce identity of signer1/signer2 against the on-chain row." A nonzero, well-signed
+payload from *any* keypair could transition an agreement (ADR-0027: a caller-supplied signer set is not
+authority).
+
+Now the caller **reveals** the two parties + the commitment components (`party1`, `party2`,
+`issuerCommitment`, `termsCommitment`, `scheduleCommitment`, `commitmentSalt`) on the `StatusUpdatePayload`;
+`updateStatus` **recomputes** the agreement commitment with register's exact formula
+(`keccak256(abi.encode(keccak256(party1‖party2), issuerCommitment, termsCommitment, scheduleCommitment,
+salt))`) and reverts `CommitmentMismatch` unless it equals the row's commitment — so the revealed parties
+are provably the agreement's parties. Then each signer must BE one of those two parties (new error
+`SignerNotParty`); bilateral transitions require the two signers be distinct parties. The on-chain row
+still stores NO party SAs — **AR-11 governs `register()` calldata only**; a status transition is already
+a public state change that names its signers, so revealing the parties here leaks nothing new.
+
+Foundry: the four existing transition tests now thread the registered salt + reveal; new
+`signerNotParty` / `secondSignerNotParty` / `revealedComponentMismatch` reverts. AgreementRegistry suite
+11 green; full forge suite green (the one unrelated failure is a concurrent half-applied
+`DeployAuthorityResolution` edit, not this wave).
+
+**Deferred to the wave redeploy:** the TS `agreements` status-transition encoder + any demo-jp caller
+must populate the revealed party/component fields (they already hold them to build the commitment). Live
+demo runs on the OLD deployed registry until the wave redeploys.
+
+### RW1-3 (later) — canonical transition digest recompute
+
+`updateStatus` still accepts a caller-supplied `transitionStructHash` that the parties signed (RW1-2 binds
+*who* signs; RW1-3 binds *what* they sign). Recompute the EIP-712 transition digest on-chain from
+`(agreementCommitment, toStatus, nullifier)` + domain constants rather than trusting the supplied hash,
+giving one canonical digest model across the registries — gate-checked by `check:eip712-typehash-equality`
+once the TS side lands (add a `TRANSITION_TYPEHASH` + the RW1-1 `JOINT_CONSENT_TYPEHASH` to the gate).
 
 ### RW1-4b (optional, with RW1-1) — port `CallDataHashEnforcer`
 

@@ -88,12 +88,15 @@ contract AgreementRegistryTest is Test {
 
     // ─── Status transitions (AR-04..AR-06 + AR-08 nullifier) ────────────
 
+    /// @dev `salt` must match the salt the agreement was registered with so the
+    ///      RW1-2 recompute (partySet + components + salt) equals `commitment`.
     function _updatePayload(
         bytes32 commitment,
         uint8 toStatus,
         bytes32 nullifier,
         uint256 signer1pk,
-        uint256 signer2pk
+        uint256 signer2pk,
+        uint256 salt
     ) internal view returns (AgreementRegistry.StatusUpdatePayload memory p) {
         bytes32 transitionHash = keccak256(abi.encodePacked(commitment, toStatus, nullifier));
         p = AgreementRegistry.StatusUpdatePayload({
@@ -104,7 +107,13 @@ contract AgreementRegistryTest is Test {
             signature1: _sign(transitionHash, signer1pk),
             signature2: signer2pk == 0 ? bytes("") : _sign(transitionHash, signer2pk),
             signer1: vm.addr(signer1pk),
-            signer2: signer2pk == 0 ? address(0) : vm.addr(signer2pk)
+            signer2: signer2pk == 0 ? address(0) : vm.addr(signer2pk),
+            party1: p1,
+            party2: p2,
+            issuerCommitment: keccak256(abi.encodePacked(issuer)),
+            termsCommitment: keccak256("terms"),
+            scheduleCommitment: keccak256("schedule"),
+            commitmentSalt: salt
         });
     }
 
@@ -117,7 +126,8 @@ contract AgreementRegistryTest is Test {
             reg.STATUS_DISPUTED(),
             keccak256("nullifier-1"),
             P1_PK,
-            0
+            0,
+            3
         );
         reg.updateStatus(up);
 
@@ -135,7 +145,8 @@ contract AgreementRegistryTest is Test {
             reg.STATUS_COMPLETED(),
             keccak256("nullifier-2"),
             P1_PK,
-            0 // no second signer
+            0, // no second signer
+            4
         );
         vm.expectRevert(AgreementRegistry.InvalidTransitionSignature.selector);
         reg.updateStatus(up);
@@ -146,7 +157,8 @@ contract AgreementRegistryTest is Test {
             reg.STATUS_COMPLETED(),
             keccak256("nullifier-3"),
             P1_PK,
-            P2_PK
+            P2_PK,
+            4
         );
         reg.updateStatus(up2);
         AgreementRegistry.AgreementRow memory r = reg.getRecord(cmt);
@@ -162,7 +174,8 @@ contract AgreementRegistryTest is Test {
             reg.STATUS_DISPUTED(),
             keccak256("nullifier-4"),
             P1_PK,
-            0
+            0,
+            5
         );
         reg.updateStatus(up);
 
@@ -172,10 +185,68 @@ contract AgreementRegistryTest is Test {
             reg.STATUS_COMPLETED(),
             keccak256("nullifier-4"),
             P1_PK,
-            P2_PK
+            P2_PK,
+            5
         );
         vm.expectRevert(AgreementRegistry.NullifierUsed.selector);
         reg.updateStatus(up2);
+    }
+
+    // ─── RW1-2 (ADR-0027) — signers must BE the agreement's parties ─────
+
+    uint256 internal constant STRANGER_PK = 0xBEEF;
+
+    function test_updateStatus_signerNotPartyReverts() public {
+        AgreementRegistry.AgreementIssuancePayload memory ip = _buildPayload(keccak256("schema-v1"), 7);
+        bytes32 cmt = reg.register(ip);
+
+        // A non-party signs (and the signature is genuine) — still rejected, because
+        // the signer is not one of the two parties the commitment recomputes to.
+        AgreementRegistry.StatusUpdatePayload memory up = _updatePayload(
+            cmt,
+            reg.STATUS_DISPUTED(),
+            keccak256("nullifier-stranger"),
+            STRANGER_PK,
+            0,
+            7
+        );
+        vm.expectRevert(AgreementRegistry.SignerNotParty.selector);
+        reg.updateStatus(up);
+    }
+
+    function test_updateStatus_secondSignerNotPartyReverts() public {
+        AgreementRegistry.AgreementIssuancePayload memory ip = _buildPayload(keccak256("schema-v1"), 8);
+        bytes32 cmt = reg.register(ip);
+
+        // signer1 is a party, signer2 is a stranger → bilateral fails on the party check.
+        AgreementRegistry.StatusUpdatePayload memory up = _updatePayload(
+            cmt,
+            reg.STATUS_COMPLETED(),
+            keccak256("nullifier-stranger2"),
+            P1_PK,
+            STRANGER_PK,
+            8
+        );
+        vm.expectRevert(AgreementRegistry.SignerNotParty.selector);
+        reg.updateStatus(up);
+    }
+
+    function test_updateStatus_revealedComponentMismatchReverts() public {
+        AgreementRegistry.AgreementIssuancePayload memory ip = _buildPayload(keccak256("schema-v1"), 9);
+        bytes32 cmt = reg.register(ip);
+
+        // Tamper a revealed component so the recompute no longer equals the row's commitment.
+        AgreementRegistry.StatusUpdatePayload memory up = _updatePayload(
+            cmt,
+            reg.STATUS_DISPUTED(),
+            keccak256("nullifier-mismatch"),
+            P1_PK,
+            0,
+            9
+        );
+        up.termsCommitment = keccak256("tampered-terms");
+        vm.expectRevert(AgreementRegistry.CommitmentMismatch.selector);
+        reg.updateStatus(up);
     }
 
     function test_isAssertableCommitment_gateway() public {

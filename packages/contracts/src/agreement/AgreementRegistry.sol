@@ -49,6 +49,7 @@ contract AgreementRegistry {
     error InvalidTransitionSignature();
     error NullifierUsed();
     error CommitmentMismatch();
+    error SignerNotParty();
 
     // ─── Storage ────────────────────────────────────────────────────────
 
@@ -102,6 +103,16 @@ contract AgreementRegistry {
         /// @dev Party SAs that signed. For DISPUTED: signer1 only. For COMPLETED/REVOKED: both.
         address signer1;
         address signer2;
+        /// @dev RW1-2 (ADR-0027): the agreement's parties + commitment components, REVEALED at
+        ///      transition time so the contract can recompute the commitment and PROVE the signers
+        ///      are the parties. (Registration stays commitment-only — AR-12; the transition is
+        ///      already a public state change that names its signers.)
+        address party1;
+        address party2;
+        bytes32 issuerCommitment;
+        bytes32 termsCommitment;
+        bytes32 scheduleCommitment;
+        uint256 commitmentSalt;
     }
 
     // ─── Events ─────────────────────────────────────────────────────────
@@ -157,10 +168,13 @@ contract AgreementRegistry {
     /// @notice Update the agreement status. Signing requirements (AR-04..AR-06):
     ///         - DISPUTED: signer1 (either party) only
     ///         - COMPLETED / REVOKED: both signer1 + signer2 (bilateral)
-    ///         The contract DOES NOT enforce identity of signer1/signer2 against
-    ///         the on-chain row (which holds NO party SAs per AR-11). Identity
-    ///         binding is encoded in the off-chain `transitionStructHash` which
-    ///         the parties signed; replay protection comes from the nullifier.
+    ///         RW1-2 (ADR-0027): the caller REVEALS the parties + commitment
+    ///         components; the contract recomputes the commitment (register's
+    ///         exact formula) and requires each signer to BE one of the two
+    ///         parties. The on-chain row still stores NO party SAs (AR-11 covers
+    ///         register() calldata only); the parties surface here because a
+    ///         status transition is already a public state change that names its
+    ///         signers. Replay protection comes from the nullifier.
     function updateStatus(StatusUpdatePayload calldata p) external {
         AgreementRow storage row = _rows[p.agreementCommitment];
         if (row.agreementCommitment == bytes32(0)) revert NotRegistered();
@@ -182,14 +196,29 @@ contract AgreementRegistry {
         if (_nullifiers[p.nullifier]) revert NullifierUsed();
         _nullifiers[p.nullifier] = true;
 
+        // RW1-2 (ADR-0027): PROVE the signers are the agreement's parties. Recompute the agreement
+        // commitment from the REVEALED parties + components (register's exact formula) and require it
+        // to equal the row's commitment; then require each signer to BE a party. The caller-supplied
+        // signer set is no longer trusted (a nonzero commitment ref / arbitrary signer is not authority).
+        {
+            bytes32 partySet = keccak256(abi.encodePacked(p.party1, p.party2));
+            bytes32 recomputed = keccak256(
+                abi.encode(partySet, p.issuerCommitment, p.termsCommitment, p.scheduleCommitment, p.commitmentSalt)
+            );
+            if (recomputed != p.agreementCommitment) revert CommitmentMismatch();
+        }
+
         bool bilateralRequired = (p.toStatus != STATUS_DISPUTED);
 
-        // signer1 always required
+        // signer1 must BE a party, and must have signed.
+        if (p.signer1 != p.party1 && p.signer1 != p.party2) revert SignerNotParty();
         if (!_isValidSignatureBool(p.signer1, p.transitionStructHash, p.signature1)) {
             revert InvalidTransitionSignature();
         }
         if (bilateralRequired) {
+            // both DISTINCT parties must sign.
             if (p.signer2 == address(0) || p.signer2 == p.signer1) revert InvalidTransitionSignature();
+            if (p.signer2 != p.party1 && p.signer2 != p.party2) revert SignerNotParty();
             if (!_isValidSignatureBool(p.signer2, p.transitionStructHash, p.signature2)) {
                 revert InvalidTransitionSignature();
             }
