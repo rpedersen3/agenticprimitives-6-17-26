@@ -75,8 +75,9 @@ demo-jp's operators (Pete → Global Church org; Jill → JP org) are today fixe
 
 - **Sibling custody.** One operator EOA custodies BOTH its person SA and its org SA as siblings —
   different CREATE2 salts, same owner — so there is **no nested ERC-1271** (the org is not custodied by
-  the person SA, but by the same EOA). The person SA is deployed + name-claimed (`pete.demo.agent`,
-  `jill.demo.agent`) via the existing `/a2a/session/deploy` path.
+  the person SA, but by the same EOA). The person SA is deployed + name-claimed (`pete.impact`,
+  `jill.impact`, forced-unique like Connect's `/connect/name`) via the existing `/a2a/session/deploy`
+  path; salt 0 = the person SA (matches demo-sso's SIWE derivation), salt 1 = the org SA.
 - **SIWE-connect.** The operator EOA is registered as a SIWE/wallet credential on the person SA
   (demo-sso wallet onboarding — `bootstrapWithWallet`), so the **same demo-jp key** signs into the
   operator's own Connect home at `<handle>.impact-agent.me/you`, where they see themselves, their orgs,

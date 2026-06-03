@@ -48,8 +48,11 @@ export interface OrgChainState {
 }
 
 const DEPLOY_KEY = (name: OrgName) => `demo-jp/org-deploy/${name}`;
-/** Stable per-org salt (D-5: address reproduces across reloads). */
-const ORG_SALT: Record<OrgName, bigint> = { 'global-church': 0n, jp: 1n };
+/** Stable per-org salt (D-5: address reproduces across reloads). Salt 0 under each
+ *  custodian EOA is RESERVED for that operator's own PERSON SA (spec 247 — it matches
+ *  demo-sso's SIWE derivation `{mode:0, custodians:[eoa], salt:0}`), so the org SAs sit
+ *  at salt 1. GC + JP are under different custodians (Pete / Jill), so both can be 1n. */
+const ORG_SALT: Record<OrgName, bigint> = { 'global-church': 1n, jp: 1n };
 
 function loadDeployState(name: OrgName): OrgChainState | null {
   if (typeof localStorage === 'undefined') return null;

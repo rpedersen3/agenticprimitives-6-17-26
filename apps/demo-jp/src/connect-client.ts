@@ -227,6 +227,23 @@ export async function listDelegatedOrgs(connectOrigin: string, delegate: Address
   return b.orgs ?? [];
 }
 
+/** spec 247: register a person→org link the operator already governs (their GC/JP org,
+ *  created outside the Connect org-create ceremony) into the person's home vault, so
+ *  /you lists it via the existing related-orgs query. Authorized by control of the person
+ *  SA — `sig` is an ERC-1271 signature over `keccak256("related-orgs:write:<person>")`. */
+export async function registerRelatedOrg(
+  connectOrigin: string,
+  link: { person: Address; orgAgent: Address; orgName: string; purpose: string; requestedBy: string },
+  sig: Hex,
+): Promise<boolean> {
+  const r = await fetch(new URL('/connect/related-orgs', connectOrigin).toString(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...link, sig }),
+  });
+  return r.ok;
+}
+
 /** Exchange the authorization code at /token (PKCE) → { id_token, delegation, org? } (§4.3). */
 export async function exchangeCode(authOrigin: string, code: string, codeVerifier: string): Promise<TokenResult> {
   const r = await fetch(new URL('/token', authOrigin).toString(), {

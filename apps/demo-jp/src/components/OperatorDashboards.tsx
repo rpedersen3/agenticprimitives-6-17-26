@@ -29,6 +29,9 @@ import {
 } from '../lib/onchain';
 import { getAgreementRecord, isAttestationValid, personaSignHash } from '../lib/chain';
 import { listDelegatedOrgs, type DelegatedOrgLink } from '../connect-client';
+import { setupOperatorHome, operatorHomeUrl } from '../lib/operator-home';
+import { personChainState, type PersonChainState } from '../lib/person-sa';
+import type { PersonaName } from '../lib/personas';
 import { PLATFORM_AUTH_ORIGIN } from '../lib/domain';
 import { expressIntent, tryMatch, buildCommitment } from '../lib/intent-flow';
 import { JP_INTENT_OBJECT } from '../lib/intent-payload';
@@ -116,6 +119,70 @@ function OrgDeployCard({ org }: { org: OrgName }) {
   );
 }
 
+// ─── Operator's own person agent + home (spec 247) ───────────────────────────
+//
+// Pete + Jill are real PERSON Smart Agents — siblings of their org, custodied by
+// the same EOA (person SA @ salt 0, org SA @ salt 1). "Set up" deploys + names the
+// person SA and registers the person→org link at their Connect home; "Open home"
+// deep-links to `<handle>.impact-agent.me/you`, where they sign in with the SAME
+// key and see their org + delegations (deep-link + sign-in-at-home; no handoff).
+function OperatorHomeCard({ who }: { who: PersonaName }) {
+  const [state, setState] = useState<PersonChainState | null>(() => personChainState(who));
+  const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const connect = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const p = await setupOperatorHome(who, setStep);
+      setState(p);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setState(personChainState(who));
+    } finally {
+      setBusy(false);
+      setStep(null);
+    }
+  }, [who]);
+
+  const label = who === 'pete' ? 'Pete' : 'Jill';
+  const homeUrl = state?.deployed ? operatorHomeUrl(state) : null;
+  return (
+    <Card>
+      <SectionHead
+        eyebrow="Your person agent · spec 247"
+        title={`${label}’s home`}
+        sub={`${label} is a real person Smart Agent — a sibling of the org, custodied by the same key. Set it up, then open ${label}’s own home to sign in and see the org + delegations.`}
+      />
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '.4rem 1rem', alignItems: 'center', fontSize: '.85rem' }}>
+        <span style={{ color: 'var(--c-g500)' }}>Name</span>
+        <span>{state?.agentName ? <Mono>{state.agentName}</Mono> : '—'}</span>
+        <span style={{ color: 'var(--c-g500)' }}>Address</span>
+        <span><AddrLink addr={state?.saAddress} /></span>
+        <span style={{ color: 'var(--c-g500)' }}>Status</span>
+        <span>
+          {state?.deployed
+            ? <Pill tone="live">● Deployed + named</Pill>
+            : busy
+              ? <Pill tone="neutral">{step ?? 'Working…'}</Pill>
+              : <Pill tone="warn">Not set up</Pill>}
+        </span>
+      </div>
+      <div style={{ marginTop: '.8rem', display: 'flex', gap: '.7rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <Btn onClick={connect} busy={busy}>{state?.deployed ? 'Re-sync home' : `Set up ${label}’s home`}</Btn>
+        {homeUrl && (
+          <a href={homeUrl} target="_blank" rel="noreferrer" style={{ fontSize: '.85rem', fontWeight: 600, color: 'var(--c-accent, #2563eb)' }}>
+            Open {label}’s home ↗
+          </a>
+        )}
+      </div>
+      {err && <div style={{ marginTop: '.8rem' }}><Banner tone="err">{err}</Banner></div>}
+    </Card>
+  );
+}
+
 function FpgSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <select style={inputStyle} value={value} onChange={(e) => onChange(e.target.value)}>
@@ -137,6 +204,7 @@ export function JillDashboard() {
         <h1 style={{ fontSize: '1.6rem', marginTop: '.3rem' }}>JP — match brokerage</h1>
         <p style={{ color: 'var(--c-g600)', marginTop: '.4rem', maxWidth: '60ch' }}>{meta.blurb} Direct Lane only (D-27): adopter need ↔ facilitator offer.</p>
       </header>
+      <OperatorHomeCard who="jill" />
       <OrgDeployCard org="jp" />
       <DelegatedOrgsPanel />
       <IntentBoard />
@@ -434,6 +502,7 @@ export function PeteDashboard() {
         <h1 style={{ fontSize: '1.6rem', marginTop: '.3rem' }}>Global Church — agreement issuance</h1>
         <p style={{ color: 'var(--c-g600)', marginTop: '.4rem', maxWidth: '60ch' }}>{meta.blurb} Issues the AgreementCredential + registers the commitment-only row, then publishes the bilateral joint assertion.</p>
       </header>
+      <OperatorHomeCard who="pete" />
       <OrgDeployCard org="global-church" />
       <IssuanceDesk />
     </div>
