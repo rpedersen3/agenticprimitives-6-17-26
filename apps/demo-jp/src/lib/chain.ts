@@ -361,6 +361,33 @@ export async function isAttestationValid(uid: Hex): Promise<boolean> {
   }
 }
 
+// Reverse-resolve an agent address → its primary name (single on-chain
+// reverseResolveString read; forward-confirmed; ADR-0012/0013, no log scan, no
+// fallback). Cached per address so an agreements view resolves each name once.
+const REVERSE_RESOLVER_ABI = [
+  { type: 'function', name: 'reverseResolveString', stateMutability: 'view', inputs: [{ name: 'agent', type: 'address' }], outputs: [{ type: 'string' }] },
+] as const;
+const _nameCache = new Map<string, string | null>();
+export async function reverseName(addr: Address): Promise<string | null> {
+  const key = addr.toLowerCase();
+  const hit = _nameCache.get(key);
+  if (hit !== undefined) return hit;
+  try {
+    const name = (await publicClient().readContract({
+      address: CONTRACTS.agentNameUniversalResolver,
+      abi: REVERSE_RESOLVER_ABI,
+      functionName: 'reverseResolveString',
+      args: [addr],
+    })) as string;
+    const v = name && name.length > 0 ? name : null;
+    _nameCache.set(key, v);
+    return v;
+  } catch {
+    _nameCache.set(key, null);
+    return null;
+  }
+}
+
 /** Base Sepolia explorer link for a tx / address. */
 export function explorerTx(txHash: string): string {
   return `https://sepolia.basescan.org/tx/${txHash}`;

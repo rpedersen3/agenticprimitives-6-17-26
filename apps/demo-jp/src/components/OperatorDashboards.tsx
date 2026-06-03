@@ -16,6 +16,7 @@ import { keccak256, toBytes } from 'viem';
 import type { Address, Hex } from '@agenticprimitives/types';
 
 import { Card, SectionHead, Btn, Mono, Pill, Field, inputStyle, Banner, AddrLink, TxLink, shortHex } from './ui';
+import { AgreementsBoard } from './AgreementsBoard';
 import { PERSONA_META } from '../lib/persona-mode';
 import { loadOrMintOrgPersona, type OrgName } from '../lib/org-personas';
 import {
@@ -241,6 +242,10 @@ export function JillDashboard() {
       <DelegatedOrgsPanel />
       <IntentBoard />
       <AssociationIssuer />
+      <AgreementsBoard
+        title="Agreements you brokered"
+        sub="The agreements Global Church issued from your matches + their joint assertions — read live from chain. The terms and member details live in the parties' vaults (JP holds no delegation to them); this view is limited to on-chain truth."
+      />
     </div>
   );
 }
@@ -522,6 +527,10 @@ export function PeteDashboard() {
       <OperatorHomeCard who="pete" />
       <OrgDeployCard org="global-church" />
       <IssuanceDesk />
+      <AgreementsBoard
+        title="Agreements & assertions you issued"
+        sub="Live on-chain truth for every commitment Global Church registered + the bilateral joint assertions it published. The off-chain terms and member details stay in the parties' own vaults — GC holds no delegation to them, so only on-chain facts appear here."
+      />
     </div>
   );
 }
