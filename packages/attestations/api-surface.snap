@@ -1,0 +1,6 @@
+const CREDENTIAL_TYPE: { readonly Association: `0x${string}`
+const PACKAGE_STATUS: "w1-foundational"
+function computeAttestationUid(args:
+interface AssociationAttestationRequest
+interface JointAgreementAttestationRequest
+type Hex32 = `0x${string}`

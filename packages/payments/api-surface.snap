@@ -1,0 +1,15 @@
+const PACKAGE_STATUS: "w1-foundational"
+function assertClosedMandateInvariants(mandate: PaymentMandate): void
+function assertContextBindingValid(cb: ContextBinding): void
+function computeMandateId(args:
+function getRail(rail: PaymentRail): PaymentRailExecutor | undefined
+function registerRail(executor: PaymentRailExecutor): void
+interface AssetRef
+interface ContextBinding
+interface MandateConstraints
+interface PaymentMandate
+interface PaymentRailExecutor
+type AmountPolicy = { kind: 'exact'
+type Hex32 = `0x${string}`
+type PaymentMandateMode = 'open' | 'closed'
+type PaymentRail = 'x402' | 'wallet' | 'sponsored-userop' | 'escrow' | 'invoice' | 'confidential-aztec' | 'confidential-zcash' | 'confidential-zk-paymaster'

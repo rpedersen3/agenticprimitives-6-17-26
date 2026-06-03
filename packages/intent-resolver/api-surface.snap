@@ -1,0 +1,3 @@
+const PACKAGE_STATUS: "w1-skeleton"
+interface IIntentResolver<TIntent = unknown, TResolved = unknown>
+interface ResolvedOrder<TIntent = unknown>
