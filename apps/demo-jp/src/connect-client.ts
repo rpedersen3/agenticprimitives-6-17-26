@@ -84,7 +84,7 @@ interface AuthorizeParams {
   codeChallenge: string;
   agentName: string;
   delegate: Address;
-  template: 'site-login' | 'org-create';
+  template: 'site-login' | 'org-create' | 'jp-data-access';
   orgBase?: string;
   purpose?: string;
   grantOrg?: Address;
@@ -157,9 +157,11 @@ export interface IdTokenClaims {
 
 // ── Public surface ─────────────────────────────────────────────────────
 
-/** Build the OIDC `/authorize` request to the person's secure home (template=site-login).
+/** Build the OIDC `/authorize` request to the person's secure home (template=jp-data-access).
  *  demo-jp creates NOTHING locally — no passkey, no account, ZERO prompts on this origin.
- *  The home runs the ceremony, signs the delegation, redirects back with `?code=…&state=…`. */
+ *  The home runs the ceremony, shows the explicit JP data-access consent (read+write your
+ *  profile + adoption records in YOUR vault — spec 247), signs the grant, and redirects back
+ *  with `?code=…&state=…`. demo-jp uses that grant to read/write the member's records. */
 export async function startSiteEnrollment(
   name: string,
 ): Promise<{ ok: true; url: string; state: string; authOrigin: string; codeVerifier: string; nonce: string }> {
@@ -174,7 +176,7 @@ export async function startSiteEnrollment(
     codeChallenge: challenge,
     agentName: name,
     delegate: DEMO_JP_DELEGATE,
-    template: 'site-login',
+    template: 'jp-data-access',
   });
   return { ok: true, url, state, authOrigin, codeVerifier: verifier, nonce };
 }

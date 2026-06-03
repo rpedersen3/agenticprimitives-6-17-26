@@ -75,8 +75,12 @@ that set IS the broker pool.
 | delegations an org received (e.g. adopter-org→JP) | **the recipient org's vault** (`delegation-received:<grantorOrg>`) — replaces the Connect-home `delegated-idx` KV (ADR-0013) | the org, via its custodian |
 
 The broker reads any member's records by iterating its stored grants — the data never leaves the
-member's vault; JP holds delegations, not data. (The explicit `jp-data-access` consent template +
-permission screen at the member's home is the consent surface; see §4.)
+member's vault; JP holds delegations, not data. The consent surface is the **`jp-data-access`
+delegation template** (demo-jp's member sign-in): the member's home shows an explicit permission
+screen ("read your profile + adoption records; record your MOU/adoption into your vault on your
+behalf; cannot move funds / change recovery / share without a new permission") before minting the
+read+write grant. (Caveat-level data-scoping is consent-expressed here, not yet MCP-enforced — a
+future data-scope enforcer would gate the vault tools cryptographically.)
 
 ## 4. Operator identity: sibling custody + SIWE-connect
 
