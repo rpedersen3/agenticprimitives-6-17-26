@@ -190,7 +190,8 @@ consent-verified-off-chain model in ADR-0023) but are correctly flagged as produ
 declarative): *every authority-bearing action binds the signature to a canonical typed payload the
 verifier RECOMPUTES from calldata + domain constants — a stored hash, caller-supplied digest, or
 nonzero reference is not authority; `refUID`/`schemaId`/`bilateralConsentRef` must be dereferenced or
-proven, not merely stored.* Track as a new ADR or an ADR-0022 amendment.
+proven, not merely stored.* **Landed as [ADR-0027](decisions/0027-canonical-authority-binding.md)**
+(complements ADR-0022); RW1-1..RW1-4 are its open enforcement items.
 
 **Already in place (review recommendations that are NOT gaps):**
 - The production CI gates the review lists **all exist**: `check:eip712-typehash-equality`,
