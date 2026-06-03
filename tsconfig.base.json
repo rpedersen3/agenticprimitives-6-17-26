@@ -26,6 +26,7 @@
       "@agenticprimitives/connect-auth/google": ["packages/connect-auth/src/methods/google.ts"],
       "@agenticprimitives/agent-account": ["packages/agent-account/src/index.ts"],
       "@agenticprimitives/delegation": ["packages/delegation/src/index.ts"],
+      "@agenticprimitives/related-agents": ["packages/related-agents/src/index.ts"],
       "@agenticprimitives/key-custody": ["packages/key-custody/src/index.ts"],
       "@agenticprimitives/key-custody/local": ["packages/key-custody/src/providers/local.ts"],
       "@agenticprimitives/key-custody/aws": ["packages/key-custody/src/providers/aws.ts"],
