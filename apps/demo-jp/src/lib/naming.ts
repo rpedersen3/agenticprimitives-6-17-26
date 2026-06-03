@@ -60,12 +60,8 @@ export async function buildNameClaimCallData(sa: Address, base: string): Promise
   return { callData: buildExecuteBatchCallData(calls), name };
 }
 
-/** The SA's current primary `.impact` name, or `null` — so an already-deployed SA is
- *  only given a name when it doesn't already have one. */
-export async function reverseName(sa: Address): Promise<string | null> {
-  try {
-    return await namingClient().reverseResolve(sa);
-  } catch {
-    return null;
-  }
-}
+// Reverse resolution (SA → primary `.impact` name) has ONE implementation in this app:
+// `chain.ts reverseName` (single on-chain `reverseResolveString` read, cached — ADR-0013,
+// one fact / one mechanism). Re-export it here so existing `naming.ts` importers keep
+// working without a second, differently-cached code path.
+export { reverseName } from './chain.js';
