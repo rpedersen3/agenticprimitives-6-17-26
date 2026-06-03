@@ -6,7 +6,7 @@
 // sentinels never live on-chain; their semantics live in this package's
 // evaluator (off-chain only).
 
-import { encodeAbiParameters, type Hex, type Address } from 'viem';
+import { encodeAbiParameters, keccak256, type Hex, type Address } from 'viem';
 import { keccak_256 } from '@noble/hashes/sha3';
 import type { Caveat, DataScopeGrant } from './types';
 
@@ -62,6 +62,17 @@ export function encodeAllowedMethodsTerms(selectors: Hex[]): Hex {
     }
   }
   return encodeAbiParameters([{ type: 'bytes4[]' }], [selectors]);
+}
+
+/** Exact-calldata pinning (CallDataHashEnforcer — ADR-0027 / spec 249 RW1-4b): terms =
+ *  abi.encode(bytes32 keccak256(callData)). Binds a (sub-)delegation to EXACTLY one call so a
+ *  registry checking `verifyAuthorizationForCall` authorizes only that precise payload — not
+ *  merely its target + selector. Pass the exact `execute(...)`/inner calldata the grant permits. */
+export function encodeCallDataHashTerms(callData: Hex): Hex {
+  if (!/^0x([0-9a-fA-F]{2})*$/.test(callData)) {
+    throw new Error('encodeCallDataHashTerms: callData must be 0x-prefixed even-length hex');
+  }
+  return encodeAbiParameters([{ type: 'bytes32' }], [keccak256(callData)]);
 }
 
 // ─── Off-chain sentinel caveat builders ──────────────────────────────────

@@ -38,7 +38,7 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 6. `src/caveats.ts` (builders + evaluator); `src/sessions.ts` (SessionManager); `src/token.ts` (mint + verify)
 
 ## Stable public exports
-**Caveats:** `ROOT_AUTHORITY`, `buildCaveat`, `buildMcpToolScopeCaveat`, `buildDataScopeCaveat`, `buildDelegateBindingCaveat`, `encodeTimestampTerms`, `encodeValueTerms`, `encodeAllowedTargetsTerms`, `encodeAllowedMethodsTerms`
+**Caveats:** `ROOT_AUTHORITY`, `buildCaveat`, `buildMcpToolScopeCaveat`, `buildDataScopeCaveat`, `buildDelegateBindingCaveat`, `encodeTimestampTerms`, `encodeValueTerms`, `encodeAllowedTargetsTerms`, `encodeAllowedMethodsTerms`, `encodeCallDataHashTerms`
 **Hashing:** `hashDelegation`, `hashCaveats`, `evaluateCaveats`
 **Browser:** `DelegationClient`
 **Sessions:** `SessionManager`, `SessionStore`
