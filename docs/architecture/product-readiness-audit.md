@@ -170,6 +170,47 @@ third-party audit + operational hardening** — matches this doc's standing verd
 
 ---
 
+## W1-Substrate Contract Authority Review — June 2026 (incorporated)
+
+A second 2026-06-03 review focused on the new W1 coordination-substrate contracts. Its top contract
+claims were **spot-verified accurate** against source. Several are *by-design* (the commitment-only,
+consent-verified-off-chain model in ADR-0023) but are correctly flagged as production-readiness gaps —
+"a stored nonzero hash is not consent verification." Recorded as RW1-* (open unless noted):
+
+| ID | Sev | Finding (verified) | Note |
+| --- | --- | --- | --- |
+| **RW1-1** | **P0** | **`AttestationRegistry.assertJointAgreement` does not enforce bilateral consent on-chain.** It requires `bilateralConsentRef != 0` and verifies only the ISSUER signature; AR-04 comment says "bilateral consent verification is the caller's responsibility" (`AttestationRegistry.sol:172-182`). An issuer-signed credential can publish a joint assertion with an arbitrary nonzero ref unless every consumer independently rejects it. | OPEN. Fix: verify both party signatures OR a `DelegationManager` authorization for the exact call before storing. |
+| **RW1-2** | **P0** | **`AgreementRegistry.updateStatus` does not prove signers are the parties.** It accepts caller-supplied `signer1`/`signer2`/`transitionStructHash` + a `partySetCommitment` but does not bind the signers to a provable membership of that commitment (`AgreementRegistry.sol:86,97-104`). | OPEN. Fix: store a party commitment with a verifiable membership path, OR reveal party SAs for status updates, OR move private transitions fully off-chain. |
+| **RW1-3** | **P0** | **Registry signatures not uniformly bound to recomputed canonical typed payloads.** Attestation verifies over `credentialHash`; Agreement verifies over a caller-supplied `attestationStructHash`; the VC package signs its own EIP-712 digest. The contracts do not all recompute the digest from calldata + domain constants. | OPEN. Partially mitigated: the delegation typehash IS now gate-verified TS↔live-Solidity (see below). Registry digests still need on-chain recompute. Doctrine: **DOC-3** below. |
+| **RW1-4** | **P1** | **`DelegationManager.verifyAuthorization` (view) does not evaluate caveats** — only chain/sig/authority/revocation. Too weak for bilateral consent unless the consumer enforces exact-call caveats. | OPEN. Fix: a `verifyAuthorizationForCall(delegations, sender, target, value, data)` that evaluates the pinned-calldata/target/method/value/time caveats. |
+| **RW1-5** | **P1** | **New W1 packages are stub/foundational** (`0.0.0-stub.0`, several `--passWithNoTests`): payments rail execution, replay tracking, full VC verification, resolver engine, fulfillment persistence, privacy-vault enforcement not yet implemented (`payments`, `fulfillment`, `intent-resolver`). | OPEN. Fix: remove `--passWithNoTests`, require per-package invariant suites, block publish/deploy for `stub`/`foundational` status. |
+| **RW1-6** | **P1** | **Deploy leaves `.impact` root with the deployer.** `Deploy.s.sol` routes `.agent` to `roles.namingRootOwner` but initializes `.impact` with the deployer; production must transfer root ownership to governance/multisig + assert the postcondition. | OPEN. Intersects N1 (governance keys). |
+
+**Recommended doctrine — DOC-3 (Canonical authority binding).** Extends ADR-0022 (authority-must-be-
+declarative): *every authority-bearing action binds the signature to a canonical typed payload the
+verifier RECOMPUTES from calldata + domain constants — a stored hash, caller-supplied digest, or
+nonzero reference is not authority; `refUID`/`schemaId`/`bilateralConsentRef` must be dereferenced or
+proven, not merely stored.* Track as a new ADR or an ADR-0022 amendment.
+
+**Already in place (review recommendations that are NOT gaps):**
+- The production CI gates the review lists **all exist**: `check:eip712-typehash-equality`,
+  `check:storage-layouts`, `check:abi-sync`, `check:contracts`, `check:contracts-lint`,
+  `coverage:contracts`. The first is wired into `check:all-publish`.
+- **EXT-2 correction:** the EIP-712 typehash gate is NOT missing — it exists and (strengthened
+  2026-06-03) now compares the TS `DELEGATION_EIP712_TYPES` against the **live `DelegationManager.sol`**
+  source, not just a hardcoded mirror (`packages/delegation/test/integration/cross-stack-typehashes.test.ts`,
+  8 assertions). Remaining typehash gap is the registry digests (RW1-3), a contract-recompute fix, not a
+  missing gate.
+- ADR-0022 already establishes declarative authority (DOC-1/DOC-2: no invisible authority transfer; AI
+  proposes, signatures authorize).
+
+**Package lifecycle states** (adopt as a manifest `productionReadiness` field — RW1-5): `stub` (graph
+only, no runtime) → `foundational` (types/helpers; NOT an authority boundary) → `testnet` (runtime in
+controlled envs) → `audit-ready` (invariant suite + fuzz + typehash/ABI/storage gates + threat model) →
+`production` (external audit + runbook + prod keys + monitors). Block publish/deploy below `testnet`.
+
+---
+
 ## Top Priorities (Next Hardening Pass)
 
 These are the items the next pass should close. Selected by impact × ease — biggest reduction in attack surface per hour of work.
