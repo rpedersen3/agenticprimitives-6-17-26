@@ -183,8 +183,34 @@ export interface OnchainResult extends ExecuteResult {
   id?: Hex32;
 }
 
-/** Jill-as-JP issues a JpAssociationCredential to an org SA + publishes the
- *  on-chain Association assertion (subject = org SA, issuer = JP SA). */
+/** Jill-as-JP issues a JpAssociationCredential to an org SA OFF-CHAIN: builds + JP-signs
+ *  the credential (issuer = JP SA, subject = org SA). NO on-chain assertion — JP stores the
+ *  signed credential in its own vault and delivers a copy to the org's vault. This is the
+ *  recognition that gates brokering; it never touches the AttestationRegistry. */
+export async function issueAssociationCredential(args: {
+  subjectOrg: Address;
+  body: JpAssociationBody;
+  validFrom: string;
+  validUntil?: string;
+  salt: bigint;
+}): Promise<{ credential: ReturnType<typeof issueAssociation>['credential']; credentialHash: Hex; issuerSignature: Hex; issuer: Address }> {
+  const jp = await ensureOrgDeployed('jp');
+  const persona = loadOrMintOrgPersona('jp');
+  const issued = issueAssociation({
+    issuerCaip10: `eip155:84532:${jp.saAddress}`,
+    issuer: jp.saAddress,
+    subjectOrg: args.subjectOrg,
+    body: args.body,
+    validFrom: args.validFrom,
+    validUntil: args.validUntil,
+    salt: args.salt,
+  });
+  const issuerSignature = await personaSignHash(persona.custodian)(issued.credentialHash);
+  return { credential: issued.credential, credentialHash: issued.credentialHash as Hex, issuerSignature, issuer: jp.saAddress };
+}
+
+/** @deprecated on-chain assertion path — recognition is now an off-chain credential
+ *  (issueAssociationCredential). Kept for reference; not used by the demo flow. */
 export async function issueAssociationOnChain(args: {
   subjectOrg: Address;
   body: JpAssociationBody;

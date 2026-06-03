@@ -70,12 +70,19 @@ export interface IssuanceRow {
 
 /** A published Association (JP → org), IA §5.3. */
 export interface AssociationRow {
+  /** On-chain attestation UID when asserted; otherwise the credential hash (off-chain). */
   uid: Hex;
   subjectOrg: Address;
   associationKind: 'facilitator' | 'adopter';
   fpgIds: string[];
   issuedAt: string;
+  /** Present only if asserted on chain. Recognition is now issued OFF chain, so this is
+   *  normally absent — the recognition is the signed credential below. */
   txHash?: Hex;
+  /** The signed JpAssociationCredential JP issued + stored (off-chain recognition). */
+  credential?: unknown;
+  /** JP's signature over the credential hash (proves JP issued it). */
+  issuerSignature?: Hex;
 }
 
 // All broker working state lives in JP Org's own MCP vault (spec 247) — JP is the
