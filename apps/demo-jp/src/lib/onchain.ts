@@ -167,6 +167,15 @@ export function jpVaultOwner(): VaultOwner | null {
   return { owner: s.saAddress, custodian: loadOrMintOrgPersona('jp').custodian };
 }
 
+/** The Global Church Org vault owner (Pete custodian). GC is the ISSUER of agreements,
+ *  so its issuance index is GC's own record — kept in GC's vault, read/written with
+ *  Pete's key. Keeps GC's view strictly to data it owns + on-chain (not JP's vault). */
+export function gcVaultOwner(): VaultOwner | null {
+  const s = loadDeployState('global-church');
+  if (!s?.deployed) return null;
+  return { owner: s.saAddress, custodian: loadOrMintOrgPersona('global-church').custodian };
+}
+
 // ─── Issuance / registration orchestrations ─────────────────────────────────
 
 export interface OnchainResult extends ExecuteResult {

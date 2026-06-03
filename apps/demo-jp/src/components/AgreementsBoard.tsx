@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
 
 import { Card, SectionHead, Pill, Mono, TxLink, shortHex } from './ui';
-import { loadIssuance, type IssuanceRow } from '../lib/broker-store';
+import { loadIssuance, loadGcIssuance, type IssuanceRow } from '../lib/broker-store';
 import { getAgreementRecord, isAttestationValid, reverseName } from '../lib/chain';
 import { ensureOrgDeployed } from '../lib/onchain';
 import { findPeopleGroup } from '../lib/people-groups';
@@ -33,15 +33,17 @@ function statusLabel(s: number | null): { text: string; tone: 'ok' | 'live' | 'n
 const party = (name: string | null, addr: Address) =>
   name ? <span title={addr} style={{ fontWeight: 700, color: 'var(--c-g800)' }}>{name}</span> : <Mono>{shortHex(addr)}</Mono>;
 
-export function AgreementsBoard({ title, sub }: { title: string; sub: string }) {
+export function AgreementsBoard({ title, sub, source }: { title: string; sub: string; source: 'gc' | 'jp' }) {
   const [rows, setRows] = useState<EnrichedRow[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try { await ensureOrgDeployed('jp'); } catch { /* surfaced elsewhere */ }
-      const iss = await loadIssuance().catch(() => [] as IssuanceRow[]);
+      // GC reads its OWN issuance index (GC vault); JP reads the broker receipt (JP vault).
+      // Neither reads the other's vault — each is scoped to data it owns + the public chain.
+      try { await ensureOrgDeployed(source === 'gc' ? 'global-church' : 'jp'); } catch { /* surfaced elsewhere */ }
+      const iss = await (source === 'gc' ? loadGcIssuance() : loadIssuance()).catch(() => [] as IssuanceRow[]);
       const enriched = await Promise.all(iss.map(async (r): Promise<EnrichedRow> => {
         const [rec, valid, adopterName, facName] = await Promise.all([
           getAgreementRecord(r.agreementCommitment),

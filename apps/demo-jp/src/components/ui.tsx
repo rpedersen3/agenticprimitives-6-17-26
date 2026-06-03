@@ -2,8 +2,9 @@
 // Inline styles keyed off the index.html CSS variables so these match the
 // public site palette (teal --c-primary, grey scale, amber --c-accent).
 
-import type { CSSProperties, ReactNode } from 'react';
-import { explorerTx, explorerAddress } from '../lib/chain';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import type { Address } from '@agenticprimitives/types';
+import { explorerTx, explorerAddress, reverseName } from '../lib/chain';
 
 export function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
@@ -102,11 +103,21 @@ export function TxLink({ hash, label }: { hash?: string; label?: string }) {
   );
 }
 
+/** An address link that reverse-resolves the agent's primary name from the naming service
+ *  (single on-chain read, cached). Shows the name when one exists, else the short hex; the
+ *  full address stays in the title + the link points to the explorer. */
 export function AddrLink({ addr }: { addr?: string }) {
+  const [name, setName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!addr) return;
+    let cancelled = false;
+    void reverseName(addr as Address).then((n) => { if (!cancelled) setName(n); });
+    return () => { cancelled = true; };
+  }, [addr]);
   if (!addr) return <span>—</span>;
   return (
-    <a href={explorerAddress(addr)} target="_blank" rel="noreferrer" title={addr}>
-      <Mono>{shortHex(addr, 8, 6)}</Mono>
+    <a href={explorerAddress(addr)} target="_blank" rel="noreferrer" title={name ? `${name} · ${addr}` : addr}>
+      {name ? <span style={{ fontWeight: 600 }}>{name}</span> : <Mono>{shortHex(addr, 8, 6)}</Mono>}
     </a>
   );
 }
