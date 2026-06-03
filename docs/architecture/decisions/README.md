@@ -26,6 +26,13 @@ The drift mode this prevents: an agent doesn't know *why* a boundary is where it
 - [`0018-agenticprimitives-wide-formal-ontology.md`](./0018-agenticprimitives-wide-formal-ontology.md) — a monorepo-wide formal ontology (RDFS/OWL/SHACL) in its own package; pairs with the on-chain ontology (ADR-0009).
 - [`0019-relying-site-authority-is-a-scoped-delegation.md`](./0019-relying-site-authority-is-a-scoped-delegation.md) — a relying site is a scoped ERC-7710 delegate of the person SA, never a custodian; runtime auth = holding a live caveated delegation, not `isCustodian` (closes the spec-229 full-custodian takeover risk).
 - [`0020-faceted-agent-identity-doctrine.md`](./0020-faceted-agent-identity-doctrine.md) — every contextual identity surface is a facet of the canonical Smart Agent; facets are evidence/display/discovery, not authority.
+- [`0021-generic-packages-vs-white-label-apps.md`](./0021-generic-packages-vs-white-label-apps.md) — packages are generic, vertical-agnostic trust building blocks; white-label / faith / deployment specifics live in apps as config data.
+- [`0022-authority-must-be-declarative.md`](./0022-authority-must-be-declarative.md) — authority is a first-class declarative object; CI proves the implementation matches the declaration.
+- [`0023-attestation-registry-eas-aligned-bilateral-consent.md`](./0023-attestation-registry-eas-aligned-bilateral-consent.md) — EAS-aligned, Verax-informed attestation registry with a bilateral-consent model (consent verified off-chain in the commitment-only design — see ADR-0027).
+- [`0024-intent-coordination-substrate.md`](./0024-intent-coordination-substrate.md) — the intent coordination substrate (the 15-layer spine: intent → resolution → agreement → fulfillment → evidence).
+- [`0025-related-agent-links-are-private.md`](./0025-related-agent-links-are-private.md) — person↔org links are private holder-resident vault credentials, never public on-chain edges.
+- [`0026-per-agent-vault-substrate.md`](./0026-per-agent-vault-substrate.md) — an agent's data lives in its own delegation-gated vault, keyed by the delegator-principal (`owner == principal`).
+- [`0027-canonical-authority-binding.md`](./0027-canonical-authority-binding.md) — every authority-bearing verification recomputes the canonical typed payload from calldata + domain constants; a stored hash / caller-supplied digest / nonzero reference is NOT authority. Complements ADR-0022.
 
 ## Status discipline
 
