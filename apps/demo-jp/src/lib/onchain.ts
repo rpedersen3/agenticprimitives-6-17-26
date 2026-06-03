@@ -53,8 +53,9 @@ export interface OrgChainState {
   agentName?: string;
 }
 
-/** The `.impact` name base each org reserves on creation. */
-const ORG_NAME_BASE: Record<OrgName, string> = { 'global-church': 'global-church', jp: 'jp' };
+/** The `.impact` name base each org reserves on creation. Min 3 chars — the
+ *  permissionless subregistry rejects shorter labels (so 'jp' → 'joshua-project'). */
+const ORG_NAME_BASE: Record<OrgName, string> = { 'global-church': 'global-church', jp: 'joshua-project' };
 
 /** Stable per-org salt (D-5: address reproduces across reloads). Salt 0 under each
  *  custodian EOA is RESERVED for that operator's own PERSON SA (spec 247 — it matches

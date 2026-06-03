@@ -29,7 +29,10 @@ function namingClient(): AgentNamingClient {
  *  locally so no cross-origin call is needed (one read mechanism, ADR-0013). */
 export async function pickFreeName(base: string): Promise<{ label: string; name: string; node: Hex }> {
   const naming = namingClient();
-  const s = base.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '') || 'agent';
+  // Min 3 chars (matches Connect's /connect/name): the permissionless subregistry
+  // rejects shorter labels, so a too-short base would revert the on-chain claim.
+  const cleaned = base.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '');
+  const s = cleaned.length >= 3 ? cleaned.slice(0, 24) : 'agent';
   for (let i = 1; i < 50; i++) {
     const label = i === 1 ? s : `${s}${i}`;
     const name = `${label}.impact`;
