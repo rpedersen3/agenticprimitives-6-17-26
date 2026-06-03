@@ -1,0 +1,53 @@
+{
+  "name": "@agenticprimitives/related-agents",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/246-related-agents-vault.md",
+  "summary": "Private, holder-resident related-agent credentials (person↔org links as vault situation credentials, never on-chain edges — ADR-0025) + scoped-delegation read caveats + list-query shapes.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/delegation"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/delegation",
+    "viem"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy"
+  ],
+  "publicExports": [
+    "buildRelatedAgentCredential",
+    "relatedAgentProofHash",
+    "relatedAgentReadCaveats",
+    "RELATED_AGENT_DESCRIPTION",
+    "RelatedAgentCredential",
+    "RelatedAgentLink",
+    "ListRelatedAgentsResponse",
+    "ListDelegatedAgentsResponse"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1500,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

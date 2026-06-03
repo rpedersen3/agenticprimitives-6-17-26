@@ -1,0 +1,57 @@
+{
+  "name": "@agenticprimitives/related-agents",
+  "version": "0.0.0-stub.0",
+  "description": "Private, holder-resident related-agent credentials (person↔org links as vault situation credentials, never on-chain edges — ADR-0025) + scoped-delegation read caveats + list-query shapes. Composes verifiable-credentials + delegation.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/related-agents"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/related-agents",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run test/unit --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
+    "viem": "^2.50.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.8",
+    "viem": "^2.50.0"
+  },
+  "keywords": [
+    "agentic",
+    "primitives",
+    "related-agents",
+    "vault"
+  ]
+}
