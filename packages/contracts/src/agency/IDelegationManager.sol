@@ -80,4 +80,25 @@ interface IDelegationManager {
         Delegation[] calldata delegations,
         address sender
     ) external view returns (bool ok, string memory reason);
+
+    /// @notice View-only authorization of a SPECIFIC call (ADR-0027 / spec 249 RW1-4):
+    ///         validates the chain AND evaluates every caveat's `beforeHook` against the exact
+    ///         `(target, value, data)` read-only, fail-closed. `true` ONLY if the chain validates
+    ///         and every caveat passes under `staticcall`; a denied OR non-view-evaluable caveat
+    ///         yields `false` ("use live redemption"). Lets a registry bind consent to the exact
+    ///         call inside its own transaction. Caveat evaluation mirrors `redeemDelegation`.
+    /// @param delegations Delegation chain, leaf first
+    /// @param sender The address that would be the redeemer
+    /// @param target The exact target of the delegated call
+    /// @param value The exact ETH value
+    /// @param data The exact calldata
+    /// @return ok True if the chain + every caveat authorize this exact call
+    /// @return reason Empty if ok; otherwise short rejection reason
+    function verifyAuthorizationForCall(
+        Delegation[] calldata delegations,
+        address sender,
+        address target,
+        uint256 value,
+        bytes calldata data
+    ) external view returns (bool ok, string memory reason);
 }

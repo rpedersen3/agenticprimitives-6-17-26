@@ -86,6 +86,11 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
         "Caveat(address enforcer,bytes terms)"
     );
 
+    /// @dev Gas cap for the read-only caveat evaluation in `verifyAuthorizationForCall`.
+    ///      Generous for any pure/view enforcer; bounds the gas a stateful enforcer would
+    ///      burn before reverting under staticcall, so on-chain callers get a cheap `false`.
+    uint256 private constant CAVEAT_VIEW_GAS = 1_000_000;
+
     /// @dev Revoked delegation hashes
     mapping(bytes32 => bool) private _revoked;
 
@@ -268,6 +273,65 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
         for (uint256 i = 0; i < delegations.length; i++) {
             (bool valid, string memory r) = _validateDelegationView(delegations, i, sender);
             if (!valid) return (false, r);
+        }
+        return (true, "");
+    }
+
+    /// @notice View verifier for a SPECIFIC call (ADR-0027 / spec 249, RW1-4). Validates the
+    ///         delegation chain AND evaluates every caveat's `beforeHook` against the exact
+    ///         `(target, value, data)` — read-only, FAIL-CLOSED.
+    /// @dev    `verifyAuthorization` checks chain/signature/authority/revocation but NOT the
+    ///         caveats — too weak to authorize a specific call. This evaluates each caveat via
+    ///         `staticcall` (the hook is `external`/non-view because stateful enforcers like
+    ///         Quorum exist). Returns `true` ONLY if the chain validates and EVERY caveat passes
+    ///         read-only. A caveat that reverts (denied) OR cannot be evaluated read-only (a
+    ///         stateful enforcer attempting a write under staticcall) yields `false` — so `true`
+    ///         is a genuine authorization guarantee for this exact call, and `false` means "use
+    ///         live redemption" (which evaluates stateful caveats properly). The caveat
+    ///         evaluation mirrors `_runBeforeHooks` exactly (same args, same `sender`-as-redeemer),
+    ///         so an unknown/no-code enforcer is a no-op here just as it is in redemption. Pure
+    ///         addition — `redeemDelegation` is untouched.
+    /// @param delegations Chain (leaf first; root authority last)
+    /// @param sender The address that would be the redeemer
+    /// @param target The exact target the delegated call would hit
+    /// @param value The exact ETH value
+    /// @param data The exact calldata
+    function verifyAuthorizationForCall(
+        Delegation[] calldata delegations,
+        address sender,
+        address target,
+        uint256 value,
+        bytes calldata data
+    ) external view returns (bool ok, string memory reason) {
+        if (delegations.length == 0) return (false, "empty-chain");
+
+        for (uint256 i = 0; i < delegations.length; i++) {
+            (bool valid, string memory r) = _validateDelegationView(delegations, i, sender);
+            if (!valid) return (false, r);
+
+            Delegation calldata d = delegations[i];
+            bytes32 dHash = hashDelegation(d);
+            for (uint256 j = 0; j < d.caveats.length; j++) {
+                // staticcall the same hook redemption would call; success == satisfied read-only.
+                // Gas-bounded: a stateful enforcer (which would revert on its SSTORE under
+                // staticcall) is capped so an on-chain caller (e.g. RW1-1) sees a cheap, predictable
+                // `false`, not an out-of-gas of the whole call. CAVEAT_VIEW_GAS is generous for any
+                // pure/view enforcer (timestamp/value/targets/methods are all far below it).
+                (bool passed, ) = d.caveats[j].enforcer.staticcall{gas: CAVEAT_VIEW_GAS}(
+                    abi.encodeWithSelector(
+                        ICaveatEnforcer.beforeHook.selector,
+                        d.caveats[j].terms,
+                        d.caveats[j].args,
+                        dHash,
+                        d.delegator,
+                        sender,
+                        target,
+                        value,
+                        data
+                    )
+                );
+                if (!passed) return (false, "caveat-failed");
+            }
         }
         return (true, "");
     }
