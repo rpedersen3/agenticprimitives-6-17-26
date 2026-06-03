@@ -13,6 +13,7 @@ import {TimestampEnforcer} from "../src/enforcers/TimestampEnforcer.sol";
 import {AllowedTargetsEnforcer} from "../src/enforcers/AllowedTargetsEnforcer.sol";
 import {AllowedMethodsEnforcer} from "../src/enforcers/AllowedMethodsEnforcer.sol";
 import {ValueEnforcer} from "../src/enforcers/ValueEnforcer.sol";
+import {CallDataHashEnforcer} from "../src/enforcers/CallDataHashEnforcer.sol";
 import {SmartAgentPaymaster} from "../src/SmartAgentPaymaster.sol";
 import {UniversalSignatureValidator} from "../src/UniversalSignatureValidator.sol";
 import {QuorumEnforcer} from "../src/enforcers/QuorumEnforcer.sol";
@@ -227,6 +228,11 @@ contract Deploy is Script {
         console2.log("AllowedMethods:       %s", address(allowedMethods));
         ValueEnforcer valueEnforcer = new ValueEnforcer();
         console2.log("ValueEnforcer:        %s", address(valueEnforcer));
+        // RW1-4b (spec 249, ADR-0027): exact-calldata pinning enforcer —
+        // terms = abi.encode(keccak256(callData)). The missing primitive for
+        // exact-call sub-delegation (e.g. pinning a sensitive registry call).
+        CallDataHashEnforcer callDataHashEnforcer = new CallDataHashEnforcer();
+        console2.log("CallDataHashEnforcer: %s", address(callDataHashEnforcer));
 
         // 4.5. Spec 207 multi-sig substrate (phase 6c).
         //   QuorumEnforcer = N-of-M signature aggregation caveat that
@@ -465,6 +471,7 @@ contract Deploy is Script {
         vm.serializeAddress(key, "allowedTargetsEnforcer", address(allowedTargets));
         vm.serializeAddress(key, "allowedMethodsEnforcer", address(allowedMethods));
         vm.serializeAddress(key, "valueEnforcer", address(valueEnforcer));
+        vm.serializeAddress(key, "callDataHashEnforcer", address(callDataHashEnforcer));
         vm.serializeAddress(key, "smartAgentPaymaster", address(paymaster));
         vm.serializeAddress(key, "quorumEnforcer", address(quorumEnforcer));
         vm.serializeAddress(key, "approvedHashRegistry", address(approvedHashRegistry));
