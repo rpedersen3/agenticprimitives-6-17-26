@@ -63,3 +63,23 @@ person→org state.**
   only; a vault credential is a different concern (ADR-0021 boundary discipline).
 - **Relying-app-held person→org store.** Distributes the leak to every relying app and makes the person
   unable to revoke visibility centrally. The vault-at-home + query model keeps the person in control.
+
+## `agent-relationships` is structurally PUBLIC — keep it that way (do NOT pretend privacy)
+
+`agent-relationships` (the on-chain edge package) is **structurally public and experimental**: an edge
+written to the AgentRelationship contract is visible to anyone reading the chain. Do **not** try to make
+it "private" — hiding a public edge is a category error. Privacy for person↔org and any sensitive org
+relationship is the job of the PRIVATE related-agent credentials / vault claims this ADR establishes
+(`related-agents` + the Connect vault), never a "hidden" on-chain edge.
+
+**Product rule — consent-gated publication.** A PUBLIC relationship assertion (an `AgentRelationship`
+edge, or a published org↔org joint assertion — spec 242) is written **only after explicit bilateral
+user/org consent**. Default visibility is private (vault). The public graph is **org↔org and only on
+consent**; **person↔org is never public by default**.
+
+So the two siblings, by design:
+- `agent-relationships` — **public**, experimental, **consent-gated** org↔org edges.
+- `related-agents` — **private**, holder-resident credentials (the default for anything sensitive).
+
+This closes the recurring "AgentRelationship privacy" finding: it is not a gap to fix; it is the correct,
+deliberate split — public edge package + private vault package.

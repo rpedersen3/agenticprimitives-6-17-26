@@ -97,6 +97,14 @@ constants.
   Authorization to write an edge goes through the actor's Smart
   Agent ERC-1271 → its CustodyPolicy quorum. The relationships
   package itself MUST stay custody-agnostic.
+- "Make a relationship 'private' / hide an edge / add a privacy flag" —
+  **HARD STOP.** This package is **structurally public + experimental**
+  by design; an edge IS public. Privacy for person↔org and sensitive
+  org relationships belongs to **`related-agents`** (private vault
+  credentials) — see [ADR-0025](../../docs/architecture/decisions/0025-related-agent-links-are-private.md).
+  A PUBLIC edge is written only after **explicit bilateral consent**;
+  default visibility is private (vault), and person↔org is NEVER a
+  public edge.
 
 ## Before you write code
 - [ ] Is the change in the edge / type / role / client surface?
