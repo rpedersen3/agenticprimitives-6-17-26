@@ -48,15 +48,20 @@ export function buildAssociationAssertion(args: {
   return { request, predictedUid };
 }
 
-/** IA §10b: joint agreement assertion with bilateral consent. */
+/** IA §10b: joint agreement assertion with bilateral consent.
+ *  RW1-1 (ADR-0027): consent is two party signatures over the JOINT_CONSENT
+ *  digest (`jointConsentDigest(party1, party2, agreementCommitment,
+ *  credentialHash)`), VERIFIED on-chain — not a supplied reference. */
 export function buildJointAgreementAssertion(args: {
   credential: VerifiableCredential;
   party1: Address;
   party2: Address;
   issuer: Address;
   issuerSignatureOverCredentialHash: Hex;
-  /** Hash of both parties' signatures bundled, OR pinned delegation hash. */
-  bilateralConsentRef: Hex32;
+  /** party1's consent signature over the JOINT_CONSENT digest (ERC-1271 / ECDSA). */
+  party1Signature: Hex;
+  /** party2's consent signature over the JOINT_CONSENT digest (ERC-1271 / ECDSA). */
+  party2Signature: Hex;
   /** Back-pointer to spec 241 AgreementRegistry row. */
   agreementCommitment: Hex32;
   salt: bigint;
@@ -67,12 +72,13 @@ export function buildJointAgreementAssertion(args: {
     credentialType: CREDENTIAL_TYPE.JointAgreement,
     credentialHash: ch,
     refUID: args.agreementCommitment,
-    bilateralConsentRef: args.bilateralConsentRef,
     offchainCredentialStatusList: ('0x' + '00'.repeat(32)) as Hex32,
     party1: args.party1,
     party2: args.party2,
     issuer: args.issuer,
     issuerSignature: args.issuerSignatureOverCredentialHash,
+    party1Signature: args.party1Signature,
+    party2Signature: args.party2Signature,
     salt: args.salt,
   };
   const predictedUid = computeAttestationUid({

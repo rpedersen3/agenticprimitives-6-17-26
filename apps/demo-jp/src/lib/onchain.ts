@@ -244,13 +244,17 @@ export async function registerAgreementOnChain(args: {
 }
 
 /** Pete-as-Global-Church publishes the bilateral joint-agreement assertion that
- *  back-points to the registered commitment row. */
+ *  back-points to the registered commitment row. RW1-1 (ADR-0027): the contract
+ *  VERIFIES both party consent signatures over the JOINT_CONSENT digest
+ *  (`jointConsentDigest(party1, party2, agreementCommitment, credentialHash)`);
+ *  the two signatures are produced by each party at their home and supplied here. */
 export async function submitJointAssertionOnChain(args: {
   credential: ReturnType<typeof issueAgreement>['credential'];
   party1: Address;
   party2: Address;
   agreementCommitment: Hex32;
-  bilateralConsentRef: Hex32;
+  party1Signature: Hex;
+  party2Signature: Hex;
   salt: bigint;
 }): Promise<OnchainResult> {
   const gc = await ensureOrgDeployed('global-church');
@@ -263,12 +267,13 @@ export async function submitJointAssertionOnChain(args: {
     credentialType: CREDENTIAL_TYPE.JointAgreement,
     credentialHash: ch,
     refUID: args.agreementCommitment,
-    bilateralConsentRef: args.bilateralConsentRef,
     offchainCredentialStatusList: ZERO32,
     party1: args.party1,
     party2: args.party2,
     issuer: gc.saAddress,
     issuerSignature,
+    party1Signature: args.party1Signature,
+    party2Signature: args.party2Signature,
     salt: args.salt,
   });
   const res = await executeViaSa({
