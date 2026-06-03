@@ -33,6 +33,7 @@ The drift mode this prevents: an agent doesn't know *why* a boundary is where it
 - [`0025-related-agent-links-are-private.md`](./0025-related-agent-links-are-private.md) — person↔org links are private holder-resident vault credentials, never public on-chain edges.
 - [`0026-per-agent-vault-substrate.md`](./0026-per-agent-vault-substrate.md) — an agent's data lives in its own delegation-gated vault, keyed by the delegator-principal (`owner == principal`).
 - [`0027-canonical-authority-binding.md`](./0027-canonical-authority-binding.md) — every authority-bearing verification recomputes the canonical typed payload from calldata + domain constants; a stored hash / caller-supplied digest / nonzero reference is NOT authority. Complements ADR-0022.
+- [`0028-accepted-testnet-posture.md`](./0028-accepted-testnet-posture.md) — a bounded set of disclosed-demo-key / deferred-custody trade-offs (N1, DEMO-1/2, operator sessions, stub packages) are DECIDED + gated; reviewers cite this ADR and confirm the gate, they do NOT re-raise them as new findings.
 
 ## Status discipline
 

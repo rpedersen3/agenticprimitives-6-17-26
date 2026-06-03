@@ -14,7 +14,22 @@
 
 External reviewers occasionally read this doc top-to-bottom and conflate items that were CLOSED in a hardening wave with items still open. Quick disambiguation:
 
-- **N1 — leaked deployer key (P0):** OPEN. Intentional for the public-reproducible testnet demo; production rotation runbook in `packages/contracts/AUDIT.md`.
+### Accepted testnet trade-offs — DECIDED, do not re-raise (see [ADR-0028](decisions/0028-accepted-testnet-posture.md))
+
+These are a **bounded, deliberate set** of testnet custody shortcuts, each enforced by a gate that fails a
+production deploy. They are correct production-launch gates but **NOT new findings**. A review should
+confirm the gate still fails-closed and mark them `accepted (testnet) / deferred (production)` — it should
+**not** re-report them as P0/P1 discoveries. (A *missing/weakened/bypassable* gate IS a new finding.)
+
+| Item | Status | Enforced gate | Closes for production via |
+| --- | --- | --- | --- |
+| **N1** — disclosed deployer EOA holds live authority roles | accepted (testnet) / deferred | `check:production-deploy gateOnLeakedDeployerKey` (hard-fails on the demo key) | `packages/contracts/AUDIT.md` §4.1 (KMS deployer + multisig + timelock) |
+| **DEMO-1** — demo-jp operator keys are globally-derivable | accepted (testnet) / deferred | tracked in `apps/demo-jp/AUDIT.md` | **spec 248** (per-operator SIWE/KMS, spec 235) |
+| **DEMO-2** — vault delegations are full-vault grants | accepted (testnet) / deferred | tracked in `apps/demo-jp/AUDIT.md` | **spec 248** (record-type scope caveat) |
+| **Operator sessions** — ~10yr Pete/Jill Connect sessions | accepted (testnet) / deferred | scoped to `DEMO_LONG_LIVED_EOAS` | normal-TTL sessions in production |
+| **Stub packages** — `0.0.0-stub.*` W1 packages | enforced now | **`check:no-stub-publish`** (a stub must be `private:true`) | graduate (drop `-stub` + add invariant suite) |
+
+- **N1 — leaked deployer key (P0):** OPEN as a production gate, **ACCEPTED + DECIDED for testnet (ADR-0028)** — do not re-raise. Intentional for the public-reproducible testnet demo; preflight gate refuses it for production; rotation runbook in `packages/contracts/AUDIT.md` §4.1.
 - **N8 — `tool-policy.evaluatePolicy` fail-open (P0):** **CLOSED 2026-05-23.** Shape-gate fail-closed at `packages/tool-policy/src/decision.ts:73-79`; closed-enum validation in `validateClassificationShape` (lines 47-67); Wave H1 inverted `withDelegation` to production-strict default. Negative-test matrix at `packages/tool-policy/test/decision.test.ts`. If an external reviewer cites N8 as open, they are reading a pre-2026-05-23 snapshot.
 - **N9 — `/session/package` persists on failed ERC-1271 (P1):** **CLOSED 2026-05-23.** Returns HTTP 400 `erc1271_failed` before persistence.
 - **N11 — A2A BigInt parsing (P1):** **CLOSED 2026-05-23.** Shared `apps/demo-a2a/src/validate.ts` module covers every deploy route.
