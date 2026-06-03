@@ -87,13 +87,31 @@ Foundry: the four existing transition tests now thread the registered salt + rev
 must populate the revealed party/component fields (they already hold them to build the commitment). Live
 demo runs on the OLD deployed registry until the wave redeploys.
 
-### RW1-3 (later) — canonical transition digest recompute
+### RW1-3 — canonical transition digest recompute — **CONTRACT + TS DONE**
 
-`updateStatus` still accepts a caller-supplied `transitionStructHash` that the parties signed (RW1-2 binds
-*who* signs; RW1-3 binds *what* they sign). Recompute the EIP-712 transition digest on-chain from
-`(agreementCommitment, toStatus, nullifier)` + domain constants rather than trusting the supplied hash,
-giving one canonical digest model across the registries — gate-checked by `check:eip712-typehash-equality`
-once the TS side lands (add a `TRANSITION_TYPEHASH` + the RW1-1 `JOINT_CONSENT_TYPEHASH` to the gate).
+RW1-2 bound *who* signs; RW1-3 binds *what* they sign. `updateStatus` no longer accepts a caller-supplied
+`transitionStructHash` — that field is **deleted** from `StatusUpdatePayload`. The contract now defines
+`TRANSITION_TYPEHASH = keccak256("AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32
+nullifier)")` and **recomputes** the digest the parties sign as `keccak256(abi.encode(TRANSITION_TYPEHASH,
+agreementCommitment, toStatus, nullifier))`, verifying both party signatures against it (plain struct hash,
+no domain separator — matching RW1-1's `JOINT_CONSENT_TYPEHASH`). One canonical digest model; a stored or
+caller-supplied hash is never authority (ADR-0027 corollary 2).
+
+TS side landed in `@agenticprimitives/agreements`: `TRANSITION_TYPEHASH` constant + `transitionDigest()`
+helper (byte-identical to the contract), and `StatusUpdatePayload` realigned to the RW1-2/RW1-3 struct
+(drop `transitionStructHash`; add the revealed `party1/party2` + commitment components). New cross-stack
+test reads the **LIVE** `AgreementRegistry.sol` and asserts the TS constant equals the on-chain literal;
+**`check:eip712-typehash-equality` now runs BOTH** the delegation and agreements suites, so a one-sided
+edit to either typehash fails the PR-blocking gate. AgreementRegistry Foundry suite 11 green; full forge
+suite 729 green; agreements TS 12 green.
+
+`JOINT_CONSENT_TYPEHASH` (RW1-1) is **not yet** in the gate — the attestations TS side has no `agreements`-style
+constant/helper to compare against. Wiring it is deferred to when an attestations consent encoder lands
+(out of scope here; tracked under the wave redeploy).
+
+**Deferred to the wave redeploy:** demo-jp / any status-transition caller must build the payload via
+`transitionDigest()` + populate the revealed party/component fields. Live demo runs on the OLD deployed
+registry until redeploy.
 
 ### RW1-4b (optional, with RW1-1) — port `CallDataHashEnforcer`
 

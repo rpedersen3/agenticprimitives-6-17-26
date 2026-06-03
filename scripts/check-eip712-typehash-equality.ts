@@ -28,28 +28,45 @@
 
 import { execSync } from 'node:child_process';
 
-console.log('[eip712-typehash-equality] running cross-stack typehash invariant test…');
+// Each entry: a TS package + the cross-stack typehash test that reads the LIVE
+// Solidity source and asserts byte-equality with the off-chain constant.
+//   - delegation: DELEGATION_TYPEHASH / CAVEAT_TYPEHASH ↔ DelegationManager.sol
+//   - agreements: TRANSITION_TYPEHASH ↔ AgreementRegistry.sol (RW1-3 / ADR-0027)
+const SUITES: ReadonlyArray<{ pkg: string; test: string }> = [
+  {
+    pkg: '@agenticprimitives/delegation',
+    test: 'test/integration/cross-stack-typehashes.test.ts',
+  },
+  {
+    pkg: '@agenticprimitives/agreements',
+    test: 'test/unit/cross-stack-transition-typehash.test.ts',
+  },
+];
+
+console.log('[eip712-typehash-equality] running cross-stack typehash invariant tests…');
 
 try {
-  execSync(
-    'pnpm --filter @agenticprimitives/delegation exec vitest run test/integration/cross-stack-typehashes.test.ts',
-    { stdio: 'inherit' },
-  );
+  for (const { pkg, test } of SUITES) {
+    console.log(`[eip712-typehash-equality]   ${pkg} → ${test}`);
+    execSync(`pnpm --filter ${pkg} exec vitest run ${test}`, { stdio: 'inherit' });
+  }
   console.log('[eip712-typehash-equality] ✓ TS-side typehashes equal Solidity-side constants.');
 } catch {
   console.error(
     '[eip712-typehash-equality] ✗ FAILED.\n\n' +
-      'Cross-stack EIP-712 typehash drift detected. The off-chain delegation\n' +
-      "computation (`packages/delegation/src/hash.ts::DELEGATION_EIP712_TYPES`)\n" +
-      'no longer matches the Solidity-side `DELEGATION_TYPEHASH` constant.\n\n' +
+      'Cross-stack EIP-712 typehash drift detected. An off-chain typehash\n' +
+      'computation no longer matches its Solidity-side constant:\n' +
+      "  - delegation: `packages/delegation/src/hash.ts::DELEGATION_EIP712_TYPES`\n" +
+      '      ↔ `DelegationManager.sol::DELEGATION_TYPEHASH` / `CAVEAT_TYPEHASH`\n' +
+      "  - agreements: `packages/agreements/src/index.ts::TRANSITION_TYPEHASH`\n" +
+      '      ↔ `AgreementRegistry.sol::TRANSITION_TYPEHASH` (RW1-3)\n\n' +
       'Causes (most likely):\n' +
-      "  - Solidity-side EIP712 type string was edited without updating the TS types\n" +
-      '  - TS-side DELEGATION_EIP712_TYPES was edited without updating the contract\n' +
+      "  - A Solidity-side EIP-712 type string was edited without updating the TS side\n" +
+      '  - A TS-side typehash/type set was edited without updating the contract\n' +
       '  - A new field was added on one side only\n\n' +
       'The two sides MUST converge before publish — a mismatch ships a silently\n' +
-      'broken delegation flow. The full test file at\n' +
-      '  packages/delegation/test/integration/cross-stack-typehashes.test.ts\n' +
-      'documents what each constant represents and how viem encodes them.',
+      'broken signing flow (DoS, or accepted-but-wrong authority). The test files\n' +
+      'document what each constant represents and how viem encodes them.',
   );
   process.exit(1);
 }

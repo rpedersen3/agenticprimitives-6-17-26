@@ -26,7 +26,13 @@
 
 ## Stable public exports (planned)
 
-`buildAgreementIssuancePayload`, `signIssuerAttestation`, `hashAgreement`, `computeAgreementCommitment`, `partyCommitment`, `issuerCommitment`, `partySetCommitment`, `nullifierFor`, `AgreementRegistryClient.getRecord`, `AgreementRegistryClient.isAssertableCommitment`, `gateway.buildJointAssertionPayload`, `AgreementCredential` (type).
+`buildAgreementIssuancePayload`, `signIssuerAttestation`, `hashAgreement`, `computeAgreementCommitment`, `partyCommitment`, `issuerCommitment`, `partySetCommitment`, `nullifierFor`, `TRANSITION_TYPEHASH`, `transitionDigest`, `AgreementRegistryClient.getRecord`, `AgreementRegistryClient.isAssertableCommitment`, `gateway.buildJointAssertionPayload`, `AgreementCredential` (type).
+
+> RW1-3 (ADR-0027): `updateStatus` RECOMPUTES the transition digest from
+> `(agreementCommitment, toStatus, nullifier)` on chain — it does not trust a
+> caller-supplied `transitionStructHash`. `transitionDigest()` here derives the
+> byte-identical value; the cross-stack `check:eip712-typehash-equality` gate
+> locks `TRANSITION_TYPEHASH` to `AgreementRegistry.sol`.
 
 ## Allowed imports
 

@@ -40,6 +40,15 @@ contract AgreementRegistry {
     uint8 public constant STATUS_DISPUTED = 3;
     uint8 public constant STATUS_REVOKED = 4;
 
+    /// @dev RW1-3 (ADR-0027): the contract RECOMPUTES the transition digest the
+    ///      parties sign from (agreementCommitment, toStatus, nullifier) — it no
+    ///      longer trusts a caller-supplied `transitionStructHash`. One canonical
+    ///      digest model; the TS side derives the same constant (cross-stack
+    ///      typehash-equality gate). Plain struct hash (no domain separator),
+    ///      matching the attestation registry's JOINT_CONSENT_TYPEHASH.
+    bytes32 internal constant TRANSITION_TYPEHASH =
+        keccak256("AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier)");
+
     // ─── Errors ─────────────────────────────────────────────────────────
 
     error AlreadyRegistered();
@@ -95,9 +104,8 @@ contract AgreementRegistry {
         bytes32 agreementCommitment;
         uint8 toStatus;
         bytes32 nullifier;
-        /// @dev EIP-712 transition hash (party / parties / either-party signed).
-        bytes32 transitionStructHash;
-        /// @dev Signatures: 1 for either-party (DISPUTED), 2 for bilateral (COMPLETED/REVOKED).
+        /// @dev Signatures over the RECOMPUTED transition digest (RW1-3): 1 for
+        ///      either-party (DISPUTED), 2 for bilateral (COMPLETED/REVOKED).
         bytes signature1;
         bytes signature2;
         /// @dev Party SAs that signed. For DISPUTED: signer1 only. For COMPLETED/REVOKED: both.
@@ -174,7 +182,9 @@ contract AgreementRegistry {
     ///         parties. The on-chain row still stores NO party SAs (AR-11 covers
     ///         register() calldata only); the parties surface here because a
     ///         status transition is already a public state change that names its
-    ///         signers. Replay protection comes from the nullifier.
+    ///         signers. Replay protection comes from the nullifier. RW1-3: the
+    ///         transition digest the parties sign is RECOMPUTED here from
+    ///         (agreementCommitment, toStatus, nullifier) — not caller-supplied.
     function updateStatus(StatusUpdatePayload calldata p) external {
         AgreementRow storage row = _rows[p.agreementCommitment];
         if (row.agreementCommitment == bytes32(0)) revert NotRegistered();
@@ -208,18 +218,25 @@ contract AgreementRegistry {
             if (recomputed != p.agreementCommitment) revert CommitmentMismatch();
         }
 
+        // RW1-3 (ADR-0027): RECOMPUTE the transition digest the parties sign — do not trust a
+        // caller-supplied hash. The signed payload is canonically bound to (commitment, toStatus,
+        // nullifier) here, on chain.
+        bytes32 transitionDigest = keccak256(
+            abi.encode(TRANSITION_TYPEHASH, p.agreementCommitment, p.toStatus, p.nullifier)
+        );
+
         bool bilateralRequired = (p.toStatus != STATUS_DISPUTED);
 
         // signer1 must BE a party, and must have signed.
         if (p.signer1 != p.party1 && p.signer1 != p.party2) revert SignerNotParty();
-        if (!_isValidSignatureBool(p.signer1, p.transitionStructHash, p.signature1)) {
+        if (!_isValidSignatureBool(p.signer1, transitionDigest, p.signature1)) {
             revert InvalidTransitionSignature();
         }
         if (bilateralRequired) {
             // both DISTINCT parties must sign.
             if (p.signer2 == address(0) || p.signer2 == p.signer1) revert InvalidTransitionSignature();
             if (p.signer2 != p.party1 && p.signer2 != p.party2) revert SignerNotParty();
-            if (!_isValidSignatureBool(p.signer2, p.transitionStructHash, p.signature2)) {
+            if (!_isValidSignatureBool(p.signer2, transitionDigest, p.signature2)) {
                 revert InvalidTransitionSignature();
             }
         }

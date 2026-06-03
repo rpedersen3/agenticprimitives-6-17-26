@@ -21,10 +21,23 @@ contract AgreementRegistryTest is Test {
         p2 = vm.addr(P2_PK);
     }
 
+    /// @dev Mirrors AgreementRegistry.TRANSITION_TYPEHASH (RW1-3).
+    bytes32 internal constant TRANSITION_TYPEHASH =
+        keccak256("AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier)");
+
     function _sign(bytes32 digest, uint256 pk) internal pure returns (bytes memory) {
         bytes32 ethHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, ethHash);
         return abi.encodePacked(r, s, v);
+    }
+
+    /// @dev The canonical transition digest the contract recomputes (RW1-3).
+    function _transitionDigest(
+        bytes32 commitment,
+        uint8 toStatus,
+        bytes32 nullifier
+    ) internal pure returns (bytes32) {
+        return keccak256(abi.encode(TRANSITION_TYPEHASH, commitment, toStatus, nullifier));
     }
 
     function _buildPayload(
@@ -98,14 +111,13 @@ contract AgreementRegistryTest is Test {
         uint256 signer2pk,
         uint256 salt
     ) internal view returns (AgreementRegistry.StatusUpdatePayload memory p) {
-        bytes32 transitionHash = keccak256(abi.encodePacked(commitment, toStatus, nullifier));
+        bytes32 transitionDigest = _transitionDigest(commitment, toStatus, nullifier);
         p = AgreementRegistry.StatusUpdatePayload({
             agreementCommitment: commitment,
             toStatus: toStatus,
             nullifier: nullifier,
-            transitionStructHash: transitionHash,
-            signature1: _sign(transitionHash, signer1pk),
-            signature2: signer2pk == 0 ? bytes("") : _sign(transitionHash, signer2pk),
+            signature1: _sign(transitionDigest, signer1pk),
+            signature2: signer2pk == 0 ? bytes("") : _sign(transitionDigest, signer2pk),
             signer1: vm.addr(signer1pk),
             signer2: signer2pk == 0 ? address(0) : vm.addr(signer2pk),
             party1: p1,

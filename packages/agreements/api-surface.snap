@@ -1,10 +1,12 @@
 const PACKAGE_STATUS: "w1-foundational"
 const STATUS: { readonly NONE: 0
+const TRANSITION_TYPEHASH: Hex32
 function bytesCommitment(value: string): Hex32
 function computeAgreementCommitment(args:
 function issuerCommitment(issuer: Address): Hex32
 function nullifierFor(args:
 function partySetCommitment(party1: Address, party2: Address): Hex32
+function transitionDigest(args:
 interface AgreementIssuancePayload
 interface StatusUpdatePayload
 type AgreementStatus = (typeof STATUS)[keyof typeof STATUS]
