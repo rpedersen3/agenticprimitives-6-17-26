@@ -29,7 +29,7 @@ import {
 } from '../lib/onchain';
 import { getAgreementRecord, isAttestationValid } from '../lib/chain';
 import { loadReceivedDelegations, type ReceivedOrgDelegation } from '../lib/vault';
-import { setupOperatorHome, operatorHomeUrl } from '../lib/operator-home';
+import { setupOperatorHome, operatorSignInUrl } from '../lib/operator-home';
 import { personChainState, type PersonChainState } from '../lib/person-sa';
 import type { PersonaName } from '../lib/personas';
 import { expressIntent, tryMatch, buildCommitment } from '../lib/intent-flow';
@@ -131,6 +131,8 @@ function OperatorHomeCard({ who }: { who: PersonaName }) {
   const [step, setStep] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  const [opening, setOpening] = useState(false);
+
   const connect = useCallback(async () => {
     setBusy(true);
     setErr(null);
@@ -146,8 +148,24 @@ function OperatorHomeCard({ who }: { who: PersonaName }) {
     }
   }, [who]);
 
+  // One-click connect: sign the operator in at their .me home with their demo-jp key
+  // (SIWE handoff) and open /you already signed in, where their org's delegations show.
+  const openHome = useCallback(async () => {
+    const s = state;
+    if (!s?.deployed) return;
+    setOpening(true);
+    setErr(null);
+    try {
+      const url = await operatorSignInUrl(s);
+      window.open(url, '_blank', 'noopener');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOpening(false);
+    }
+  }, [state]);
+
   const label = who === 'pete' ? 'Pete' : 'Jill';
-  const homeUrl = state?.deployed ? operatorHomeUrl(state) : null;
   return (
     <Card>
       <SectionHead
@@ -171,12 +189,16 @@ function OperatorHomeCard({ who }: { who: PersonaName }) {
       </div>
       <div style={{ marginTop: '.8rem', display: 'flex', gap: '.7rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <Btn onClick={connect} busy={busy}>{state?.deployed ? 'Re-sync home' : `Set up ${label}’s home`}</Btn>
-        {homeUrl && (
-          <a href={homeUrl} target="_blank" rel="noreferrer" style={{ fontSize: '.85rem', fontWeight: 600, color: 'var(--c-accent, #2563eb)' }}>
-            Open {label}’s home ↗
-          </a>
+        {state?.deployed && (
+          <Btn onClick={openHome} busy={opening}>Open {label}’s home ↗</Btn>
         )}
       </div>
+      {state?.deployed && (
+        <p style={{ marginTop: '.55rem', fontSize: '.8rem', color: 'var(--c-g500)' }}>
+          Signs you in at {state.agentName ?? 'your home'} with this device’s key — see {label === 'Jill' ? 'JP' : 'Global Church'}’s
+          delegations under “Received by your organizations”.
+        </p>
+      )}
       {err && <div style={{ marginTop: '.8rem' }}><Banner tone="err">{err}</Banner></div>}
     </Card>
   );

@@ -91,6 +91,13 @@ export function personaSignHash(persona: PersonaState): SignHash {
   return (hash: Hex) => account.signMessage({ message: { raw: hash } }) as Promise<Hex>;
 }
 
+/** Sign an arbitrary STRING message (EIP-191 personal_sign) with a persona's key.
+ *  Used for the spec-247 SIWE handoff (the SIWE message is a string, not a raw hash). */
+export function personaSignMessage(persona: PersonaState): (message: string) => Promise<Hex> {
+  const account = privateKeyToAccount(persona.privateKey);
+  return (message: string) => account.signMessage({ message }) as Promise<Hex>;
+}
+
 // ─── Org SA deploy (via demo-a2a relayer) ───────────────────────────────────
 
 /** Predict the factory CREATE2 address for an EOA-custodied (Mode-0) org SA. */
