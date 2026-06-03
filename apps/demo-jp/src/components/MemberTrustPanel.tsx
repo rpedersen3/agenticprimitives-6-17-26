@@ -16,7 +16,7 @@ import {
   type BoardIntent, type AssociationRow, type IssuanceRow,
 } from '../lib/broker-store';
 import { ensureOrgDeployed } from '../lib/onchain';
-import { isAttestationValid, getAgreementRecord } from '../lib/chain';
+import { getAgreementRecord } from '../lib/chain';
 import { FPG_SEED, findPeopleGroup } from '../lib/people-groups';
 
 const ADOPTER_TYPES = ['individual', 'family', 'group', 'church', 'organization', 'network'] as const;
@@ -83,10 +83,6 @@ export function MemberTrustPanel({
     } finally { setBusy(false); }
   }, [kind, orgAgent, orgName, fpgId, adopterType]);
 
-  const checkAssoc = useCallback(async (uid: string) => {
-    const ok = await isAttestationValid(uid as `0x${string}`);
-    setVerify((v) => ({ ...v, [uid]: ok ? 'valid on chain ✓' : 'not found' }));
-  }, []);
   const checkAgreement = useCallback(async (commitment: string) => {
     const rec = await getAgreementRecord(commitment as `0x${string}`);
     setVerify((v) => ({ ...v, [commitment]: rec ? `status ${rec.status} ✓` : 'not registered' }));
@@ -130,16 +126,15 @@ export function MemberTrustPanel({
 
       {/* 2. JP recognition */}
       <Card>
-        <SectionHead eyebrow="Step 2 · Recognition" title="JP's recognition of your org" sub="The Association credential JP issued to your org's Smart Agent (AttestationRegistry)." />
+        <SectionHead eyebrow="Step 2 · Recognition" title="JP's recognition of your org" sub="A JP-signed Association credential held off-chain — JP keeps it in its vault and delivered a copy to your org. It's not on the AttestationRegistry; this credential is what lets JP broker matches for you." />
         {myAssoc.length === 0
-          ? <p style={{ fontSize: '.85rem', color: 'var(--c-g400)' }}>Not recognized yet. Once JP approves your org as {kind === 'adopter' ? 'an adopter' : 'a facilitator'}, it appears here.</p>
+          ? <p style={{ fontSize: '.85rem', color: 'var(--c-g400)' }}>Not recognized yet. Once JP approves your org as {kind === 'adopter' ? 'an adopter' : 'a facilitator'}, the credential appears here.</p>
           : myAssoc.map((x) => (
-            <div key={x.uid} style={{ display: 'flex', gap: '.6rem', alignItems: 'center', fontSize: '.83rem', padding: '.5rem 0', borderTop: '1px solid var(--c-g100)' }}>
+            <div key={x.uid} style={{ display: 'flex', gap: '.6rem', alignItems: 'center', fontSize: '.83rem', padding: '.5rem 0', borderTop: '1px solid var(--c-g100)', flexWrap: 'wrap' }}>
               <Pill tone="ok">{x.associationKind}</Pill>
               <span style={{ color: 'var(--c-g500)' }}>{x.fpgIds.map((f) => findPeopleGroup(f)?.name ?? f).join(', ')}</span>
-              <TxLink hash={x.txHash} />
-              <Btn variant="ghost" style={{ marginLeft: 'auto', padding: '.3rem .6rem' }} onClick={() => checkAssoc(x.uid)}>Verify</Btn>
-              {verify[x.uid] && <Pill tone="live">{verify[x.uid]}</Pill>}
+              <span style={{ color: 'var(--c-g500)' }}>credential <Mono>{shortHex(x.uid)}</Mono></span>
+              <span style={{ marginLeft: 'auto' }}><Pill tone="live">JP-signed ✓ (off-chain)</Pill></span>
             </div>
           ))}
       </Card>

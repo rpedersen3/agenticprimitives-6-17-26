@@ -23,13 +23,14 @@ import {
   ensureOrgDeployed,
   predictOrgAddress,
   orgChainState,
-  issueAssociationOnChain,
+  issueAssociationCredential,
   registerAgreementOnChain,
   submitJointAssertionOnChain,
   type OrgChainState,
 } from '../lib/onchain';
 import { getAgreementRecord, isAttestationValid } from '../lib/chain';
 import { loadReceivedDelegations, type ReceivedOrgDelegation } from '../lib/vault';
+import { vaultWriteWithDelegation } from '../lib/vault-client';
 import { setupOperatorHome, operatorSignInUrl } from '../lib/operator-home';
 import { personChainState, resolvePersonState, type PersonChainState } from '../lib/person-sa';
 import type { PersonaName } from '../lib/personas';
@@ -498,27 +499,44 @@ function AssociationIssuer() {
     if (!/^0x[0-9a-fA-F]{40}$/.test(subject.trim())) { setMsg({ tone: 'err', text: 'Enter a valid subject org SA address.' }); return; }
     setBusy(true);
     try {
-      const res = await issueAssociationOnChain({
-        subjectOrg: subject.trim() as Address,
+      const subjectOrg = subject.trim() as Address;
+      // OFF-CHAIN recognition: JP builds + signs the credential. No AttestationRegistry tx.
+      const issued = await issueAssociationCredential({
+        subjectOrg,
         body: { associationKind: kind, role: 'approved', fpgIds: [fpgId], ...(kind === 'adopter' ? { adopterType: 'church', mouHash: ZERO32 } : { countries: [findPeopleGroup(fpgId)?.country ?? 'XX'] }) },
         validFrom: new Date().toISOString(),
         salt: BigInt(Date.now()),
       });
-      if (!res.ok) { setMsg({ tone: 'err', text: res.error ?? 'issuance failed' }); return; }
-      const row: AssociationRow = { uid: res.id ?? ('0x' as Hex), subjectOrg: subject.trim() as Address, associationKind: kind, fpgIds: [fpgId], issuedAt: new Date().toISOString(), txHash: res.txHash };
+      const issuedAt = new Date().toISOString();
+      // JP STORES the signed credential in its own vault (its recognition record + the gate).
+      const row: AssociationRow = { uid: issued.credentialHash, subjectOrg, associationKind: kind, fpgIds: [fpgId], issuedAt, credential: issued.credential, issuerSignature: issued.issuerSignature };
       const next = [row, ...associations];
       setAssociations(next); await saveAssociations(next);
-      setMsg({ tone: 'ok', text: `Association issued + asserted on Base Sepolia.`, tx: res.txHash });
+      // ISSUE THE CREDENTIAL BACK TO THE ORG: deliver it into the org's OWN vault over the
+      // broker delegation that org granted JP (delegator = the org), so the org holds its
+      // recognition. Best-effort: if the org hasn't delegated to JP yet, JP still has it.
+      const member = members.find((m) => m.orgAgent.toLowerCase() === subjectOrg.toLowerCase());
+      let delivered = false;
+      if (member?.delegation) {
+        try {
+          await vaultWriteWithDelegation(member.delegation, 'jp:recognition', {
+            credential: issued.credential, issuerSignature: issued.issuerSignature, credentialHash: issued.credentialHash,
+            associationKind: kind, fpgIds: [fpgId], issuer: issued.issuer, issuedAt,
+          });
+          delivered = true;
+        } catch { /* delivery is best-effort; JP's own copy still gates brokering */ }
+      }
+      setMsg({ tone: 'ok', text: `Recognition credential issued + stored by JP${delivered ? ' and delivered to the org' : ' (org has no delegation on file yet — stored at JP only)'}. Not on chain.` });
     } catch (e) {
       setMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(false);
     }
-  }, [subject, kind, fpgId, associations]);
+  }, [subject, kind, fpgId, associations, members]);
 
   return (
     <Card>
-      <SectionHead eyebrow="Agentic Trust · AttestationRegistry" title="Issue Association credential" sub="JP recognizes an org SA as an approved facilitator/adopter. Signs the credential as the JP SA and writes the public Association assertion on chain (subject = org, issuer = JP)." />
+      <SectionHead eyebrow="Recognition · off-chain credential" title="Issue Association credential" sub="JP recognizes an org as an approved facilitator/adopter by issuing a JP-signed credential (subject = org, issuer = JP). JP stores it in its own vault and delivers a copy to the org — NOT asserted on chain. Recognition is what unlocks brokering for that org + people group." />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
         <Field label="Kind">
           <select style={inputStyle} value={kind} onChange={(e) => setKind(e.target.value as 'facilitator' | 'adopter')}>
@@ -554,11 +572,12 @@ function AssociationIssuer() {
         <div style={{ marginTop: '1rem' }}>
           <h4 style={{ fontSize: '.78rem', textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--c-g500)', marginBottom: '.4rem' }}>Issued associations</h4>
           {associations.map((a) => (
-            <div key={a.uid} style={{ display: 'flex', gap: '.6rem', alignItems: 'center', fontSize: '.82rem', padding: '.4rem 0', borderTop: '1px solid var(--c-g100)' }}>
+            <div key={a.uid} style={{ display: 'flex', gap: '.6rem', alignItems: 'center', fontSize: '.82rem', padding: '.4rem 0', borderTop: '1px solid var(--c-g100)', flexWrap: 'wrap' }}>
               <Pill tone={a.associationKind === 'facilitator' ? 'ok' : 'neutral'}>{a.associationKind}</Pill>
               <AddrLink addr={a.subjectOrg} />
-              <span style={{ color: 'var(--c-g500)' }}>UID <Mono>{shortHex(a.uid)}</Mono></span>
-              <span style={{ marginLeft: 'auto' }}><TxLink hash={a.txHash} /></span>
+              <span style={{ color: 'var(--c-g500)' }}>{a.fpgIds.map((f) => findPeopleGroup(f)?.name ?? f).join(', ')}</span>
+              <span style={{ color: 'var(--c-g500)' }}>credential <Mono>{shortHex(a.uid)}</Mono></span>
+              <span style={{ marginLeft: 'auto' }}><Pill tone={a.txHash ? 'live' : 'neutral'}>{a.txHash ? 'on chain' : 'off-chain · JP-signed'}</Pill></span>
             </div>
           ))}
         </div>

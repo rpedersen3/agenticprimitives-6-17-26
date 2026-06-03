@@ -20,6 +20,7 @@ interface EnrichedRow extends IssuanceRow {
   status: number | null;
   assertionValid: boolean | null;
   issuer: Address | null;
+  issuerName: string | null;
   adopterName: string | null;
   facName: string | null;
 }
@@ -51,7 +52,8 @@ export function AgreementsBoard({ title, sub, source }: { title: string; sub: st
           reverseName(r.adopterParty),
           reverseName(r.facilitatorParty),
         ]);
-        return { ...r, status: rec ? Number(rec.status) : null, assertionValid: valid, issuer: rec?.issuer ?? null, adopterName, facName };
+        const issuerName = rec?.issuer ? await reverseName(rec.issuer) : null;
+        return { ...r, status: rec ? Number(rec.status) : null, assertionValid: valid, issuer: rec?.issuer ?? null, issuerName, adopterName, facName };
       }));
       if (!cancelled) { setRows(enriched); setLoaded(true); }
     })();
@@ -88,7 +90,7 @@ export function AgreementsBoard({ title, sub, source }: { title: string; sub: st
               </div>
               <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', color: 'var(--c-g500)' }}>
                 <span>commitment <Mono>{shortHex(r.agreementCommitment)}</Mono></span>
-                {r.issuer && <span>issuer <Mono>{shortHex(r.issuer)}</Mono></span>}
+                {r.issuer && <span>issuer {r.issuerName ? <b style={{ color: 'var(--c-g800)' }} title={r.issuer}>{r.issuerName}</b> : <Mono>{shortHex(r.issuer)}</Mono>}</span>}
                 {r.registerTxHash && <TxLink hash={r.registerTxHash} label="register" />}
                 {r.jointAssertionTxHash && <TxLink hash={r.jointAssertionTxHash} label="assertion" />}
               </div>
