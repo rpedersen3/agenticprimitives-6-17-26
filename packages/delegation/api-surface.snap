@@ -36,6 +36,7 @@ re-export createMemorySessionStore from ./session-manager
 re-export delegationDomain from ./hash
 re-export encodeAllowedMethodsTerms from ./caveats
 re-export encodeAllowedTargetsTerms from ./caveats
+re-export encodeCallDataHashTerms from ./caveats
 re-export encodeTimestampTerms from ./caveats
 re-export encodeValueTerms from ./caveats
 re-export evaluateCaveats from ./evaluator
