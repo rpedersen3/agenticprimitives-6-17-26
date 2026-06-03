@@ -41,9 +41,38 @@ export function MemberOrgSection({
       </div>
 
       <div style={{ marginTop: '1.25rem' }}>
-        {org ? <OrgActive kind={kind} org={org} /> : <OrgClaim label={label} onCreateOrg={onCreateOrg} />}
+        {org ? (
+          <>
+            <OrgActive kind={kind} org={org} />
+            <CreateAnother label={label} onCreateOrg={onCreateOrg} />
+          </>
+        ) : (
+          <OrgClaim label={label} onCreateOrg={onCreateOrg} />
+        )}
       </div>
     </section>
+  );
+}
+
+/** When you already steward an org, the create form is collapsed behind a small link —
+ *  you can still spin up another org, but the default view is your existing one. */
+function CreateAnother({ label, onCreateOrg }: { label: string; onCreateOrg: (orgName: string) => void | Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{ marginTop: '.8rem', background: 'none', border: 'none', color: 'var(--c-primary)', cursor: 'pointer', fontSize: '.82rem', padding: 0 }}
+      >
+        + Create another {label.toLowerCase()} organization
+      </button>
+    );
+  }
+  return (
+    <div style={{ marginTop: '.9rem' }}>
+      <OrgClaim label={label} onCreateOrg={onCreateOrg} />
+    </div>
   );
 }
 

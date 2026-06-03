@@ -521,7 +521,7 @@ export function App() {
         <AdopterIntranet
           key={vaultBump}
           session={session}
-          org={relatedOrgs.find((o) => o.purpose === orgPurpose('adopter')) ?? null}
+          org={relatedOrgs.find((o) => o.purpose === orgPurpose('adopter')) ?? relatedOrgs.find((o) => o.stewardshipDelegation) ?? null}
           relatedOrgs={relatedOrgs}
           onCreateOrg={(name) => goCreateOrg('adopter', name)}
           onSignOut={signOut}
@@ -537,7 +537,7 @@ export function App() {
       <FacilitatorIntranet
         key={vaultBump}
         session={session}
-        org={relatedOrgs.find((o) => o.purpose === orgPurpose('facilitator')) ?? null}
+        org={relatedOrgs.find((o) => o.purpose === orgPurpose('facilitator')) ?? relatedOrgs.find((o) => o.stewardshipDelegation) ?? null}
         onCreateOrg={(name) => goCreateOrg('facilitator', name)}
         onSignOut={signOut}
         onOpenWea={() => setModal({ kind: 'wea' })}
