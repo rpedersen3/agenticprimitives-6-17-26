@@ -28,12 +28,12 @@ import {
 } from './chain.js';
 import { buildNameClaimCallData, buildNameClaimCalls, reverseName } from './naming.js';
 import { loadOrMintOrgPersona, type OrgName, type OrgPersona } from './org-personas.js';
-import type { VaultOwner } from './vault-client.js';
+import { vaultRead, vaultWrite, type VaultOwner } from './vault-client.js';
 import { issueAgreement } from './agreement-flow.js';
 import type { JpAgreementPayload } from './agreement-payload.js';
 import { issueAssociation, type JpAssociationBody } from './issuance-flow.js';
 import { JP_SHAPES } from './jp-shapes.js';
-import { CREDENTIAL_TYPE, type Hex32 } from '@agenticprimitives/attestations';
+import { CREDENTIAL_TYPE, jointConsentDigest, type Hex32 } from '@agenticprimitives/attestations';
 import { credentialHash } from '@agenticprimitives/verifiable-credentials';
 
 const ZERO32 = ('0x' + '00'.repeat(32)) as Hex32;
@@ -240,7 +240,50 @@ export async function registerAgreementOnChain(args: {
     signHash: personaSignHash(persona.custodian),
     call: { to: CONTRACTS.agreementRegistry, data },
   });
+  // Persist the issued credential (GC vault) so the two-party consent ceremony + the publish
+  // step can recompute the JOINT_CONSENT digest and re-sign the issuer hash AFTER the page
+  // reloads across each party's home redirect — the in-memory credential does not survive it.
+  if (res.ok) {
+    const gcOwner = gcVaultOwner();
+    if (gcOwner) {
+      await vaultWrite(gcOwner, agreementCredRecord(issued.registryPayload.agreementCommitment), issued.credential).catch(() => {});
+    }
+  }
   return { ...res, id: issued.registryPayload.agreementCommitment, issued };
+}
+
+// ─── Two-party consent (RW1-1 / ADR-0027) ────────────────────────────────────
+
+/** GC-vault record key for a registered agreement's credential — needed to recompute the
+ *  JOINT_CONSENT digest + re-sign the issuer hash at consent + publish time (survives reloads). */
+export const agreementCredRecord = (commitment: Hex32): string =>
+  `gc:agreement-cred:${commitment.toLowerCase()}`;
+
+/** Load the persisted AgreementCredential for a registered commitment (GC vault). */
+export async function loadAgreementCredential(
+  commitment: Hex32,
+): Promise<ReturnType<typeof issueAgreement>['credential'] | null> {
+  const gcOwner = gcVaultOwner();
+  if (!gcOwner) return null;
+  return (
+    (await vaultRead<ReturnType<typeof issueAgreement>['credential']>(gcOwner, agreementCredRecord(commitment))) ?? null
+  );
+}
+
+/** The canonical consent digest each party signs (RW1-1). adopter = party1, facilitator = party2 —
+ *  the exact order the AttestationRegistry recomputes + verifies against the two party signatures. */
+export function consentDigestFor(args: {
+  adopterParty: Address;
+  facilitatorParty: Address;
+  agreementCommitment: Hex32;
+  credential: ReturnType<typeof issueAgreement>['credential'];
+}): Hex32 {
+  return jointConsentDigest({
+    party1: args.adopterParty,
+    party2: args.facilitatorParty,
+    agreementCommitment: args.agreementCommitment,
+    credentialHash: credentialHash(args.credential) as Hex32,
+  }) as Hex32;
 }
 
 /** Pete-as-Global-Church publishes the bilateral joint-agreement assertion that

@@ -188,6 +188,31 @@ export async function startSiteEnrollment(
   return { ok: true, url, state, authOrigin, codeVerifier: verifier, nonce };
 }
 
+/** Start a two-party agreement CONSENT ceremony (RW1-1 / ADR-0027) at a party's secure
+ *  home. The party reviews the agreement and signs the canonical consent digest with THEIR
+ *  credential (passkey / wallet / Google KMS); the home redirects back to demo-jp with
+ *  `?consent_state=&consent_party=&consent_digest=&consent_sig=`. The signature validates
+ *  under the party SA on-chain (the AttestationRegistry recomputes the digest + verifies it),
+ *  so the issuer can never forge a party's consent. `partyName` resolves the party's home;
+ *  `party` is the SA the signature must validate under (a person home, or a stewarded org). */
+export async function startConsentSignature(args: {
+  partyName: string;
+  party: Address;
+  digest: Hex;
+  label: string;
+}): Promise<{ url: string; state: string }> {
+  const state = randomB64url(16);
+  const authOrigin = await resolveAuthOrigin(args.partyName);
+  const u = new URL(`${authOrigin}/consent-sign`);
+  u.searchParams.set('app', CLIENT_ID);
+  u.searchParams.set('return', redirectUri());
+  u.searchParams.set('state', state);
+  u.searchParams.set('digest', args.digest);
+  u.searchParams.set('party', args.party);
+  u.searchParams.set('label', args.label);
+  return { url: u.toString(), state };
+}
+
 /** Start an org-creation ceremony (template=org-create) at the connected person's
  *  secure home. The org SA is DEPLOYED + custodied by the person's ROOT credential
  *  AT their home (same custody as their person agent — demo-jp is never a custodian);

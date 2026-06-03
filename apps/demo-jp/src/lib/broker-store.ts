@@ -63,6 +63,11 @@ export interface IssuanceRow {
   fpgId: string;
   registeredAt: string;
   registerTxHash?: Hex;
+  /** RW1-1 (ADR-0027): each party's consent signature over the JOINT_CONSENT digest,
+   *  collected from that party's home before the joint assertion can be published.
+   *  adopter = party1, facilitator = party2 (the order the contract recomputes + verifies). */
+  adopterConsentSig?: Hex;
+  facilitatorConsentSig?: Hex;
   /** Set once the joint assertion is published. */
   jointAssertionTxHash?: Hex;
   jointAssertionUid?: Hex;

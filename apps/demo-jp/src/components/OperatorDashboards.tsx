@@ -26,9 +26,12 @@ import {
   issueAssociationCredential,
   registerAgreementOnChain,
   submitJointAssertionOnChain,
+  loadAgreementCredential,
+  consentDigestFor,
   type OrgChainState,
 } from '../lib/onchain';
-import { getAgreementRecord, isAttestationValid } from '../lib/chain';
+import { getAgreementRecord, isAttestationValid, reverseName } from '../lib/chain';
+import { startConsentSignature } from '../connect-client';
 import { verifyRecognitionCredential, type JpAssociationCredential } from '../lib/issuance-flow';
 import { loadReceivedDelegations, type ReceivedOrgDelegation } from '../lib/vault';
 import { vaultWriteWithDelegation, vaultReadWithDelegation } from '../lib/vault-client';
@@ -642,6 +645,46 @@ function IssuanceDesk() {
     return () => { cancelled = true; };
   }, []);
 
+  // RW1-1 consent-return: a party signed the JOINT_CONSENT digest at their home and was
+  // redirected back with ?consent_state&consent_party&consent_digest&consent_sig. Verify the
+  // stashed request, attach the signature to its issuance row (adopter=party1, facilitator=party2),
+  // and persist. When both sigs are present the row's "Publish joint assertion" button enables.
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const sig = u.searchParams.get('consent_sig');
+    const party = u.searchParams.get('consent_party');
+    const retState = u.searchParams.get('consent_state');
+    if (!sig || !party || !retState) return;
+    for (const k of ['consent_state', 'consent_party', 'consent_digest', 'consent_sig']) u.searchParams.delete(k);
+    window.history.replaceState({}, '', u.toString());
+    let stash: { state?: string; commitment?: string } = {};
+    try { stash = JSON.parse(sessionStorage.getItem(CONSENT_KEY) ?? '{}'); } catch { /* ignore */ }
+    sessionStorage.removeItem(CONSENT_KEY);
+    if (!stash.state || stash.state !== retState || !stash.commitment) {
+      setMsg({ tone: 'err', text: "Couldn't verify that consent response. Please try again." });
+      return;
+    }
+    const commitment = stash.commitment;
+    void (async () => {
+      const rows = await loadGcIssuance();
+      const idx = rows.findIndex((r) => r.agreementCommitment.toLowerCase() === commitment.toLowerCase());
+      const row = idx >= 0 ? rows[idx] : undefined;
+      if (!row) { setMsg({ tone: 'err', text: 'No matching agreement for that consent.' }); return; }
+      const partyLc = party.toLowerCase();
+      const next: IssuanceRow = { ...row };
+      let who: string;
+      if (partyLc === row.adopterParty.toLowerCase()) { next.adopterConsentSig = sig as Hex; who = 'Adopter'; }
+      else if (partyLc === row.facilitatorParty.toLowerCase()) { next.facilitatorConsentSig = sig as Hex; who = 'Facilitator'; }
+      else { setMsg({ tone: 'err', text: 'That signer is not a party to this agreement.' }); return; }
+      const updated = rows.map((r, i) => (i === idx ? next : r));
+      setIssuance(updated);
+      await saveGcIssuance(updated);
+      await saveIssuance(updated).catch(() => {});
+      const both = !!next.adopterConsentSig && !!next.facilitatorConsentSig;
+      setMsg({ tone: 'ok', text: `${who} consent recorded.${both ? ' Both parties have consented — you can publish the joint assertion.' : ' Awaiting the other party.'}` });
+    })();
+  }, []);
+
   const register = useCallback(async (d: AgreementDraft) => {
     setBusyId(d.id); setMsg(null);
     try {
@@ -667,18 +710,61 @@ function IssuanceDesk() {
     } finally { setBusyId(null); }
   }, [drafts, issuance]);
 
-  const publishJoint = useCallback((row: IssuanceRow) => {
-    // RW1-1 (ADR-0027): the on-chain joint assertion now REQUIRES both parties'
-    // consent signatures over the JOINT_CONSENT digest. The two-party consent
-    // ceremony (each party signs at their home) lands in the next drop; until then
-    // publish is gated. The agreement COMMITMENT is already registered + verifiable
-    // on chain — only the public bilateral assertion waits on consent.
-    void row;
-    setMsg({
-      tone: 'ok',
-      text: 'Bilateral consent required: both parties must sign at their home before Global Church can publish the joint assertion. Coming in the next drop — the agreement commitment is already registered on chain.',
-    });
+  // RW1-1 (ADR-0027): send a party to THEIR home to sign the JOINT_CONSENT digest. The issuer
+  // can never forge this — the signature is produced by the party's own credential and verified
+  // on chain under their SA. Redirects away; the return is handled by the consent-return effect.
+  const collectConsent = useCallback(async (row: IssuanceRow, role: 'adopter' | 'facilitator') => {
+    const party = role === 'adopter' ? row.adopterParty : row.facilitatorParty;
+    setBusyId(row.agreementCommitment); setMsg(null);
+    try {
+      const credential = await loadAgreementCredential(row.agreementCommitment as Hex32);
+      if (!credential) { setMsg({ tone: 'err', text: 'Agreement credential not found in GC vault — re-register first.' }); return; }
+      const digest = consentDigestFor({
+        adopterParty: row.adopterParty,
+        facilitatorParty: row.facilitatorParty,
+        agreementCommitment: row.agreementCommitment as Hex32,
+        credential,
+      });
+      const partyName = await reverseName(party);
+      if (!partyName) { setMsg({ tone: 'err', text: `No .impact home found for the ${role} (${shortHex(party)}). They need a name before they can consent.` }); return; }
+      const label = `${role === 'adopter' ? 'Adopter' : 'Facilitator'} consent — ${findPeopleGroup(row.fpgId)?.name ?? row.fpgId} agreement ${shortHex(row.agreementCommitment)}.`;
+      const { url, state } = await startConsentSignature({ partyName, party, digest, label });
+      sessionStorage.setItem(CONSENT_KEY, JSON.stringify({ state, commitment: row.agreementCommitment }));
+      window.location.href = url; // → party's home /consent-sign; returns with ?consent_*
+    } catch (e) {
+      setMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
+      setBusyId(null);
+    }
   }, []);
+
+  const publishJoint = useCallback(async (row: IssuanceRow) => {
+    setBusyId(row.agreementCommitment); setMsg(null);
+    try {
+      if (!row.adopterConsentSig || !row.facilitatorConsentSig) {
+        setMsg({ tone: 'err', text: 'Both parties must consent first — collect the missing consent(s) above.' });
+        return;
+      }
+      const credential = await loadAgreementCredential(row.agreementCommitment as Hex32);
+      if (!credential) { setMsg({ tone: 'err', text: 'Agreement credential not found in GC vault — re-register first.' }); return; }
+      const res = await submitJointAssertionOnChain({
+        credential,
+        party1: row.adopterParty,
+        party2: row.facilitatorParty,
+        agreementCommitment: row.agreementCommitment as Hex32,
+        party1Signature: row.adopterConsentSig,
+        party2Signature: row.facilitatorConsentSig,
+        salt: BigInt(Date.now()),
+      });
+      if (!res.ok) { setMsg({ tone: 'err', text: res.error ?? 'joint assertion failed' }); return; }
+      const next = issuance.map((x) => x.agreementCommitment === row.agreementCommitment ? { ...x, jointAssertionTxHash: res.txHash, jointAssertionUid: res.id } : x);
+      setIssuance(next);
+      await saveGcIssuance(next); // GC's own index
+      await saveIssuance(next).catch(() => {}); // broker receipt
+      setMsg({ tone: 'ok', text: 'Bilateral joint assertion published on chain.', tx: res.txHash });
+    } catch (e) {
+      setMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
+    } finally { setBusyId(null); }
+  }, [issuance]);
 
   const verify = useCallback(async (row: IssuanceRow) => {
     setBusyId(row.agreementCommitment); setMsg(null);
@@ -721,9 +807,23 @@ function IssuanceDesk() {
                 <TxLink hash={row.registerTxHash} label="register" />
               </div>
               <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                {row.jointAssertionTxHash
-                  ? <><Pill tone="live">joint asserted</Pill><TxLink hash={row.jointAssertionTxHash} label="assertion" /></>
-                  : <Btn variant="ghost" style={{ padding: '.35rem .7rem' }} busy={busyId === row.agreementCommitment} onClick={() => publishJoint(row)}>Publish joint assertion</Btn>}
+                {row.jointAssertionTxHash ? (
+                  <><Pill tone="live">joint asserted</Pill><TxLink hash={row.jointAssertionTxHash} label="assertion" /></>
+                ) : (
+                  <>
+                    <Pill tone={row.adopterConsentSig ? 'live' : 'neutral'}>adopter {row.adopterConsentSig ? '✓ consented' : 'consent pending'}</Pill>
+                    <Pill tone={row.facilitatorConsentSig ? 'live' : 'neutral'}>facilitator {row.facilitatorConsentSig ? '✓ consented' : 'consent pending'}</Pill>
+                    {!row.adopterConsentSig && (
+                      <Btn variant="ghost" style={{ padding: '.35rem .7rem' }} busy={busyId === row.agreementCommitment} onClick={() => collectConsent(row, 'adopter')}>Collect adopter consent ↗</Btn>
+                    )}
+                    {!row.facilitatorConsentSig && (
+                      <Btn variant="ghost" style={{ padding: '.35rem .7rem' }} busy={busyId === row.agreementCommitment} onClick={() => collectConsent(row, 'facilitator')}>Collect facilitator consent ↗</Btn>
+                    )}
+                    {row.adopterConsentSig && row.facilitatorConsentSig && (
+                      <Btn style={{ padding: '.35rem .7rem' }} busy={busyId === row.agreementCommitment} onClick={() => publishJoint(row)}>Publish joint assertion</Btn>
+                    )}
+                  </>
+                )}
                 <Btn variant="ghost" style={{ padding: '.35rem .7rem' }} busy={busyId === row.agreementCommitment} onClick={() => verify(row)}>Verify on chain</Btn>
               </div>
             </div>
@@ -734,8 +834,10 @@ function IssuanceDesk() {
   );
 }
 
-// Session cache of issued AgreementCredentials keyed by commitment (the credential
-// body is needed to publish the joint assertion; it isn't persisted to localStorage
-// to keep the full VC body out of long-lived demo storage).
+// sessionStorage key for an in-flight consent request (survives the home redirect round-trip).
+const CONSENT_KEY = 'jp:consent:pending';
+
+// Session cache of issued AgreementCredentials keyed by commitment (kept for parity; the
+// publish + consent paths read the credential from GC's vault so they survive reloads).
 const lastIssued: Record<string, Awaited<ReturnType<typeof registerAgreementOnChain>>['issued']> = {};
 
