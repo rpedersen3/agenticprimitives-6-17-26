@@ -7,8 +7,9 @@
 // that home with the SAME key (deep-link + sign-in-at-home), no cross-origin handoff.
 
 import { keccak256, toBytes } from 'viem';
+import { buildMessage } from '@agenticprimitives/connect-auth/siwe';
 import { loadOrMintPersona, type PersonaName } from './personas.js';
-import { personaSignHash } from './chain.js';
+import { personaSignHash, personaSignMessage, CHAIN_ID } from './chain.js';
 import { ensurePersonDeployed, type PersonChainState } from './person-sa.js';
 import { ensureOrgDeployed } from './onchain.js';
 import type { OrgName } from './org-personas.js';
@@ -26,9 +27,39 @@ function homeOrigin(person: PersonChainState): string {
   return person.agentName ? personalAuthOrigin(nameLabel(person.agentName)) : PLATFORM_AUTH_ORIGIN;
 }
 
-/** The `<handle>.impact-agent.me/you` portal URL the operator opens to connect. */
-export function operatorHomeUrl(person: PersonChainState): string {
-  return `${homeOrigin(person)}/you`;
+/** One-click SIWE handoff (spec 247): sign the operator in at their `.me` home with
+ *  their demo-jp key and return the `/you` URL carrying the minted session in the
+ *  fragment. The home's session provider reads `#session=<token>` and signs them in,
+ *  where the "Received by your organizations" panel shows their org's delegations.
+ *  Requires the person SA to be deployed (run setupOperatorHome first). */
+export async function operatorSignInUrl(person: PersonChainState): Promise<string> {
+  const persona = loadOrMintPersona(person.name);
+  const origin = homeOrigin(person);
+  const host = new URL(origin).host;
+
+  const nonceRes = await fetch(`${origin}/connect/nonce`);
+  if (!nonceRes.ok) throw new Error(`could not reach your home (nonce ${nonceRes.status})`);
+  const { nonce } = (await nonceRes.json()) as { nonce: string };
+
+  const message = buildMessage({
+    domain: host,
+    address: persona.address,
+    uri: origin,
+    chainId: CHAIN_ID,
+    nonce,
+    statement: 'Sign in to your Impact home from JP Adopt — proving you control this agent.',
+  });
+  const signature = await personaSignMessage(persona)(message);
+
+  const siweRes = await fetch(`${origin}/connect/siwe`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ message, signature, aud: 'demo-sso' }),
+  });
+  const body = (await siweRes.json().catch(() => ({}))) as { status?: string; token?: string; reason?: string };
+  if (body.status === 'issued' && body.token) return `${origin}/you#session=${body.token}`;
+  if (body.status === 'bootstrap') throw new Error('Your home agent isn’t set up yet — run “Set up your home” first.');
+  throw new Error(body.reason ?? `sign-in failed (${body.status ?? siweRes.status})`);
 }
 
 /** Deploy + name the operator's person SA, ensure their org SA, and register the
