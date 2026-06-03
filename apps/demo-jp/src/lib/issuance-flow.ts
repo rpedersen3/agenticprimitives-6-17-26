@@ -26,6 +26,7 @@ import {
 import type { Address, Hex } from '@agenticprimitives/types';
 
 import { JP_SHAPES } from './jp-shapes.js';
+import { verifyErc1271 } from './chain.js';
 
 export type AssociationKind = 'facilitator' | 'adopter';
 
@@ -90,6 +91,32 @@ export interface AssociationIssuance {
   request: Omit<AssociationAttestationRequest, 'issuerSignature'>;
   /** Deterministic UID the AttestationRegistry will assign. */
   predictedUid: Hex32;
+}
+
+/**
+ * Verify an OFF-CHAIN recognition credential before honoring it (the recognition-gate
+ * integrity backstop). Recompute the credential hash, ERC-1271-verify the issuer's
+ * signature against the claimed JP issuer SA, and extract the SIGNED subject + kind +
+ * people groups from the credential body (NOT from any caller-supplied row metadata, so
+ * a copied signature can only recognize what JP actually signed). Returns null (fail-closed)
+ * on any mismatch — a forged or unsigned row never passes.
+ */
+export async function verifyRecognitionCredential(
+  credential: JpAssociationCredential,
+  issuerSignature: Hex,
+  issuerSa: Address,
+): Promise<{ subjectOrg: Address; associationKind: AssociationKind; fpgIds: string[] } | null> {
+  try {
+    const ch = credentialHash(credential);
+    if (!(await verifyErc1271(issuerSa, ch, issuerSignature))) return null;
+    const situation = credential.credentialSubject;
+    const subjectOrg = situation?.roles?.subject as Address | undefined;
+    const body = situation?.body?.payload;
+    if (!subjectOrg || !/^0x[0-9a-fA-F]{40}$/.test(subjectOrg) || !body?.associationKind || !Array.isArray(body.fpgIds)) return null;
+    return { subjectOrg, associationKind: body.associationKind, fpgIds: body.fpgIds };
+  } catch {
+    return null;
+  }
 }
 
 /** Compose the credential + the on-chain Association assertion request (minus the

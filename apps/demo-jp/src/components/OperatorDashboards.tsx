@@ -29,6 +29,7 @@ import {
   type OrgChainState,
 } from '../lib/onchain';
 import { getAgreementRecord, isAttestationValid } from '../lib/chain';
+import { verifyRecognitionCredential, type JpAssociationCredential } from '../lib/issuance-flow';
 import { loadReceivedDelegations, type ReceivedOrgDelegation } from '../lib/vault';
 import { vaultWriteWithDelegation, vaultReadWithDelegation } from '../lib/vault-client';
 import { setupOperatorHome, operatorSignInUrl } from '../lib/operator-home';
@@ -304,7 +305,10 @@ function IntentBoard() {
   const [intents, setIntents] = useState<BoardIntent[]>([]);
   const [matches, setMatches] = useState<BoardMatch[]>([]);
   const [drafts, setDrafts] = useState<AgreementDraft[]>([]);
-  const [associations, setAssociations] = useState<AssociationRow[]>([]);
+  // Recognitions whose JP signature actually VERIFIES (ERC-1271 over the credential hash),
+  // keyed `subjectOrg|kind|fpg`. A bare vault row is NOT trusted — only a row carrying a
+  // valid JP-signed credential counts (F2: the gate must not be presence-only).
+  const [verifiedRecognitions, setVerifiedRecognitions] = useState<Set<string>>(new Set());
 
   const [err, setErr] = useState<string | null>(null);
 
@@ -321,18 +325,28 @@ function IntentBoard() {
       if (cancelled) return;
       const [i, m, d, a] = await Promise.all([loadIntents(), loadMatches(), loadDrafts(), loadAssociations()]);
       if (cancelled) return;
-      setIntents(i); setMatches(m); setDrafts(d); setAssociations(a);
+      setIntents(i); setMatches(m); setDrafts(d);
+      // Verify each recognition's JP signature (ERC-1271) before honoring it, and take the
+      // subject/kind/people-groups from the SIGNED credential body — not the row metadata.
+      const jpSa = orgChainState('jp')?.saAddress ?? loadOrMintOrgPersona('jp').saAddress;
+      const verified = new Set<string>();
+      await Promise.all(a.map(async (row) => {
+        if (!row.credential || !row.issuerSignature) return;
+        const v = await verifyRecognitionCredential(row.credential as JpAssociationCredential, row.issuerSignature, jpSa);
+        if (v) for (const fpg of v.fpgIds) verified.add(`${v.subjectOrg.toLowerCase()}|${v.associationKind}|${fpg}`);
+      }));
+      if (!cancelled) setVerifiedRecognitions(verified);
     })();
     return () => { cancelled = true; };
   }, []);
 
-  // Recognition gate (D-flow): JP may only broker a match once BOTH parties hold a valid
-  // JP Association for that people group — adopter recognized as 'adopter', facilitator as
-  // 'facilitator'. Issue recognition in the "Issue Association credential" card above.
+  // Recognition gate (D-flow): JP may only broker a match for a FACILITATOR that holds a
+  // VERIFIED JP recognition for the people group (adopters need none). A row only counts
+  // if its JP signature validated above — presence alone is not enough.
   const isRecognized = useCallback(
     (addr: Address, kind: 'adopter' | 'facilitator', fpgId: string) =>
-      associations.some((x) => x.subjectOrg.toLowerCase() === addr.toLowerCase() && x.associationKind === kind && x.fpgIds.includes(fpgId)),
-    [associations],
+      verifiedRecognitions.has(`${addr.toLowerCase()}|${kind}|${fpgId}`),
+    [verifiedRecognitions],
   );
 
   const persist = async (next: { i?: BoardIntent[]; m?: BoardMatch[]; d?: AgreementDraft[] }) => {

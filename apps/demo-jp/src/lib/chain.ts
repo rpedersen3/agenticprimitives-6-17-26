@@ -388,6 +388,27 @@ export async function reverseName(addr: Address): Promise<string | null> {
   }
 }
 
+// ERC-1271 signature verification against a Smart Account (the signer is a contract).
+// Used to verify JP's off-chain recognition credential signature before honoring it
+// (the recognition gate's integrity backstop — see verifyRecognitionCredential).
+const ERC1271_MAGIC = '0x1626ba7e';
+const ERC1271_ABI = [
+  { type: 'function', name: 'isValidSignature', stateMutability: 'view', inputs: [{ name: 'hash', type: 'bytes32' }, { name: 'signature', type: 'bytes' }], outputs: [{ type: 'bytes4' }] },
+] as const;
+export async function verifyErc1271(signer: Address, hash: Hex, signature: Hex): Promise<boolean> {
+  try {
+    const r = (await publicClient().readContract({
+      address: signer,
+      abi: ERC1271_ABI,
+      functionName: 'isValidSignature',
+      args: [hash, signature],
+    })) as string;
+    return r === ERC1271_MAGIC;
+  } catch {
+    return false;
+  }
+}
+
 /** Base Sepolia explorer link for a tx / address. */
 export function explorerTx(txHash: string): string {
   return `https://sepolia.basescan.org/tx/${txHash}`;
