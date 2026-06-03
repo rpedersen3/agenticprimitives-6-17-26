@@ -71,8 +71,20 @@ function saveDeployState(s: OrgChainState): void {
 }
 
 /** Resolve the canonical (factory-derived) org SA address, deploying if needed.
- *  Idempotent: a cached deployed state short-circuits. Returns the chain state. */
-export async function ensureOrgDeployed(name: OrgName): Promise<OrgChainState> {
+ *  Idempotent: a cached deployed state short-circuits. Concurrent callers (the
+ *  deploy card + each broker panel on mount) share ONE in-flight deploy via the
+ *  promise cache below — otherwise they'd each pass the not-yet-deployed check and
+ *  race two deploys (nonce conflict / duplicate). Returns the chain state. */
+const _inflight = new Map<OrgName, Promise<OrgChainState>>();
+export function ensureOrgDeployed(name: OrgName): Promise<OrgChainState> {
+  const existing = _inflight.get(name);
+  if (existing) return existing;
+  const p = _ensureOrgDeployed(name).finally(() => _inflight.delete(name));
+  _inflight.set(name, p);
+  return p;
+}
+
+async function _ensureOrgDeployed(name: OrgName): Promise<OrgChainState> {
   const persona: OrgPersona = loadOrMintOrgPersona(name);
   const cached = loadDeployState(name);
   if (cached?.deployed) return cached;

@@ -5,7 +5,7 @@
 //   2. See JP's recognition of the org (the Association credential, on chain).
 //   3. See the agreement(s) the org is party to (AgreementRegistry), verifiable.
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
 
 import { Card, SectionHead, Btn, Mono, Pill, Field, inputStyle, Banner, TxLink, AddrLink, shortHex } from './ui';
@@ -15,6 +15,7 @@ import {
   loadIntents, saveIntents, loadAssociations, loadIssuance,
   type BoardIntent, type AssociationRow, type IssuanceRow,
 } from '../lib/broker-store';
+import { ensureOrgDeployed } from '../lib/onchain';
 import { isAttestationValid, getAgreementRecord } from '../lib/chain';
 import { FPG_SEED, findPeopleGroup } from '../lib/people-groups';
 
@@ -29,14 +30,27 @@ export function MemberTrustPanel({
   orgAgent: Address;
   orgName: string;
 }) {
-  const [intents, setIntents] = useState<BoardIntent[]>(() => loadIntents());
-  const [associations] = useState<AssociationRow[]>(() => loadAssociations());
-  const [issuance] = useState<IssuanceRow[]>(() => loadIssuance());
+  const [intents, setIntents] = useState<BoardIntent[]>([]);
+  const [associations, setAssociations] = useState<AssociationRow[]>([]);
+  const [issuance, setIssuance] = useState<IssuanceRow[]>([]);
   const [verify, setVerify] = useState<Record<string, string>>({});
   const [fpgId, setFpgId] = useState(FPG_SEED[0]?.id ?? 'NAJDI');
   const [adopterType, setAdopterType] = useState<(typeof ADOPTER_TYPES)[number]>('church');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // The broker board + JP's recognition live in JP Org's vault (spec 247) — load
+  // once JP is deployed (the org reads JP's view of itself via JP's custodian key).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try { await ensureOrgDeployed('jp'); } catch { /* surfaced on the operator dash */ }
+      const [i, assoc, iss] = await Promise.all([loadIntents(), loadAssociations(), loadIssuance()]);
+      if (cancelled) return;
+      setIntents(i); setAssociations(assoc); setIssuance(iss);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const a = orgAgent.toLowerCase();
   const mine = useMemo(() => intents.filter((i) => i.expressedBy.toLowerCase() === a), [intents, a]);
@@ -51,7 +65,8 @@ export function MemberTrustPanel({
     try {
       const direction = kind === 'adopter' ? 'receive' : 'give';
       const object = kind === 'adopter' ? JP_INTENT_OBJECT.NeedFacilitator : JP_INTENT_OBJECT.OfferFacilitator;
-      const id = `int_${loadIntents().length}_${Date.now().toString(36)}`;
+      const current = await loadIntents();
+      const id = `int_${current.length}_${Date.now().toString(36)}`;
       await expressIntent({ id, expressedBy: orgAgent, object, payload: { fpgId, adopterType: kind === 'adopter' ? adopterType : undefined } });
       const pg = findPeopleGroup(fpgId);
       const row: BoardIntent = {
@@ -62,8 +77,8 @@ export function MemberTrustPanel({
         createdAt: new Date().toISOString(),
         state: 'expressed',
       };
-      const next = [...loadIntents(), row];
-      saveIntents(next); setIntents(next);
+      const next = [...current, row];
+      await saveIntents(next); setIntents(next);
       setMsg(kind === 'adopter' ? `${orgName}'s need is on the network — JP can broker a facilitator match.` : `${orgName}'s offering is on the network — JP can match you to adopters.`);
     } finally { setBusy(false); }
   }, [kind, orgAgent, orgName, fpgId, adopterType]);
