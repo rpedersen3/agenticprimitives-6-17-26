@@ -14,7 +14,13 @@ import { ensurePersonDeployed, type PersonChainState } from './person-sa.js';
 import { ensureOrgDeployed } from './onchain.js';
 import type { OrgName } from './org-personas.js';
 import { registerRelatedOrg } from '../connect-client.js';
-import { PLATFORM_AUTH_ORIGIN, personalAuthOrigin, nameLabel } from './domain.js';
+import { CONNECT_DOMAIN } from './domain.js';
+
+/** The canonical Connect platform home (`www.<connect-domain>`) — the no-redirect,
+ *  CORS-enabled host. The operator signs in HERE; the session is shared across
+ *  `*.impact-agent.me` (and the related-org KV is one store), so `/you` shows their
+ *  orgs + delegations regardless of whether a per-handle subdomain is provisioned. */
+const CONNECT_HOME = `https://www.${CONNECT_DOMAIN}`;
 
 /** Each operator governs one org (Pete → Global Church, Jill → Joshua Project). */
 const OPERATOR_ORG: Record<PersonaName, { org: OrgName; orgName: string; purpose: string }> = {
@@ -22,19 +28,14 @@ const OPERATOR_ORG: Record<PersonaName, { org: OrgName; orgName: string; purpose
   jill: { org: 'jp', orgName: 'Joshua Project', purpose: 'jp-broker-org' },
 };
 
-/** The operator's Connect home origin, derived from their claimed person name. */
-function homeOrigin(person: PersonChainState): string {
-  return person.agentName ? personalAuthOrigin(nameLabel(person.agentName)) : PLATFORM_AUTH_ORIGIN;
-}
-
-/** One-click SIWE handoff (spec 247): sign the operator in at their `.me` home with
- *  their demo-jp key and return the `/you` URL carrying the minted session in the
- *  fragment. The home's session provider reads `#session=<token>` and signs them in,
- *  where the "Received by your organizations" panel shows their org's delegations.
- *  Requires the person SA to be deployed (run setupOperatorHome first). */
+/** One-click SIWE handoff (spec 247): sign the operator in at the Connect platform
+ *  home (`impact-agent.me`) with their demo-jp key, returning the `/you` URL carrying
+ *  the minted session in the fragment. The home's session provider reads
+ *  `#session=<token>` and signs them in, where the "Received by your organizations"
+ *  panel shows their org's delegations. Requires the person SA deployed (setup first). */
 export async function operatorSignInUrl(person: PersonChainState): Promise<string> {
   const persona = loadOrMintPersona(person.name);
-  const origin = homeOrigin(person);
+  const origin = CONNECT_HOME;
   const host = new URL(origin).host;
 
   const nonceRes = await fetch(`${origin}/connect/nonce`);
@@ -83,7 +84,7 @@ export async function setupOperatorHome(
   const challenge = keccak256(toBytes(`related-orgs:write:${person.saAddress.toLowerCase()}`));
   const sig = await personaSignHash(persona)(challenge);
   await registerRelatedOrg(
-    homeOrigin(person),
+    CONNECT_HOME,
     { person: person.saAddress, orgAgent: orgState.saAddress, orgName, purpose, requestedBy: 'demo-jp' },
     sig,
   );

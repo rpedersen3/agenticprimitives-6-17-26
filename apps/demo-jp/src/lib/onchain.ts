@@ -19,6 +19,7 @@ import {
   deployOrgSa,
   deriveOrgSaAddress,
   executeViaSa,
+  executeBatchViaSa,
   personaSignHash,
   isContractDeployed,
   encodeRegisterAgreement,
@@ -26,6 +27,7 @@ import {
   encodeAssertJointAgreement,
   type ExecuteResult,
 } from './chain.js';
+import { buildNameClaimCallData, buildNameClaimCalls, reverseName } from './naming.js';
 import { loadOrMintOrgPersona, type OrgName, type OrgPersona } from './org-personas.js';
 import type { VaultOwner } from './vault-client.js';
 import { issueAgreement } from './agreement-flow.js';
@@ -46,7 +48,13 @@ export interface OrgChainState {
   saAddress: Address;
   deployed: boolean;
   deployTxHash?: Hex;
+  /** Reserved `<base>.impact` primary name (spec 247) — claimed at deploy, or for an
+   *  already-deployed org on demand. Undefined until the name is claimed/resolved. */
+  agentName?: string;
 }
+
+/** The `.impact` name base each org reserves on creation. */
+const ORG_NAME_BASE: Record<OrgName, string> = { 'global-church': 'global-church', jp: 'jp' };
 
 /** Stable per-org salt (D-5: address reproduces across reloads). Salt 0 under each
  *  custodian EOA is RESERVED for that operator's own PERSON SA (spec 247 — it matches
@@ -87,32 +95,48 @@ export function ensureOrgDeployed(name: OrgName): Promise<OrgChainState> {
 async function _ensureOrgDeployed(name: OrgName): Promise<OrgChainState> {
   const persona: OrgPersona = loadOrMintOrgPersona(name);
   const cached = loadDeployState(name);
-  if (cached?.deployed) return cached;
+  if (cached?.deployed && cached.agentName) return cached; // fully provisioned (deployed + named)
 
   const salt = ORG_SALT[name];
-  const saAddress = cached?.saAddress ?? (await deriveOrgSaAddress(persona.custodian.address, salt));
+  const base = ORG_NAME_BASE[name];
+  const custodian = persona.custodian.address;
+  const saAddress = cached?.saAddress ?? (await deriveOrgSaAddress(custodian, salt));
 
-  // If the SA already has code on chain (e.g. local state was cleared), adopt it
-  // rather than re-deploying (which would revert). One canonical check, no fallback.
+  // Already on chain (e.g. created in a prior session) → adopt it rather than
+  // re-deploying (which would revert), and reserve a `.impact` name if it doesn't
+  // have one yet ("if these are already created, go get a name for them"). The name
+  // claim is best-effort — the org is fully usable without it.
   if (await isContractDeployed(saAddress)) {
-    const adopted: OrgChainState = { name, custodian: persona.custodian.address, saAddress, deployed: true };
+    let agentName = cached?.agentName ?? (await reverseName(saAddress)) ?? undefined;
+    if (!agentName) {
+      try {
+        const { calls, name: claimed } = await buildNameClaimCalls(saAddress, base);
+        const res = await executeBatchViaSa({ sender: saAddress, signHash: personaSignHash(persona.custodian), calls });
+        if (res.ok) agentName = claimed;
+      } catch {
+        /* name reservation is best-effort for an already-deployed org */
+      }
+    }
+    const adopted: OrgChainState = { name, custodian, saAddress, deployed: true, agentName };
     saveDeployState(adopted);
     return adopted;
   }
 
-  const res = await deployOrgSa({ custodian: persona.custodian, salt });
+  // Fresh deploy → reserve + claim the `.impact` name atomically in the deploy userOp.
+  const { callData, name: agentName } = await buildNameClaimCallData(saAddress, base);
+  const res = await deployOrgSa({ custodian: persona.custodian, salt, callData });
   if (!res.ok || !res.deployedAddress) {
     // Persist the predicted address so the UI can show it pre-deploy.
-    const pending: OrgChainState = { name, custodian: persona.custodian.address, saAddress, deployed: false };
-    saveDeployState(pending);
+    saveDeployState({ name, custodian, saAddress, deployed: false, agentName });
     throw new Error(res.error ?? 'org deploy failed');
   }
   const state: OrgChainState = {
     name,
-    custodian: persona.custodian.address,
+    custodian,
     saAddress: res.deployedAddress,
     deployed: true,
     deployTxHash: res.txHash,
+    agentName,
   };
   saveDeployState(state);
   return state;
