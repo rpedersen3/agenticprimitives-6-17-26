@@ -293,6 +293,42 @@ function DelegatedOrgsPanel() {
   );
 }
 
+/** Pick a party SA from JP's members (orgs delegated to JP), or fall back to a manual
+ *  address. The value is always the org SA (0x…40), so the intent-flow validation passes
+ *  unchanged — the dropdown just removes the copy-paste step. */
+function PartySelect({ value, onChange, members, kindHint }: {
+  value: string; onChange: (v: string) => void; members: ReceivedOrgDelegation[]; kindHint: string;
+}) {
+  const [manual, setManual] = useState(false);
+  if (manual || members.length === 0) {
+    return (
+      <div>
+        <input style={inputStyle} placeholder="0x…" value={value} onChange={(e) => onChange(e.target.value)} />
+        {members.length > 0 && (
+          <button type="button" onClick={() => { setManual(false); onChange(''); }}
+            style={{ background: 'none', border: 'none', color: 'var(--c-primary)', cursor: 'pointer', fontSize: '.74rem', padding: '.25rem 0' }}>
+            ↳ pick from JP members
+          </button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <select style={inputStyle} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Select a {kindHint} (JP member)…</option>
+        {members.map((m) => (
+          <option key={m.orgAgent} value={m.orgAgent}>{m.orgName || shortHex(m.orgAgent)}</option>
+        ))}
+      </select>
+      <button type="button" onClick={() => { setManual(true); onChange(''); }}
+        style={{ background: 'none', border: 'none', color: 'var(--c-g500)', cursor: 'pointer', fontSize: '.74rem', padding: '.25rem 0' }}>
+        ↳ enter an address manually
+      </button>
+    </div>
+  );
+}
+
 function IntentBoard() {
   const [intents, setIntents] = useState<BoardIntent[]>([]);
   const [matches, setMatches] = useState<BoardMatch[]>([]);
@@ -302,19 +338,23 @@ function IntentBoard() {
   const [adopterAddr, setAdopterAddr] = useState('');
   const [facilitatorAddr, setFacilitatorAddr] = useState('');
   const [adopterType, setAdopterType] = useState('church');
+  const [members, setMembers] = useState<ReceivedOrgDelegation[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   // The broker board lives in JP Org's vault (spec 247) — load it once JP is
   // deployed (ensureOrgDeployed is idempotent + deduped, so this shares the
-  // deploy card's provisioning rather than racing it).
+  // deploy card's provisioning rather than racing it). JP's member roster (the
+  // orgs delegated to JP) is read from JP's OWN vault as its custodian (Jill),
+  // through the demo-a2a boundary — that's what populates the party dropdowns so
+  // the operator picks a member instead of pasting an address.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try { await ensureOrgDeployed('jp'); } catch { /* deploy card surfaces errors */ }
       if (cancelled) return;
-      const [i, m, d] = await Promise.all([loadIntents(), loadMatches(), loadDrafts()]);
+      const [i, m, d, mem] = await Promise.all([loadIntents(), loadMatches(), loadDrafts(), loadReceivedDelegations()]);
       if (cancelled) return;
-      setIntents(i); setMatches(m); setDrafts(d);
+      setIntents(i); setMatches(m); setDrafts(d); setMembers(mem);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -405,11 +445,11 @@ function IntentBoard() {
               {['individual', 'family', 'group', 'church', 'organization', 'network'].map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </Field>
-          <Field label="Adopter party SA"><input style={inputStyle} placeholder="0x…" value={adopterAddr} onChange={(e) => setAdopterAddr(e.target.value)} /></Field>
+          <Field label="Adopter party SA"><PartySelect value={adopterAddr} onChange={setAdopterAddr} members={members} kindHint="adopter org" /></Field>
           <Btn variant="ghost" onClick={() => express('receive')}>+ Express adopter need</Btn>
         </div>
         <div>
-          <Field label="Facilitator party SA"><input style={inputStyle} placeholder="0x…" value={facilitatorAddr} onChange={(e) => setFacilitatorAddr(e.target.value)} /></Field>
+          <Field label="Facilitator party SA"><PartySelect value={facilitatorAddr} onChange={setFacilitatorAddr} members={members} kindHint="facilitator org" /></Field>
           <Btn variant="ghost" onClick={() => express('give')}>+ Express facilitator offering</Btn>
         </div>
       </div>
