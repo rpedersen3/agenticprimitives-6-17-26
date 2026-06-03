@@ -14,6 +14,7 @@ export {
   encodeValueTerms,
   encodeAllowedTargetsTerms,
   encodeAllowedMethodsTerms,
+  encodeCallDataHashTerms,
   MCP_TOOL_SCOPE_ENFORCER,
   DATA_SCOPE_ENFORCER,
   DELEGATE_BINDING_ENFORCER,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decodeAbiParameters } from 'viem';
+import { decodeAbiParameters, keccak256 } from 'viem';
 import {
   buildCaveat,
   buildMcpToolScopeCaveat,
@@ -10,6 +10,7 @@ import {
   encodeValueTerms,
   encodeAllowedTargetsTerms,
   encodeAllowedMethodsTerms,
+  encodeCallDataHashTerms,
   MCP_TOOL_SCOPE_ENFORCER,
   DATA_SCOPE_ENFORCER,
   DELEGATE_BINDING_ENFORCER,
@@ -37,6 +38,15 @@ describe('on-chain enforcer term encoders', () => {
     const [v] = decodeAbiParameters([{ type: 'uint256' }], enc) as readonly [bigint];
     expect(v).toBe(1_000_000n);
     expect(() => encodeValueTerms(-1n)).toThrow(/non-negative/);
+  });
+
+  it('encodeCallDataHashTerms encodes keccak256(callData) as a bytes32 (matches CallDataHashEnforcer)', () => {
+    const callData = '0xdeadbeef' as `0x${string}`;
+    const enc = encodeCallDataHashTerms(callData);
+    const [h] = decodeAbiParameters([{ type: 'bytes32' }], enc) as readonly [`0x${string}`];
+    // The Solidity enforcer does `abi.decode(terms,(bytes32))` and compares to `keccak256(callData)`.
+    expect(h).toBe(keccak256(callData));
+    expect(() => encodeCallDataHashTerms('0xabc' as `0x${string}`)).toThrow(/even-length hex/);
   });
 
   it('encodeAllowedTargetsTerms round-trips', () => {
