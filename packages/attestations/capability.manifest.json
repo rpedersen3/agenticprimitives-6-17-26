@@ -76,6 +76,8 @@
     "Hex32",
     "CREDENTIAL_TYPE",
     "computeAttestationUid",
+    "JOINT_CONSENT_TYPEHASH",
+    "jointConsentDigest",
     "AssociationAttestationRequest",
     "JointAgreementAttestationRequest"
   ],

@@ -25,7 +25,14 @@
 
 ## Stable public exports (planned)
 
-`buildAssociationAssertion`, `buildJointAgreementAssertion`, `revokeOwnAssociation`, `revokeOwnJointAgreement`, `AttestationClient.getAttestation`, `AttestationClient.isValid`, `AssociationCredential`, `EvidenceCredential`, `OutcomeCredential`, `ValidationCredential`, `TrustUpdate` (credential class types).
+`buildAssociationAssertion`, `buildJointAgreementAssertion`, `revokeOwnAssociation`, `revokeOwnJointAgreement`, `JOINT_CONSENT_TYPEHASH`, `jointConsentDigest`, `AttestationClient.getAttestation`, `AttestationClient.isValid`, `AssociationCredential`, `EvidenceCredential`, `OutcomeCredential`, `ValidationCredential`, `TrustUpdate` (credential class types).
+
+> RW1-1 (ADR-0027): `assertJointAgreement` VERIFIES bilateral consent on-chain —
+> it recomputes `jointConsentDigest(party1, party2, agreementCommitment,
+> credentialHash)` and requires BOTH party signatures over it (`party1Signature`,
+> `party2Signature` on the request; ERC-1271 / ECDSA). `bilateralConsentRef` is
+> ignored (pass `bytes32(0)`). The cross-stack `check:eip712-typehash-equality`
+> gate locks `JOINT_CONSENT_TYPEHASH` to `AttestationRegistry.sol`.
 
 ## Allowed imports
 

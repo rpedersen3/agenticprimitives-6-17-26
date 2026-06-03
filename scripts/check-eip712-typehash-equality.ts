@@ -41,6 +41,10 @@ const SUITES: ReadonlyArray<{ pkg: string; test: string }> = [
     pkg: '@agenticprimitives/agreements',
     test: 'test/unit/cross-stack-transition-typehash.test.ts',
   },
+  {
+    pkg: '@agenticprimitives/attestations',
+    test: 'test/unit/cross-stack-consent-typehash.test.ts',
+  },
 ];
 
 console.log('[eip712-typehash-equality] running cross-stack typehash invariant tests…');
@@ -59,7 +63,9 @@ try {
       "  - delegation: `packages/delegation/src/hash.ts::DELEGATION_EIP712_TYPES`\n" +
       '      ↔ `DelegationManager.sol::DELEGATION_TYPEHASH` / `CAVEAT_TYPEHASH`\n' +
       "  - agreements: `packages/agreements/src/index.ts::TRANSITION_TYPEHASH`\n" +
-      '      ↔ `AgreementRegistry.sol::TRANSITION_TYPEHASH` (RW1-3)\n\n' +
+      '      ↔ `AgreementRegistry.sol::TRANSITION_TYPEHASH` (RW1-3)\n' +
+      "  - attestations: `packages/attestations/src/index.ts::JOINT_CONSENT_TYPEHASH`\n" +
+      '      ↔ `AttestationRegistry.sol::JOINT_CONSENT_TYPEHASH` (RW1-1)\n\n' +
       'Causes (most likely):\n' +
       "  - A Solidity-side EIP-712 type string was edited without updating the TS side\n" +
       '  - A TS-side typehash/type set was edited without updating the contract\n' +
