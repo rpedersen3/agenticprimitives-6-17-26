@@ -123,6 +123,53 @@ External audit pass on 2026-05-23 noted material improvement and reclassified se
 
 ---
 
+## External Review — June 2026 (incorporated)
+
+A full-monorepo external review (intent-spine / naming / ontology focus) landed 2026-06-03. Its verdict
+— **external-audit-ready alpha; P0 blockers concentrate in contracts governance keys + pending
+third-party audit + operational hardening** — matches this doc's standing verdict. Reconciliation:
+
+**Already tracked (re-raised, no new ID):**
+- *Leaked deployer key / governance* → **N1** (P0) + the rotation runbook in `packages/contracts/AUDIT.md` §4.1.
+- *No third-party contract audit* → **N15** (P0, engagement still open) + the auditor packet (`specs/214`).
+- *Production preflight incomplete* → **N10** (P1). Durable audit sinks everywhere → **CT-8/CT-11**.
+- *Old orphaned contracts* → **N6**; *NODE_ENV default-to-dev* → **CT-12**; *managed MAC rotation* → **N13**.
+
+**New, now on record:**
+
+| ID | Severity | Finding | Disposition |
+| --- | --- | --- | --- |
+| **EXT-1** | **P1** | **Intent spine needs dedicated threat modeling.** `intent-marketplace` / `intent-resolver` / `payments` / `fulfillment` / `attestations` have no STRIDE rows yet: solver front-running, runtime `ConstraintSet` enforcement, `PaymentMandate` scoping, evidence/outcome lifecycle integrity, privacy in matching. Highest-risk new surface. | OPEN — add a Boundary section to `threat-model.md` + per-package invariants before beta. |
+| **EXT-2** | **P1** | **EIP-712 typehash consistency (TS ↔ Solidity) lacks a CI gate.** A drift between `packages/delegation` hashing and the on-chain `DelegationManager`/registries typehashes would silently break ERC-1271 redemption. | OPEN — add a CI check that asserts the TS typehashes equal the Solidity constants. |
+| **EXT-3** | **P2** | **WebAuthn `authenticatorData` length not validated** on the passkey verify path. | OPEN — bounds-check authData before parsing (connect-auth / agent-account verify). |
+| **EXT-4** | **P2** | **No SHACL/ontology enforcement hook in `mcp-runtime`/`tool-policy`.** `ontology` ships shapes but nothing validates tool I/O or LLM-derived intents against them at runtime (neuro-symbolic guardrail). | OPEN — optional shape-validation step in the tool pipeline. |
+| **EXT-5** | **P2** | **`agent-relationships` privacy model.** Experimental, public-graph-only; the private person↔org model is now `related-agents` (ADR-0025). Clarify/isolate the experimental edge package so it isn't mistaken for the private path. | OPEN — doc/isolation; ADR-0025 already governs the private path. |
+| **EXT-6** | **P1** | **`PaymentMandate` ↔ delegation-caveat binding + AP2/x402 alignment** is unspecified — a payment mandate must be a scoped delegation caveat, not a free-standing grant. | OPEN — spec the mandate-as-caveat binding (peer of the on-chain enforcers). |
+
+**demo-jp custody/vault findings (2026-06-03 audit — see `apps/demo-jp/AUDIT.md`):**
+- **DEMO-1** (P0, accepted testnet hole): operator org keys (GC/JP) derived from hardcoded seeds are
+  globally identical → any visitor owns both org vaults incl. member PII. Hardening: **spec 248** (per-
+  operator SIWE/KMS custody, spec 235).
+- **DEMO-2** (P0, accepted testnet hole): vault delegations are full-vault grants (no `record_type`
+  scope enforced off-chain). Hardening: **spec 248** (record-type scope caveat in the vault tools).
+- *Fixed 2026-06-03:* the recognition gate now ERC-1271-verifies JP's signature (was presence-only).
+
+**Architecture-debt cleanup done 2026-06-03 (this turn):**
+- **F6** — consolidated demo-jp's two `reverseName` implementations to one (`naming.ts` re-exports
+  `chain.ts`'s single `reverseResolveString` read; ADR-0013 one-fact-one-mechanism).
+- **F7** — added a transport+KMS-boundary `forbiddenTerms` baseline to the 8 spine packages that
+  declared none (`agreements`, `attestations`, `fulfillment`, `intent-marketplace`, `intent-resolver`,
+  `payments`, `related-agents`, `verifiable-credentials`); `check:forbidden-terms` now enforces them.
+- **F5** — the per-agent `vault-client` is intentionally **app-local in each of demo-jp + demo-sso-next**:
+  it is MCP-vault *transport* glue (POSTs to that app's `/a2a/mcp/vault/*` proxy), which ADR-0021 keeps
+  OUT of `packages/*` (packages are transport-agnostic). The two clients share a shape; the persona-
+  signing delegation builder is app custody glue. Decision: keep app-local, do not package.
+- **F3** — `docs/audits/architecture-diagram.md` is ~6 waves stale (12 of 25 packages, old factory
+  address); a staleness banner was added pointing to the authoritative `capability.manifest.json` set +
+  `deployments-base-sepolia.json`. A full redraw is tracked as doc debt.
+
+---
+
 ## Top Priorities (Next Hardening Pass)
 
 These are the items the next pass should close. Selected by impact × ease — biggest reduction in attack surface per hour of work.

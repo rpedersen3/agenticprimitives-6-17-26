@@ -8,6 +8,15 @@ boundary, or a deployment target.
 work (see Gate 2 of `specs/214-production-audit-dossier.md`) is a
 generator that derives them from `capability.manifest.json` data.
 
+> ⚠️ **STALE (flagged 2026-06-03 architecture audit, F3).** This diagram is ~6 waves
+> behind: §1 shows **12** packages but the workspace has **25** (missing at least
+> `connect`, `identity-directory`(+adapters), `ontology`, `agreements`, `attestations`,
+> `verifiable-credentials`, `related-agents`, `intent-marketplace`, `intent-resolver`,
+> `fulfillment`, `payments`, `contracts`); §5 deployed addresses predate the R8.2/R9/R10
+> redeploys. For authoritative current state use the `packages/*/capability.manifest.json`
+> set (package graph) and `packages/contracts/deployments-base-sepolia.json` (live
+> addresses). Full redraw is tracked doc debt (product-readiness-audit.md F3).
+
 Companion docs: [`threat-model.md`](./threat-model.md) ·
 [`evidence-checklist.md`](./evidence-checklist.md) ·
 [`docs/architecture/cross-cutting-capabilities.md`](../architecture/cross-cutting-capabilities.md).

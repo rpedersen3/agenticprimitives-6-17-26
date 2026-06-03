@@ -42,6 +42,28 @@
     "@agenticprimitives/agent-profile",
     "@agenticprimitives/agent-relationships"
   ],
+  "forbiddenTerms": [
+    {
+      "term": "@modelcontextprotocol",
+      "reason": "Transport-specific; this spine package is transport-agnostic (MCP/A2A wiring lives in mcp-runtime and apps).",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    },
+    {
+      "term": "LocalAesProvider",
+      "reason": "Concrete KMS backend belongs in key-custody. Consume the A2AKeyProvider interface, not a provider class.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "AwsKmsProvider",
+      "reason": "Concrete KMS backend belongs in key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    },
+    {
+      "term": "GcpKmsProvider",
+      "reason": "Concrete KMS backend belongs in key-custody.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    }
+  ],
   "publicExports": [
     "PACKAGE_NAME",
     "PACKAGE_STATUS",
