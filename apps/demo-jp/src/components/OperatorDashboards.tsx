@@ -293,68 +293,27 @@ function DelegatedOrgsPanel() {
   );
 }
 
-/** Pick a party SA from JP's members (orgs delegated to JP), or fall back to a manual
- *  address. The value is always the org SA (0x…40), so the intent-flow validation passes
- *  unchanged — the dropdown just removes the copy-paste step. */
-function PartySelect({ value, onChange, members, kindHint }: {
-  value: string; onChange: (v: string) => void; members: ReceivedOrgDelegation[]; kindHint: string;
-}) {
-  const [manual, setManual] = useState(false);
-  if (manual || members.length === 0) {
-    return (
-      <div>
-        <input style={inputStyle} placeholder="0x…" value={value} onChange={(e) => onChange(e.target.value)} />
-        {members.length > 0 && (
-          <button type="button" onClick={() => { setManual(false); onChange(''); }}
-            style={{ background: 'none', border: 'none', color: 'var(--c-primary)', cursor: 'pointer', fontSize: '.74rem', padding: '.25rem 0' }}>
-            ↳ pick from JP members
-          </button>
-        )}
-      </div>
-    );
-  }
-  return (
-    <div>
-      <select style={inputStyle} value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Select a {kindHint} (JP member)…</option>
-        {members.map((m) => (
-          <option key={m.orgAgent} value={m.orgAgent}>{m.orgName || shortHex(m.orgAgent)}</option>
-        ))}
-      </select>
-      <button type="button" onClick={() => { setManual(true); onChange(''); }}
-        style={{ background: 'none', border: 'none', color: 'var(--c-g500)', cursor: 'pointer', fontSize: '.74rem', padding: '.25rem 0' }}>
-        ↳ enter an address manually
-      </button>
-    </div>
-  );
-}
-
 function IntentBoard() {
   const [intents, setIntents] = useState<BoardIntent[]>([]);
   const [matches, setMatches] = useState<BoardMatch[]>([]);
   const [drafts, setDrafts] = useState<AgreementDraft[]>([]);
 
-  const [fpgId, setFpgId] = useState(FPG_SEED[0]?.id ?? 'NAJDI');
-  const [adopterAddr, setAdopterAddr] = useState('');
-  const [facilitatorAddr, setFacilitatorAddr] = useState('');
-  const [adopterType, setAdopterType] = useState('church');
-  const [members, setMembers] = useState<ReceivedOrgDelegation[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   // The broker board lives in JP Org's vault (spec 247) — load it once JP is
   // deployed (ensureOrgDeployed is idempotent + deduped, so this shares the
-  // deploy card's provisioning rather than racing it). JP's member roster (the
-  // orgs delegated to JP) is read from JP's OWN vault as its custodian (Jill),
-  // through the demo-a2a boundary — that's what populates the party dropdowns so
-  // the operator picks a member instead of pasting an address.
+  // deploy card's provisioning rather than racing it). JP does NOT author intents
+  // here — adopters/facilitators express their own from their member dashboards
+  // (at their org level); this board only reads the resulting needs/offers and
+  // brokers matches.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try { await ensureOrgDeployed('jp'); } catch { /* deploy card surfaces errors */ }
       if (cancelled) return;
-      const [i, m, d, mem] = await Promise.all([loadIntents(), loadMatches(), loadDrafts(), loadReceivedDelegations()]);
+      const [i, m, d] = await Promise.all([loadIntents(), loadMatches(), loadDrafts()]);
       if (cancelled) return;
-      setIntents(i); setMatches(m); setDrafts(d); setMembers(mem);
+      setIntents(i); setMatches(m); setDrafts(d);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -364,26 +323,6 @@ function IntentBoard() {
     if (next.m) { setMatches(next.m); await saveMatches(next.m); }
     if (next.d) { setDrafts(next.d); await saveDrafts(next.d); }
   };
-
-  const express = useCallback(async (direction: 'receive' | 'give') => {
-    setErr(null);
-    const addr = (direction === 'receive' ? adopterAddr : facilitatorAddr).trim();
-    if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) { setErr('Enter a valid party SA address (0x…40 hex).'); return; }
-    const id = `int_${intents.length}_${Date.now().toString(36)}`;
-    const object = direction === 'receive' ? JP_INTENT_OBJECT.NeedFacilitator : JP_INTENT_OBJECT.OfferFacilitator;
-    // Exercise the real intent-flow (build + resolve via PassThroughResolver).
-    const at = adopterType as 'individual' | 'family' | 'group' | 'church' | 'organization' | 'network';
-    await expressIntent({ id, expressedBy: addr as Address, object, payload: { fpgId, adopterType: direction === 'receive' ? at : undefined } });
-    const row: BoardIntent = {
-      id, direction, object: 'facilitator', fpgId,
-      adopterType: direction === 'receive' ? adopterType : undefined,
-      expressedBy: addr as Address,
-      label: direction === 'receive' ? `Adopter needs facilitator · ${findPeopleGroup(fpgId)?.name ?? fpgId}` : `Facilitator offers · ${findPeopleGroup(fpgId)?.name ?? fpgId}`,
-      createdAt: new Date().toISOString(),
-      state: 'expressed',
-    };
-    await persist({ i: [...intents, row] });
-  }, [adopterAddr, facilitatorAddr, fpgId, adopterType, intents]);
 
   const runMatch = useCallback(async (need: BoardIntent, offer: BoardIntent) => {
     setErr(null);
@@ -434,25 +373,8 @@ function IntentBoard() {
 
   return (
     <Card>
-      <SectionHead eyebrow="Direct Lane · Intent → Match → Commitment" title="Intent board" sub="Express adopter needs + facilitator offerings, then broker a match. Vault-only (D-28); the commitment is the hand-off to Global Church." />
+      <SectionHead eyebrow="Direct Lane · Intent → Match → Commitment" title="Intent board" sub="Adopters and facilitators express their own intents from their dashboards (at their person/org level). Joshua Project brokers a match here — it does not author intents. Vault-only (D-28); the commitment is the hand-off to Global Church." />
       {err && <div style={{ marginBottom: '.9rem' }}><Banner tone="err">{err}</Banner></div>}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-        <div>
-          <Field label="People group"><FpgSelect value={fpgId} onChange={setFpgId} /></Field>
-          <Field label="Adopter type">
-            <select style={inputStyle} value={adopterType} onChange={(e) => setAdopterType(e.target.value)}>
-              {['individual', 'family', 'group', 'church', 'organization', 'network'].map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </Field>
-          <Field label="Adopter party SA"><PartySelect value={adopterAddr} onChange={setAdopterAddr} members={members} kindHint="adopter org" /></Field>
-          <Btn variant="ghost" onClick={() => express('receive')}>+ Express adopter need</Btn>
-        </div>
-        <div>
-          <Field label="Facilitator party SA"><PartySelect value={facilitatorAddr} onChange={setFacilitatorAddr} members={members} kindHint="facilitator org" /></Field>
-          <Btn variant="ghost" onClick={() => express('give')}>+ Express facilitator offering</Btn>
-        </div>
-      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
         <IntentColumn title="Adopter needs" rows={needs} />
