@@ -39,6 +39,12 @@ import { PublicSignalPanel } from './components/PublicSignalPanel';
 import { SubstrateClaimsPanel } from './components/SubstrateClaimsPanel';
 import { SwitchboardBridgePanel } from './components/SwitchboardBridgePanel';
 import { DirectoryPanel } from './components/DirectoryPanel';
+import { LifecycleRail } from './components/LifecycleRail';
+import { NextBestAction, type NextAction } from './components/NextBestAction';
+import { GcoPostedNeeds } from './components/GcoPostedNeeds';
+import { AccessRequestState } from './components/AccessRequestState';
+import { gcoLifecycle } from './lib/gco-lifecycle';
+import type { GcoNeedIntent } from './domain/gs-types';
 import { Banner, Card, Pill, SectionHead } from './components/ui';
 
 /** sessionStorage key + stash for the in-flight org-create redirect (GCO step 2). */
@@ -255,7 +261,9 @@ export function App() {
 
       <div className="wrap" style={{ padding: '1.5rem 1.25rem 0' }}>
         {connectError && <div style={{ marginBottom: '1rem' }}><Banner tone="err">{connectError}</Banner></div>}
-        {view === 'workspace' && loadError() && (
+        {view === 'workspace' && loadError() && !(activeRole === 'gco' && !demoPersona) && (
+          // The GCO workspace renders its OWN first-class request-access state for a missing grant
+          // (below); every other surface shows the generic vault-error banner.
           <div style={{ marginBottom: '1rem' }}><Banner tone="err">Couldn&rsquo;t reach the vault: {loadError()}. This view may be out of date until it reconnects.</Banner></div>
         )}
 
@@ -293,7 +301,20 @@ export function App() {
           {view === 'workspace' && demoPersona === 'jane' && <JaneView />}
           {view === 'workspace' && demoPersona === 'pete' && <PeteView />}
           {view === 'workspace' && !demoPersona && activeRole === 'gco' && (
-            <GcoView pendingGco={pendingGco} onClearPending={() => setPendingGco(null)} onHub={goHub} caps={caps} />
+            <GcoView
+              pendingGco={pendingGco}
+              onClearPending={() => setPendingGco(null)}
+              onHub={goHub}
+              caps={caps}
+              onRecreateOrg={(signatory) => {
+                // Re-mint the org→Switchboard grant: drop the broken gco session + resume org-create.
+                clearSession('gco');
+                setPendingGco({ signatory });
+                setActiveRoleState('gco');
+                void setActiveContext({ persona: 'gco', session: null }).catch(() => { /* loadError() */ });
+              }}
+              onOpenBoard={() => openDemo('jane')}
+            />
           )}
           {view === 'workspace' && !demoPersona && activeRole === 'kc' && <KcView onHub={goHub} caps={caps} />}
         </div>
@@ -399,43 +420,120 @@ function GcoOrgCreate({ signatory, onSignOut }: { signatory: string; onSignOut: 
   );
 }
 
-// The GCO Organization (demand). No session → onboarding landing. Connected but org not yet created
-// (pendingGco) → the org-create ceremony. Connected with a session → the org intranet: post Needs to
-// your OWN org vault, browse the COARSENED public supply, see YOUR agreements.
-function GcoView({ pendingGco, onClearPending, onHub, caps }: {
+// The GCO Organization (demand) workspace (production UX Wave C, design spec §10). No session →
+// onboarding landing. Connected but org not yet created (pendingGco) → the org-create ceremony.
+// A missing org→Switchboard grant (a hydrate failure on the org's own needs) → a first-class
+// request-access state, NOT a raw error banner (§15c, no silent fallback). Connected + a readable
+// grant → the org intranet, restructured into the §10 hierarchy: lifecycle rail → primary task card
+// (post a need) + a next-best-action right rail → posted needs (edit/withdraw) → coarsened supply
+// directory → agreements → a data/trust footer.
+function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg, onOpenBoard }: {
   pendingGco: { signatory: string } | null; onClearPending: () => void; onHub: () => void;
   caps: ReturnType<typeof deriveRoleCapabilities>;
+  /** Re-mint the org→Switchboard grant (drop the session + resume org-create). */
+  onRecreateOrg: (signatory: string) => void;
+  /** Open the Switchboard broker board (to review matches + request a connection). */
+  onOpenBoard: () => void;
 }) {
+  // A "re-post"/edit prefill, set when the user clicks edit on a posted need.
+  const [editNeed, setEditNeed] = useState<GcoNeedIntent | null>(null);
+
   const session = loadSession('gco');
   if (!session) {
     if (pendingGco) return <GcoOrgCreate signatory={pendingGco.signatory} onSignOut={onClearPending} />;
     return <OnboardPanel kind="gco" />;
   }
   const org = session.sa;
+  const orgName = session.orgName ?? session.name;
+  const signatory = session.signatory ?? session.name;
+
+  // Grant-missing: the org's own needs are unreadable (the org→Switchboard grant never minted or
+  // failed). ONE mechanism (ADR-0013) → no fallback read; surface the request-access state instead.
+  if (loadError()) {
+    return (
+      <>
+        <IntranetHeader label={`${orgName} · signatory ${signatory}`} role="GCO Organization"
+          onHub={caps.canSwitch ? onHub : undefined}
+          onSignOut={() => { clearSession('gco'); void setActiveContext({ persona: 'gco', session: null }); }} />
+        <AccessRequestState
+          title="Switchboard can’t read this org’s needs yet"
+          body="The organization didn’t return a Switchboard access grant when it was created (no silent fallback — ADR-0013). Re-create the organization to mint the scoped grant, or continue with a limited view."
+          disclosure={{ owner: 'Your GCO org', scope: 'Read the needs your org posts (gs:needs)', grantee: 'Global Switchboard' }}
+          primary={{ label: 'Re-create the organization to mint the grant', onClick: () => onRecreateOrg(signatory) }}
+          limited={{ label: 'Continue with a limited view (no demand directory)', onClick: onHub }}
+        />
+      </>
+    );
+  }
+
   const myNeeds = allNeeds();
+  const lc = gcoLifecycle({ hasOrg: true, needs: myNeeds, agreements: allAgreements() });
+  const next = gcoNextAction(lc.position, onOpenBoard);
+
   return (
     <>
       <IntranetHeader
-        label={`${session.orgName ?? session.name} · signatory ${session.signatory ?? session.name}`}
+        label={`${orgName} · signatory ${signatory}`}
         role="GCO Organization"
         onHub={caps.canSwitch ? onHub : undefined}
         onSignOut={() => { clearSession('gco'); void setActiveContext({ persona: 'gco', session: null }); }}
       />
-      <GcoNeedWizard ownerOrg={org} signatory={org} session={session} />
-      <Card>
-        <SectionHead eyebrow="GCO Org · my needs" title="Posted needs" sub={`Needs ${session.orgName ?? 'your organization'} has declared (in your own org vault). The Switchboard scores them against KC offerings — switch to Jane to broker connections.`} />
-        {myNeeds.length === 0 && <p style={{ fontSize: '.86rem', color: 'var(--c-g500)' }}>None yet — post one above.</p>}
-        {myNeeds.map((n) => (
-          <div key={n.id} style={{ display: 'flex', gap: '.5rem', alignItems: 'center', padding: '.4rem 0', borderBottom: '1px solid var(--c-g100)', fontSize: '.86rem', flexWrap: 'wrap' }}>
-            <Pill tone={n.status === 'fulfilled' ? 'live' : n.status === 'open' ? 'ok' : 'warn'}>{n.status}</Pill>
-            <span style={{ flex: 1 }}>{n.title}</span>
-            {n.requiredSkills.map((s) => <span key={s.gcUri} style={{ fontSize: '.74rem', color: 'var(--c-g400)' }}>{s.label}</span>)}
-          </div>
-        ))}
-      </Card>
-      <DirectoryPanel entries={publicOfferingEntries()} scope="offering" eyebrow="Directory · supply" title="Browse Kingdom Consultants" sub="The public projection of expertise offerings — by skill, region, or cause. Contact is withheld; a specific match + the consultant's contact are released only when a connection is accepted by the Switchboard." />
+      <LifecycleRail eyebrow="GCO lifecycle" steps={lc.steps} />
+
+      {/* Primary task (post a need) + the next-best-action right rail (stacks on mobile). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(260px, 1fr)', gap: '1.25rem', alignItems: 'start' }}>
+        <GcoNeedWizard
+          ownerOrg={org} signatory={org} session={session}
+          eyebrow="Primary task · post a skill need"
+          title="Post a skill need"
+          prefill={editNeed}
+          onCreated={() => setEditNeed(null)}
+        />
+        <NextBestAction action={next} />
+      </div>
+
+      <GcoPostedNeeds needs={myNeeds} session={session} orgName={orgName} onEdit={(n) => setEditNeed(n)} />
+
+      <DirectoryPanel entries={publicOfferingEntries()} scope="offering" eyebrow="Directory · coarsened supply" title="Browse Kingdom Consultants" sub="The public projection of expertise offerings — by skill, region, or cause. Contact is withheld; a specific match + the consultant's contact are released only when a connection is accepted by the Switchboard." />
       <AgreementsPanel agreements={allAgreements()} role="gco" actorPerson={org} onChanged={() => void setActiveContext({ persona: 'gco', session })} />
+
+      <GcoTrustFooter orgName={orgName} onOpenHome={() => { const h = personalHome(signatory); window.open(`https://${h}`, '_blank', 'noopener'); }} />
     </>
+  );
+}
+
+// The single most useful next step for the GCO, by lifecycle position (design spec §10 right rail).
+function gcoNextAction(position: ReturnType<typeof gcoLifecycle>['position'], onOpenBoard: () => void): NextAction {
+  switch (position) {
+    case 'no-need':
+      return { title: 'Post your first skill need', body: 'Declare what capability your organization needs — required skills, region, cause, languages, and commitment. Use the form on the left.', tone: 'action' };
+    case 'need-posted':
+      return { title: 'Review matches & request a connection', body: 'Your need is posted. The Switchboard scores it against KC offerings — open the broker board to review explainable matches and request a connection.', cta: { label: 'Open the Switchboard board', onClick: onOpenBoard }, tone: 'action' };
+    case 'request-pending':
+      return { title: 'Awaiting the KC’s response', body: 'You requested a connection. The Kingdom Consultant reviews it and accepts on their terms — contact is released only on accept. Nothing to do right now.', tone: 'wait' };
+    case 'agreement-issued':
+      return { title: 'View your agreement', body: 'A connection was accepted and Global Church issues the agreement. Track its lifecycle in the agreements card below.', tone: 'action' };
+    default:
+      return { title: 'Finish creating your organization', body: 'Create the org that holds the GCO role to start posting needs.', tone: 'action' };
+  }
+}
+
+// The persistent data/trust footer (design spec §10 + §15b): where your data lives, what Switchboard
+// can read, and how to revoke. White-label/faith copy stays in the app (ADR-0021).
+function GcoTrustFooter({ orgName, onOpenHome }: { orgName: string; onOpenHome: () => void }) {
+  return (
+    <Card style={{ background: 'var(--c-g50)' }}>
+      <div className="eyebrow">Your data &amp; access</div>
+      <p style={{ fontSize: '.85rem', color: 'var(--c-g700)', marginTop: '.4rem', lineHeight: 1.55 }}>
+        The needs <strong>{orgName}</strong> posts live in your Global.Church <strong>org vault</strong> — a private store only
+        your home credential can open. Global Switchboard reads them <strong>only through the scoped grant</strong> you minted when
+        you created the org (its intended program scope; record-level enforcement lands with spec 248). You can
+        <strong> revoke that access anytime from your Global.Church home</strong>, and Switchboard&rsquo;s visibility goes to zero.
+      </p>
+      <button onClick={onOpenHome} style={{ marginTop: '.6rem', background: 'none', border: 'none', color: 'var(--c-primary)', fontWeight: 700, fontSize: '.85rem', cursor: 'pointer', padding: 0 }}>
+        Open your Global.Church home →
+      </button>
+    </Card>
   );
 }
 

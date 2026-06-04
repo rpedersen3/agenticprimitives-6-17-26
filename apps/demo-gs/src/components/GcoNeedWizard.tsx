@@ -3,7 +3,7 @@
 // it appends to the GCO ORG's OWN vault via the session grant (`saveGcoNeeds`) — the broker reads it
 // only through that grant.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { GcoNeedIntent, NeedKind, Uri, VisibilityTier } from '../domain/gs-types';
 import { CAUSES, LANGUAGES, REGIONS, skillByUri } from '../data/taxonomy';
 import type { Address } from '@agenticprimitives/types';
@@ -16,7 +16,13 @@ import { Banner, Btn, Card, Field, Pill, SectionHead, inputStyle } from './ui';
 
 const NEED_KINDS: NeedKind[] = ['project', 'role', 'discussion', 'inquiry'];
 
-export function GcoNeedWizard({ ownerOrg, signatory, session, onCreated }: { ownerOrg: Address; signatory: Address; session: MemberSession; onCreated?: () => void }) {
+export function GcoNeedWizard({ ownerOrg, signatory, session, onCreated, eyebrow, title: titleProp, sub, prefill }: {
+  ownerOrg: Address; signatory: Address; session: MemberSession; onCreated?: () => void;
+  /** Card header overrides (Wave C re-homes this as the workspace primary-task card). */
+  eyebrow?: string; title?: string; sub?: string;
+  /** Re-post / edit: prefill the form from a withdrawn need (Wave C edit flow). */
+  prefill?: GcoNeedIntent | null;
+}) {
   const [title, setTitle] = useState('');
   const [needKind, setNeedKind] = useState<NeedKind>('project');
   const [skills, setSkills] = useState<Uri[]>([]);
@@ -27,6 +33,20 @@ export function GcoNeedWizard({ ownerOrg, signatory, session, onCreated }: { own
   const [visibility, setVisibility] = useState<VisibilityTier>('public');
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Prefill from an edited need (a "re-post"). Only canonical/known values are applied.
+  useEffect(() => {
+    if (!prefill) return;
+    setTitle(prefill.title);
+    setNeedKind(prefill.needKind);
+    setSkills(prefill.requiredSkills.map((s) => s.gcUri));
+    if (prefill.geoFacets[0]) setRegionUri(prefill.geoFacets[0].uri);
+    if (prefill.causeFacets?.[0]) setCauseUri(prefill.causeFacets[0].uri);
+    if (prefill.languages?.length) setLangs(prefill.languages.map((l) => l.code));
+    if (prefill.commitment?.cadence) setCadence(prefill.commitment.cadence);
+    setVisibility(prefill.visibility);
+    setMsg('Editing — adjust and re-post; the original was withdrawn.');
+  }, [prefill]);
 
   async function submit() {
     if (!title.trim()) { setMsg('Give the need a title.'); return; }
@@ -66,7 +86,11 @@ export function GcoNeedWizard({ ownerOrg, signatory, session, onCreated }: { own
 
   return (
     <Card>
-      <SectionHead eyebrow="GCO · post a need" title="Declare a skill need" sub="What capability does your organization need, where, and for what cause? Skills are canonical concepts — both needs and offerings cite the same anchors." />
+      <SectionHead
+        eyebrow={eyebrow ?? 'GCO · post a need'}
+        title={titleProp ?? 'Declare a skill need'}
+        sub={sub ?? 'What capability does your organization need, where, and for what cause? Skills are canonical concepts — both needs and offerings cite the same anchors.'}
+      />
       <Field label="Title"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Grant writing help for a North Africa project" style={inputStyle} /></Field>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
         <Field label="Need kind">
