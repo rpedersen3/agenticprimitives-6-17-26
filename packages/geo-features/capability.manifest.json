@@ -1,0 +1,93 @@
+{
+  "name": "@agenticprimitives/geo-features",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/251-skills-and-geo-features.md",
+  "summary": "Off-chain geo CLAIM credentials + GeoFeatureRegistry helpers (spec 251). Features on chain; claims are private vault credentials pointing to a (featureId, version). Independent of agent-skills.",
+  "owns": {
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/ontology",
+    "viem",
+    "@noble/hashes"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-skills",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/connect",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "Uri",
+    "Hex32",
+    "GEO_KIND",
+    "GEO_KIND_URI",
+    "GEO_RELATION",
+    "GeoVisibility",
+    "computeFeatureId",
+    "geometryHash",
+    "GeoFeaturePublishInput",
+    "GeoFeatureRef",
+    "GeoClaimSubject",
+    "GeoClaimCredential",
+    "geoClaimId",
+    "GEO_ENDORSEMENT_TYPEHASH",
+    "geoEndorsementDigest",
+    "buildSelfGeoClaim",
+    "buildEndorsedGeoClaim",
+    "geoClaimHash",
+    "GEO_FEATURE_READ_ABI",
+    "ReadContractFn",
+    "geoFeatureExists"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "@modelcontextprotocol",
+      "reason": "Transport-specific; this is a transport-agnostic credential SDK (MCP/A2A wiring lives in apps).",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    },
+    {
+      "term": "people group",
+      "reason": "Faith-domain vocabulary belongs in apps, not reusable substrate (spec 251 'People groups are excluded').",
+      "owningPackage": "apps/demo-jp"
+    },
+    {
+      "term": "creative access",
+      "reason": "Operational/sensitivity classification is an off-chain app policy, never substrate vocabulary (spec 251 GFR-07).",
+      "owningPackage": "apps/demo-gs"
+    }
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1500,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}
