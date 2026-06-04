@@ -1,0 +1,37 @@
+# demo-gs — Claude guide
+
+Global Switchboard skills/expertise broker (spec 250). Vite SPA. **Sibling of demo-jp** — same
+Need / Offering / Match / Agreement intent-spine primitive, applied to a *skills* marketplace.
+
+## The mapping (demo-jp → demo-gs)
+- **Pete / Global Church** = a **GCO** (Global Christian Org) that posts skill **Needs** (was the issuer in demo-jp; here it's the demand side).
+- **Jane / Global Switchboard** = the **broker** (matches Needs ↔ Offerings; mirrors Jill / JP).
+- **KC Expert** = a member who publishes an expertise **Offering** + accepts connection requests (the supply side).
+
+## v1 = fixture-driven (spec 250 Phase 0/1)
+Identity- and chain-decoupled: localStorage store, mocked taxonomy, a stubbed `AgentSession`. The store +
+adapters keep clean seams for the deferred phases (real demo-sso session, vault persistence, on-chain
+registries, the GC graph + C-Box registry, the read-only Switchboard bridge, the public API).
+
+## Where to look (by intent)
+| Working on | Read |
+| --- | --- |
+| The product/architecture brief | `specs/250-demo-gs-global-switchboard.md` (condenses the full GS design doc) |
+| Domain types | `src/domain/gs-types.ts` |
+| Skill taxonomy / causes / regions | `src/data/taxonomy.ts` (mocked; `SkillRef` cites URIs, never free text) |
+| Match scoring + explanations | `src/domain/score-match.ts` (deterministic, reason-coded) + `score-match.test.ts` |
+| Agreement lifecycle + provenance | `src/domain/gs-status.ts` |
+| Personas (Pete/GCO, Jane/broker, KC) | `src/lib/personas.ts` |
+| Persistence (localStorage, vault-shaped seams) | `src/lib/store.ts` |
+| Demo fixtures (agents, needs, offerings) | `src/data/fixtures.ts` |
+| UI shell + screens | `src/App.tsx` + `src/components/*` |
+
+## Hard rules (this app)
+- **Identity is demo-sso's job, NOT demo-gs's.** v1 stubs an `AgentSession`; never call Privy/Firebase directly (spec 250 §"Identity boundary").
+- **Skills are canonical references, never free text.** Both Needs and Offerings cite the same `SkillRef.gcUri` so they join on concept identity (the cross-app payoff). Labels are display only.
+- **Matching is deterministic + explainable.** Every score carries reason codes + a human "why this match". No opaque ranking; exact-skill ≫ category.
+- **Privacy tiers:** public anchor vs confidential profile/contact vs sensitive (absence). The fact that a specific KC matched a specific Need is confidential; only aggregate counts are public.
+- **App-local, no premature extraction.** Domain + taxonomy + matching stay in `apps/demo-gs` until a 2nd consumer appears (spec 250 §"Reference").
+
+## Validate
+`cd apps/demo-gs && pnpm typecheck && pnpm test && pnpm build`. (No `pnpm check:demo-gs`.)
