@@ -10,6 +10,7 @@ import { needById, respondToRequest, transitionAgreement } from '../lib/store';
 import type { Persona } from '../lib/personas';
 import { AgreementTimeline } from './AgreementTimeline';
 import { AddrChip, Btn, Card, Pill, SectionHead } from './ui';
+import { useToast } from './Toast';
 
 const STATUS_TONE: Record<GsConnectionStatus, 'ok' | 'warn' | 'neutral' | 'live'> = {
   proposed: 'neutral', requested: 'warn', confirmed: 'ok', ongoing: 'live',
@@ -30,11 +31,13 @@ export function AgreementsPanel({ agreements, role, actorPerson, onChanged }: {
   // store ops are async vault round-trips). A small error surfaces if the op throws.
   const [pending, setPending] = useState<string | null>(null);
   const [actErr, setActErr] = useState<string | null>(null);
-  const act = (id: string, fn: () => void | Promise<unknown>) => {
+  const toast = useToast();
+  // `successToast` fires only after the async op resolves; an error is toasted (+ inline) on throw.
+  const act = (id: string, fn: () => void | Promise<unknown>, successToast?: { msg: string; tone: 'ok' | 'info' }) => {
     setPending(id); setActErr(null);
     void Promise.resolve(fn())
-      .then(() => onChanged?.())
-      .catch((e) => setActErr(e instanceof Error ? e.message : String(e)))
+      .then(() => { onChanged?.(); if (successToast) toast(successToast.msg, successToast.tone); })
+      .catch((e) => { const m = e instanceof Error ? e.message : String(e); setActErr(m); toast(m, 'err'); })
       .finally(() => setPending(null));
   };
 
@@ -58,15 +61,15 @@ export function AgreementsPanel({ agreements, role, actorPerson, onChanged }: {
             <div style={{ display: 'flex', gap: '.5rem', marginTop: '.7rem', flexWrap: 'wrap', alignItems: 'center' }}>
               {a.status === 'requested' && role === 'kc' && (
                 <>
-                  <Btn busy={pending === a.id} style={{ padding: '.4rem .8rem' }} onClick={() => act(a.id, () => respondToRequest(a.id, true, actorPerson))}>Accept connection</Btn>
-                  <Btn busy={pending === a.id} variant="ghost" style={{ padding: '.4rem .8rem' }} onClick={() => act(a.id, () => respondToRequest(a.id, false, actorPerson))}>Decline</Btn>
+                  <Btn busy={pending === a.id} size="sm" onClick={() => act(a.id, () => respondToRequest(a.id, true, actorPerson), { msg: 'Connection accepted — contact released', tone: 'ok' })}>Accept connection</Btn>
+                  <Btn busy={pending === a.id} variant="ghost" size="sm" onClick={() => act(a.id, () => respondToRequest(a.id, false, actorPerson), { msg: 'Request declined', tone: 'info' })}>Decline</Btn>
                 </>
               )}
               {a.status === 'requested' && role !== 'kc' && (
                 <span style={{ fontSize: '.8rem', color: 'var(--c-g500)' }}>Awaiting the KC's response — switch to KC Expert to accept.</span>
               )}
               {transitions.map((t) => (
-                <Btn key={t} busy={pending === a.id} variant="ghost" style={{ padding: '.4rem .8rem' }} onClick={() => act(a.id, () => transitionAgreement(a.id, t, actorPerson, `${role} → ${t}`))}>
+                <Btn key={t} busy={pending === a.id} variant="ghost" size="sm" onClick={() => act(a.id, () => transitionAgreement(a.id, t, actorPerson, `${role} → ${t}`), { msg: `Marked ${CONNECTION_STATUS_LABEL[t]}`, tone: 'ok' })}>
                   Mark {CONNECTION_STATUS_LABEL[t]}
                 </Btn>
               ))}

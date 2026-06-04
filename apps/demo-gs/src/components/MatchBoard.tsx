@@ -9,7 +9,7 @@ import { explainMatch, rankMatches } from '../domain/score-match';
 import { skillByUri } from '../data/taxonomy';
 import { allOfferings, offeringById, requestConnection } from '../lib/store';
 import type { GcoNeedIntent } from '../domain/gs-types';
-import { Banner, Btn, Card, Pill, ScoreBadge, SectionHead } from './ui';
+import { Banner, Btn, Card, Pill, ScoreBadge, SectionHead, Select } from './ui';
 
 export function MatchBoard({ needs, requestAsPerson, onChanged }: {
   needs: GcoNeedIntent[];
@@ -39,9 +39,7 @@ export function MatchBoard({ needs, requestAsPerson, onChanged }: {
     <Card>
       <SectionHead eyebrow="Switchboard · matching" title="Match board" sub="Deterministic, explainable scoring over shared skill / geo / cause / language anchors. Exact-skill ≫ category. The fact that a specific expert matched a specific need is confidential — only aggregate counts are public." />
       <div style={{ marginBottom: '.9rem' }}>
-        <select value={needId} onChange={(e) => { setNeedId(e.target.value); setMsg(null); }} style={{ width: '100%', borderRadius: 9, border: '1.5px solid var(--c-g200)', padding: '.55rem .7rem', fontSize: '.9rem' }}>
-          {openNeeds.map((n) => <option key={n.id} value={n.id}>{n.title}</option>)}
-        </select>
+        <Select value={needId} onChange={(v) => { setNeedId(v); setMsg(null); }} options={openNeeds.map((n) => ({ value: n.id, label: n.title }))} />
       </div>
       {need && (
         <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '.9rem', fontSize: '.82rem', color: 'var(--c-g600)' }}>
@@ -75,7 +73,7 @@ export function MatchBoard({ needs, requestAsPerson, onChanged }: {
               </div>
             </div>
             {requestAsPerson && (
-              <Btn variant="ghost" style={{ padding: '.4rem .8rem', flex: '0 0 auto' }} onClick={() => void request(m.id)}>Request connection</Btn>
+              <Btn variant="ghost" size="sm" style={{ flex: '0 0 auto' }} onClick={() => void request(m.id)}>Request connection</Btn>
             )}
           </div>
         );

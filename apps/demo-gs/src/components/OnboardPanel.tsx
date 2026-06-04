@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { GS, type OnboardKind } from '../lib/gs-brand';
 import { personalHome, toAgentName } from '../lib/domain';
 import { LAST_NAME_KEY, startConnect } from '../lib/connect-launch';
-import { Banner, Card, inputStyle } from './ui';
+import { Banner, Card, Spinner, TextField } from './ui';
 
 // Stash key + shape now live in `lib/connect-launch` (shared with ConnectScreen); re-exported here
 // for the App's connect-return handler, which still imports them from OnboardPanel.
@@ -56,11 +56,11 @@ export function OnboardPanel({ kind }: { kind: OnboardKind }) {
 
       <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '.6rem', maxWidth: 460 }}>
         <label style={{ fontSize: '.78rem', fontWeight: 800, color: 'var(--c-g700)', letterSpacing: '.02em' }}>Your {GS.community} name</label>
-        <input
-          type="text" value={name} placeholder="e.g. rich-pedersen" autoCapitalize="none" spellCheck={false} disabled={busy}
-          onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-          onKeyDown={(e) => { if (e.key === 'Enter') void connect(); }}
-          style={{ ...inputStyle, padding: '.7rem .9rem', fontSize: '1rem', fontFamily: "'SF Mono','Roboto Mono',monospace" }}
+        <TextField
+          value={name} placeholder="e.g. rich-pedersen" mono disabled={busy}
+          onChange={(v) => setName(v.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+          onEnter={() => void connect()}
+          style={{ padding: '.7rem .9rem', fontSize: '1rem' }}
         />
         {kind === 'gco' && (
           <p style={{ fontSize: '.76rem', color: 'var(--c-g500)', margin: 0 }}>
@@ -73,7 +73,7 @@ export function OnboardPanel({ kind }: { kind: OnboardKind }) {
           </div>
         )}
         <button className="btn-sso" onClick={connect} disabled={!trimmed || busy} title={GS.ssoCta}>
-          <span className="btn-sso-glyph" aria-hidden="true">🌐</span>
+          <span className="btn-sso-glyph" aria-hidden="true">{busy ? <Spinner /> : '🌐'}</span>
           {busy ? 'Opening your home…' : GS.ssoCta}
           <span style={{ flex: 1 }} />
           <span style={{ fontSize: '.72rem', fontWeight: 600, color: 'var(--c-g400)' }}>SSO + your vault</span>

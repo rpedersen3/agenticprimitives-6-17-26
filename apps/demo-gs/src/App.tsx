@@ -51,7 +51,8 @@ import { AccessRequestState } from './components/AccessRequestState';
 import { gcoLifecycle } from './lib/gco-lifecycle';
 import { kcLifecycle } from './lib/kc-lifecycle';
 import type { GcoNeedIntent } from './domain/gs-types';
-import { Banner, Card, Pill, SectionHead } from './components/ui';
+import { Banner, Card, Pill, SectionHead, Spinner, TextField } from './components/ui';
+import { ToastProvider } from './components/Toast';
 
 /** sessionStorage key + stash for the in-flight org-create redirect (GCO step 2). */
 const ORG_KEY = 'agenticprimitives:demo-gs:org-create';
@@ -64,6 +65,14 @@ interface OrgStash { state: string; signatory: string; orgName: string; authOrig
 type View = 'landing' | 'connect' | 'discovery' | 'hub' | 'workspace';
 
 export function App() {
+  return (
+    <ToastProvider>
+      <AppInner />
+    </ToastProvider>
+  );
+}
+
+function AppInner() {
   const [view, setView] = useState<View>('landing');
   // The active member workspace role (gco/kc) when view==='workspace' and not a demo surface.
   const [activeRole, setActiveRoleState] = useState<RoleKind | null>(null);
@@ -424,14 +433,13 @@ function GcoOrgCreate({ signatory, onSignOut }: { signatory: string; onSignOut: 
           Switchboard is never a custodian, and it reads your needs only through the scoped grant you mint now.
         </p>
         <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '.6rem', maxWidth: 460 }}>
-          <input
-            type="text" value={orgName} placeholder="GCO organization name (e.g. Hope Church Missions Team)" disabled={busy}
-            onChange={(e) => setOrgName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void createOrg(); }}
+          <TextField
+            value={orgName} placeholder="GCO organization name (e.g. Hope Church Missions Team)" disabled={busy}
+            onChange={setOrgName} onEnter={() => void createOrg()}
             style={{ padding: '.7rem .9rem', fontSize: '.95rem', borderRadius: 10, border: '1.5px solid var(--c-g300)', background: '#fff' }}
           />
           <button className="btn-sso" onClick={() => void createOrg()} disabled={!orgName.trim() || busy}>
-            <span className="btn-sso-glyph" aria-hidden="true">🏛️</span>
+            <span className="btn-sso-glyph" aria-hidden="true">{busy ? <Spinner /> : '🏛️'}</span>
             {busy ? 'Opening your home…' : 'Create the GCO organization'}
           </button>
           {err && <Banner tone="err">{err}</Banner>}

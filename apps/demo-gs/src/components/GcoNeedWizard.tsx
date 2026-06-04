@@ -12,7 +12,8 @@ import { loadGcoNeeds, saveGcoNeeds } from '../lib/member-vault';
 import { hydrate } from '../lib/store';
 import type { MemberSession } from '../lib/session';
 import { SkillPicker } from './SkillPicker';
-import { Banner, Btn, Card, Field, Pill, SectionHead, inputStyle } from './ui';
+import { Banner, Btn, Card, Chip, Field, SectionHead, Select, TextField } from './ui';
+import { useToast } from './Toast';
 
 const NEED_KINDS: NeedKind[] = ['project', 'role', 'discussion', 'inquiry'];
 
@@ -33,6 +34,7 @@ export function GcoNeedWizard({ ownerOrg, signatory, session, onCreated, eyebrow
   const [visibility, setVisibility] = useState<VisibilityTier>('public');
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   // Prefill from an edited need (a "re-post"). Only canonical/known values are applied.
   useEffect(() => {
@@ -76,9 +78,11 @@ export function GcoNeedWizard({ ownerOrg, signatory, session, onCreated, eyebrow
       await saveGcoNeeds(session.grant, [need, ...existing]);
       await hydrate(true);
       setTitle(''); setSkills([]); setMsg('Need posted to your org vault. Switch to Jane to broker matches.');
+      toast('Need posted', 'ok');
       onCreated?.();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
+      const m = e instanceof Error ? e.message : String(e);
+      setMsg(m); toast(m, 'err');
     } finally {
       setBusy(false);
     }
@@ -91,48 +95,30 @@ export function GcoNeedWizard({ ownerOrg, signatory, session, onCreated, eyebrow
         title={titleProp ?? 'Declare a skill need'}
         sub={sub ?? 'What capability does your organization need, where, and for what cause? Skills are canonical concepts — both needs and offerings cite the same anchors.'}
       />
-      <Field label="Title"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Grant writing help for a North Africa project" style={inputStyle} /></Field>
+      <TextField label="Title" value={title} onChange={setTitle} placeholder="e.g. Grant writing help for a North Africa project" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
-        <Field label="Need kind">
-          <select value={needKind} onChange={(e) => setNeedKind(e.target.value as NeedKind)} style={inputStyle}>
-            {NEED_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
-          </select>
-        </Field>
-        <Field label="Visibility">
-          <select value={visibility} onChange={(e) => setVisibility(e.target.value as VisibilityTier)} style={inputStyle}>
-            <option value="public">public (anchor + fields)</option>
-            <option value="confidential">confidential (anchor coarsened)</option>
-            <option value="sensitive">sensitive (absence)</option>
-          </select>
-        </Field>
+        <Select label="Need kind" value={needKind} onChange={(v) => setNeedKind(v as NeedKind)} options={NEED_KINDS.map((k) => ({ value: k, label: k }))} />
+        <Select label="Visibility" value={visibility} onChange={(v) => setVisibility(v as VisibilityTier)} options={[
+          { value: 'public', label: 'public (anchor + fields)' },
+          { value: 'confidential', label: 'confidential (anchor coarsened)' },
+          { value: 'sensitive', label: 'sensitive (absence)' },
+        ]} />
       </div>
       <SkillPicker label="Required skills" selected={skills} onChange={setSkills} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
-        <Field label="Region focus">
-          <select value={regionUri} onChange={(e) => setRegionUri(e.target.value)} style={inputStyle}>
-            {REGIONS.map((r) => <option key={r.uri} value={r.uri}>{r.label}{r.sensitivity && r.sensitivity !== 'normal' ? ' (sensitive)' : ''}</option>)}
-          </select>
-        </Field>
-        <Field label="Cause">
-          <select value={causeUri} onChange={(e) => setCauseUri(e.target.value)} style={inputStyle}>
-            {CAUSES.map((c) => <option key={c.uri} value={c.uri}>{c.label}</option>)}
-          </select>
-        </Field>
+        <Select label="Region focus" value={regionUri} onChange={setRegionUri} options={REGIONS.map((r) => ({ value: r.uri, label: `${r.label}${r.sensitivity && r.sensitivity !== 'normal' ? ' (sensitive)' : ''}` }))} />
+        <Select label="Cause" value={causeUri} onChange={setCauseUri} options={CAUSES.map((c) => ({ value: c.uri, label: c.label }))} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
         <Field label="Languages">
           <div style={{ display: 'flex', gap: '.3rem', flexWrap: 'wrap' }}>
             {LANGUAGES.slice(0, 6).map((l) => {
               const on = langs.includes(l.code);
-              return <button key={l.code} onClick={() => setLangs(on ? langs.filter((x) => x !== l.code) : [...langs, l.code])} style={{ cursor: 'pointer', border: 'none', background: 'transparent', padding: 0 }}><Pill tone={on ? 'ok' : 'neutral'}>{l.label}</Pill></button>;
+              return <Chip key={l.code} active={on} onClick={() => setLangs(on ? langs.filter((x) => x !== l.code) : [...langs, l.code])}>{l.label}</Chip>;
             })}
           </div>
         </Field>
-        <Field label="Commitment cadence">
-          <select value={cadence} onChange={(e) => setCadence(e.target.value)} style={inputStyle}>
-            {['once', 'weekly', 'monthly', 'seasonal', 'ongoing'].map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </Field>
+        <Select label="Commitment cadence" value={cadence} onChange={setCadence} options={['once', 'weekly', 'monthly', 'seasonal', 'ongoing'].map((c) => ({ value: c, label: c }))} />
       </div>
       {msg && <div style={{ margin: '.5rem 0' }}><Banner tone="ok">{msg}</Banner></div>}
       <Btn onClick={submit} busy={busy}>Post need</Btn>

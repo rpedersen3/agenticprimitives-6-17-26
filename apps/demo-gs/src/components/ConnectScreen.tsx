@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { GS } from '../lib/gs-brand';
 import { personalHome, toAgentName } from '../lib/domain';
 import { startConnect, LAST_NAME_KEY } from '../lib/connect-launch';
-import { Banner, Card, inputStyle, Pill } from './ui';
+import { Banner, Card, Pill, Spinner, TextField } from './ui';
 
 export function ConnectScreen({ onBack }: {
   /** Back to the landing. */
@@ -53,11 +53,11 @@ export function ConnectScreen({ onBack }: {
 
       <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '.6rem' }}>
         <label style={{ fontSize: '.78rem', fontWeight: 800, color: 'var(--c-g700)', letterSpacing: '.02em' }}>Your {GS.community} name</label>
-        <input
-          type="text" value={name} placeholder="e.g. rich-pedersen" autoCapitalize="none" spellCheck={false} disabled={busy}
-          onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-          onKeyDown={(e) => { if (e.key === 'Enter') void cont(); }}
-          style={{ ...inputStyle, padding: '.7rem .9rem', fontSize: '1rem', fontFamily: "'SF Mono','Roboto Mono',monospace" }}
+        <TextField
+          value={name} placeholder="e.g. rich-pedersen" mono disabled={busy}
+          onChange={(v) => setName(v.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+          onEnter={() => void cont()}
+          style={{ padding: '.7rem .9rem', fontSize: '1rem' }}
         />
         {trimmed && (
           <div style={{ fontSize: '.75rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
@@ -65,7 +65,7 @@ export function ConnectScreen({ onBack }: {
           </div>
         )}
         <button className="btn-sso" onClick={() => void cont()} disabled={!trimmed || busy} title={GS.ssoCta}>
-          <span className="btn-sso-glyph" aria-hidden="true">🌐</span>
+          <span className="btn-sso-glyph" aria-hidden="true">{busy ? <Spinner /> : '🌐'}</span>
           {busy ? 'Opening your home…' : GS.ssoCta}
         </button>
         {err && <Banner tone="err">{err}</Banner>}

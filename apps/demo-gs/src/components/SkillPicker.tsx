@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react';
 import type { SkillRef, Uri } from '../domain/gs-types';
 import { SKILL_CATEGORIES, SKILLS, skillByUri } from '../data/taxonomy';
-import { Field, Pill, inputStyle } from './ui';
+import { Field, Pill, Select, TextField } from './ui';
 
 export function SkillPicker({ label, selected, onChange }: {
   label: string;
@@ -24,11 +24,11 @@ export function SkillPicker({ label, selected, onChange }: {
   return (
     <Field label={label}>
       <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.5rem', flexWrap: 'wrap' }}>
-        <select value={cat} onChange={(e) => setCat(e.target.value)} style={{ ...inputStyle, width: 'auto', flex: '1 1 180px' }}>
-          <option value="all">All categories</option>
-          {SKILL_CATEGORIES.map((c) => <option key={c.uri} value={c.uri}>{c.label}</option>)}
-        </select>
-        <input placeholder="Search skills…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle, flex: '1 1 160px' }} />
+        <Select value={cat} onChange={setCat} style={{ width: 'auto', flex: '1 1 180px' }} options={[
+          { value: 'all', label: 'All categories' },
+          ...SKILL_CATEGORIES.map((c) => ({ value: c.uri, label: c.label })),
+        ]} />
+        <TextField placeholder="Search skills…" value={q} onChange={setQ} style={{ flex: '1 1 160px' }} />
       </div>
       {selected.length > 0 && (
         <div style={{ display: 'flex', gap: '.35rem', flexWrap: 'wrap', marginBottom: '.5rem' }}>

@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react';
 import type { ExpertOffering, GcoNeedIntent, Uri } from '../domain/gs-types';
 import { buildDirectory, directoryFacets, searchDirectory, type DirEntry } from '../lib/directory';
-import { Card, Pill, SectionHead, inputStyle } from './ui';
+import { Card, Chip, Pill, SectionHead, TextField } from './ui';
 
 type Scope = 'all' | 'need' | 'offering';
 
@@ -50,37 +50,38 @@ export function DirectoryPanel({ needs, offerings, entries, scope = 'all', eyebr
         sub={sub ?? 'The public projection of open needs + active offerings — what the ecosystem can browse. Confidential anchors are coarsened, sensitive regions collapsed, contact withheld until a connection is accepted.'}
       />
 
-      <input
-        type="text" value={text} placeholder="Search skills, causes, organizations…" autoCapitalize="none" spellCheck={false}
-        onChange={(e) => setText(e.target.value)}
-        style={{ ...inputStyle, width: '100%', padding: '.65rem .85rem', fontSize: '.92rem', marginBottom: '.7rem' }}
-      />
+      <div style={{ marginBottom: '.7rem' }}>
+        <TextField
+          value={text} placeholder="Search skills, causes, organizations…" mono onChange={setText}
+          style={{ padding: '.65rem .85rem', fontSize: '.92rem', fontFamily: 'inherit' }}
+        />
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem', marginBottom: '.85rem' }}>
         {scope === 'all' && (
           <FacetRow label="Type">
-            <Chip on={kind === 'need'} onClick={() => setKind(kind === 'need' ? 'all' : 'need')}>Needs (demand)</Chip>
-            <Chip on={kind === 'offering'} onClick={() => setKind(kind === 'offering' ? 'all' : 'offering')}>Offerings (supply)</Chip>
+            <Chip active={kind === 'need'} onClick={() => setKind(kind === 'need' ? 'all' : 'need')}>Needs (demand)</Chip>
+            <Chip active={kind === 'offering'} onClick={() => setKind(kind === 'offering' ? 'all' : 'offering')}>Offerings (supply)</Chip>
           </FacetRow>
         )}
         {facets.categories.length > 0 && (
           <FacetRow label="Skill category">
             {facets.categories.map((c) => (
-              <Chip key={c.uri} on={categoryUri === c.uri} onClick={() => setCategoryUri(categoryUri === c.uri ? undefined : c.uri)}>{c.label} · {c.n}</Chip>
+              <Chip key={c.uri} active={categoryUri === c.uri} onClick={() => setCategoryUri(categoryUri === c.uri ? undefined : c.uri)}>{c.label} · {c.n}</Chip>
             ))}
           </FacetRow>
         )}
         {facets.regions.length > 0 && (
           <FacetRow label="Region">
             {facets.regions.map((r) => (
-              <Chip key={r.uri} on={regionUri === r.uri} sensitive={r.uri === 'sensitive'} onClick={() => setRegionUri(regionUri === r.uri ? undefined : r.uri)}>{r.label} · {r.n}</Chip>
+              <Chip key={r.uri} active={regionUri === r.uri} tone={r.uri === 'sensitive' ? 'accent' : 'neutral'} onClick={() => setRegionUri(regionUri === r.uri ? undefined : r.uri)}>{r.label} · {r.n}</Chip>
             ))}
           </FacetRow>
         )}
         {facets.causes.length > 0 && (
           <FacetRow label="Cause">
             {facets.causes.map((c) => (
-              <Chip key={c.label} on={cause === c.label} onClick={() => setCause(cause === c.label ? undefined : c.label)}>{c.label} · {c.n}</Chip>
+              <Chip key={c.label} active={cause === c.label} onClick={() => setCause(cause === c.label ? undefined : c.label)}>{c.label} · {c.n}</Chip>
             ))}
           </FacetRow>
         )}
@@ -135,23 +136,5 @@ function FacetRow({ label, children }: { label: string; children: React.ReactNod
       <span style={{ fontSize: '.7rem', textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--c-g400)', fontWeight: 700, minWidth: 96 }}>{label}</span>
       {children}
     </div>
-  );
-}
-
-function Chip({ children, on, sensitive, onClick }: { children: React.ReactNode; on: boolean; sensitive?: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        fontSize: '.76rem', padding: '.22rem .6rem', borderRadius: 999, cursor: 'pointer',
-        border: '1px solid',
-        borderColor: on ? 'var(--c-primary)' : sensitive ? 'var(--c-accent-border)' : 'var(--c-g200)',
-        background: on ? 'var(--c-primary)' : sensitive ? 'var(--c-accent-subtle)' : '#fff',
-        color: on ? '#fff' : sensitive ? 'var(--c-accent)' : 'var(--c-g600)',
-        fontWeight: on ? 700 : 500,
-      }}
-    >
-      {children}
-    </button>
   );
 }

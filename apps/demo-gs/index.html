@@ -33,6 +33,22 @@
       .eyebrow { font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--c-primary); }
       @keyframes btnspin { to { transform: rotate(360deg); } }
       .btn-spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; display: inline-block; animation: btnspin .6s linear infinite; }
+      /* Standalone spinner (control kit) — same keyframe as .btn-spin, inherits currentColor; size via class. */
+      .spinner { border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; display: inline-block; animation: btnspin .6s linear infinite; }
+      .spinner-sm { width: 13px; height: 13px; }
+      .spinner-md { width: 18px; height: 18px; }
+      /* Toast host + cards (control kit). Fixed bottom-right stack; CSS-only enter/leave. */
+      @keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+      @keyframes toast-out { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(8px) scale(.97); } }
+      .toast-host { position: fixed; right: 1.1rem; bottom: 1.1rem; z-index: 200; display: flex; flex-direction: column; gap: .55rem; max-width: min(380px, calc(100vw - 2rem)); pointer-events: none; }
+      .toast { pointer-events: auto; display: flex; align-items: flex-start; gap: .6rem; border: 1px solid; border-radius: var(--r-md); padding: .7rem .85rem; font-size: .85rem; font-weight: 600; box-shadow: var(--sh-md); background: #fff; animation: toast-in .22s ease-out; }
+      .toast.leaving { animation: toast-out .2s ease-in forwards; }
+      .toast-ok { background: #ecfdf5; border-color: #6ee7b7; color: #047857; }
+      .toast-err { background: var(--c-accent-subtle); border-color: var(--c-accent-border); color: var(--c-accent); }
+      .toast-info { background: var(--c-g100); border-color: var(--c-g200); color: var(--c-g700); }
+      .toast-msg { flex: 1; line-height: 1.4; }
+      .toast-x { background: none; border: none; color: inherit; opacity: .6; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0; }
+      .toast-x:hover { opacity: 1; }
       .btn-primary { background: var(--c-primary); color: #fff; }
       .btn-primary:hover { background: var(--c-primary-hover); }
       .btn-ghost { background: #fff; color: var(--c-primary); border: 1.5px solid var(--c-primary-border); }

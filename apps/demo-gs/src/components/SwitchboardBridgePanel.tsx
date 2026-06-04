@@ -9,6 +9,7 @@ import { importSwitchboardRoles, mapRoles, skillLabels } from '../lib/switchboar
 import { regionByUri } from '../data/taxonomy';
 import { loadBridgedNeeds } from '../lib/store';
 import { Banner, Btn, Card, Pill, SectionHead } from './ui';
+import { useToast } from './Toast';
 
 export function SwitchboardBridgePanel() {
   // Stable preview (no time dependency) so the mapping render is deterministic.
@@ -17,6 +18,7 @@ export function SwitchboardBridgePanel() {
   const [done, setDone] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   // The currently-bridged set lives in Jane's vault (gs:broker:bridge).
   useEffect(() => {
@@ -34,8 +36,10 @@ export function SwitchboardBridgePanel() {
     try {
       const res = await importSwitchboardRoles(SWITCHBOARD_ROLES);
       setDone(res.imported);
+      toast(`Imported ${res.imported} role${res.imported === 1 ? '' : 's'} as needs`, 'ok');
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      const m = e instanceof Error ? e.message : String(e);
+      setErr(m); toast(m, 'err');
     } finally {
       setBusy(false);
     }

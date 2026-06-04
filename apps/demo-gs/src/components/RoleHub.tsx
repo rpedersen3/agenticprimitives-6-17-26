@@ -10,7 +10,7 @@
 
 import type { RoleCapabilities, RoleKind } from '../lib/role-capabilities';
 import { GS } from '../lib/gs-brand';
-import { Card, Pill } from './ui';
+import { Btn, Card, Pill } from './ui';
 
 interface CardCopy { side: string; title: string; sub: string; bullets: string[] }
 
@@ -107,19 +107,15 @@ function RoleAction({ kind, state, onOpen, onResumeOrg, onSetupGco }: {
 }) {
   if (state === 'ready') {
     const label = kind === 'kc' ? 'Offer your expertise' : 'Open GCO workspace';
-    return <button className="btn-primary" onClick={onOpen} style={btn}>{label}</button>;
+    return <Btn size="sm" onClick={onOpen}>{label}</Btn>;
   }
   if (state === 'org-pending') {
-    return <button className="btn-primary" onClick={onResumeOrg} style={btn}>Resume org setup</button>;
+    return <Btn size="sm" onClick={onResumeOrg}>Resume org setup</Btn>;
   }
   // empty: KC opens immediately (no ceremony — the person session already grants it); GCO launches the
   // org-create ceremony directly from the hub.
   if (kind === 'kc') {
-    return <button className="btn-primary" onClick={onOpen} style={btn}>Offer your expertise</button>;
+    return <Btn size="sm" onClick={onOpen}>Offer your expertise</Btn>;
   }
-  return <button className="btn-ghost" onClick={onSetupGco} style={btn}>Set up an organization</button>;
+  return <Btn variant="ghost" size="sm" onClick={onSetupGco}>Set up an organization</Btn>;
 }
-
-const btn: React.CSSProperties = {
-  borderRadius: 10, padding: '.55rem 1.1rem', fontWeight: 700, fontSize: '.85rem', cursor: 'pointer', border: 'none',
-};

@@ -12,7 +12,8 @@ import { saveKcOffering } from '../lib/member-vault';
 import { hydrate } from '../lib/store';
 import type { MemberSession } from '../lib/session';
 import { SkillPicker } from './SkillPicker';
-import { Banner, Btn, Card, Field, Pill, SectionHead, inputStyle } from './ui';
+import { Banner, Btn, Card, Chip, Field, SectionHead, Select, TextField } from './ui';
+import { useToast } from './Toast';
 
 const AVAIL: Capacity['availabilityStatus'][] = ['available', 'limited', 'paused', 'unavailable'];
 
@@ -31,6 +32,7 @@ export function ExpertOfferingWizard({ owner, ownerName, session, onCreated, eye
   const [msg, setMsg] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   const toggle = (arr: string[], v: string, set: (x: string[]) => void) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
   async function submit() {
@@ -59,9 +61,11 @@ export function ExpertOfferingWizard({ owner, ownerName, session, onCreated, eye
       await saveKcOffering(session.grant, offering); // KC's OWN vault, via the session grant
       await hydrate(true);
       setHeadline(''); setSkills([]); setEvidence(''); setMsg('Offering published to your vault. Switch to Jane to see it matched against open needs.');
+      toast('Offering published', 'ok');
       onCreated?.();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
+      const m = e instanceof Error ? e.message : String(e);
+      setMsg(m); toast(m, 'err');
     } finally {
       setBusy(false);
     }
@@ -74,35 +78,29 @@ export function ExpertOfferingWizard({ owner, ownerName, session, onCreated, eye
         title={titleProp ?? 'Offer your expertise'}
         sub={sub ?? 'Which skills can you serve with, and under what constraints? Your identity + contact stay confidential until a connection is accepted.'}
       />
-      <Field label="Headline"><input value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="e.g. Grant writing + foundation strategy for missions" style={inputStyle} /></Field>
+      <TextField label="Headline" value={headline} onChange={setHeadline} placeholder="e.g. Grant writing + foundation strategy for missions" />
       <SkillPicker label="Offered skills" selected={skills} onChange={setSkills} />
       <Field label="Region focus">
         <div style={{ display: 'flex', gap: '.3rem', flexWrap: 'wrap' }}>
-          {REGIONS.map((r) => <button key={r.uri} onClick={() => toggle(regionUris, r.uri, setRegionUris)} style={tagBtn}><Pill tone={regionUris.includes(r.uri) ? 'ok' : 'neutral'}>{r.label}</Pill></button>)}
+          {REGIONS.map((r) => <Chip key={r.uri} active={regionUris.includes(r.uri)} onClick={() => toggle(regionUris, r.uri, setRegionUris)}>{r.label}</Chip>)}
         </div>
       </Field>
       <Field label="Causes">
         <div style={{ display: 'flex', gap: '.3rem', flexWrap: 'wrap' }}>
-          {CAUSES.map((c) => <button key={c.uri} onClick={() => toggle(causeUris, c.uri, setCauseUris)} style={tagBtn}><Pill tone={causeUris.includes(c.uri) ? 'ok' : 'neutral'}>{c.label}</Pill></button>)}
+          {CAUSES.map((c) => <Chip key={c.uri} active={causeUris.includes(c.uri)} onClick={() => toggle(causeUris, c.uri, setCauseUris)}>{c.label}</Chip>)}
         </div>
       </Field>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
         <Field label="Languages">
           <div style={{ display: 'flex', gap: '.3rem', flexWrap: 'wrap' }}>
-            {LANGUAGES.slice(0, 6).map((l) => <button key={l.code} onClick={() => toggle(langs, l.code, setLangs)} style={tagBtn}><Pill tone={langs.includes(l.code) ? 'ok' : 'neutral'}>{l.label}</Pill></button>)}
+            {LANGUAGES.slice(0, 6).map((l) => <Chip key={l.code} active={langs.includes(l.code)} onClick={() => toggle(langs, l.code, setLangs)}>{l.label}</Chip>)}
           </div>
         </Field>
-        <Field label="Availability">
-          <select value={availability} onChange={(e) => setAvailability(e.target.value as Capacity['availabilityStatus'])} style={inputStyle}>
-            {AVAIL.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </Field>
+        <Select label="Availability" value={availability} onChange={(v) => setAvailability(v as Capacity['availabilityStatus'])} options={AVAIL.map((a) => ({ value: a, label: a }))} />
       </div>
-      <Field label="Evidence (optional)"><input value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="e.g. $250k raised for a literacy program" style={inputStyle} /></Field>
+      <TextField label="Evidence (optional)" value={evidence} onChange={setEvidence} placeholder="e.g. $250k raised for a literacy program" />
       {msg && <div style={{ margin: '.5rem 0' }}><Banner tone="ok">{msg}</Banner></div>}
       <Btn onClick={submit} busy={busy}>Publish offering</Btn>
     </Card>
   );
 }
-
-const tagBtn: React.CSSProperties = { cursor: 'pointer', border: 'none', background: 'transparent', padding: 0 };
