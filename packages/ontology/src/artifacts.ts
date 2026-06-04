@@ -26,8 +26,17 @@ export const ARTIFACTS = {
     'tbox/payment.ttl',
     'tbox/fulfillment.ttl',
     'tbox/attestation.ttl',
+    // Generic skills + geo substrate (spec 251)
+    'tbox/skills.ttl',
+    'tbox/geo.ttl',
   ],
-  cbox: ['cbox/canonical-agent-id-shape.shacl.ttl', 'cbox/controlled-vocabularies.ttl'],
+  cbox: [
+    'cbox/canonical-agent-id-shape.shacl.ttl',
+    'cbox/controlled-vocabularies.ttl',
+    // Generic skills + geo codelists — on-chain-bound kinds (lockstep, ADR-0009)
+    'cbox/skill-vocabulary.ttl',
+    'cbox/geo-vocabulary.ttl',
+  ],
   mappings: ['mappings/spine-standards.ttl'],
 } as const;
 

@@ -1,0 +1,28 @@
+# T-box — generic geo substrate (spec 251). The geo FEATURE is a public on-chain
+# definition (GeoFeatureRegistry; geometry hash + roots + coarse bbox, exact GeoJSON off
+# chain). The geo CLAIM (agent↔feature association) is an off-chain vault credential.
+# NEUTRAL public geography only — never operational/sensitivity data on chain; no on-chain
+# skill↔geo mapping.
+
+@prefix apg:  <https://agenticprimitives.dev/ns/geo#> .
+@prefix ap:   <https://agenticprimitives.dev/ns/core#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+apg:GeoFeature a rdfs:Class ;
+    rdfs:label "GeoFeature" ;
+    rdfs:comment "A versioned, PUBLIC, generic geographic feature. Anchored on chain by GeoFeatureRegistry (geometryHash + coverage/source roots + coarse bbox; exact geometry off chain via metadataURI). Neutral public geography only." .
+
+apg:GeoClaim a rdfs:Class ;
+    rdfs:label "GeoClaim" ;
+    rdfs:comment "An OFF-CHAIN verifiable credential asserting a subject Smart Agent's relation to an apg:GeoFeature (pinned featureId+version). Private vault credential; the association is NEVER on chain (it would leak operational data)." .
+
+apg:featureId a rdf:Property ; rdfs:domain apg:GeoClaim ; rdfs:range apg:GeoFeature ;
+    rdfs:comment "The on-chain (featureId, version) this claim credential references." .
+apg:hasGeoKind a rdf:Property ; rdfs:domain apg:GeoFeature ;
+    rdfs:comment "An apg:geoKind value (C-box codelist; on-chain-bound)." .
+apg:geometryHash a rdf:Property ; rdfs:domain apg:GeoFeature ;
+    rdfs:comment "keccak256 of the canonical GeoJSON (which lives off chain)." .
+apg:claimSubject a rdf:Property ; rdfs:domain apg:GeoClaim ; rdfs:range ap:CanonicalAgentId .
+apg:claimRelation a rdf:Property ; rdfs:domain apg:GeoClaim ;
+    rdfs:comment "An apg:geoRelation value (C-box codelist)." .

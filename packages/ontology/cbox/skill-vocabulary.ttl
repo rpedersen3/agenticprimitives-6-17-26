@@ -1,0 +1,50 @@
+# C-box — skill controlled vocabularies (spec 251). Closed SKOS codelists for the
+# generic skills substrate: skill KINDS (on-chain-bound), skill RELATIONS + VISIBILITY
+# modes (used by the off-chain claim credential SDK).
+#
+# LOCKSTEP (ADR-0009): the on-chain `SkillDefinitionRegistry.KIND_*` constants equal
+# keccak256(<the skillKind concept URI>) declared here. The lockstep gate
+# (packages/ontology test) asserts this equality.
+#
+# NEUTRAL substrate — NO domain/faith vocabulary (spec 251 "People groups are excluded").
+# A skill is a generic capability concept; the agent↔skill ASSOCIATION is an off-chain
+# vault credential, never an on-chain row.
+
+@prefix aps:  <https://agenticprimitives.dev/ns/skill#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# ─── skillKind — 3 values, ON-CHAIN-BOUND (SkillDefinitionRegistry.KIND_*) ──
+aps:skillKind a skos:ConceptScheme ;
+    rdfs:label "skillKind" ;
+    rdfs:comment "The on-chain-bound skill-definition kind. keccak256 of each concept URI equals the matching SkillDefinitionRegistry.KIND_* constant (ADR-0009 lockstep)." ;
+    skos:hasTopConcept aps:Leaf, aps:Domain, aps:Custom .
+aps:Leaf   a skos:Concept ; skos:inScheme aps:skillKind ; skos:prefLabel "leaf" ;
+    rdfs:comment "A leaf skill in a controlled taxonomy (e.g. an OASF leaf)." .
+aps:Domain a skos:Concept ; skos:inScheme aps:skillKind ; skos:prefLabel "domain" ;
+    rdfs:comment "A domain/grouping concept (a non-leaf category)." .
+aps:Custom a skos:Concept ; skos:inScheme aps:skillKind ; skos:prefLabel "custom" ;
+    rdfs:comment "A steward-defined custom skill outside the controlled set." .
+
+# ─── skillRelation — used by the OFF-CHAIN claim credential (not on chain) ──
+aps:skillRelation a skos:ConceptScheme ;
+    rdfs:label "skillRelation" ;
+    rdfs:comment "Relation a claim credential asserts between a subject SA and a skill definition. Lives in the credential body (off chain); not an on-chain row." ;
+    skos:hasTopConcept aps:hasSkill, aps:practicesSkill, aps:certifiedIn, aps:endorsesSkill, aps:mentorsIn, aps:canTrainOthersIn .
+aps:hasSkill          a skos:Concept ; skos:inScheme aps:skillRelation ; skos:prefLabel "hasSkill" .
+aps:practicesSkill    a skos:Concept ; skos:inScheme aps:skillRelation ; skos:prefLabel "practicesSkill" .
+aps:certifiedIn       a skos:Concept ; skos:inScheme aps:skillRelation ; skos:prefLabel "certifiedIn" .
+aps:endorsesSkill     a skos:Concept ; skos:inScheme aps:skillRelation ; skos:prefLabel "endorsesSkill" .
+aps:mentorsIn         a skos:Concept ; skos:inScheme aps:skillRelation ; skos:prefLabel "mentorsIn" .
+aps:canTrainOthersIn  a skos:Concept ; skos:inScheme aps:skillRelation ; skos:prefLabel "canTrainOthersIn" .
+
+# ─── claimVisibility — shared by skill + geo claim credentials ──────────────
+aps:claimVisibility a skos:ConceptScheme ;
+    rdfs:label "claimVisibility" ;
+    rdfs:comment "Visibility mode of an off-chain skill/geo claim credential." ;
+    skos:hasTopConcept aps:Public, aps:PublicCoarse, aps:PrivateCommitment, aps:PrivateZk, aps:OffchainOnly .
+aps:Public            a skos:Concept ; skos:inScheme aps:claimVisibility ; skos:prefLabel "public" .
+aps:PublicCoarse      a skos:Concept ; skos:inScheme aps:claimVisibility ; skos:prefLabel "public-coarse" .
+aps:PrivateCommitment a skos:Concept ; skos:inScheme aps:claimVisibility ; skos:prefLabel "private-commitment" .
+aps:PrivateZk         a skos:Concept ; skos:inScheme aps:claimVisibility ; skos:prefLabel "private-zk" .
+aps:OffchainOnly      a skos:Concept ; skos:inScheme aps:claimVisibility ; skos:prefLabel "offchain-only" .

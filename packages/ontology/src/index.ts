@@ -51,6 +51,9 @@ export const NS = {
   apful: 'https://agenticprimitives.dev/ns/fulfillment#',
   apatt: 'https://agenticprimitives.dev/ns/attestation#',
   apvc: 'https://agenticprimitives.dev/ns/verifiable-credential#',
+  // Generic skills + geo substrate (spec 251)
+  aps: 'https://agenticprimitives.dev/ns/skill#',
+  apg: 'https://agenticprimitives.dev/ns/geo#',
 } as const;
 
 /** Class IRIs (T-box). Each is `<namespace><LocalName>`. */

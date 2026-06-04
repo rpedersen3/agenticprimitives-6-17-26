@@ -1,0 +1,30 @@
+# T-box — generic skills substrate (spec 251). Class + property definitions for the
+# definition-vs-claim model. The DEFINITION is a public on-chain anchor
+# (SkillDefinitionRegistry); the CLAIM is an off-chain vault credential pointing to a
+# definition. NEUTRAL substrate — no domain/faith vocabulary.
+
+@prefix aps:  <https://agenticprimitives.dev/ns/skill#> .
+@prefix ap:   <https://agenticprimitives.dev/ns/core#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+
+aps:Skill a rdfs:Class ;
+    rdfs:label "Skill" ;
+    rdfs:comment "A versioned, PUBLIC, generic capability definition. Anchored on chain by SkillDefinitionRegistry (id, version, steward, kind, conceptHash, ontologyMerkleRoot, metadataURI, validity)." .
+
+aps:SkillClaim a rdfs:Class ;
+    rdfs:label "SkillClaim" ;
+    rdfs:comment "An OFF-CHAIN verifiable credential asserting a subject Smart Agent's relation to an aps:Skill (pinned definitionId+version). Lives in the subject's private vault; never an on-chain row." .
+
+aps:definitionId a rdf:Property ; rdfs:domain aps:SkillClaim ; rdfs:range aps:Skill ;
+    rdfs:comment "The on-chain (skillId, version) this claim credential references." .
+aps:hasSkillKind a rdf:Property ; rdfs:domain aps:Skill ;
+    rdfs:comment "An aps:skillKind value (C-box codelist; on-chain-bound)." .
+aps:claimSubject a rdf:Property ; rdfs:domain aps:SkillClaim ; rdfs:range ap:CanonicalAgentId ;
+    rdfs:comment "The subject Smart Agent (Address) the claim is about." .
+aps:claimIssuer a rdf:Property ; rdfs:domain aps:SkillClaim ; rdfs:range ap:CanonicalAgentId .
+aps:claimRelation a rdf:Property ; rdfs:domain aps:SkillClaim ;
+    rdfs:comment "An aps:skillRelation value (C-box codelist)." .
+aps:claimVisibilityMode a rdf:Property ; rdfs:domain aps:SkillClaim ;
+    rdfs:comment "An aps:claimVisibility value (C-box codelist)." .

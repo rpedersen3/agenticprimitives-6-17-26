@@ -36,11 +36,13 @@ pragma solidity ^0.8.28;
  */
 contract GeoFeatureRegistry {
     // ─── C-box feature-kind codelist (keccak of the cbox URIs) ──────────
-    bytes32 public constant KIND_PLANET = keccak256(bytes("https://ontology.agenticprimitives.dev/cbox/geo-kind#Planet"));
-    bytes32 public constant KIND_REGION = keccak256(bytes("https://ontology.agenticprimitives.dev/cbox/geo-kind#Region"));
-    bytes32 public constant KIND_COUNTRY = keccak256(bytes("https://ontology.agenticprimitives.dev/cbox/geo-kind#Country"));
-    bytes32 public constant KIND_ADMIN = keccak256(bytes("https://ontology.agenticprimitives.dev/cbox/geo-kind#AdminArea"));
-    bytes32 public constant KIND_CUSTOM = keccak256(bytes("https://ontology.agenticprimitives.dev/cbox/geo-kind#Custom"));
+    //   Concept URIs are declared in packages/ontology cbox/geo-vocabulary.ttl
+    //   (scheme apg:geoKind); lockstep-gated against the ontology (ADR-0009).
+    bytes32 public constant KIND_PLANET = keccak256(bytes("https://agenticprimitives.dev/ns/geo#Planet"));
+    bytes32 public constant KIND_REGION = keccak256(bytes("https://agenticprimitives.dev/ns/geo#Region"));
+    bytes32 public constant KIND_COUNTRY = keccak256(bytes("https://agenticprimitives.dev/ns/geo#Country"));
+    bytes32 public constant KIND_ADMIN = keccak256(bytes("https://agenticprimitives.dev/ns/geo#AdminArea"));
+    bytes32 public constant KIND_CUSTOM = keccak256(bytes("https://agenticprimitives.dev/ns/geo#Custom"));
     int256 public constant COORD_SCALE = 1e7;
 
     // ─── Errors ─────────────────────────────────────────────────────────
