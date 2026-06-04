@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 760" width="1120" height="760" font-family="Inter,system-ui,sans-serif">
+<rect x="0" y="0" width="1120" height="760" rx="0" fill="#f8fafc" stroke="#f8fafc" stroke-width="1.5"/>
+<rect x="0" y="0" width="1120" height="56" rx="0" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+<rect x="24" y="16" width="24" height="24" rx="8" fill="#4f46e5" stroke="#3730a3" stroke-width="1.5"/>
+<text x="58" y="28" font-size="15" fill="#0f172a" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Global Switchboard</text>
+<text x="58" y="42" font-size="10" fill="#64748b" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">skills · needs · offerings · matches</text>
+<text x="1096" y="33" font-size="11" fill="#94a3b8" font-weight="700" text-anchor="end" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">role-aware connect + grant review</text>
+<rect x="310" y="110" width="500" height="540" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="340" y="152" font-size="10.5" fill="#4f46e5" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">BEFORE YOU CONNECT</text>
+<text x="340" y="178" font-size="22" fill="#0f172a" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Connect via Global.Church</text>
+<rect x="340" y="196" width="177.20000000000002" height="20" rx="10" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1"/>
+<text x="428.6" y="210" font-size="10.5" fill="#3730a3" font-weight="700" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Selected: GCO Organization</text>
+<text x="340" y="250" font-size="13" fill="#334155" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">What Global.Church will do</text>
+<line x1="340" y1="268" x2="770" y2="268" stroke="#e2e8f0" stroke-width="6" />
+<line x1="340" y1="281" x2="740" y2="281" stroke="#e2e8f0" stroke-width="6" />
+<text x="340" y="320" font-size="13" fill="#334155" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">What Switchboard will receive</text>
+<rect x="340" y="334" width="440" height="96" rx="12" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5"/>
+<text x="356" y="358" font-size="12" fill="#3730a3" font-weight="700" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Owner: your GCO org Smart Agent</text>
+<text x="356" y="378" font-size="12" fill="#3730a3" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Scope: posted needs + match status (intended)</text>
+<text x="356" y="398" font-size="12" fill="#3730a3" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Purpose: broker matches · Limit: revocable at home</text>
+<text x="356" y="418" font-size="12" fill="#3730a3" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Contact released only when a connection is accepted</text>
+<rect x="340" y="470" width="440" height="34" rx="9" fill="#4f46e5" stroke="#4f46e5" stroke-width="1.5"/>
+<text x="560" y="492" font-size="13" fill="#ffffff" font-weight="700" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">🌐  Continue to Global.Church</text>
+<text x="340" y="524" font-size="12" fill="#4f46e5" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Switch path: KC expert  ·  Help me choose</text>
+<rect x="340" y="548" width="440" height="70" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="356" y="574" font-size="11" fill="#64748b" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">You’ll confirm with your device at</text>
+<text x="356" y="592" font-size="12" fill="#334155" font-weight="700" text-anchor="start" font-family="'SF Mono','Roboto Mono',monospace">maria.impact-agent.me</text>
+</svg>

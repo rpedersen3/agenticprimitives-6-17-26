@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 760" width="1120" height="760" font-family="Inter,system-ui,sans-serif">
+<rect x="0" y="0" width="1120" height="760" rx="0" fill="#f8fafc" stroke="#f8fafc" stroke-width="1.5"/>
+<rect x="0" y="0" width="1120" height="56" rx="0" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+<rect x="24" y="16" width="24" height="24" rx="8" fill="#4f46e5" stroke="#3730a3" stroke-width="1.5"/>
+<text x="58" y="28" font-size="15" fill="#0f172a" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Global Switchboard</text>
+<text x="58" y="42" font-size="10" fill="#64748b" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">skills · needs · offerings · matches</text>
+<text x="1096" y="33" font-size="11" fill="#94a3b8" font-weight="700" text-anchor="end" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">match → agreement timeline</text>
+<text x="60" y="110" font-size="16" fill="#0f172a" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Connection: Hope Church Missions Team  ↔  Dana (KC)</text>
+<rect x="60" y="150" width="160" height="110" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="80" y="180" font-size="13" fill="#334155" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">GCO Org</text>
+<line x1="240" y1="205" x2="1060" y2="205" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4 6"/>
+<rect x="60" y="280" width="160" height="110" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="80" y="310" font-size="13" fill="#334155" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Switchboard (broker)</text>
+<line x1="240" y1="335" x2="1060" y2="335" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4 6"/>
+<rect x="60" y="410" width="160" height="110" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="80" y="440" font-size="13" fill="#334155" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">KC Expert</text>
+<line x1="240" y1="465" x2="1060" y2="465" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4 6"/>
+<rect x="60" y="540" width="160" height="110" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="80" y="570" font-size="13" fill="#334155" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Global Church (issuer)</text>
+<line x1="240" y1="595" x2="1060" y2="595" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4 6"/>
+<circle cx="290" cy="205" r="9" fill="#4f46e5"/>
+<text x="290" y="189" font-size="11" fill="#4f46e5" font-weight="800" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">1</text>
+<text x="290" y="235" font-size="9.5" fill="#475569" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Need posted</text>
+<circle cx="398" cy="335" r="9" fill="#4f46e5"/>
+<text x="398" y="319" font-size="11" fill="#4f46e5" font-weight="800" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">2</text>
+<text x="398" y="365" font-size="9.5" fill="#475569" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Scores via grants</text>
+<circle cx="506" cy="335" r="9" fill="#4f46e5"/>
+<text x="506" y="319" font-size="11" fill="#4f46e5" font-weight="800" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">3</text>
+<text x="506" y="365" font-size="9.5" fill="#475569" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Proposes match</text>
+<circle cx="614" cy="205" r="9" fill="#4f46e5"/>
+<text x="614" y="189" font-size="11" fill="#4f46e5" font-weight="800" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">4</text>
+<text x="614" y="235" font-size="9.5" fill="#475569" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Requests connection</text>
+<circle cx="722" cy="465" r="9" fill="#4f46e5"/>
+<text x="722" y="449" font-size="11" fill="#4f46e5" font-weight="800" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">5</text>
+<text x="722" y="495" font-size="9.5" fill="#475569" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Accepts → contact released</text>
+<circle cx="830" cy="595" r="9" fill="#4f46e5"/>
+<text x="830" y="579" font-size="11" fill="#4f46e5" font-weight="800" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">6</text>
+<text x="830" y="625" font-size="9.5" fill="#475569" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Issues agreement</text>
+<circle cx="938" cy="595" r="9" fill="#4f46e5"/>
+<text x="938" y="579" font-size="11" fill="#4f46e5" font-weight="800" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">7</text>
+<text x="938" y="625" font-size="9.5" fill="#475569" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">ongoing → fulfilled</text>
+<rect x="60" y="690" width="1000" height="50" rx="12" fill="#f0f9ff" stroke="#7dd3fc" stroke-width="1.5"/>
+<text x="84" y="720" font-size="11" fill="#0369a1" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Who can see what:  members’ needs/offerings are private (owner vault) · broker sees both via grants · public sees only coarsened aggregates · person↔org links never published · public assertion is opt-in.</text>
+</svg>

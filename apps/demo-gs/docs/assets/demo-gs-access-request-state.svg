@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 760" width="1120" height="760" font-family="Inter,system-ui,sans-serif">
+<rect x="0" y="0" width="1120" height="760" rx="0" fill="#f8fafc" stroke="#f8fafc" stroke-width="1.5"/>
+<rect x="0" y="0" width="1120" height="56" rx="0" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+<rect x="24" y="16" width="24" height="24" rx="8" fill="#4f46e5" stroke="#3730a3" stroke-width="1.5"/>
+<text x="58" y="28" font-size="15" fill="#0f172a" font-weight="800" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Global Switchboard</text>
+<text x="58" y="42" font-size="10" fill="#64748b" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">skills · needs · offerings · matches</text>
+<text x="1096" y="33" font-size="11" fill="#94a3b8" font-weight="700" text-anchor="end" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">missing-delegation · request-access state</text>
+<rect x="310" y="150" width="500" height="420" rx="12" fill="#ffffff" stroke="#d97706" stroke-width="1.5"/>
+<text x="560" y="210" font-size="40" fill="#334155" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">🔒</text>
+<text x="560" y="262" font-size="18" fill="#0f172a" font-weight="800" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Switchboard can’t read this org’s needs yet</text>
+<text x="560" y="292" font-size="12" fill="#475569" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">The organization didn’t return a Switchboard access grant</text>
+<text x="560" y="310" font-size="12" fill="#475569" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">when it was created (no silent fallback — ADR-0013).</text>
+<rect x="360" y="340" width="400" height="90" rx="12" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+<text x="380" y="366" font-size="12" fill="#d97706" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Owner: your GCO org · Needs: read gs:needs</text>
+<text x="380" y="388" font-size="12" fill="#d97706" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Grantee: Global Switchboard</text>
+<text x="380" y="410" font-size="12" fill="#d97706" font-weight="400" text-anchor="start" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Revoke anytime from your Global.Church home</text>
+<rect x="360" y="450" width="400" height="34" rx="9" fill="#4f46e5" stroke="#4f46e5" stroke-width="1.5"/>
+<text x="560" y="472" font-size="13" fill="#ffffff" font-weight="700" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Re-create the organization to mint the grant</text>
+<text x="560" y="520" font-size="12" fill="#4f46e5" font-weight="400" text-anchor="middle" font-family="Inter,system-ui,-apple-system,'Segoe UI',sans-serif">Or continue with a limited view (no demand directory).</text>
+</svg>
