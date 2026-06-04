@@ -1,6 +1,6 @@
-// GCO Need wizard (spec 250 §12.1, §17.1). Pete (the GCO signatory) declares a skill-based Need
-// owned by the Global Church org. v1 writes to the local store; Phase 2 writes via the org-vault
-// adapter + publishes a public anchor to the GC graph.
+// GCO Need wizard (spec 250 §12.1, §17.1). The GCO signatory (the connected person) declares a
+// skill-based Need owned by their GCO organization (e.g. Hope Church Missions Team). v1 writes to
+// the local store; Phase 2 writes via the org-vault adapter + publishes a public anchor to the GC graph.
 
 import { useState } from 'react';
 import type { GcoNeedIntent, NeedKind, Uri, VisibilityTier } from '../domain/gs-types';

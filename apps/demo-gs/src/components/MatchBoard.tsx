@@ -24,7 +24,7 @@ export function MatchBoard({ needs, requestAsPerson, onChanged }: {
   const matches = useMemo(() => (need ? rankMatches(need, allOfferings()) : []), [need, needId]);
 
   if (openNeeds.length === 0) {
-    return <Card><SectionHead eyebrow="Switchboard · matching" title="Match board" /><p style={{ color: 'var(--c-g500)', fontSize: '.88rem' }}>No open needs yet. Post one as Pete (GCO).</p></Card>;
+    return <Card><SectionHead eyebrow="Switchboard · matching" title="Match board" /><p style={{ color: 'var(--c-g500)', fontSize: '.88rem' }}>No open needs yet. Post one as a GCO Organization.</p></Card>;
   }
 
   function request(matchId: string) {
