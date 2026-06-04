@@ -33,7 +33,7 @@ export function Btn({ children, onClick, disabled, variant = 'primary', busy, st
       disabled={disabled || busy}
       style={{ borderRadius: 10, padding: '.6rem 1.1rem', fontWeight: 700, fontSize: '.88rem', cursor: disabled || busy ? 'not-allowed' : 'pointer', opacity: disabled || busy ? 0.6 : 1, border: variant === 'ghost' ? '1.5px solid var(--c-primary-border)' : 'none', ...style }}
     >
-      {busy ? 'Working…' : children}
+      {busy ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '.45rem' }}><span className="btn-spin" aria-hidden="true" />Working…</span> : children}
     </button>
   );
 }

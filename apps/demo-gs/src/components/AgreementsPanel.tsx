@@ -2,12 +2,14 @@
 // relationships, the 9-state lifecycle, the provenance timeline, and the contact released on accept.
 // Role-aware: the KC accepts/declines a request; either party concludes; the broker can fulfil.
 
+import { useState } from 'react';
 import type { Address } from '@agenticprimitives/types';
 import type { GsAgreement, GsConnectionStatus } from '../domain/gs-status';
 import { CONNECTION_STATUS_LABEL, nextStatuses } from '../domain/gs-status';
 import { needById, respondToRequest, transitionAgreement } from '../lib/store';
 import type { Persona } from '../lib/personas';
-import { AddrChip, Banner, Btn, Card, Pill, SectionHead } from './ui';
+import { AgreementTimeline } from './AgreementTimeline';
+import { AddrChip, Btn, Card, Pill, SectionHead } from './ui';
 
 const STATUS_TONE: Record<GsConnectionStatus, 'ok' | 'warn' | 'neutral' | 'live'> = {
   proposed: 'neutral', requested: 'warn', confirmed: 'ok', ongoing: 'live',
@@ -24,7 +26,17 @@ export function AgreementsPanel({ agreements, role, actorPerson, onChanged }: {
     return <Card><SectionHead eyebrow="Switchboard · connections" title="Agreements" /><p style={{ color: 'var(--c-g500)', fontSize: '.88rem' }}>No connections yet. Request one from the match board.</p></Card>;
   }
 
-  const act = (fn: () => void | Promise<unknown>) => { void Promise.resolve(fn()).then(() => onChanged?.()); };
+  // Track which agreement is mid-action so its buttons show a busy/spinner state (the underlying
+  // store ops are async vault round-trips). A small error surfaces if the op throws.
+  const [pending, setPending] = useState<string | null>(null);
+  const [actErr, setActErr] = useState<string | null>(null);
+  const act = (id: string, fn: () => void | Promise<unknown>) => {
+    setPending(id); setActErr(null);
+    void Promise.resolve(fn())
+      .then(() => onChanged?.())
+      .catch((e) => setActErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setPending(null));
+  };
 
   return (
     <Card>
@@ -42,43 +54,44 @@ export function AgreementsPanel({ agreements, role, actorPerson, onChanged }: {
               <AddrChip id={a.gcoOrgAgentId} /> (GCO) ↔ <AddrChip id={a.kcPersonAgentId} /> (KC)
             </p>
 
-            {/* Contact release — only after the KC accepts (spec 250 §10.3). */}
-            {a.releasedKcContact && (
-              <div style={{ marginTop: '.6rem' }}>
-                <Banner tone="ok">Contact released on accept · GCO: {a.releasedGcoContact} · KC: {a.releasedKcContact}{a.channelRef ? ` · channel ${a.channelRef.channelId}` : ''}</Banner>
-              </div>
-            )}
-
             {/* Actions */}
             <div style={{ display: 'flex', gap: '.5rem', marginTop: '.7rem', flexWrap: 'wrap', alignItems: 'center' }}>
               {a.status === 'requested' && role === 'kc' && (
                 <>
-                  <Btn style={{ padding: '.4rem .8rem' }} onClick={() => act(() => respondToRequest(a.id, true, actorPerson))}>Accept connection</Btn>
-                  <Btn variant="ghost" style={{ padding: '.4rem .8rem' }} onClick={() => act(() => respondToRequest(a.id, false, actorPerson))}>Decline</Btn>
+                  <Btn busy={pending === a.id} style={{ padding: '.4rem .8rem' }} onClick={() => act(a.id, () => respondToRequest(a.id, true, actorPerson))}>Accept connection</Btn>
+                  <Btn busy={pending === a.id} variant="ghost" style={{ padding: '.4rem .8rem' }} onClick={() => act(a.id, () => respondToRequest(a.id, false, actorPerson))}>Decline</Btn>
                 </>
               )}
               {a.status === 'requested' && role !== 'kc' && (
                 <span style={{ fontSize: '.8rem', color: 'var(--c-g500)' }}>Awaiting the KC's response — switch to KC Expert to accept.</span>
               )}
               {transitions.map((t) => (
-                <Btn key={t} variant="ghost" style={{ padding: '.4rem .8rem' }} onClick={() => act(() => transitionAgreement(a.id, t, actorPerson, `${role} → ${t}`))}>
+                <Btn key={t} busy={pending === a.id} variant="ghost" style={{ padding: '.4rem .8rem' }} onClick={() => act(a.id, () => transitionAgreement(a.id, t, actorPerson, `${role} → ${t}`))}>
                   Mark {CONNECTION_STATUS_LABEL[t]}
                 </Btn>
               ))}
             </div>
+            {actErr && pending === null && <p style={{ fontSize: '.78rem', color: '#d97706', marginTop: '.4rem' }}>Couldn’t complete that action: {actErr}</p>}
 
-            {/* Provenance timeline (spec 250 §15.3) */}
+            {/* Expandable match→agreement timeline (Wave E): actor swimlanes, the canonical
+                concept-join, who-can-see-what, contact reveal, opt-in public assertion, and
+                demo-admin jumps. Collapsed by default so the list stays scannable. The raw
+                provenance event log is kept as a nested forensic sub-detail. */}
             <details style={{ marginTop: '.7rem' }}>
-              <summary style={{ fontSize: '.78rem', color: 'var(--c-g500)', cursor: 'pointer', fontWeight: 700 }}>Provenance ({a.statusEvents.length} event{a.statusEvents.length === 1 ? '' : 's'})</summary>
-              <ol style={{ margin: '.5rem 0 0', paddingLeft: '1.1rem' }}>
-                {a.statusEvents.map((e) => (
-                  <li key={e.id} style={{ fontSize: '.78rem', color: 'var(--c-g600)', marginBottom: '.3rem' }}>
-                    {e.previousStatus ? `${CONNECTION_STATUS_LABEL[e.previousStatus]} → ` : ''}<strong>{CONNECTION_STATUS_LABEL[e.nextStatus]}</strong>
-                    {' '}by <AddrChip id={e.actorPersonAgentId} /> · {new Date(e.occurredAt).toLocaleString()}
-                    {e.reason ? ` · ${e.reason}` : ''}
-                  </li>
-                ))}
-              </ol>
+              <summary style={{ fontSize: '.78rem', color: 'var(--c-g500)', cursor: 'pointer', fontWeight: 700 }}>Timeline &amp; who can see what ({a.statusEvents.length} event{a.statusEvents.length === 1 ? '' : 's'})</summary>
+              <AgreementTimeline agreement={a} role={role} />
+              <details style={{ marginTop: '.7rem' }}>
+                <summary style={{ fontSize: '.74rem', color: 'var(--c-g400)', cursor: 'pointer', fontWeight: 700 }}>Provenance log ({a.statusEvents.length} event{a.statusEvents.length === 1 ? '' : 's'})</summary>
+                <ol style={{ margin: '.5rem 0 0', paddingLeft: '1.1rem' }}>
+                  {a.statusEvents.map((e) => (
+                    <li key={e.id} style={{ fontSize: '.78rem', color: 'var(--c-g600)', marginBottom: '.3rem' }}>
+                      {e.previousStatus ? `${CONNECTION_STATUS_LABEL[e.previousStatus]} → ` : ''}<strong>{CONNECTION_STATUS_LABEL[e.nextStatus]}</strong>
+                      {' '}by <AddrChip id={e.actorPersonAgentId} /> · {new Date(e.occurredAt).toLocaleString()}
+                      {e.reason ? ` · ${e.reason}` : ''}
+                    </li>
+                  ))}
+                </ol>
+              </details>
             </details>
           </div>
         );

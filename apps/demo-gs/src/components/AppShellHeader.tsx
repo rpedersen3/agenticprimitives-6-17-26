@@ -25,10 +25,13 @@ export interface ConnectedIdentity {
 }
 
 export function AppShellHeader({
-  identity, caps,
+  admin = false, identity, caps,
   onConnect, onDemoJane, onDemoPete, onHelp,
   onOpenHome, onDisconnect, onSwitchRole, onSetupRole,
 }: {
+  /** In a Jane/Pete demo-admin surface → a distinct hashed-black header so it's obvious you're in the
+   *  demo-admin area, not a connected user page. */
+  admin?: boolean;
   /** The connected member, or null when signed out. */
   identity: ConnectedIdentity | null;
   /** Role capabilities (connected only) — drives the switch/setup entries. */
@@ -63,8 +66,9 @@ export function AppShellHeader({
   const run = (fn: () => void) => () => { close(); fn(); };
 
   return (
-    <header className="topbar">
+    <header className={admin ? 'topbar topbar-admin' : 'topbar'}>
       <div className="wrap">
+        {admin && <span className="topbar-admin-badge">DEMO ADMIN</span>}
         <div className="brand">
           <span className="brand-glyph" aria-hidden="true">🎛️</span>
           <span>{GS.org}<small>skills · needs · offerings · matches</small></span>

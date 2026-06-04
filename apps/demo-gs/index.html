@@ -31,6 +31,8 @@
       a { color: var(--c-primary); }
       .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
       .eyebrow { font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--c-primary); }
+      @keyframes btnspin { to { transform: rotate(360deg); } }
+      .btn-spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; display: inline-block; animation: btnspin .6s linear infinite; }
       .btn-primary { background: var(--c-primary); color: #fff; }
       .btn-primary:hover { background: var(--c-primary-hover); }
       .btn-ghost { background: #fff; color: var(--c-primary); border: 1.5px solid var(--c-primary-border); }
@@ -51,6 +53,14 @@
       .brand small { display: block; font-size: .66rem; font-weight: 600; color: var(--c-g500); letter-spacing: .02em; }
       .powered { display: inline-flex; align-items: center; gap: .4rem; font-size: .7rem; font-weight: 700; color: var(--c-g600); background: var(--c-g100); border: 1px solid var(--c-g200); border-radius: 999px; padding: .3rem .65rem; }
       .powered b { color: var(--c-primary); }
+      /* Demo-admin (Jane/Pete) header — black with gray diagonal hashes so it's unmistakably the demo
+         admin area, not a connected user page. */
+      .topbar-admin { background: repeating-linear-gradient(135deg, #0b1120 0 11px, #334155 11px 22px) !important; backdrop-filter: none; border-bottom: 3px solid #000; }
+      .topbar-admin .wrap { position: relative; }
+      .topbar-admin .brand, .topbar-admin .brand small { color: #fff !important; }
+      .topbar-admin .powered { color: #e2e8f0; background: rgba(15,23,42,.55); border-color: #475569; }
+      .topbar-admin .powered b { color: #c7d2fe; }
+      .topbar-admin-badge { position: absolute; left: 50%; transform: translateX(-50%); background: #000; color: #fff; font-size: .66rem; font-weight: 800; letter-spacing: .14em; padding: .25rem .7rem; border-radius: 4px; border: 1px solid #475569; }
       .btn-sso {
         display: flex; align-items: center; gap: .6rem; width: 100%;
         background: linear-gradient(150deg, var(--c-primary), var(--c-primary-active));

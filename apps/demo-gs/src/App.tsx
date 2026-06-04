@@ -285,6 +285,7 @@ export function App() {
   return (
     <>
       <AppShellHeader
+        admin={!!demoPersona}
         identity={identity}
         caps={connected ? caps : null}
         onConnect={goConnect}
@@ -339,10 +340,11 @@ export function App() {
                 setActiveRoleState('gco');
                 void setActiveContext({ persona: 'gco', session: null }).catch(() => { /* loadError() */ });
               }}
-              onOpenBoard={() => openDemo('jane')}
             />
           )}
-          {view === 'workspace' && !demoPersona && activeRole === 'kc' && <KcView onHub={goHub} caps={caps} />}
+          {view === 'workspace' && !demoPersona && activeRole === 'kc' && (
+            <KcView onHub={goHub} caps={caps} />
+          )}
         </div>
       </div>
 
@@ -449,13 +451,11 @@ function GcoOrgCreate({ signatory, onSignOut }: { signatory: string; onSignOut: 
 // grant → the org intranet, restructured into the §10 hierarchy: lifecycle rail → primary task card
 // (post a need) + a next-best-action right rail → posted needs (edit/withdraw) → coarsened supply
 // directory → agreements → a data/trust footer.
-function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg, onOpenBoard }: {
+function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg }: {
   pendingGco: { signatory: string } | null; onClearPending: () => void; onHub: () => void;
   caps: ReturnType<typeof deriveRoleCapabilities>;
   /** Re-mint the org→Switchboard grant (drop the session + resume org-create). */
   onRecreateOrg: (signatory: string) => void;
-  /** Open the Switchboard broker board (to review matches + request a connection). */
-  onOpenBoard: () => void;
 }) {
   // A "re-post"/edit prefill, set when the user clicks edit on a posted need.
   const [editNeed, setEditNeed] = useState<GcoNeedIntent | null>(null);
@@ -490,7 +490,7 @@ function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg, onOpe
 
   const myNeeds = allNeeds();
   const lc = gcoLifecycle({ hasOrg: true, needs: myNeeds, agreements: allAgreements() });
-  const next = gcoNextAction(lc.position, onOpenBoard);
+  const next = gcoNextAction(lc.position);
 
   return (
     <>
@@ -525,12 +525,12 @@ function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg, onOpe
 }
 
 // The single most useful next step for the GCO, by lifecycle position (design spec §10 right rail).
-function gcoNextAction(position: ReturnType<typeof gcoLifecycle>['position'], onOpenBoard: () => void): NextAction {
+function gcoNextAction(position: ReturnType<typeof gcoLifecycle>['position']): NextAction {
   switch (position) {
     case 'no-need':
       return { title: 'Post your first skill need', body: 'Declare what capability your organization needs — required skills, region, cause, languages, and commitment. Use the form on the left.', tone: 'action' };
     case 'need-posted':
-      return { title: 'Review matches & request a connection', body: 'Your need is posted. The Switchboard scores it against KC offerings — open the broker board to review explainable matches and request a connection.', cta: { label: 'Open the Switchboard board', onClick: onOpenBoard }, tone: 'action' };
+      return { title: 'The Switchboard is matching your need', body: 'Your need is posted to your org vault. Global Switchboard scores it against KC offerings and will propose a connection; you’ll see it here once a Kingdom Consultant is matched. Nothing to do right now.', tone: 'wait' };
     case 'request-pending':
       return { title: 'Awaiting the KC’s response', body: 'You requested a connection. The Kingdom Consultant reviews it and accepts on their terms — contact is released only on accept. Nothing to do right now.', tone: 'wait' };
     case 'agreement-issued':
@@ -591,7 +591,9 @@ function JaneView() {
 // (publish/update your offering) + a next-best-action right rail → request queue (the AgreementsPanel
 // accept/decline surface, framed with the matched-skill "why this match") → coarsened demand directory →
 // the on-chain substrate badge → a data/trust footer.
-function KcView({ onHub, caps }: { onHub: () => void; caps: ReturnType<typeof deriveRoleCapabilities> }) {
+function KcView({ onHub, caps }: {
+  onHub: () => void; caps: ReturnType<typeof deriveRoleCapabilities>;
+}) {
   const session = loadSession('kc');
   if (!session) return <OnboardPanel kind="kc" />;
   const kc = session.sa;
