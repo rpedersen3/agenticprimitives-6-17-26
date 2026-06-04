@@ -1,0 +1,8 @@
+# Cloudflare Pages headers baseline for demo-gs — mirrors demo-jp's defensive shape.
+# Closes the cheap clickjacking / MIME-sniff / referrer-leak / permissions-API surfaces.
+
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()

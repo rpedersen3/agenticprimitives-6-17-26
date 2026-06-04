@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Global Switchboard · Skills Need/Offering broker (demo)</title>
+    <style>
+      :root {
+        /* demo-gs identity — a "switchboard / network" indigo, distinct from demo-jp (teal),
+           demo-org (emerald), demo-sso (amber/indigo). Sky accent for match highlights. */
+        --c-primary: #4f46e5; --c-primary-hover: #4338ca; --c-primary-active: #3730a3;
+        --c-primary-subtle: #eef2ff; --c-primary-border: #c7d2fe; --c-primary-mid: #818cf8;
+        --c-accent: #0369a1; --c-accent-subtle: #f0f9ff; --c-accent-border: #7dd3fc;
+        --c-g900: #0f172a; --c-g800: #1e293b; --c-g700: #334155; --c-g600: #475569;
+        --c-g500: #64748b; --c-g400: #94a3b8; --c-g300: #cbd5e1; --c-g200: #e2e8f0;
+        --c-g100: #f1f5f9; --c-g50: #f8fafc;
+        --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px;
+        --sh-sm: 0 1px 2px rgba(15,23,42,.06); --sh-md: 0 4px 16px rgba(15,23,42,.08);
+        --sh-lg: 0 18px 50px rgba(15,23,42,.12);
+        --maxw: 1100px;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0; color: var(--c-g800); background: var(--c-g50);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.55; -webkit-font-smoothing: antialiased;
+      }
+      h1, h2, h3, h4 { color: var(--c-g900); line-height: 1.15; margin: 0; letter-spacing: -.01em; }
+      p { margin: 0; }
+      a { color: var(--c-primary); }
+      .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
+      .eyebrow { font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--c-primary); }
+      .btn-primary { background: var(--c-primary); color: #fff; }
+      .btn-primary:hover { background: var(--c-primary-hover); }
+      .btn-ghost { background: #fff; color: var(--c-primary); border: 1.5px solid var(--c-primary-border); }
+      .btn-ghost:hover { background: var(--c-primary-subtle); }
+      .demo-banner {
+        position: relative; z-index: 50;
+        background: repeating-linear-gradient(135deg, #c7d2fe 0 14px, #a5b4fc 14px 28px);
+        color: #312e81; border-bottom: 3px solid #4f46e5;
+        padding: .65rem 1rem; text-align: center; font-weight: 800;
+        font-size: clamp(.82rem, 2.4vw, .95rem); letter-spacing: .02em; line-height: 1.35;
+      }
+      .demo-banner strong { display: inline-block; background: #4f46e5; color: #fff; padding: .12rem .6rem; border-radius: 4px; margin-right: .35rem; letter-spacing: .12em; }
+      .demo-banner small { display: block; font-weight: 600; font-size: .76rem; opacity: .85; margin-top: .15rem; }
+      .topbar { position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--c-g200); }
+      .topbar .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+      .brand { display: flex; align-items: center; gap: .6rem; font-weight: 800; color: var(--c-g900); }
+      .brand-glyph { width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(150deg, var(--c-primary-mid), var(--c-primary-active)); display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: var(--sh-sm); }
+      .brand small { display: block; font-size: .66rem; font-weight: 600; color: var(--c-g500); letter-spacing: .02em; }
+      .powered { display: inline-flex; align-items: center; gap: .4rem; font-size: .7rem; font-weight: 700; color: var(--c-g600); background: var(--c-g100); border: 1px solid var(--c-g200); border-radius: 999px; padding: .3rem .65rem; }
+      .powered b { color: var(--c-primary); }
+      footer { border-top: 1px solid var(--c-g200); padding: 2rem 0; color: var(--c-g500); font-size: .8rem; margin-top: 3rem; }
+    </style>
+  </head>
+  <body>
+    <!-- Demo-site disclaimer: visible from first paint, on every screen, NOT a React component. -->
+    <div class="demo-banner" role="alert" aria-live="polite">
+      <strong>DEMO</strong> Prototype only — <u>not affiliated with or endorsed by any real organization</u>. "Global Switchboard", "GCO", "KC" are placeholders demonstrating the skill-matching intent-spine on agenticprimitives.dev.
+      <small>No real connections are brokered here. This is a pattern demonstration only.</small>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
