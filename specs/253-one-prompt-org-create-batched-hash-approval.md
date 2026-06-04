@@ -1,7 +1,11 @@
 # Spec 253 — One-prompt org-create via batched on-chain hash approval
 
-**Status:** draft, 2026-06-04. **Security-auditor verdict: GO-WITH-CONDITIONS** (see §5 — conditions 1–5
-are gates; the contract change MUST NOT merge until conditions 1–4 land with their tests).
+**Status:** SHIPPED 2026-06-04 (R11 full Base Sepolia redeploy). **Security-auditor verdict:
+GO-WITH-CONDITIONS** — all conditions met (see §5). PRs: spec #177/#178, contract #179, home+relayer #181,
+redeploy #182. Live addresses (R11): factory `0x6f7Fc9B36977F55666548e0a73D9063F0D88A760`, impl
+`0x11f1523D9883BdF382993d70C601D307ED0F1f13`, ApprovedHashRegistry
+`0xE01c1356F4B10FEfa8Ab210020B802cf3e900759`, paymaster `0x0e54A8Cc986C86530f0593817E8CafE01FC52983`
+(devMode). 9/9 Foundry gate tests pass; `factory.approvedHashRegistry()` verified on-chain.
 **Owner:** `packages/contracts` (`AgentAccount.isValidSignature` + the `ApprovedHashRegistry` it must
 honor) + `apps/demo-sso-next` (the home org-create ceremony) + `apps/demo-a2a` (the delegation verify
 path). Affects BOTH demo-jp and demo-gs (shared Impact home).
