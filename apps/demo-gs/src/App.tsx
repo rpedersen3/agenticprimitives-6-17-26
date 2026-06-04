@@ -6,7 +6,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { PERSONA_META, actingAgents, loadPersona, savePersona, type Persona } from './lib/personas';
-import { allAgreements, allNeeds, allOfferings, needsForOrg, offeringsForPerson, resetStore, subscribe, version } from './lib/store';
+import { allAgreements, allNeeds, allOfferings, hydrate, isHydrated, loadError, needsForOrg, offeringsForPerson, resetStore, subscribe, version } from './lib/store';
 import {
   activeGco, activeKc, attachGcoOrg, createConnectedGcoPerson, createConnectedKc, createGco, createKc, gcoMembers, isEntered, kcMembers, membersVersion, setActiveGco, setActiveKc, setEntered, subscribeMembers,
 } from './lib/members';
@@ -37,6 +37,10 @@ export function App() {
 
   const [connectError, setConnectError] = useState<string | null>(null);
   const select = (p: Persona) => { setPersona(p); savePersona(p); };
+
+  // Wave 1 (spec 252): load the broker board from the Switchboard vault on start (deploys the
+  // Switchboard SA on first run). The board data now lives in the per-agent MCP vault, not localStorage.
+  useEffect(() => { void hydrate().catch(() => { /* surfaced via loadError() */ }); }, []);
 
   // Connect return handler (Phase 1): a person came back from their secure home with ?code&state.
   // TWO ceremonies land here (mirrors demo-jp): (1) the site-login that enrolls the PERSON — KC acts
@@ -132,6 +136,12 @@ export function App() {
         </Card>
 
         {connectError && <div style={{ marginBottom: '1rem' }}><Banner tone="err">{connectError}</Banner></div>}
+        {loadError() && <div style={{ marginBottom: '1rem' }}><Banner tone="err">Couldn&rsquo;t reach the Switchboard vault: {loadError()}. The board may be out of date until it reconnects.</Banner></div>}
+        {!isHydrated() && !loadError() && (
+          <div style={{ marginBottom: '1rem', fontSize: '.78rem', color: 'var(--c-g500)' }}>
+            ⟳ syncing the board with the Switchboard vault…
+          </div>
+        )}
 
         <div style={{ display: 'grid', gap: '1.25rem', paddingBottom: '2rem' }}>
           {persona === 'gco' && <GcoView />}

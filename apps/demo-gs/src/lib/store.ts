@@ -1,8 +1,14 @@
-// App-local store (spec 250 Phase 0/1). localStorage-backed with vault-shaped seams: each
-// accessor is the spot a real org-vault / person-vault / GC-graph adapter slots in later
-// (Phase 2/3). Seeds from fixtures on first load so the broker board is never empty.
+// Broker operational store (spec 252 Wave 1). The board data — needs / offerings / agreements — is
+// the BROKER's (Jane / Switchboard) operational view, and now lives in the Switchboard org's per-agent
+// MCP vault (record `gs:broker:store`), NOT localStorage. Cross-browser + delegation-gated.
 //
-// Reactivity: a tiny version counter + subscribe(); App bumps + re-reads on every action.
+// ONE mechanism (ADR-0013): the vault is the source of truth; `_db` is an in-memory CACHE of it.
+// `hydrate()` loads the vault on app start (deploying the Switchboard SA on first run); every mutation
+// write-throughs to the vault. The fixtures seed the vault ONLY when it is empty (first run) — they are
+// never a fallback when the vault is unreachable (that surfaces as `loadError`, not silent local data).
+//
+// (Wave 2 splits member-owned records — KC offerings, GCO needs — into each member's OWN vault; for now
+// the broker holds the whole operational set.)
 
 import type { Address } from '@agenticprimitives/types';
 import type { ExpertOffering, GcoNeedIntent, GsIntentMatch } from '../domain/gs-types';
@@ -11,38 +17,30 @@ import {
 } from '../domain/gs-status';
 import { SEED_NEEDS, SEED_OFFERINGS } from '../data/fixtures';
 import { caip10 } from './personas';
+import { vaultRead, vaultWrite } from './vault-client';
+import { switchboardVaultOwner } from './onchain';
 
 interface DbShape {
   needs: GcoNeedIntent[];
   offerings: ExpertOffering[];
   agreements: GsAgreement[];
-  seeded: boolean;
 }
 
-const KEY = 'agenticprimitives:demo-gs:db:v1';
+const RECORD = 'gs:broker:store';
 
-function load(): DbShape {
-  if (typeof localStorage !== 'undefined') {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      try { return JSON.parse(raw) as DbShape; } catch { /* fall through to seed */ }
-    }
-  }
-  const seeded: DbShape = { needs: [...SEED_NEEDS], offerings: [...SEED_OFFERINGS], agreements: [], seeded: true };
-  save(seeded);
-  return seeded;
+function seed(): DbShape {
+  return { needs: [...SEED_NEEDS], offerings: [...SEED_OFFERINGS], agreements: [] };
 }
 
-function save(db: DbShape): void {
-  if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(db));
-}
-
-let _db: DbShape = load();
+// In-memory cache of the broker vault. Seeded so the UI renders instantly; replaced by the vault's
+// canonical copy once `hydrate()` resolves.
+let _db: DbShape = seed();
 let _version = 0;
+let _hydrated = false;
+let _loadError: string | null = null;
 const _subs = new Set<() => void>();
 
-function commit(): void {
-  save(_db);
+function bump(): void {
   _version += 1;
   for (const s of _subs) s();
 }
@@ -54,8 +52,54 @@ export function subscribe(fn: () => void): () => void {
 export function version(): number {
   return _version;
 }
+export const isHydrated = (): boolean => _hydrated;
+export const loadError = (): string | null => _loadError;
 
-// ── Reads ──
+// ── Vault hydrate + write-through (the single mechanism) ──
+let _hydrating: Promise<void> | null = null;
+
+/** Load the broker store from the Switchboard vault (deploying the SA on first run). Idempotent. */
+export function hydrate(): Promise<void> {
+  if (_hydrating) return _hydrating;
+  _hydrating = (async () => {
+    try {
+      const owner = await switchboardVaultOwner();
+      const stored = await vaultRead<DbShape>(owner, RECORD);
+      if (stored && Array.isArray(stored.needs)) {
+        _db = stored;
+      } else {
+        await vaultWrite(owner, RECORD, _db); // first run — seed the vault from fixtures
+      }
+      _hydrated = true;
+      _loadError = null;
+      bump();
+    } catch (e) {
+      _loadError = e instanceof Error ? e.message : String(e);
+      bump();
+      throw e;
+    }
+  })();
+  return _hydrating;
+}
+
+async function persist(): Promise<void> {
+  try {
+    const owner = await switchboardVaultOwner();
+    await vaultWrite(owner, RECORD, _db);
+    if (_loadError) { _loadError = null; bump(); }
+  } catch (e) {
+    _loadError = e instanceof Error ? e.message : String(e);
+    bump();
+  }
+}
+
+/** Re-render now (cache changed); write the new state through to the vault. */
+function commit(): void {
+  bump();
+  void persist();
+}
+
+// ── Reads (sync, from the cache) ──
 export const allNeeds = (): GcoNeedIntent[] => _db.needs;
 export const allOfferings = (): ExpertOffering[] => _db.offerings;
 export const allAgreements = (): GsAgreement[] => _db.agreements;
@@ -149,8 +193,8 @@ export function transitionAgreement(agreementId: string, to: GsConnectionStatus,
   return true;
 }
 
-/** Reset the demo data to fixtures (dev convenience). */
+/** Reset the broker store to fixtures (writes through to the vault). */
 export function resetStore(): void {
-  _db = { needs: [...SEED_NEEDS], offerings: [...SEED_OFFERINGS], agreements: [], seeded: true };
+  _db = seed();
   commit();
 }

@@ -49,6 +49,13 @@ async function _ensure(): Promise<DeployState> {
     saveState({ sa, deployed: false }); // persist the predicted address for display pre-deploy
     throw new Error(res.error ?? 'Switchboard org deploy failed');
   }
+  // The relayer returns optimistically — the deploy userOp may not be mined yet. The first vault
+  // write would then 403 (ERC-1271 isValidSignature returns 0x against a code-less address). Wait for
+  // code to appear before declaring the SA usable.
+  for (let i = 0; i < 30; i++) {
+    if (await isContractDeployed(res.deployedAddress)) break;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
   const state: DeployState = { sa: res.deployedAddress, deployed: true };
   saveState(state);
   return state;
