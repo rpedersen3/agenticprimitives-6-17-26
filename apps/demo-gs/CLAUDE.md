@@ -3,10 +3,12 @@
 Global Switchboard skills/expertise broker (spec 250). Vite SPA. **Sibling of demo-jp** — same
 Need / Offering / Match / Agreement intent-spine primitive, applied to a *skills* marketplace.
 
-## The mapping (demo-jp → demo-gs)
-- **Pete / Global Church** = a **GCO** (Global Christian Org) that posts skill **Needs** (was the issuer in demo-jp; here it's the demand side).
-- **Jane / Global Switchboard** = the **broker** (matches Needs ↔ Offerings; mirrors Jill / JP).
-- **KC Expert** = a member who publishes an expertise **Offering** + accepts connection requests (the supply side).
+## The mapping (demo-jp → demo-gs) — 4 roles, a clean mirror
+- **GCO Organization** (demand) = a **Great Commission Organization**. A connected person **creates an ORG** (e.g. *Hope Church Missions Team*) that **holds the GCO role** + posts skill **Needs**; the person is its signatory. **≈ demo-jp Adopter.** (The GCO role belongs to the ORG, not the person.)
+- **KC Expert** (supply) = an **individual** person agent with skills who publishes an **Offering** + accepts requests. **≈ demo-jp Facilitator.** We create new KC people whose skills we match against.
+- **Jane / Global Switchboard** = the **broker** operator (matches Needs ↔ Offerings). **≈ JP / Jill.**
+- **Pete / Global Church** = the **issuer** operator — the *same* Global Church org as demo-jp, **NOT a GCO**. Issues the connection agreement. **≈ demo-jp Global Church.**
+- New GCO orgs + KC people are **created in-app** (`src/lib/members.ts` + `MemberPicker`) — the Adopter/Facilitator "create + act as your identity" analog; Phase 1 swaps this for real demo-sso SAs.
 
 ## v1 = fixture-driven (spec 250 Phase 0/1)
 Identity- and chain-decoupled: localStorage store, mocked taxonomy, a stubbed `AgentSession`. The store +

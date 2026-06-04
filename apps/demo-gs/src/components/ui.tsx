@@ -4,6 +4,7 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 import { agentName } from '../data/fixtures';
+import { memberName } from '../lib/members';
 
 export function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
@@ -56,7 +57,7 @@ export function shortHex(s: string | undefined, head = 6, tail = 4): string {
 export function AddrChip({ id }: { id?: string }) {
   if (!id) return <span>—</span>;
   const addr = id.includes(':') ? id.split(':').pop()! : id;
-  const name = agentName(addr);
+  const name = agentName(addr) ?? memberName(addr);
   return name
     ? <span style={{ fontWeight: 600, color: 'var(--c-g800)' }} title={addr}>{name}</span>
     : <Mono title={addr}>{shortHex(addr, 8, 6)}</Mono>;

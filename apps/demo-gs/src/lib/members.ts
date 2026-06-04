@@ -1,0 +1,119 @@
+// Member creation (the demo-jp Adopter/Facilitator analog). Lets the demo create NEW people:
+//   • a KC Expert — an INDIVIDUAL person agent with skills (the supply side).
+//   • a GCO Organization — a person who CREATES an org that takes the GCO role (the demand side);
+//     the org holds the role, the person is its signatory.
+//
+// v1 derives stable addresses locally (Phase 1 swaps this for real demo-sso person/org SAs created
+// via Connect, exactly like demo-jp). Seeded with the default members so the board is never empty.
+
+import { keccak256, encodePacked, toBytes } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import type { Address } from '@agenticprimitives/types';
+import { GCO_ORG, GCO_PERSON_EOA, KC_EOA } from './personas';
+
+/** A GCO Organization member: a signatory PERSON who created an ORG that holds the GCO role. */
+export interface GcoMember {
+  id: string;
+  signatory: string; // the person who created the org
+  orgName: string; // the org that takes the GCO role
+  person: Address; // the signatory's agent
+  org: Address; // the GCO org agent (the role belongs here)
+}
+
+/** A KC Expert member: an individual person agent with skills. */
+export interface KcMember {
+  id: string;
+  name: string;
+  person: Address;
+}
+
+interface MembersDb {
+  gco: GcoMember[];
+  kc: KcMember[];
+  activeGcoId: string;
+  activeKcId: string;
+  counter: number;
+}
+
+const SEED_GCO: GcoMember = { id: 'seed-gco', signatory: 'Maria', orgName: 'Hope Church Missions Team', person: GCO_PERSON_EOA, org: GCO_ORG };
+const SEED_KC: KcMember = { id: 'seed-kc', name: 'Dana — Grant & Foundation Strategy', person: KC_EOA };
+
+const KEY = 'agenticprimitives:demo-gs:members:v1';
+
+function seed(): MembersDb {
+  return { gco: [SEED_GCO], kc: [SEED_KC], activeGcoId: SEED_GCO.id, activeKcId: SEED_KC.id, counter: 0 };
+}
+
+function load(): MembersDb {
+  if (typeof localStorage !== 'undefined') {
+    const raw = localStorage.getItem(KEY);
+    if (raw) { try { return JSON.parse(raw) as MembersDb; } catch { /* reseed */ } }
+  }
+  const s = seed();
+  save(s);
+  return s;
+}
+function save(db: MembersDb): void {
+  if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(db));
+}
+
+let _db: MembersDb = load();
+let _version = 0;
+const _subs = new Set<() => void>();
+function commit(): void { save(_db); _version += 1; for (const s of _subs) s(); }
+
+export function subscribeMembers(fn: () => void): () => void { _subs.add(fn); return () => _subs.delete(fn); }
+export function membersVersion(): number { return _version; }
+
+// derive a stable, unique agent address from a creation seed
+function deriveAddr(seed: string): Address {
+  return privateKeyToAccount(keccak256(toBytes(seed))).address;
+}
+function predictOrg(custodian: Address, name: string): Address {
+  return `0x${keccak256(encodePacked(['string', 'address', 'string'], ['demo-gs/org-sa/v1', custodian, name])).slice(-40)}` as Address;
+}
+
+// ── Reads ──
+export const gcoMembers = (): GcoMember[] => _db.gco;
+export const kcMembers = (): KcMember[] => _db.kc;
+export const activeGco = (): GcoMember => _db.gco.find((m) => m.id === _db.activeGcoId) ?? _db.gco[0]!;
+export const activeKc = (): KcMember => _db.kc.find((m) => m.id === _db.activeKcId) ?? _db.kc[0]!;
+
+/** Friendly name for a created member's person/org address (directory fallback). */
+export function memberName(addr?: string): string | undefined {
+  if (!addr) return undefined;
+  const lc = addr.toLowerCase();
+  for (const m of _db.gco) {
+    if (m.org.toLowerCase() === lc) return `${m.orgName} (GCO)`;
+    if (m.person.toLowerCase() === lc) return `${m.signatory} (GCO signatory)`;
+  }
+  for (const m of _db.kc) if (m.person.toLowerCase() === lc) return `${m.name} (KC)`;
+  return undefined;
+}
+
+// ── Writes ──
+/** Create a GCO Organization: a signatory PERSON + the ORG they create (which holds the GCO role). */
+export function createGco(signatory: string, orgName: string): GcoMember {
+  const n = (_db.counter += 1);
+  const person = deriveAddr(`gco-person|${signatory}|${orgName}|${n}`);
+  const org = predictOrg(person, `${orgName}|${n}`);
+  const m: GcoMember = { id: `gco-${n}`, signatory: signatory.trim(), orgName: orgName.trim(), person, org };
+  _db.gco.unshift(m);
+  _db.activeGcoId = m.id;
+  commit();
+  return m;
+}
+
+/** Create a KC Expert: an individual person agent with skills. */
+export function createKc(name: string): KcMember {
+  const n = (_db.counter += 1);
+  const person = deriveAddr(`kc-person|${name}|${n}`);
+  const m: KcMember = { id: `kc-${n}`, name: name.trim(), person };
+  _db.kc.unshift(m);
+  _db.activeKcId = m.id;
+  commit();
+  return m;
+}
+
+export function setActiveGco(id: string): void { _db.activeGcoId = id; commit(); }
+export function setActiveKc(id: string): void { _db.activeKcId = id; commit(); }

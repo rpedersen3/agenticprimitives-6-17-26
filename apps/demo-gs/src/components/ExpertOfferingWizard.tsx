@@ -5,14 +5,15 @@
 import { useState } from 'react';
 import type { Capacity, ExpertOffering, Uri } from '../domain/gs-types';
 import { CAUSES, LANGUAGES, REGIONS, skillByUri } from '../data/taxonomy';
-import { KC_EOA, caip10 } from '../lib/personas';
+import type { Address } from '@agenticprimitives/types';
+import { caip10 } from '../lib/personas';
 import { upsertOffering } from '../lib/store';
 import { SkillPicker } from './SkillPicker';
 import { Banner, Btn, Card, Field, Pill, SectionHead, inputStyle } from './ui';
 
 const AVAIL: Capacity['availabilityStatus'][] = ['available', 'limited', 'paused', 'unavailable'];
 
-export function ExpertOfferingWizard({ onCreated }: { onCreated?: () => void }) {
+export function ExpertOfferingWizard({ owner, ownerName, onCreated }: { owner: Address; ownerName?: string; onCreated?: () => void }) {
   const [headline, setHeadline] = useState('');
   const [skills, setSkills] = useState<Uri[]>([]);
   const [regionUris, setRegionUris] = useState<Uri[]>([]);
@@ -30,8 +31,8 @@ export function ExpertOfferingWizard({ onCreated }: { onCreated?: () => void }) 
     const now = new Date().toISOString();
     const offering: ExpertOffering = {
       id: `gc:offering:demo-gs:kc-${headline.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 20)}-${Date.now().toString(36)}`,
-      ownerPersonAgentId: caip10(KC_EOA),
-      displayName: 'You (KC)',
+      ownerPersonAgentId: caip10(owner),
+      displayName: ownerName ?? 'You (KC)',
       headline: headline.trim(),
       offeredSkills: skills.map((u) => skillByUri(u)!),
       geoFacets: REGIONS.filter((r) => regionUris.includes(r.uri)),

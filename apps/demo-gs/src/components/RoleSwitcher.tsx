@@ -1,10 +1,10 @@
 // Persona switcher (spec 250 §17.1 "Connect / role selector"). Mirrors demo-jp's PersonaBar.
 // In v1 this stands in for demo-sso's role selection; Phase 1 swaps in real agent/delegation claims.
 
-import { OPERATOR_PERSONAS, PERSONA_META, type Persona } from '../lib/personas';
+import { MEMBER_PERSONAS, OPERATOR_PERSONAS, PERSONA_META, type Persona } from '../lib/personas';
 
 export function RoleSwitcher({ active, onSelect }: { active: Persona; onSelect: (p: Persona) => void }) {
-  const order: Persona[] = [...OPERATOR_PERSONAS, 'expert'];
+  const order: Persona[] = [...MEMBER_PERSONAS, ...OPERATOR_PERSONAS];
   return (
     <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
       {order.map((p) => {
