@@ -24,6 +24,9 @@ export interface MemberSession {
   signatory?: string;
   /** member SA → DEMO_GS_DELEGATE grant signed at the member's home; the app reads/writes via this. */
   grant: DelegationWire;
+  /** Person/KC session only: the id_token, used to query Connect related-orgs for cross-browser GCO
+   *  org recognition (lib/gco-discovery.ts). Not needed for vault access. */
+  idToken?: string;
 }
 
 const KEY = (kind: SessionKind) => `agenticprimitives:demo-gs:session:${kind}`;

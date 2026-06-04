@@ -23,6 +23,7 @@ import {
   clearSession, loadSession, setSession, sessionsVersion, subscribeSessions, type MemberSession,
 } from './lib/session';
 import { registerMember } from './lib/member-vault';
+import { discoverGcoSession } from './lib/gco-discovery';
 import { exchangeCode, personAddressFromIdToken, startOrgCreation } from './connect-client';
 import { CONNECT_KEY, type ConnectStash } from './lib/connect-launch';
 import { deriveRoleCapabilities, type RoleKind } from './lib/role-capabilities';
@@ -171,6 +172,11 @@ export function App() {
     setActiveRoleState(ready);
     setView('workspace');
     void setActiveContext({ persona: ready, session: loadSession(ready) }).catch(() => { /* loadError() */ });
+    // Returning person with a saved person session but no local GCO session → re-discover an org they
+    // already created (a different browser, or the gco session was cleared) so it's recognized.
+    if (kc?.idToken && !gco) {
+      void discoverGcoSession(kc.name, kc.idToken).then((g) => { if (g) setSession(g); }).catch(() => { /* best-effort */ });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -238,10 +244,14 @@ export function App() {
         // enrolled as a KC ('kc') member session; they choose their role (KC workspace / create a GCO
         // org) from the hub afterwards.
         if (!tok.delegation) throw new Error('your home did not return a Switchboard access grant — please retry sign-in');
-        const session: MemberSession = { kind: 'kc', sa: person, name: stash.name!, grant: tok.delegation };
+        const session: MemberSession = { kind: 'kc', sa: person, name: stash.name!, grant: tok.delegation, idToken: tok.idToken };
         setSession(session);
         saveActiveRole(person, 'kc');
         await registerMember({ kind: 'kc', sa: person, name: stash.name!, delegation: tok.delegation });
+        // Recognize a GCO org this person ALREADY created (cross-browser) so the hub offers "Open GCO
+        // workspace" instead of a duplicate "set up an organization". Best-effort recognition — absent /
+        // unreachable → null, and they simply see the set-up option.
+        try { const existingGco = await discoverGcoSession(stash.name!, tok.idToken); if (existingGco) setSession(existingGco); } catch { /* best-effort */ }
         // Route through visible discovery while the entitled view hydrates → the role hub (the user
         // picks a workspace there, not auto into one).
         setActiveRoleState('kc');
