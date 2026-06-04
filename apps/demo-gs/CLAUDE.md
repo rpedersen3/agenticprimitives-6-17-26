@@ -24,6 +24,7 @@ registries, the GC graph + C-Box registry, the read-only Switchboard bridge, the
 | Personas (Pete/GCO, Jane/broker, KC) | `src/lib/personas.ts` |
 | Persistence (localStorage, vault-shaped seams) | `src/lib/store.ts` |
 | Demo fixtures (agents, needs, offerings) | `src/data/fixtures.ts` |
+| **Substrate wiring (spec 251 Phase 3)** | `src/lib/substrate.ts` — Offerings → `SkillClaimCredential`/`GeoClaimCredential` via `@agenticprimitives/agent-skills`+`geo-features`; taxonomy `SkillRef.skillId`/`GeoFacet.featureId` are canonical substrate ids (`computeSkillId`/`computeFeatureId`). |
 | UI shell + screens | `src/App.tsx` + `src/components/*` |
 
 ## Hard rules (this app)

@@ -95,6 +95,12 @@ importers:
 
   apps/demo-gs:
     dependencies:
+      '@agenticprimitives/agent-skills':
+        specifier: workspace:*
+        version: link:../../packages/agent-skills
+      '@agenticprimitives/geo-features':
+        specifier: workspace:*
+        version: link:../../packages/geo-features
       '@agenticprimitives/types':
         specifier: workspace:*
         version: link:../../packages/types

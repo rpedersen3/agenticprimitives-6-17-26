@@ -7,14 +7,19 @@ import type { Address } from '@agenticprimitives/types';
 /** A canonical agent id. v1 uses the CAIP-10-style string demo-sso would resolve. */
 export type AgentId = `eip155:${number}:${Address}` | string;
 export type Uri = string;
+export type Hex32 = `0x${string}`;
 export type ISODateTime = string;
 
 export type VisibilityTier = 'public' | 'confidential' | 'sensitive';
 export type NeedKind = 'discussion' | 'project' | 'role' | 'inquiry';
 
-/** A canonical skill reference. The gcUri is identity; `label` is display only. */
+/** A canonical skill reference. The gcUri is the display/registry key; `skillId` is the canonical
+ *  substrate id (keccak, from @agenticprimitives/agent-skills) that anchors this skill to the on-chain
+ *  SkillDefinitionRegistry. `label` is display only. */
 export interface SkillRef {
   gcUri: Uri;
+  /** Canonical substrate skill id — what a SkillClaimCredential / the SkillDefinitionRegistry key on. */
+  skillId: Hex32;
   label: string;
   categoryUri: Uri;
   cboxUri?: Uri;
@@ -24,6 +29,8 @@ export interface SkillRef {
 
 export interface GeoFacet {
   uri: Uri;
+  /** Canonical substrate feature id — anchors this region to the on-chain GeoFeatureRegistry. */
+  featureId: Hex32;
   label: string;
   level: 'global' | 'region' | 'country' | 'admin' | 'custom';
   /** A region marked sensitive is suppressed/coarsened in public projections. */

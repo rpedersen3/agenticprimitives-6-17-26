@@ -3,6 +3,8 @@
 // vocabulary is represented here by a demo subset — enough to drive matching + the golden path.
 // RULE: a SkillRef cites a gcUri (identity); labels are display only.
 
+import { computeSkillId } from '@agenticprimitives/agent-skills';
+import { computeFeatureId } from '@agenticprimitives/geo-features';
 import type { CauseRef, GeoFacet, LanguageRef, SkillRef, Uri } from '../domain/gs-types';
 
 const SKILL_BASE = 'https://registry.global.church/skills/switchboard/';
@@ -67,8 +69,12 @@ const SKILL_SEEDS: SkillSeed[] = [
 ];
 
 function buildSkill(seed: SkillSeed): SkillRef {
+  const gcUri = `${SKILL_BASE}${seed.slug}`;
   return {
-    gcUri: `${SKILL_BASE}${seed.slug}`,
+    gcUri,
+    // Anchor to the canonical substrate id (keccak of the registry key) — what an on-chain
+    // SkillDefinitionRegistry entry + a SkillClaimCredential would key on.
+    skillId: computeSkillId(gcUri),
     label: seed.label,
     categoryUri: `${CAT_BASE}${seed.cat}`,
     cboxUri: seed.cbox ? `${CBOX_BASE}${seed.slug}` : undefined,
@@ -109,16 +115,20 @@ export function causeByUri(uri: Uri): CauseRef | undefined {
 
 /** Passion regions (coarse). A `parentUri` chains a country/region into a broader region for
  *  related-geo scoring + redaction; `sensitivity` collapses sensitive regions in public views. */
+/** Build a region GeoFacet anchored to its canonical substrate feature id. */
+function geo(g: Omit<GeoFacet, 'featureId'>): GeoFacet {
+  return { ...g, featureId: computeFeatureId(g.uri) };
+}
 export const REGIONS: GeoFacet[] = [
-  { uri: `${REGION_BASE}north-africa`, label: 'North Africa', level: 'region', sensitivity: 'creative_access' },
-  { uri: `${REGION_BASE}middle-east`, label: 'Middle East', level: 'region', sensitivity: 'creative_access' },
-  { uri: `${REGION_BASE}sub-saharan-africa`, label: 'Sub-Saharan Africa', level: 'region' },
-  { uri: `${REGION_BASE}south-asia`, label: 'South Asia', level: 'region' },
-  { uri: `${REGION_BASE}southeast-asia`, label: 'Southeast Asia', level: 'region' },
-  { uri: `${REGION_BASE}east-asia`, label: 'East Asia', level: 'region' },
-  { uri: `${REGION_BASE}latin-america`, label: 'Latin America', level: 'region' },
-  { uri: `${REGION_BASE}europe`, label: 'Europe', level: 'region' },
-  { uri: `${REGION_BASE}global`, label: 'Global / Remote', level: 'global' },
+  geo({ uri: `${REGION_BASE}north-africa`, label: 'North Africa', level: 'region', sensitivity: 'creative_access' }),
+  geo({ uri: `${REGION_BASE}middle-east`, label: 'Middle East', level: 'region', sensitivity: 'creative_access' }),
+  geo({ uri: `${REGION_BASE}sub-saharan-africa`, label: 'Sub-Saharan Africa', level: 'region' }),
+  geo({ uri: `${REGION_BASE}south-asia`, label: 'South Asia', level: 'region' }),
+  geo({ uri: `${REGION_BASE}southeast-asia`, label: 'Southeast Asia', level: 'region' }),
+  geo({ uri: `${REGION_BASE}east-asia`, label: 'East Asia', level: 'region' }),
+  geo({ uri: `${REGION_BASE}latin-america`, label: 'Latin America', level: 'region' }),
+  geo({ uri: `${REGION_BASE}europe`, label: 'Europe', level: 'region' }),
+  geo({ uri: `${REGION_BASE}global`, label: 'Global / Remote', level: 'global' }),
 ];
 export function regionByUri(uri: Uri): GeoFacet | undefined {
   return REGIONS.find((r) => r.uri === uri);

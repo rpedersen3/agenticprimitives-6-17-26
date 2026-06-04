@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/agent-skills": "workspace:*",
+    "@agenticprimitives/geo-features": "workspace:*",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "viem": "^2.50.0"
