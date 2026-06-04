@@ -60,6 +60,17 @@ export interface Capacity {
 export type NeedStatus =
   | 'draft' | 'open' | 'matched' | 'requested' | 'agreement_active' | 'withdrawn' | 'fulfilled';
 
+/** Where a Need came from. Locally-authored Needs are `demo-gs`; the Pattern-A read bridge tags
+ *  imported Switchboard Roles as `switchboard-bridge` and records the source URI + what its
+ *  vocabulary used that has no concept in our taxonomy (surfaced, NEVER silently dropped). */
+export interface NeedProvenance {
+  source: 'demo-gs' | 'switchboard-bridge';
+  sourceUri?: Uri;
+  sourceLabel?: string;
+  importedAt?: ISODateTime;
+  unmapped?: { skills?: string[]; region?: string };
+}
+
 /** A GCO-owned declaration of a skill/capability need (spec 250 §13.2). */
 export interface GcoNeedIntent {
   id: Uri;
@@ -79,6 +90,8 @@ export interface GcoNeedIntent {
   /** Confidential org contact — released to the counterparty only on Agreement accept. */
   confidentialContact?: string;
   status: NeedStatus;
+  /** Read-only when imported by the Pattern-A bridge (Switchboard remains the system of record). */
+  provenance?: NeedProvenance;
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
 }

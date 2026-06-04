@@ -60,6 +60,8 @@ export const allNeeds = (): GcoNeedIntent[] => _db.needs;
 export const allOfferings = (): ExpertOffering[] => _db.offerings;
 export const allAgreements = (): GsAgreement[] => _db.agreements;
 export const needById = (id: string) => _db.needs.find((n) => n.id === id);
+/** Needs imported via the Pattern-A Switchboard read bridge (provenance-tagged). */
+export const bridgedNeeds = (): GcoNeedIntent[] => _db.needs.filter((n) => n.provenance?.source === 'switchboard-bridge');
 export const offeringById = (id: string) => _db.offerings.find((o) => o.id === id);
 export const agreementById = (id: string) => _db.agreements.find((a) => a.id === id);
 

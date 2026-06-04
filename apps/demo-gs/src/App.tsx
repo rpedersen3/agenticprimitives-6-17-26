@@ -20,6 +20,7 @@ import { MatchBoard } from './components/MatchBoard';
 import { AgreementsPanel } from './components/AgreementsPanel';
 import { PublicSignalPanel } from './components/PublicSignalPanel';
 import { SubstrateClaimsPanel } from './components/SubstrateClaimsPanel';
+import { SwitchboardBridgePanel } from './components/SwitchboardBridgePanel';
 import { Banner, Card, Pill, SectionHead, inputStyle } from './components/ui';
 import { personalHome } from './lib/domain';
 
@@ -274,6 +275,7 @@ function JaneView({ personaActor }: { personaActor: `0x${string}` }) {
           <Pill tone="live">{allAgreements().length} agreements</Pill>
         </div>
       </Card>
+      <SwitchboardBridgePanel />
       <MatchBoard needs={allNeeds()} />
       <AgreementsPanel agreements={allAgreements()} role="jane" actorPerson={personaActor} />
       <PublicSignalPanel needs={allNeeds()} offerings={allOfferings()} />
