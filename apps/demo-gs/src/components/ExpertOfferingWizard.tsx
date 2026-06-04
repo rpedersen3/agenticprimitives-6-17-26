@@ -1,19 +1,22 @@
-// KC Expert Offering wizard (spec 250 §12.2, §17.1). The connected KC publishes an expertise
-// Offering owned by their person agent. v1 writes to the local store; Phase 2 writes via the
-// person-vault adapter (profile/contact stay confidential until an Agreement is accepted).
+// KC Expert Offering wizard (spec 250 §12.2, §17.1). The connected KC publishes an expertise Offering
+// owned by their person agent. Wave 2 (spec 252): it writes to the KC's OWN vault via the session grant
+// (`saveKcOffering`) — the broker reads it only through that grant. Contact stays confidential until an
+// Agreement is accepted.
 
 import { useState } from 'react';
 import type { Capacity, ExpertOffering, Uri } from '../domain/gs-types';
 import { CAUSES, LANGUAGES, REGIONS, skillByUri } from '../data/taxonomy';
 import type { Address } from '@agenticprimitives/types';
 import { caip10 } from '../lib/personas';
-import { upsertOffering } from '../lib/store';
+import { saveKcOffering } from '../lib/member-vault';
+import { hydrate } from '../lib/store';
+import type { MemberSession } from '../lib/session';
 import { SkillPicker } from './SkillPicker';
 import { Banner, Btn, Card, Field, Pill, SectionHead, inputStyle } from './ui';
 
 const AVAIL: Capacity['availabilityStatus'][] = ['available', 'limited', 'paused', 'unavailable'];
 
-export function ExpertOfferingWizard({ owner, ownerName, onCreated }: { owner: Address; ownerName?: string; onCreated?: () => void }) {
+export function ExpertOfferingWizard({ owner, ownerName, session, onCreated }: { owner: Address; ownerName?: string; session: MemberSession; onCreated?: () => void }) {
   const [headline, setHeadline] = useState('');
   const [skills, setSkills] = useState<Uri[]>([]);
   const [regionUris, setRegionUris] = useState<Uri[]>([]);
@@ -23,9 +26,10 @@ export function ExpertOfferingWizard({ owner, ownerName, onCreated }: { owner: A
   const [evidence, setEvidence] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
 
+  const [busy, setBusy] = useState(false);
   const toggle = (arr: string[], v: string, set: (x: string[]) => void) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
-  function submit() {
+  async function submit() {
     if (!headline.trim()) { setMsg('Add a short headline.'); return; }
     if (skills.length === 0) { setMsg('Pick at least one offered skill.'); return; }
     const now = new Date().toISOString();
@@ -46,9 +50,17 @@ export function ExpertOfferingWizard({ owner, ownerName, onCreated }: { owner: A
       createdAt: now,
       updatedAt: now,
     };
-    upsertOffering(offering);
-    setHeadline(''); setSkills([]); setEvidence(''); setMsg('Offering published. Switch to Jane to see it matched against open needs.');
-    onCreated?.();
+    setBusy(true); setMsg(null);
+    try {
+      await saveKcOffering(session.grant, offering); // KC's OWN vault, via the session grant
+      await hydrate(true);
+      setHeadline(''); setSkills([]); setEvidence(''); setMsg('Offering published to your vault. Switch to Jane to see it matched against open needs.');
+      onCreated?.();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -80,7 +92,7 @@ export function ExpertOfferingWizard({ owner, ownerName, onCreated }: { owner: A
       </div>
       <Field label="Evidence (optional)"><input value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="e.g. $250k raised for a literacy program" style={inputStyle} /></Field>
       {msg && <div style={{ margin: '.5rem 0' }}><Banner tone="ok">{msg}</Banner></div>}
-      <Btn onClick={submit}>Publish offering</Btn>
+      <Btn onClick={submit} busy={busy}>Publish offering</Btn>
     </Card>
   );
 }

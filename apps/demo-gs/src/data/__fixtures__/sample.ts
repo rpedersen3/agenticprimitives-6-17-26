@@ -1,47 +1,32 @@
-// Golden-path + supporting demo fixtures (spec 250 §17.2). Seeds the store on first load so the
-// broker board has needs + offerings to match without manual data entry. The golden path is the
-// "Grant Writing for a North Africa disciple-making project" walk-through.
+// TEST-ONLY sample needs/offerings (Wave 2: the app no longer ships in-app sample identities or seed
+// data — member data lives in member vaults. These inline fixtures feed the PURE-LOGIC unit tests
+// (projection / scoring / signal) so they keep exercising the golden grant-writing path without any
+// vault/Connect dependency. NOT imported by app code — only by `*.test.ts`.)
 
 import type { Address } from '@agenticprimitives/types';
-import type { ExpertOffering, GcoNeedIntent } from '../domain/gs-types';
-import { CAUSES, LANGUAGES, REGIONS, skillBySlug } from './taxonomy';
-import { GCO_ORG, GCO_PERSON_EOA, KC_EOA, caip10 } from '../lib/personas';
+import type { ExpertOffering, GcoNeedIntent } from '../../domain/gs-types';
+import { CAUSES, LANGUAGES, REGIONS, skillBySlug } from '../taxonomy';
+import { caip10 } from '../../lib/personas';
 
 const T0 = '2026-06-01T00:00:00Z';
-
 const region = (slug: string) => REGIONS.find((r) => r.uri.endsWith(slug))!;
 const cause = (slug: string) => CAUSES.find((c) => c.uri.endsWith(slug))!;
 const lang = (code: string) => LANGUAGES.find((l) => l.code === code)!;
 
-/** Display directory (address → friendly name) for the demo's fixture agents. */
-export const AGENT_DIRECTORY: Record<string, string> = {
-  // The GCO Organization (the role belongs to the ORG) + its signatory person.
-  [GCO_ORG.toLowerCase()]: 'Hope Church Missions Team (GCO)',
-  [GCO_PERSON_EOA.toLowerCase()]: 'Maria (GCO signatory)',
-  [KC_EOA.toLowerCase()]: 'Dana — Grant & Foundation Strategy (KC)',
-};
-
-export function agentName(addr?: string): string | undefined {
-  return addr ? AGENT_DIRECTORY[addr.toLowerCase()] : undefined;
-}
-
-// ── Additional fixture KC experts (supply side beyond the connected "Expert" persona) ──
+// Deterministic pseudo-agents — test scaffolding only (no real SA).
+export const TEST_GCO_ORG: Address = '0xaAaA000000000000000000000000000000000001';
+export const TEST_GCO_PERSON: Address = '0xaAaA000000000000000000000000000000000002';
+export const TEST_KC: Address = '0xaAaA000000000000000000000000000000000003';
 const KC_VIDEO: Address = '0x1111111111111111111111111111111111111111';
 const KC_TRANSLATE: Address = '0x2222222222222222222222222222222222222222';
 const KC_WEB: Address = '0x3333333333333333333333333333333333333333';
 const KC_COACH: Address = '0x4444444444444444444444444444444444444444';
-Object.assign(AGENT_DIRECTORY, {
-  [KC_VIDEO.toLowerCase()]: 'Marco — Mission Media',
-  [KC_TRANSLATE.toLowerCase()]: 'Leila — Arabic Translation',
-  [KC_WEB.toLowerCase()]: 'Sam — Ministry Web Dev',
-  [KC_COACH.toLowerCase()]: 'Grace — Leadership Coaching',
-});
 
 export const SEED_NEEDS: GcoNeedIntent[] = [
   {
     id: 'gc:need:demo-gs:grant-writing-na-001',
-    ownerOrgAgentId: caip10(GCO_ORG),
-    createdByPersonAgentId: caip10(GCO_PERSON_EOA),
+    ownerOrgAgentId: caip10(TEST_GCO_ORG),
+    createdByPersonAgentId: caip10(TEST_GCO_PERSON),
     title: 'Grant writing help for a North Africa disciple-making project',
     description: 'We have a funded pilot to scale but need help shaping a foundation proposal + budget.',
     needKind: 'project',
@@ -59,8 +44,8 @@ export const SEED_NEEDS: GcoNeedIntent[] = [
   },
   {
     id: 'gc:need:demo-gs:video-sea-002',
-    ownerOrgAgentId: caip10(GCO_ORG),
-    createdByPersonAgentId: caip10(GCO_PERSON_EOA),
+    ownerOrgAgentId: caip10(TEST_GCO_ORG),
+    createdByPersonAgentId: caip10(TEST_GCO_PERSON),
     title: 'Short documentary on a Southeast Asia church-planting movement',
     needKind: 'project',
     requiredSkills: [skillBySlug('video-production')],
@@ -75,8 +60,8 @@ export const SEED_NEEDS: GcoNeedIntent[] = [
   },
   {
     id: 'gc:need:demo-gs:translate-me-003',
-    ownerOrgAgentId: caip10(GCO_ORG),
-    createdByPersonAgentId: caip10(GCO_PERSON_EOA),
+    ownerOrgAgentId: caip10(TEST_GCO_ORG),
+    createdByPersonAgentId: caip10(TEST_GCO_PERSON),
     title: 'Arabic translation of discipleship curriculum',
     needKind: 'role',
     requiredSkills: [skillBySlug('document-translation')],
@@ -85,7 +70,7 @@ export const SEED_NEEDS: GcoNeedIntent[] = [
     causeFacets: [cause('disciple-making')],
     languages: [lang('ar'), lang('en')],
     commitment: { cadence: 'ongoing' },
-    visibility: 'confidential', // sensitive region → public anchor coarsened
+    visibility: 'confidential',
     status: 'open',
     createdAt: T0,
     updatedAt: T0,
@@ -94,9 +79,8 @@ export const SEED_NEEDS: GcoNeedIntent[] = [
 
 export const SEED_OFFERINGS: ExpertOffering[] = [
   {
-    // The golden-path KC = the connected "Expert" persona (KC_EOA).
     id: 'gc:offering:demo-gs:kc-grant-writing-001',
-    ownerPersonAgentId: caip10(KC_EOA),
+    ownerPersonAgentId: caip10(TEST_KC),
     displayName: 'Dana',
     headline: 'Grant writing and foundation strategy for mission organizations',
     offeredSkills: [skillBySlug('grant-writing'), skillBySlug('donor-communications'), skillBySlug('proposal-budgeting')],

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { computeSkillId } from '@agenticprimitives/agent-skills';
 import { computeFeatureId } from '@agenticprimitives/geo-features';
 import { REGIONS, skillBySlug } from '../data/taxonomy';
-import { SEED_OFFERINGS } from '../data/fixtures';
+import { SEED_OFFERINGS } from '../data/__fixtures__/sample';
 import { offeringGeoClaims, offeringSkillClaims } from './substrate';
 
 describe('demo-gs ↔ substrate anchoring (spec 251 Phase 3)', () => {

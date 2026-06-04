@@ -3,26 +3,42 @@
 // taxonomy), and imports them as gc:Needs that flow onto the match board + public signal. Read-only:
 // Switchboard stays the system of record; we never write back.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SWITCHBOARD_ROLES } from '../data/switchboard-roles';
 import { importSwitchboardRoles, mapRoles, skillLabels } from '../lib/switchboard-bridge';
 import { regionByUri } from '../data/taxonomy';
-import { allNeeds } from '../lib/store';
+import { loadBridgedNeeds } from '../lib/store';
 import { Banner, Btn, Card, Pill, SectionHead } from './ui';
 
 export function SwitchboardBridgePanel() {
   // Stable preview (no time dependency) so the mapping render is deterministic.
   const preview = useMemo(() => mapRoles(SWITCHBOARD_ROLES, 'preview'), []);
-  const importedIds = useMemo(() => new Set(allNeeds().map((n) => n.id)), []);
+  const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
   const [done, setDone] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // The currently-bridged set lives in Jane's vault (gs:broker:bridge).
+  useEffect(() => {
+    let cancelled = false;
+    void loadBridgedNeeds().then((ns) => { if (!cancelled) setImportedIds(new Set(ns.map((n) => n.id))); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [done]);
 
   const totalSkills = preview.results.reduce((n, r) => n + r.mappedSkills.length + r.unmappedSkills.length, 0);
   const mappedSkills = totalSkills - preview.totalUnmappedSkills;
   const allImported = preview.results.every((r) => importedIds.has(r.need.id));
 
-  function runImport() {
-    const res = importSwitchboardRoles(SWITCHBOARD_ROLES);
-    setDone(res.imported);
+  async function runImport() {
+    setBusy(true); setErr(null);
+    try {
+      const res = await importSwitchboardRoles(SWITCHBOARD_ROLES);
+      setDone(res.imported);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -66,8 +82,9 @@ export function SwitchboardBridgePanel() {
       </div>
 
       <div style={{ marginTop: '1rem', display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <Btn onClick={runImport}>{allImported && done === null ? 'Re-import roles as Needs' : `Import ${preview.imported} roles as Needs`}</Btn>
+        <Btn onClick={runImport} busy={busy}>{allImported && done === null ? 'Re-import roles as Needs' : `Import ${preview.imported} roles as Needs`}</Btn>
         {done !== null && <Banner tone="ok">Imported {done} Switchboard role(s) as Needs — they now appear on the match board + public signal. Unmapped skills are recorded on each Need&rsquo;s provenance, not dropped.</Banner>}
+        {err && <Banner tone="err">{err}</Banner>}
       </div>
       <p style={{ fontSize: '.72rem', color: 'var(--c-g500)', marginTop: '.6rem' }}>
         Bridged Needs are owned by a bridge-scoped pseudo-agent (no real Smart Account) and tagged

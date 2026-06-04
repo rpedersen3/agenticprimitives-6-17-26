@@ -15,7 +15,7 @@ import type { CauseRef, Commitment, GcoNeedIntent, GeoFacet, LanguageRef, NeedKi
 import { CAUSES, LANGUAGES, REGIONS, SKILLS, skillByUri } from '../data/taxonomy';
 import type { SwitchboardRole } from '../data/switchboard-roles';
 import { caip10 } from './personas';
-import { upsertNeed } from './store';
+import { hydrate, loadBridgedNeeds, saveBridgedNeeds } from './store';
 
 const SKILL_BASE = 'https://registry.global.church/skills/switchboard/';
 const REGION_BASE = 'https://registry.global.church/regions/';
@@ -157,10 +157,15 @@ export function mapRoles(roles: SwitchboardRole[], importedAt: string): BridgeIm
   };
 }
 
-/** Import: map + upsert each Role as a Need (idempotent by id). Switchboard stays read-only. */
-export function importSwitchboardRoles(roles: SwitchboardRole[], importedAt = new Date().toISOString()): BridgeImportResult {
+/** Import: map each Role → a Need and persist the bridged set to Jane's broker vault
+ *  (`gs:broker:bridge`), idempotent by id. Switchboard stays read-only — we never write back. */
+export async function importSwitchboardRoles(roles: SwitchboardRole[], importedAt = new Date().toISOString()): Promise<BridgeImportResult> {
   const res = mapRoles(roles, importedAt);
-  for (const r of res.results) upsertNeed(r.need);
+  const existing = await loadBridgedNeeds();
+  const byId = new Map(existing.map((n) => [n.id, n] as const));
+  for (const r of res.results) byId.set(r.need.id, r.need);
+  await saveBridgedNeeds([...byId.values()]);
+  await hydrate(true); // re-render the broker view with the imported demand
   return res;
 }
 

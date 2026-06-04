@@ -1,19 +1,22 @@
 // GCO Need wizard (spec 250 §12.1, §17.1). The GCO signatory (the connected person) declares a
-// skill-based Need owned by their GCO organization (e.g. Hope Church Missions Team). v1 writes to
-// the local store; Phase 2 writes via the org-vault adapter + publishes a public anchor to the GC graph.
+// skill-based Need owned by their GCO organization (e.g. Hope Church Missions Team). Wave 2 (spec 252):
+// it appends to the GCO ORG's OWN vault via the session grant (`saveGcoNeeds`) — the broker reads it
+// only through that grant.
 
 import { useState } from 'react';
 import type { GcoNeedIntent, NeedKind, Uri, VisibilityTier } from '../domain/gs-types';
 import { CAUSES, LANGUAGES, REGIONS, skillByUri } from '../data/taxonomy';
 import type { Address } from '@agenticprimitives/types';
 import { caip10 } from '../lib/personas';
-import { upsertNeed } from '../lib/store';
+import { loadGcoNeeds, saveGcoNeeds } from '../lib/member-vault';
+import { hydrate } from '../lib/store';
+import type { MemberSession } from '../lib/session';
 import { SkillPicker } from './SkillPicker';
 import { Banner, Btn, Card, Field, Pill, SectionHead, inputStyle } from './ui';
 
 const NEED_KINDS: NeedKind[] = ['project', 'role', 'discussion', 'inquiry'];
 
-export function GcoNeedWizard({ ownerOrg, signatory, onCreated }: { ownerOrg: Address; signatory: Address; onCreated?: () => void }) {
+export function GcoNeedWizard({ ownerOrg, signatory, session, onCreated }: { ownerOrg: Address; signatory: Address; session: MemberSession; onCreated?: () => void }) {
   const [title, setTitle] = useState('');
   const [needKind, setNeedKind] = useState<NeedKind>('project');
   const [skills, setSkills] = useState<Uri[]>([]);
@@ -23,8 +26,9 @@ export function GcoNeedWizard({ ownerOrg, signatory, onCreated }: { ownerOrg: Ad
   const [cadence, setCadence] = useState('weekly');
   const [visibility, setVisibility] = useState<VisibilityTier>('public');
   const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function submit() {
+  async function submit() {
     if (!title.trim()) { setMsg('Give the need a title.'); return; }
     if (skills.length === 0) { setMsg('Pick at least one required skill.'); return; }
     const now = new Date().toISOString();
@@ -46,9 +50,18 @@ export function GcoNeedWizard({ ownerOrg, signatory, onCreated }: { ownerOrg: Ad
       createdAt: now,
       updatedAt: now,
     };
-    upsertNeed(need);
-    setTitle(''); setSkills([]); setMsg('Need posted. Switch to Jane to broker matches.');
-    onCreated?.();
+    setBusy(true); setMsg(null);
+    try {
+      const existing = await loadGcoNeeds(session.grant); // the GCO org's OWN vault, via the session grant
+      await saveGcoNeeds(session.grant, [need, ...existing]);
+      await hydrate(true);
+      setTitle(''); setSkills([]); setMsg('Need posted to your org vault. Switch to Jane to broker matches.');
+      onCreated?.();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -98,7 +111,7 @@ export function GcoNeedWizard({ ownerOrg, signatory, onCreated }: { ownerOrg: Ad
         </Field>
       </div>
       {msg && <div style={{ margin: '.5rem 0' }}><Banner tone="ok">{msg}</Banner></div>}
-      <Btn onClick={submit}>Post need</Btn>
+      <Btn onClick={submit} busy={busy}>Post need</Btn>
     </Card>
   );
 }

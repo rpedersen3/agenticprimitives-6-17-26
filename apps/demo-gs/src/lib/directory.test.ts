@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ExpertOffering, GcoNeedIntent } from '../domain/gs-types';
 import { CAUSES, REGIONS, skillBySlug } from '../data/taxonomy';
-import { caip10, GCO_ORG, GCO_PERSON_EOA, KC_EOA } from './personas';
+import { caip10 } from './personas';
+import { TEST_GCO_ORG, TEST_GCO_PERSON, TEST_KC } from '../data/__fixtures__/sample';
 import { buildDirectory, directoryFacets, projectNeed, projectOffering, searchDirectory } from './directory';
 
 const region = (slug: string) => REGIONS.find((r) => r.uri.endsWith(slug))!;
@@ -10,14 +11,14 @@ const T = '2026-06-01T00:00:00Z';
 
 function need(over: Partial<GcoNeedIntent>): GcoNeedIntent {
   return {
-    id: 'gc:need:test:1', ownerOrgAgentId: caip10(GCO_ORG), createdByPersonAgentId: caip10(GCO_PERSON_EOA),
+    id: 'gc:need:test:1', ownerOrgAgentId: caip10(TEST_GCO_ORG), createdByPersonAgentId: caip10(TEST_GCO_PERSON),
     title: 'A need', needKind: 'project', requiredSkills: [skillBySlug('grant-writing')], geoFacets: [region('sub-saharan-africa')],
     causeFacets: [cause('disciple-making')], visibility: 'public', status: 'open', createdAt: T, updatedAt: T, ...over,
   };
 }
 function offering(over: Partial<ExpertOffering>): ExpertOffering {
   return {
-    id: 'gc:offering:test:1', ownerPersonAgentId: caip10(KC_EOA), displayName: 'Dana', headline: 'Grant strategy',
+    id: 'gc:offering:test:1', ownerPersonAgentId: caip10(TEST_KC), displayName: 'Dana', headline: 'Grant strategy',
     offeredSkills: [skillBySlug('grant-writing')], geoFacets: [region('north-africa')], visibility: 'public-summary',
     confidentialContact: 'dana@secret.example (confidential)', status: 'active', createdAt: T, updatedAt: T, ...over,
   };

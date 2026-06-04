@@ -11,8 +11,7 @@
 // Pure functions over the store's arrays; no identity/contact is ever surfaced beyond the public tier.
 
 import { categoryLabel, regionByUri } from '../data/taxonomy';
-import { agentName } from '../data/fixtures';
-import { memberName } from './members';
+import { agentName } from './names';
 import type { ExpertOffering, GcoNeedIntent, NeedKind, Uri } from '../domain/gs-types';
 
 export interface DirSkill { uri: Uri; label: string; categoryUri: Uri }
@@ -72,7 +71,7 @@ function commitmentLabel(n: GcoNeedIntent): string | undefined {
 function needOwnerLabel(n: GcoNeedIntent): string {
   if (n.provenance?.source === 'switchboard-bridge') return n.provenance.sourceLabel ?? 'Global Switchboard (bridged)';
   const addr = String(n.ownerOrgAgentId).split(':').pop();
-  return memberName(addr) ?? agentName(addr) ?? 'A GCO Organization';
+  return agentName(addr) ?? 'A GCO Organization';
 }
 
 /** Project a Need to its public directory entry, or null if it's sensitive (absence). */

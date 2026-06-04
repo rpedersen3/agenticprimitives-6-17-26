@@ -10,18 +10,23 @@ import { Card, Pill, SectionHead, inputStyle } from './ui';
 
 type Scope = 'all' | 'need' | 'offering';
 
-export function DirectoryPanel({ needs, offerings, scope = 'all', eyebrow, title, sub }: {
-  needs: GcoNeedIntent[];
-  offerings: ExpertOffering[];
+// Two entry sources, both ALREADY privacy-projected:
+//   • Jane (broker, entitled): pass raw `needs`/`offerings` — we build the projection here.
+//   • A member (kc/gco): pass `entries` — the store already coarsened them to the public tier so the
+//     member never receives raw confidential data even in memory.
+export function DirectoryPanel({ needs, offerings, entries, scope = 'all', eyebrow, title, sub }: {
+  needs?: GcoNeedIntent[];
+  offerings?: ExpertOffering[];
+  entries?: DirEntry[];
   scope?: Scope;
   eyebrow?: string;
   title?: string;
   sub?: string;
 }) {
   const all = useMemo(() => {
-    const built = buildDirectory(needs, offerings);
+    const built = entries ?? buildDirectory(needs ?? [], offerings ?? []);
     return scope === 'all' ? built : built.filter((e) => e.kind === scope);
-  }, [needs, offerings, scope]);
+  }, [needs, offerings, entries, scope]);
 
   const [text, setText] = useState('');
   const [kind, setKind] = useState<Scope>('all');

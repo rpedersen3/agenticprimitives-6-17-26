@@ -1,7 +1,9 @@
 // The onboarding landing for a new member (mirrors demo-jp's OnboardPanel). Shows the flow steps,
 // takes a Global.Church name, previews <name>.impact-agent.me, and connects via the shared identity
 // (KC = individual person login; GCO = person login + create the org that holds the GCO role).
-// Once connected (or after choosing a sample identity) the view becomes the member intranet.
+// Wave 2 (spec 252): members come ONLY from a real Connect sign-in — there is NO sample identity. A
+// sample identity has no SA and cannot sign a delegation, so it could never write its own vault.
+// Once connected the view becomes the member intranet (driven by the session in `lib/session.ts`).
 
 import { useState } from 'react';
 import { GS, type OnboardKind } from '../lib/gs-brand';
@@ -24,7 +26,7 @@ export interface ConnectStash {
 // Both roles first enroll the PERSON via the shared identity (site-login). A KC then acts as that
 // individual; a GCO signatory creates the org that holds the GCO role as a SECOND step from inside
 // the intranet (org-create needs an existing person — exactly demo-jp's Adopter two-step).
-export function OnboardPanel({ kind, onExplore }: { kind: OnboardKind; onExplore: () => void }) {
+export function OnboardPanel({ kind }: { kind: OnboardKind }) {
   const p = GS.paths[kind];
   const [name, setName] = useState<string>(() => {
     try { return localStorage.getItem(LAST_NAME_KEY) ?? ''; } catch { return ''; }
@@ -92,9 +94,6 @@ export function OnboardPanel({ kind, onExplore }: { kind: OnboardKind; onExplore
         <span className="soon" style={{ background: 'var(--c-primary-subtle)', borderColor: 'var(--c-primary-border)', color: 'var(--c-primary-active)' }}>
           You&rsquo;ll confirm with your device at <b>{personalHome(trimmed || 'your-name')}</b>, then come back here to continue.
         </span>
-        <button onClick={onExplore} style={{ background: 'none', border: 'none', color: 'var(--c-g500)', fontSize: '.8rem', textDecoration: 'underline', cursor: 'pointer', alignSelf: 'flex-start', padding: 0 }}>
-          Or explore with a sample identity (no sign-in) →
-        </button>
       </div>
     </Card>
   );

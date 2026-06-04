@@ -12,7 +12,10 @@
 //     • Pete / Global Church       — the ISSUER (issues the connection agreement). UNCHANGED from
 //                                    demo-jp; Global Church is an org, NOT a GCO.  [≈ demo-jp Global Church]
 //
-// v1 is chain-decoupled, so org "SA" addresses are derived deterministically from the custodian EOA.
+// Wave 2 (spec 252 §7): MEMBERS (gco / kc) no longer have deterministic addresses — they come ONLY
+// from a real Connect sign-in (a person/org SA at their Global.Church home) and live as a session
+// (`lib/session.ts`) + an entry in Jane's member registry. The OPERATORS (jane / pete) stay
+// deterministic: the app holds their keys so the broker vault + issuance work with no Connect.
 
 import { keccak256, encodePacked } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -65,11 +68,9 @@ export const PERSONA_META: Record<Persona, PersonaMeta> = {
   },
 };
 
-const SEEDS: Record<'pete' | 'jane' | 'gcoPerson' | 'kc', string> = {
+const SEEDS: Record<'pete' | 'jane', string> = {
   pete: 'a11ce', // Global Church custodian (same EOA as demo-jp's Pete)
   jane: 'face1', // Global Switchboard custodian
-  gcoPerson: '5af3', // the GCO signatory ("Maria"), who custodies the GCO org
-  kc: 'c0ffee', // the KC Expert person
 };
 
 function pkOf(seed: string): `0x${string}` {
@@ -88,9 +89,6 @@ function custodian(name: string, seed: string): Custodian {
   return { name, address: privateKeyToAccount(privateKey).address, privateKey };
 }
 
-/** Member people. */
-export const GCO_PERSON_EOA: Address = eoa(SEEDS.gcoPerson); // the GCO signatory
-export const KC_EOA: Address = eoa(SEEDS.kc); // the KC Expert
 /** Operator custodians. */
 export const PETE_EOA: Address = eoa(SEEDS.pete); // Global Church custodian
 export const JANE_EOA: Address = eoa(SEEDS.jane); // Global Switchboard custodian
@@ -105,8 +103,6 @@ function predictOrg(custodian: Address, name: string): Address {
   return `0x${digest.slice(-40)}` as Address;
 }
 
-/** A GCO Organization instance (the demand side), custodied by its signatory. */
-export const GCO_ORG: Address = predictOrg(GCO_PERSON_EOA, 'hope-church-missions-team');
 /** The broker org (Global Switchboard), custodied by Jane. */
 export const SWITCHBOARD_ORG: Address = predictOrg(JANE_EOA, 'global-switchboard');
 /** The issuer org (Global Church — NOT a GCO), custodied by Pete. Same as demo-jp. */
@@ -115,13 +111,10 @@ export const GLOBAL_CHURCH_ORG: Address = predictOrg(PETE_EOA, 'global-church');
 export const CHAIN_ID = 84532;
 export const caip10 = (addr: Address): AgentId => `eip155:${CHAIN_ID}:${addr}` as AgentId;
 
-/** The person + org the active persona acts as / for. */
-export function actingAgents(p: Persona): { person: Address; org?: Address } {
+/** The person + org an OPERATOR persona acts as / for. Members (gco/kc) have no deterministic
+ *  address — their identity comes from the active `MemberSession`, never from here. */
+export function actingAgents(p: 'jane' | 'pete'): { person: Address; org: Address } {
   switch (p) {
-    case 'gco':
-      return { person: GCO_PERSON_EOA, org: GCO_ORG };
-    case 'kc':
-      return { person: KC_EOA };
     case 'jane':
       return { person: JANE_EOA, org: SWITCHBOARD_ORG };
     case 'pete':

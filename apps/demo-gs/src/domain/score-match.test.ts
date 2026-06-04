@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { rankMatches, scoreMatch } from './score-match';
-import { SEED_NEEDS, SEED_OFFERINGS } from '../data/fixtures';
+import { SEED_NEEDS, SEED_OFFERINGS } from '../data/__fixtures__/sample';
 import type { ExpertOffering, GcoNeedIntent } from './gs-types';
 
 const CLOCK = () => '2026-06-01T00:00:00Z';

@@ -24,7 +24,7 @@ export function AgreementsPanel({ agreements, role, actorPerson, onChanged }: {
     return <Card><SectionHead eyebrow="Switchboard · connections" title="Agreements" /><p style={{ color: 'var(--c-g500)', fontSize: '.88rem' }}>No connections yet. Request one from the match board.</p></Card>;
   }
 
-  const act = (fn: () => void) => { fn(); onChanged?.(); };
+  const act = (fn: () => void | Promise<unknown>) => { void Promise.resolve(fn()).then(() => onChanged?.()); };
 
   return (
     <Card>

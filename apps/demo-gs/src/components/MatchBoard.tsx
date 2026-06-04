@@ -27,11 +27,11 @@ export function MatchBoard({ needs, requestAsPerson, onChanged }: {
     return <Card><SectionHead eyebrow="Switchboard · matching" title="Match board" /><p style={{ color: 'var(--c-g500)', fontSize: '.88rem' }}>No open needs yet. Post one as a GCO Organization.</p></Card>;
   }
 
-  function request(matchId: string) {
+  async function request(matchId: string) {
     const m = matches.find((x) => x.id === matchId);
     if (!m || !requestAsPerson) return;
-    requestConnection(m, requestAsPerson);
-    setMsg('Connection requested. Switch to Expert to accept it, or to Jane to track the agreement.');
+    await requestConnection(m, requestAsPerson);
+    setMsg('Connection requested. Switch to KC Expert to accept it, or track the agreement below.');
     onChanged?.();
   }
 
@@ -75,7 +75,7 @@ export function MatchBoard({ needs, requestAsPerson, onChanged }: {
               </div>
             </div>
             {requestAsPerson && (
-              <Btn variant="ghost" style={{ padding: '.4rem .8rem', flex: '0 0 auto' }} onClick={() => request(m.id)}>Request connection</Btn>
+              <Btn variant="ghost" style={{ padding: '.4rem .8rem', flex: '0 0 auto' }} onClick={() => void request(m.id)}>Request connection</Btn>
             )}
           </div>
         );
