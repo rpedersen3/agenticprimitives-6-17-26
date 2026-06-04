@@ -101,6 +101,9 @@ importers:
       '@agenticprimitives/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@agenticprimitives/delegation':
+        specifier: workspace:*
+        version: link:../../packages/delegation
       '@agenticprimitives/geo-features':
         specifier: workspace:*
         version: link:../../packages/geo-features
@@ -472,10 +475,10 @@ importers:
         version: 18.3.1(react@18.3.1)
       viem:
         specifier: ^2.50.0
-        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@3.25.76)
       wagmi:
         specifier: ^2.12.0
-        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@19.2.15)(@upstash/redis@1.38.0)(bufferutil@4.1.0)(encoding@0.1.13)(react@18.3.1)(typescript@5.7.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@4.4.3)
+        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@19.2.15)(@upstash/redis@1.38.0)(bufferutil@4.1.0)(encoding@0.1.13)(react@18.3.1)(typescript@5.7.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@3.25.76))(zod@3.25.76)
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -530,10 +533,10 @@ importers:
         version: 18.3.1(react@18.3.1)
       viem:
         specifier: ^2.50.0
-        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+        version: 2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
       wagmi:
         specifier: ^2.12.0
-        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@19.2.15)(@upstash/redis@1.38.0)(bufferutil@4.1.0)(encoding@0.1.13)(react@18.3.1)(typescript@5.7.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@3.25.76))(zod@3.25.76)
+        version: 2.19.5(@tanstack/query-core@5.100.11)(@tanstack/react-query@5.100.11(react@18.3.1))(@types/react@19.2.15)(@upstash/redis@1.38.0)(bufferutil@4.1.0)(encoding@0.1.13)(react@18.3.1)(typescript@5.7.3)(utf-8-validate@5.0.10)(viem@2.50.4(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@4.4.3)
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
