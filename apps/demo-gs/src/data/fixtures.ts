@@ -5,7 +5,7 @@
 import type { Address } from '@agenticprimitives/types';
 import type { ExpertOffering, GcoNeedIntent } from '../domain/gs-types';
 import { CAUSES, LANGUAGES, REGIONS, skillBySlug } from './taxonomy';
-import { GCO_ORG, KC_EOA, PETE_EOA, caip10 } from '../lib/personas';
+import { GCO_ORG, GCO_PERSON_EOA, KC_EOA, caip10 } from '../lib/personas';
 
 const T0 = '2026-06-01T00:00:00Z';
 
@@ -15,9 +15,10 @@ const lang = (code: string) => LANGUAGES.find((l) => l.code === code)!;
 
 /** Display directory (address → friendly name) for the demo's fixture agents. */
 export const AGENT_DIRECTORY: Record<string, string> = {
-  [GCO_ORG.toLowerCase()]: 'North Africa Disciple-Making Network',
-  [PETE_EOA.toLowerCase()]: 'Pete (GCO signatory)',
-  [KC_EOA.toLowerCase()]: 'Dana — Grant & Foundation Strategy',
+  // The GCO Organization (the role belongs to the ORG) + its signatory person.
+  [GCO_ORG.toLowerCase()]: 'Hope Church Missions Team (GCO)',
+  [GCO_PERSON_EOA.toLowerCase()]: 'Maria (GCO signatory)',
+  [KC_EOA.toLowerCase()]: 'Dana — Grant & Foundation Strategy (KC)',
 };
 
 export function agentName(addr?: string): string | undefined {
@@ -40,7 +41,7 @@ export const SEED_NEEDS: GcoNeedIntent[] = [
   {
     id: 'gc:need:demo-gs:grant-writing-na-001',
     ownerOrgAgentId: caip10(GCO_ORG),
-    createdByPersonAgentId: caip10(PETE_EOA),
+    createdByPersonAgentId: caip10(GCO_PERSON_EOA),
     title: 'Grant writing help for a North Africa disciple-making project',
     description: 'We have a funded pilot to scale but need help shaping a foundation proposal + budget.',
     needKind: 'project',
@@ -59,7 +60,7 @@ export const SEED_NEEDS: GcoNeedIntent[] = [
   {
     id: 'gc:need:demo-gs:video-sea-002',
     ownerOrgAgentId: caip10(GCO_ORG),
-    createdByPersonAgentId: caip10(PETE_EOA),
+    createdByPersonAgentId: caip10(GCO_PERSON_EOA),
     title: 'Short documentary on a Southeast Asia church-planting movement',
     needKind: 'project',
     requiredSkills: [skillBySlug('video-production')],
@@ -75,7 +76,7 @@ export const SEED_NEEDS: GcoNeedIntent[] = [
   {
     id: 'gc:need:demo-gs:translate-me-003',
     ownerOrgAgentId: caip10(GCO_ORG),
-    createdByPersonAgentId: caip10(PETE_EOA),
+    createdByPersonAgentId: caip10(GCO_PERSON_EOA),
     title: 'Arabic translation of discipleship curriculum',
     needKind: 'role',
     requiredSkills: [skillBySlug('document-translation')],

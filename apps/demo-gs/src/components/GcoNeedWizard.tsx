@@ -5,14 +5,15 @@
 import { useState } from 'react';
 import type { GcoNeedIntent, NeedKind, Uri, VisibilityTier } from '../domain/gs-types';
 import { CAUSES, LANGUAGES, REGIONS, skillByUri } from '../data/taxonomy';
-import { GCO_ORG, PETE_EOA, caip10 } from '../lib/personas';
+import type { Address } from '@agenticprimitives/types';
+import { caip10 } from '../lib/personas';
 import { upsertNeed } from '../lib/store';
 import { SkillPicker } from './SkillPicker';
 import { Banner, Btn, Card, Field, Pill, SectionHead, inputStyle } from './ui';
 
 const NEED_KINDS: NeedKind[] = ['project', 'role', 'discussion', 'inquiry'];
 
-export function GcoNeedWizard({ onCreated }: { onCreated?: () => void }) {
+export function GcoNeedWizard({ ownerOrg, signatory, onCreated }: { ownerOrg: Address; signatory: Address; onCreated?: () => void }) {
   const [title, setTitle] = useState('');
   const [needKind, setNeedKind] = useState<NeedKind>('project');
   const [skills, setSkills] = useState<Uri[]>([]);
@@ -31,8 +32,8 @@ export function GcoNeedWizard({ onCreated }: { onCreated?: () => void }) {
     const cause = CAUSES.find((c) => c.uri === causeUri)!;
     const need: GcoNeedIntent = {
       id: `gc:need:demo-gs:${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 28)}-${Date.now().toString(36)}`,
-      ownerOrgAgentId: caip10(GCO_ORG),
-      createdByPersonAgentId: caip10(PETE_EOA),
+      ownerOrgAgentId: caip10(ownerOrg),
+      createdByPersonAgentId: caip10(signatory),
       title: title.trim(),
       needKind,
       requiredSkills: skills.map((u) => skillByUri(u)!),

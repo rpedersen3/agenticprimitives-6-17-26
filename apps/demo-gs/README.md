@@ -12,20 +12,23 @@ marketplace instead of People-Group adoption. See [spec 250](../../specs/250-dem
 ## The loop
 
 ```
-GCO (Pete / Global Church)  needs help with a skill in a geo / cause context
-KC  (an Expert)             offers a skill profile, optionally scoped by geo / cause / language
-Switchboard (Jane)          proposes an explainable GCO-Need ↔ KC-Offering match
-Accepted request           becomes an Agreement; confidential contact is released only on accept
-Public read surface        exposes open needs by skill / region / category (aggregate only)
+GCO Organization   a person creates an ORG (e.g. Hope Church Missions Team) that holds the GCO
+                   (Great Commission Organization) role + posts a skill Need
+KC Expert          an individual person agent with skills offers an expertise profile
+Switchboard (Jane) proposes an explainable GCO-Need ↔ KC-Offering match
+Global Church (Pete) the issuer (unchanged from demo-jp) issues the connection agreement
+Accepted request   becomes an Agreement; confidential contact is released only on accept
+Public read surface exposes open needs by skill / region / category (aggregate only)
 ```
 
-## Personas (switch in the top bar)
+## Roles (switch in the top bar) — a mirror of demo-jp
 
-| Persona | Role | Does |
-| --- | --- | --- |
-| **Pete** | Global Church (a GCO) | Posts skill Needs, reviews matches, requests connections |
-| **Jane** | Global Switchboard (broker) | Sees all needs + offerings, runs matching, manages the board, sees the public signal |
-| **Expert** | A KC member | Publishes an expertise Offering, accepts / declines connection requests |
+| Role | Is | Does | demo-jp analog |
+| --- | --- | --- | --- |
+| **GCO Org** | a **Great Commission Organization** (the demand side) — a person creates an org that holds the GCO role | Posts skill Needs, requests connections. **Create new GCO orgs in-app.** | Adopter |
+| **KC Expert** | an **individual** Kingdom Consultant person agent with skills (supply) | Publishes an Offering, accepts/declines requests. **Create new KC people in-app.** | Facilitator |
+| **Jane** | Global Switchboard (broker, operator) | Sees all needs + offerings, runs matching, manages the board + public signal | JP / Jill |
+| **Pete** | Global Church (**issuer**, operator — NOT a GCO; same org as demo-jp) | Issues the connection agreement once a match is confirmed | Global Church / Pete |
 
 ## v1 status
 

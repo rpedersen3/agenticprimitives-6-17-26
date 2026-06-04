@@ -1,20 +1,30 @@
-// Personas for demo-gs (spec 250). Mirrors demo-jp's deterministic operator model so the demo
-// survives a cleared browser. v1 is chain-decoupled, so the org "SA" addresses are derived
-// deterministically (the same predict-from-custodian shape demo-jp used pre-factory) rather than
-// from a live AgentAccount factory.
+// Personas for demo-gs (spec 250) — a clean mirror of demo-jp's role model.
 //
-//   • Pete  → Global Church (a GCO, the demand side) — REUSES demo-jp's Pete EOA seed ('a11ce').
-//   • Jane  → Global Switchboard (the broker) — mirrors Jill/JP, new seed.
-//   • Expert→ a KC member (the supply side) — connected member, picks a fixture KC identity.
+//   MEMBERS (the two parties — connected people in real life; v1 simulates them):
+//     • GCO Organization (demand)  — the GCO role belongs to an ORGANIZATION, not a person: a connected
+//       person CREATES an org (e.g. Hope Church Missions Team) that takes the "Great Commission
+//       Organization" role and posts skill Needs; the person is its signatory.  [≈ demo-jp Adopter
+//       creating + acting as their adopter org]
+//     • KC Expert (supply)         — a Kingdom Consultant who publishes an expertise Offering.
+//                                                                              [≈ demo-jp Facilitator]
+//   OPERATORS (deterministic, swap-only — like demo-jp's Jill/Pete):
+//     • Jane / Global Switchboard  — the BROKER (matches Needs ↔ Offerings).   [≈ demo-jp JP/Jill]
+//     • Pete / Global Church       — the ISSUER (issues the connection agreement). UNCHANGED from
+//                                    demo-jp; Global Church is an org, NOT a GCO.  [≈ demo-jp Global Church]
+//
+// v1 is chain-decoupled, so org "SA" addresses are derived deterministically from the custodian EOA.
 
 import { keccak256, encodePacked } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { Address } from '@agenticprimitives/types';
 import type { AgentId } from '../domain/gs-types';
 
-export type Persona = 'pete' | 'jane' | 'expert';
+export type Persona = 'gco' | 'kc' | 'jane' | 'pete';
 
-export const OPERATOR_PERSONAS: Persona[] = ['pete', 'jane'];
+/** The two member roles (the parties). */
+export const MEMBER_PERSONAS: Persona[] = ['gco', 'kc'];
+/** The two operator roles (broker + issuer). */
+export const OPERATOR_PERSONAS: Persona[] = ['jane', 'pete'];
 
 export interface PersonaMeta {
   persona: Persona;
@@ -25,32 +35,41 @@ export interface PersonaMeta {
 }
 
 export const PERSONA_META: Record<Persona, PersonaMeta> = {
-  pete: {
-    persona: 'pete',
-    label: 'Pete',
-    org: 'Global Church (GCO)',
-    blurb: 'Signatory for a Global Christian Org. Posts skill Needs, reviews matches, requests connections.',
-    glyph: '⛪',
+  gco: {
+    persona: 'gco',
+    label: 'GCO Org',
+    org: 'Hope Church Missions Team',
+    blurb: 'An ORGANIZATION that holds the GCO (Great Commission Organization) role — the demand side. A connected person creates the org (e.g. Hope Church Missions Team) and acts as its signatory; the org posts the skill Needs.',
+    glyph: '🙏',
+  },
+  kc: {
+    persona: 'kc',
+    label: 'KC Expert',
+    org: 'Kingdom Consultant',
+    blurb: 'A Kingdom Consultant (the supply side). Publishes an expertise Offering and accepts / declines connection requests.',
+    glyph: '🧰',
   },
   jane: {
     persona: 'jane',
     label: 'Jane',
     org: 'Global Switchboard (broker)',
-    blurb: 'Custodian of the broker org. Sees all needs + offerings, runs matching, manages connections, sees the public signal.',
+    blurb: 'Custodian of the broker org. Sees all Needs + Offerings, runs matching, manages connections, sees the public signal.',
     glyph: '🎛️',
   },
-  expert: {
-    persona: 'expert',
-    label: 'Expert',
-    org: 'KC member',
-    blurb: 'A Kingdom Consultant. Publishes an expertise Offering and accepts / declines connection requests.',
-    glyph: '🧰',
+  pete: {
+    persona: 'pete',
+    label: 'Pete',
+    org: 'Global Church (issuer)',
+    blurb: 'Custodian of the issuer org (the same Global Church org as demo-jp — NOT a GCO). Issues the connection agreement once a match is confirmed.',
+    glyph: '⛪',
   },
 };
 
-const SEEDS: Record<'pete' | 'jane', string> = {
-  pete: 'a11ce', // same as demo-jp's Pete
-  jane: 'face1', // new broker custodian
+const SEEDS: Record<'pete' | 'jane' | 'gcoPerson' | 'kc', string> = {
+  pete: 'a11ce', // Global Church custodian (same EOA as demo-jp's Pete)
+  jane: 'face1', // Global Switchboard custodian
+  gcoPerson: '5af3', // the GCO signatory ("Maria"), who custodies the GCO org
+  kc: 'c0ffee', // the KC Expert person
 };
 
 function eoa(seed: string): Address {
@@ -58,41 +77,42 @@ function eoa(seed: string): Address {
   return privateKeyToAccount(pk).address;
 }
 
-/** The deterministic custodian EOA for an operator persona. */
-export const PETE_EOA: Address = eoa(SEEDS.pete);
-export const JANE_EOA: Address = eoa(SEEDS.jane);
+/** Member people. */
+export const GCO_PERSON_EOA: Address = eoa(SEEDS.gcoPerson); // the GCO signatory
+export const KC_EOA: Address = eoa(SEEDS.kc); // the KC Expert
+/** Operator custodians. */
+export const PETE_EOA: Address = eoa(SEEDS.pete); // Global Church custodian
+export const JANE_EOA: Address = eoa(SEEDS.jane); // Global Switchboard custodian
 
 const ORG_NS = 'demo-gs/org-sa/v1';
-
-/** Predict a stable org SA address from the custodian EOA (mirrors demo-jp's pre-factory shape). */
 function predictOrg(custodian: Address, name: string): Address {
   const digest = keccak256(encodePacked(['string', 'address', 'string'], [ORG_NS, custodian, name]));
   return `0x${digest.slice(-40)}` as Address;
 }
 
-/** The GCO org agent (Global Church), custodied by Pete. */
-export const GCO_ORG: Address = predictOrg(PETE_EOA, 'global-church');
-/** The broker org agent (Global Switchboard), custodied by Jane. */
+/** A GCO Organization instance (the demand side), custodied by its signatory. */
+export const GCO_ORG: Address = predictOrg(GCO_PERSON_EOA, 'hope-church-missions-team');
+/** The broker org (Global Switchboard), custodied by Jane. */
 export const SWITCHBOARD_ORG: Address = predictOrg(JANE_EOA, 'global-switchboard');
+/** The issuer org (Global Church — NOT a GCO), custodied by Pete. Same as demo-jp. */
+export const GLOBAL_CHURCH_ORG: Address = predictOrg(PETE_EOA, 'global-church');
 
 export const CHAIN_ID = 84532;
 export const caip10 = (addr: Address): AgentId => `eip155:${CHAIN_ID}:${addr}` as AgentId;
 
-/** The agent the active persona acts as / for (for store filtering + provenance). */
+/** The person + org the active persona acts as / for. */
 export function actingAgents(p: Persona): { person: Address; org?: Address } {
   switch (p) {
-    case 'pete':
-      return { person: PETE_EOA, org: GCO_ORG };
+    case 'gco':
+      return { person: GCO_PERSON_EOA, org: GCO_ORG };
+    case 'kc':
+      return { person: KC_EOA };
     case 'jane':
       return { person: JANE_EOA, org: SWITCHBOARD_ORG };
-    case 'expert':
-      // The connected KC member; in v1 the demo uses a single fixture KC identity (KC_EOA).
-      return { person: KC_EOA };
+    case 'pete':
+      return { person: PETE_EOA, org: GLOBAL_CHURCH_ORG };
   }
 }
-
-/** A single fixture KC person used by the "Expert" persona in v1 (Phase 1 swaps in demo-sso). */
-export const KC_EOA: Address = eoa('c0ffee');
 
 const KEY = 'agenticprimitives:demo-gs:persona';
 

@@ -51,14 +51,14 @@ export function AgreementsPanel({ agreements, role, actorPerson, onChanged }: {
 
             {/* Actions */}
             <div style={{ display: 'flex', gap: '.5rem', marginTop: '.7rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              {a.status === 'requested' && role === 'expert' && (
+              {a.status === 'requested' && role === 'kc' && (
                 <>
                   <Btn style={{ padding: '.4rem .8rem' }} onClick={() => act(() => respondToRequest(a.id, true, actorPerson))}>Accept connection</Btn>
                   <Btn variant="ghost" style={{ padding: '.4rem .8rem' }} onClick={() => act(() => respondToRequest(a.id, false, actorPerson))}>Decline</Btn>
                 </>
               )}
-              {a.status === 'requested' && role !== 'expert' && (
-                <span style={{ fontSize: '.8rem', color: 'var(--c-g500)' }}>Awaiting the KC's response — switch to Expert to accept.</span>
+              {a.status === 'requested' && role !== 'kc' && (
+                <span style={{ fontSize: '.8rem', color: 'var(--c-g500)' }}>Awaiting the KC's response — switch to KC Expert to accept.</span>
               )}
               {transitions.map((t) => (
                 <Btn key={t} variant="ghost" style={{ padding: '.4rem .8rem' }} onClick={() => act(() => transitionAgreement(a.id, t, actorPerson, `${role} → ${t}`))}>
