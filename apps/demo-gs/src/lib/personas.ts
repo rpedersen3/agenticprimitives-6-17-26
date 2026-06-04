@@ -72,9 +72,20 @@ const SEEDS: Record<'pete' | 'jane' | 'gcoPerson' | 'kc', string> = {
   kc: 'c0ffee', // the KC Expert person
 };
 
+function pkOf(seed: string): `0x${string}` {
+  return `0x${seed.padStart(64, '0')}` as `0x${string}`;
+}
 function eoa(seed: string): Address {
-  const pk = `0x${seed.padStart(64, '0')}` as `0x${string}`;
-  return privateKeyToAccount(pk).address;
+  return privateKeyToAccount(pkOf(seed)).address;
+}
+
+/** A key-bearing custodian (the EOA that controls an SA + signs its vault delegation, spec 252 §3).
+ *  demo-gs's operators are deterministic (like demo-jp's Jill/Pete), so the broker vault works with
+ *  no Connect. Matches `chain.ts` `Signer`. The private key stays in the demo browser — testnet only. */
+export interface Custodian { name: string; address: Address; privateKey: `0x${string}` }
+function custodian(name: string, seed: string): Custodian {
+  const privateKey = pkOf(seed);
+  return { name, address: privateKeyToAccount(privateKey).address, privateKey };
 }
 
 /** Member people. */
@@ -83,6 +94,10 @@ export const KC_EOA: Address = eoa(SEEDS.kc); // the KC Expert
 /** Operator custodians. */
 export const PETE_EOA: Address = eoa(SEEDS.pete); // Global Church custodian
 export const JANE_EOA: Address = eoa(SEEDS.jane); // Global Switchboard custodian
+
+/** Key-bearing operator custodians (sign the broker / issuer vault delegations). */
+export const JANE_CUSTODIAN: Custodian = custodian('jane', SEEDS.jane);
+export const PETE_CUSTODIAN: Custodian = custodian('pete', SEEDS.pete);
 
 const ORG_NS = 'demo-gs/org-sa/v1';
 function predictOrg(custodian: Address, name: string): Address {
