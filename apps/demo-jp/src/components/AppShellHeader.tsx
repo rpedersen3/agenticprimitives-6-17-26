@@ -74,17 +74,30 @@ export function AppShellHeader({
       position="static"
       elevation={0}
       sx={{
-        bgcolor: admin ? '#0f172a' : '#ffffff',
-        color: admin ? '#fff' : 'text.primary',
-        borderBottom: '1px solid',
-        borderColor: admin ? '#0f172a' : 'divider',
+        // Demo-admin surfaces (Pete/Jill) get a distinct hashed-black header — gray diagonal hashes on
+        // black, white text, a thick black underline — mirroring demo-gs's `.topbar-admin` so it's
+        // unmistakably the demo-admin area, not a connected-user page. The normal (member/signed-out)
+        // header stays a plain white bar.
+        ...(admin
+          ? {
+              backgroundImage: 'repeating-linear-gradient(135deg, #0b1120 0 11px, #334155 11px 22px)',
+              bgcolor: '#0b1120',
+              color: '#fff',
+              borderBottom: '3px solid #000',
+            }
+          : {
+              bgcolor: '#ffffff',
+              color: 'text.primary',
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+            }),
       }}
     >
       <Toolbar sx={{ maxWidth: 1080, mx: 'auto', width: '100%', gap: 1 }}>
         {admin && (
           <Chip
             size="small" label="DEMO ADMIN"
-            sx={{ mr: 1, bgcolor: '#b45309', color: '#fff', fontWeight: 800, letterSpacing: '.06em' }}
+            sx={{ mr: 1, bgcolor: '#000', color: '#fff', fontWeight: 800, letterSpacing: '.14em', border: '1px solid #475569', borderRadius: 1 }}
           />
         )}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>

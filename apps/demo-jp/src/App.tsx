@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Card as MuiCard, CardContent, Typography, Link as MuiLink, Stack, Chip } from '@mui/material';
+import { Box, Card as MuiCard, CardContent, Typography, Link as MuiLink, Stack, Chip, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import { AgreementTimeline } from './components/AgreementTimeline';
 import type { Address, Hex } from '@agenticprimitives/types';
 import { JP } from './lib/brand';
 import { startSiteEnrollment, startOrgCreation, exchangeCode, verifyIdToken, listRelatedOrgs, type RelatedOrgLink } from './connect-client';
@@ -1971,6 +1972,8 @@ function MatchedFacilitatorsPanel({
 }
 
 function MatchedFacilitatorCard({ f, sharedPgId, grant }: { f: MatchedFacilitator; sharedPgId: string | undefined; grant: DelegationWire | undefined }) {
+  // Consent state lifted from the ContactExchangeWidget below → drives the Wave-5 timeline milestone.
+  const [consented, setConsented] = useState(false);
   const shared = sharedPgId ? findPeopleGroup(sharedPgId) : undefined;
   const otherGroups = f.peopleGroupIds
     .filter((id) => id !== sharedPgId)
@@ -2045,8 +2048,46 @@ function MatchedFacilitatorCard({ f, sharedPgId, grant }: { f: MatchedFacilitato
         lastName={f.exchangeLastName}
         email={f.exchangeEmail}
         phone={f.exchangePhone}
+        onExchangedChange={setConsented}
+      />
+
+      <MatchTimelineSection
+        role="adopter"
+        input={{ requested: true, matched: true, consented }}
+        partyLabel={`${f.facilitatorFirstName} ${f.facilitatorLastInitial} · ${f.orgName}`}
+        contactRevealed={consented}
       />
     </div>
+  );
+}
+
+/** Wave-5: the expandable "Timeline & who can see what" per match — actor swimlanes, the §15b.1
+ *  who-can-see-what panel, and the opt-in public-assertion note. Role-aware, collapsed by default so
+ *  the match card stays scannable. NO admin (Jill/Pete) links on member pages — they live only in the
+ *  header Admin dropdown (consistency rule, overrides spec §15a). */
+function MatchTimelineSection({
+  role, input, partyLabel, contactRevealed,
+}: {
+  role: import('./components/AgreementTimeline').TimelineRole;
+  input: import('./lib/agreement-timeline').MatchTimelineInput;
+  partyLabel: string;
+  contactRevealed: boolean;
+}) {
+  return (
+    <Accordion
+      disableGutters
+      elevation={0}
+      sx={{ mt: 1.25, border: '1px solid var(--c-g200)', borderRadius: '12px', '&:before': { display: 'none' }, background: '#fff' }}
+    >
+      <AccordionSummary expandIcon={<span aria-hidden style={{ fontSize: '.85rem', color: 'var(--c-g500)' }}>▾</span>}>
+        <Typography sx={{ fontSize: '.82rem', fontWeight: 700, color: 'var(--c-g600)' }}>
+          Timeline &amp; who can see what
+        </Typography>
+      </AccordionSummary>
+      <AccordionDetails sx={{ pt: 0 }}>
+        <AgreementTimeline role={role} input={input} partyLabel={partyLabel} contactRevealed={contactRevealed} />
+      </AccordionDetails>
+    </Accordion>
   );
 }
 
@@ -2063,6 +2104,7 @@ function ContactExchangeWidget({
   lastName,
   email,
   phone,
+  onExchangedChange,
 }: {
   grant: DelegationWire | undefined;
   matchId: string;
@@ -2071,9 +2113,15 @@ function ContactExchangeWidget({
   lastName?: string;
   email?: string;
   phone?: string;
+  /** Lifts the consent state to the parent card so the Wave-5 timeline can mark the "Both parties
+   *  consent · contact exchanged" milestone. Purely additive — the widget's logic is unchanged. */
+  onExchangedChange?: (exchanged: boolean) => void;
 }) {
   const [exchanged, setExchanged] = useState<boolean>(false);
   const [requesting, setRequesting] = useState(false);
+
+  // Mirror the consent state up to the parent whenever it changes (timeline milestone source).
+  useEffect(() => { onExchangedChange?.(exchanged); }, [exchanged, onExchangedChange]);
 
   // Contact-exchange consent lives in the member's own vault (spec 247), read
   // through the member's grant; resolve on mount.
@@ -3212,6 +3260,8 @@ function MatchedAdoptersPanel({ adopters, grant }: { adopters: MatchedAdopter[];
 }
 
 function MatchedAdopterCard({ a, grant }: { a: MatchedAdopter; grant: DelegationWire | undefined }) {
+  // Consent state lifted from the ContactExchangeWidget below → drives the Wave-5 timeline milestone.
+  const [consented, setConsented] = useState(false);
   const declared = new Date(a.declaredAt * 1000);
   const daysAgo = Math.max(0, Math.floor((Date.now() - declared.getTime()) / 86_400_000));
   const ago = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : daysAgo < 30 ? `${daysAgo} days ago` : daysAgo < 60 ? '~1 month ago' : `~${Math.round(daysAgo / 30)} months ago`;
@@ -3241,6 +3291,14 @@ function MatchedAdopterCard({ a, grant }: { a: MatchedAdopter; grant: Delegation
         lastName={a.exchangeLastName}
         email={a.exchangeEmail}
         phone={a.exchangePhone}
+        onExchangedChange={setConsented}
+      />
+
+      <MatchTimelineSection
+        role="facilitator"
+        input={{ requested: true, matched: true, consented }}
+        partyLabel={`${a.firstName} ${a.lastInitial} · ${a.country}`}
+        contactRevealed={consented}
       />
     </div>
   );
