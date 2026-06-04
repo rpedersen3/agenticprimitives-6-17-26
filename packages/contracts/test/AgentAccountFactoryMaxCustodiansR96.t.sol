@@ -43,7 +43,7 @@ contract AgentAccountFactoryMaxCustodiansR96Test is Test {
             address(policy),
             address(0xBB),
             address(0xCC),
-            address(0xDD)
+            address(0xDD), address(0)
         );
     }
 

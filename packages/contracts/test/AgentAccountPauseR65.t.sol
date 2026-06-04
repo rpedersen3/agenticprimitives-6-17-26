@@ -77,7 +77,8 @@ contract AgentAccountPauseR65Test is Test {
             address(policy),
             deployer,         // initialOwner
             deployer,         // bundler signer
-            address(gov)      // governance — the loadbearing wiring
+            address(gov),     // governance — the loadbearing wiring
+            address(0)        // spec 253: approvedHashRegistry (unused here)
         );
 
         // Deploy an AgentAccount via the factory using the standard
@@ -262,7 +263,8 @@ contract AgentAccountPauseR65Test is Test {
             address(policy),
             deployer,
             deployer,
-            deployer  // governance = EOA
+            deployer, // governance = EOA
+            address(0) // spec 253: approvedHashRegistry (unused here)
         );
         address[] memory custodians = new address[](1);
         custodians[0] = custodian;

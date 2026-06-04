@@ -61,7 +61,7 @@ contract CustodyPolicyDispatcherR610cTest is Test {
             address(policy),
             address(0xBB),
             address(0xCC),
-            address(0xDD)
+            address(0xDD), address(0)
         );
 
         owner     = vm.addr(OWNER_PK);
@@ -312,7 +312,7 @@ contract CustodyPolicyDispatcherR610cTest is Test {
     function test_R6_10c_applySystemUpdate_happyPath() public {
         // Deploy a fresh AgentAccount implementation; the policy schedules
         // upgradeToAndCall to that impl. T5 timelock (24h) applies.
-        AgentAccount newImpl = new AgentAccount(IEntryPoint(address(ep)));
+        AgentAccount newImpl = new AgentAccount(IEntryPoint(address(ep)), address(0));
         bytes memory args = abi.encode(address(newImpl));
         _schedAndApply(CustodyPolicy.CustodyAction.ApplySystemUpdate, args, _t5());
         // The acct version is the new impl's version. Both impls return

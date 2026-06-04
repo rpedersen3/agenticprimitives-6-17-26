@@ -36,7 +36,7 @@ contract UniversalSignatureValidatorTest is Test {
             address(cp),
             address(0xBB),
             address(0xCC),
-            address(0xDD)
+            address(0xDD), address(0)
         );
         address[] memory _c = new address[](1);
         _c[0] = owner;

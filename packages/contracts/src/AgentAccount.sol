@@ -39,6 +39,18 @@ interface IAgentAccountPauseView {
     function isPaused() external view returns (bool);
 }
 
+/// @dev Spec 253 — minimal read surface of `ApprovedHashRegistry`. The
+///      account consults it ONLY from `isValidSignature` (the ERC-1271
+///      entrypoint), under the `0x03` sentinel, so a hash the account
+///      itself pre-approved (inside its own custody-gated execute/batch)
+///      validates as an ERC-1271 signature. Address is bound IMMUTABLE in
+///      the impl (see constructor) — never an owner-mutable view — so a
+///      factory/governance key compromise cannot re-point it at an
+///      attacker registry to forge signatures.
+interface IApprovedHashRegistryView {
+    function isApproved(address signer, bytes32 hash) external view returns (bool);
+}
+
 /**
  * @title AgentAccount
  * @notice ERC-4337 + UUPS-upgradeable smart account — agent identity anchor.
@@ -74,6 +86,14 @@ contract AgentAccount is
 
     /// @dev The ERC-4337 EntryPoint contract
     IEntryPoint private immutable _entryPoint;
+
+    /// @dev Spec 253 — the `ApprovedHashRegistry` consulted by the `0x03`
+    ///      sentinel branch of `isValidSignature`. IMMUTABLE (baked into
+    ///      impl bytecode, shared by every proxy, changeable only via a
+    ///      custody-gated UUPS upgrade). May be `address(0)` on legacy/test
+    ///      deploys that don't use the sentinel — in which case the
+    ///      sentinel fails CLOSED (see `isValidSignature`).
+    address private immutable _approvedHashRegistry;
 
     /// @dev Authorized DelegationManager (ERC-7710 executor)
     address private _delegationManager;
@@ -262,8 +282,9 @@ contract AgentAccount is
 
     // ─── Constructor / Initializer ──────────────────────────────────
 
-    constructor(IEntryPoint entryPoint_) {
+    constructor(IEntryPoint entryPoint_, address approvedHashRegistry_) {
         _entryPoint = entryPoint_;
+        _approvedHashRegistry = approvedHashRegistry_;
         _disableInitializers();
     }
 
@@ -1079,6 +1100,21 @@ contract AgentAccount is
         bytes32 hash,
         bytes calldata signature
     ) external view override(IAgentAccount, IERC1271) returns (bytes4) {
+        // Spec 253 — approved-hash sentinel (ERC-1271 ONLY). A bare 1-byte
+        // 0x03 validates iff THIS account pre-approved `hash` in the
+        // (immutable) ApprovedHashRegistry — letting an org batch its
+        // outbound-delegation approvals into one deploy userOp. Checked on
+        // the RAW signature before the ERC-6492 unwrap: a 1-byte sig can't
+        // carry a 32-byte 6492 suffix, so there's no smuggling path. This
+        // branch is unreachable from `_validateSignature`/`_validateSig`
+        // (the userOp-auth path), where 0x03 is an unknown type → false.
+        // Fails CLOSED if the registry is unset/not-a-contract (ADR-0013).
+        if (signature.length == 1 && uint8(signature[0]) == SIG_TYPE_APPROVED_HASH) {
+            if (_approvedHashRegistry.code.length == 0) return bytes4(0xffffffff);
+            return IApprovedHashRegistryView(_approvedHashRegistry).isApproved(address(this), hash)
+                ? ERC1271_MAGIC_VALUE
+                : bytes4(0xffffffff);
+        }
         bytes memory inner = signature;
         if (signature.length >= 32 && bytes32(signature[signature.length - 32:]) == ERC6492_MAGIC) {
             (, , bytes memory unwrapped) = abi.decode(
@@ -1094,6 +1130,12 @@ contract AgentAccount is
 
     uint8 internal constant SIG_TYPE_ECDSA    = 0x00;
     uint8 internal constant SIG_TYPE_WEBAUTHN = 0x01;
+    /// @dev Spec 253 — approved-hash sentinel. Honored ONLY by
+    ///      `isValidSignature` (ERC-1271), NEVER by `_validateSig` /
+    ///      `_validateSignature` (the userOp-auth path) — there `0x03` is an
+    ///      unknown type and returns false. A bare 1-byte `0x03` means
+    ///      "this hash is pre-approved in the ApprovedHashRegistry".
+    uint8 internal constant SIG_TYPE_APPROVED_HASH = 0x03;
 
     /// @dev Internal dispatcher. Accepts plain 65-byte ECDSA sigs as legacy
     ///      form AND type-prefixed sigs (first byte = SIG_TYPE_*).

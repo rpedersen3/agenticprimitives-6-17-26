@@ -48,7 +48,7 @@ contract AgentAccountInvariantsTest is Test {
             address(policy),
             deployer,
             deployer,
-            deployer
+            deployer, address(0)
         );
     }
 

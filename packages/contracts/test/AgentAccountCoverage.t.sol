@@ -58,7 +58,7 @@ contract AgentAccountCoverageTest is Test {
             address(cp),
             bundlerSigner,
             sessionIssuer,
-            address(0xDD)
+            address(0xDD), address(0)
         );
         address[] memory custodians = new address[](1);
         custodians[0] = owner;
@@ -399,7 +399,7 @@ contract AgentAccountCoverageTest is Test {
             IEntryPoint(address(ep)), address(dm),
             address(new CustodyPolicy()),
             address(0), // bundlerSigner = 0
-            sessionIssuer, address(0xDD)
+            sessionIssuer, address(0xDD), address(0)
         );
         address[] memory custodians = new address[](1);
         custodians[0] = owner;
@@ -435,7 +435,7 @@ contract AgentAccountCoverageTest is Test {
         AgentAccountFactory factoryBundler = new AgentAccountFactory(
             IEntryPoint(address(ep)), address(dm),
             address(new CustodyPolicy()),
-            knownBundler, sessionIssuer, address(0xDD)
+            knownBundler, sessionIssuer, address(0xDD), address(0)
         );
         address[] memory custodians = new address[](1);
         custodians[0] = owner;
@@ -465,7 +465,7 @@ contract AgentAccountCoverageTest is Test {
         AgentAccountFactory factoryBundler = new AgentAccountFactory(
             IEntryPoint(address(ep)), address(dm),
             address(new CustodyPolicy()),
-            knownBundler, sessionIssuer, address(0xDD)
+            knownBundler, sessionIssuer, address(0xDD), address(0)
         );
         address[] memory custodians = new address[](1);
         custodians[0] = owner;

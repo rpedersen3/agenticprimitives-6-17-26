@@ -46,7 +46,7 @@ contract CustodyPolicyWave2CTest is Test {
             address(policy),
             address(this),
             address(this),
-            address(this)
+            address(this), address(0)
         );
         custodian = address(0xA11CE);
         address[] memory custodians = new address[](1);

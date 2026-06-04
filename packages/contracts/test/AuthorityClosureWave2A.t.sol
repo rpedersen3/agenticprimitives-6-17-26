@@ -52,7 +52,7 @@ contract AuthorityClosureWave2ATest is Test {
             address(cp),
             /*bundlerSigner*/ address(this),
             /*sessionIssuer*/ address(this),
-            /*governance*/ address(this)
+            /*governance*/ address(this), address(0)
         );
 
         custodianA = address(0xA11CE);
@@ -169,7 +169,7 @@ contract AuthorityClosureWave2ATest is Test {
 
     function test_C3_upgradeToWithAuthorization_always_reverts() public {
         // Any signature, any new impl — must hit the deprecation revert.
-        address newImpl = address(new AgentAccount(IEntryPoint(address(entryPoint))));
+        address newImpl = address(new AgentAccount(IEntryPoint(address(entryPoint)), address(0)));
         bytes memory sig = hex"00";
         vm.expectRevert(AgentAccount.LegacyUpgradePathDisabled.selector);
         acct.upgradeToWithAuthorization(newImpl, sig);
@@ -179,7 +179,7 @@ contract AuthorityClosureWave2ATest is Test {
         // The previous behavior would have processed this from a custodian
         // because the gate was the SIGNATURE check, not the CALLER. Now
         // the function literally cannot succeed regardless of caller.
-        address newImpl = address(new AgentAccount(IEntryPoint(address(entryPoint))));
+        address newImpl = address(new AgentAccount(IEntryPoint(address(entryPoint)), address(0)));
         vm.prank(custodianA);
         vm.expectRevert(AgentAccount.LegacyUpgradePathDisabled.selector);
         acct.upgradeToWithAuthorization(newImpl, hex"");

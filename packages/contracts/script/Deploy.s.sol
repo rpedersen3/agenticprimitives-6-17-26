@@ -205,6 +205,16 @@ contract Deploy is Script {
         CustodyPolicy custodyPolicy = new CustodyPolicy();
         console2.log("CustodyPolicy:        %s", address(custodyPolicy));
 
+        // 2.6. ApprovedHashRegistry — deployed BEFORE the factory (spec 253)
+        //      so its address can be baked IMMUTABLE into the AgentAccount
+        //      impl the factory deploys. The account's `isValidSignature`
+        //      0x03 sentinel consults it (org-create batches its outbound
+        //      delegation approvals into one deploy userOp); it is ALSO the
+        //      QuorumEnforcer v=1 companion (per-signer/per-hash approval,
+        //      spam-resistant — only approvals from bound signers count).
+        ApprovedHashRegistry approvedHashRegistry = new ApprovedHashRegistry();
+        console2.log("ApprovedHashRegistry: %s", address(approvedHashRegistry));
+
         // 3. AgentAccountFactory (deploys AgentAccount implementation as side-effect)
         // R5.4 — bundlerSigner + sessionIssuer routed through the
         // resolved hot-signer addresses (env-overridable for production
@@ -216,7 +226,8 @@ contract Deploy is Script {
             address(custodyPolicy),
             bundlerSigner,
             sessionIssuer,
-            address(governance) // H7-C.9: AgenticGovernance, not deployer EOA
+            address(governance), // H7-C.9: AgenticGovernance, not deployer EOA
+            address(approvedHashRegistry) // spec 253: immutable in the AgentAccount impl
         );
         console2.log("AgentAccountFactory:  %s", address(factory));
         console2.log("AgentAccount (impl):  %s", address(factory.accountImplementation()));
@@ -242,16 +253,11 @@ contract Deploy is Script {
         //     `@agenticprimitives/delegation.buildQuorumCaveat` reference
         //     this address; mcp-runtime's `withDelegation` threads it
         //     via `config.quorumEnforcer` (6c.4).
-        //   ApprovedHashRegistry = v=1 signature path companion for
-        //     passkey-only or hardware-wallet signers participating in
-        //     quorums without producing off-chain ECDSA. Per-signer +
-        //     per-hash approval; spam-resistant by construction (only
-        //     approvals from signers in the bound set count at the
-        //     QuorumEnforcer layer).
+        //   (ApprovedHashRegistry — the v=1 companion — is now deployed
+        //     earlier, at step 2.6, because the AgentAccount impl bakes its
+        //     address in immutably; see spec 253.)
         QuorumEnforcer quorumEnforcer = new QuorumEnforcer();
         console2.log("QuorumEnforcer:       %s", address(quorumEnforcer));
-        ApprovedHashRegistry approvedHashRegistry = new ApprovedHashRegistry();
-        console2.log("ApprovedHashRegistry: %s", address(approvedHashRegistry));
 
         // 5. SmartAgentPaymaster — sponsors gas for user-op-based account deploys.
         //    Constructor takes entryPoint, initialOwner (multisig from broadcast

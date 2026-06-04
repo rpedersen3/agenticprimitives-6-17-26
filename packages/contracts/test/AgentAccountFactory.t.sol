@@ -39,7 +39,7 @@ contract AgentAccountFactoryTest is Test {
             address(custodyPolicy),
             bundlerSigner,
             sessionIssuer,
-            governance
+            governance, address(0)
         );
     }
 
@@ -225,7 +225,7 @@ contract AgentAccountFactoryTest is Test {
             address(0),
             bundlerSigner,
             sessionIssuer,
-            governance
+            governance, address(0)
         );
     }
 }

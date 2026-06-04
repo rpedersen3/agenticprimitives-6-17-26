@@ -62,7 +62,7 @@ contract AgenticGovernanceTest is Test {
             address(custodyPolicy),
             deployer,
             deployer,
-            address(gov)
+            address(gov), address(0)
         );
     }
 

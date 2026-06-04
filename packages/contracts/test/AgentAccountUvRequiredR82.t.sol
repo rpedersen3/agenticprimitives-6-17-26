@@ -47,7 +47,7 @@ contract AgentAccountUvRequiredR82Test is Test {
             address(validator),
             address(0xBB),
             address(0xCC),
-            address(0xDD)
+            address(0xDD), address(0)
         );
     }
 

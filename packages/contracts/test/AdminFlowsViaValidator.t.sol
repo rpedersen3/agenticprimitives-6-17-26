@@ -47,7 +47,7 @@ contract AdminFlowsViaValidatorTest is Test {
             address(validator),
             address(0xBB),
             address(0xCC),
-            address(0xDD)
+            address(0xDD), address(0)
         );
 
         owner1    = vm.addr(OWNER1_PK);

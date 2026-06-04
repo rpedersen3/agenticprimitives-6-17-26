@@ -49,7 +49,7 @@ contract CustodyPolicyBranchR610bTest is Test {
             address(policy),
             address(0xBB),
             address(0xCC),
-            address(0xDD)
+            address(0xDD), address(0)
         );
 
         owner     = vm.addr(OWNER_PK);

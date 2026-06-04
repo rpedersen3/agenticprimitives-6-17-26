@@ -49,6 +49,11 @@ contract AgentAccountFactory is GovernanceManaged {
     AgentAccount public immutable accountImplementation;
     address public immutable delegationManager;
     address public immutable custodyPolicy;
+    /// @dev Spec 253 — the ApprovedHashRegistry baked (immutable) into the
+    ///      AgentAccount impl this factory deploys; surfaced here for
+    ///      deploy-time auditing. The account's `isValidSignature` 0x03
+    ///      sentinel consults it; it is NOT a mutable factory-view.
+    address public immutable approvedHashRegistry;
 
     address public bundlerSigner;
     address public sessionIssuer;
@@ -95,10 +100,12 @@ contract AgentAccountFactory is GovernanceManaged {
         address custodyPolicy_,
         address bundlerSigner_,
         address sessionIssuer_,
-        address governance_
+        address governance_,
+        address approvedHashRegistry_
     ) GovernanceManaged(governance_) {
         if (custodyPolicy_ == address(0)) revert ZeroAddress();
-        accountImplementation = new AgentAccount(entryPoint_);
+        accountImplementation = new AgentAccount(entryPoint_, approvedHashRegistry_);
+        approvedHashRegistry = approvedHashRegistry_;
         delegationManager = delegationManager_;
         custodyPolicy = custodyPolicy_;
         bundlerSigner = bundlerSigner_;

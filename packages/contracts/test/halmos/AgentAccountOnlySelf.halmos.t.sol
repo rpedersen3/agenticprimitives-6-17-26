@@ -83,7 +83,7 @@ contract AgentAccountOnlySelfHalmos is Test {
             address(policy),
             address(0xBB),
             address(0xCC),
-            address(0xDD)
+            address(0xDD), address(0)
         );
 
         address[] memory custs = new address[](1);
