@@ -38,6 +38,8 @@ import {RelationshipTypeRegistry} from "../src/relationships/RelationshipTypeReg
 // non-upgradeable.
 import {AttestationRegistry} from "../src/attestation/AttestationRegistry.sol";
 import {AgreementRegistry} from "../src/agreement/AgreementRegistry.sol";
+import {SkillDefinitionRegistry} from "../src/skills/SkillDefinitionRegistry.sol";
+import {GeoFeatureRegistry} from "../src/geo/GeoFeatureRegistry.sol";
 import {AgentRelationshipPredicates} from "../src/relationships/AgentRelationshipPredicates.sol";
 import {AgentProfileResolver} from "../src/identity/AgentProfileResolver.sol";
 import {AgentProfilePredicates} from "../src/identity/AgentProfilePredicates.sol";
@@ -432,6 +434,17 @@ contract Deploy is Script {
         AgreementRegistry agreementRegistry = new AgreementRegistry();
         console2.log("AgreementRegistry:    %s", address(agreementRegistry));
 
+        //    Skill + Geo DEFINITION registries (spec 251) — versioned PUBLIC
+        //      definition anchors only. The agent↔definition association (a
+        //      claim) is an OFF-chain vault credential (no claim registry); the
+        //      two registries are independent (no on-chain skill↔geo mapping);
+        //      metadata is neutral/sanitized (no operational data). Reusable
+        //      substrate the Switchboard (demo-gs) + future apps project over.
+        SkillDefinitionRegistry skillDefinitions = new SkillDefinitionRegistry();
+        console2.log("SkillDefinitionRegistry: %s", address(skillDefinitions));
+        GeoFeatureRegistry geoFeatures = new GeoFeatureRegistry();
+        console2.log("GeoFeatureRegistry:      %s", address(geoFeatures));
+
         // Note: the new `DelegationManager.verifyAuthorization(...)` view
         // entrypoint (spec 242 PD-9) is part of the redeployed DM bytecode
         // that already happened at step 2 above — no separate deploy line
@@ -494,7 +507,9 @@ contract Deploy is Script {
         // the end so the chained `vm.serializeAddress` returns the full
         // JSON with all R9 + R10 keys present.
         vm.serializeAddress(key, "attestationRegistry", address(attestationRegistry));
-        string memory out = vm.serializeAddress(key, "agreementRegistry", address(agreementRegistry));
+        vm.serializeAddress(key, "agreementRegistry", address(agreementRegistry));
+        vm.serializeAddress(key, "skillDefinitionRegistry", address(skillDefinitions));
+        string memory out = vm.serializeAddress(key, "geoFeatureRegistry", address(geoFeatures));
 
         string memory path = string.concat("deployments-", network, ".json");
         vm.writeFile(path, out);

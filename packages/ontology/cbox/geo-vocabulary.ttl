@@ -1,0 +1,36 @@
+# C-box — geo controlled vocabularies (spec 251). Closed SKOS codelists for the generic
+# geo substrate: geo feature KINDS (on-chain-bound) + geo RELATIONS (off-chain claim SDK).
+#
+# LOCKSTEP (ADR-0009): the on-chain `GeoFeatureRegistry.KIND_*` constants equal
+# keccak256(<the geoKind concept URI>) declared here; asserted by the lockstep gate.
+#
+# NEUTRAL public geography ONLY (spec 251 GFR-07). A feature is a generic public place —
+# never tagged with operational/sensitivity/ministry data. Sensitivity is an OFF-chain
+# app policy OVER neutral features. The agent↔feature ASSOCIATION is an off-chain vault
+# credential, never on chain; there is NO on-chain skill↔geo mapping.
+
+@prefix apg:  <https://agenticprimitives.dev/ns/geo#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# ─── geoKind — 5 values, ON-CHAIN-BOUND (GeoFeatureRegistry.KIND_*) ─────────
+apg:geoKind a skos:ConceptScheme ;
+    rdfs:label "geoKind" ;
+    rdfs:comment "The on-chain-bound geo-feature kind. keccak256 of each concept URI equals the matching GeoFeatureRegistry.KIND_* constant (ADR-0009 lockstep). Generic public geography only." ;
+    skos:hasTopConcept apg:Planet, apg:Region, apg:Country, apg:AdminArea, apg:Custom .
+apg:Planet    a skos:Concept ; skos:inScheme apg:geoKind ; skos:prefLabel "planet" .
+apg:Region    a skos:Concept ; skos:inScheme apg:geoKind ; skos:prefLabel "region" .
+apg:Country   a skos:Concept ; skos:inScheme apg:geoKind ; skos:prefLabel "country" .
+apg:AdminArea a skos:Concept ; skos:inScheme apg:geoKind ; skos:prefLabel "admin-area" .
+apg:Custom    a skos:Concept ; skos:inScheme apg:geoKind ; skos:prefLabel "custom" .
+
+# ─── geoRelation — used by the OFF-CHAIN geo claim credential (not on chain) ──
+apg:geoRelation a skos:ConceptScheme ;
+    rdfs:label "geoRelation" ;
+    rdfs:comment "Relation a claim credential asserts between a subject SA and a geo feature. Off chain only; never an on-chain row (it would leak operational association)." ;
+    skos:hasTopConcept apg:servesWithin, apg:operatesIn, apg:licensedIn, apg:residentOf, apg:originIn .
+apg:servesWithin a skos:Concept ; skos:inScheme apg:geoRelation ; skos:prefLabel "servesWithin" .
+apg:operatesIn   a skos:Concept ; skos:inScheme apg:geoRelation ; skos:prefLabel "operatesIn" .
+apg:licensedIn   a skos:Concept ; skos:inScheme apg:geoRelation ; skos:prefLabel "licensedIn" .
+apg:residentOf   a skos:Concept ; skos:inScheme apg:geoRelation ; skos:prefLabel "residentOf" .
+apg:originIn     a skos:Concept ; skos:inScheme apg:geoRelation ; skos:prefLabel "originIn" .

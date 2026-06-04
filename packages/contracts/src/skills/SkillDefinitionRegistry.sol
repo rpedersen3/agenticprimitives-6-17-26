@@ -37,13 +37,15 @@ pragma solidity ^0.8.28;
  */
 contract SkillDefinitionRegistry {
     // ─── C-box skill-kind codelist (keccak of the cbox vocabulary URIs) ──
-    string internal constant KIND_NS = "https://ontology.agenticprimitives.dev/cbox/skill-kind#";
+    //   Concept URIs are declared in packages/ontology cbox/skill-vocabulary.ttl
+    //   (scheme aps:skillKind); the lockstep gate asserts these equal keccak of
+    //   the declared skos:Concept URIs (ADR-0009).
     /// @dev A leaf skill in a controlled taxonomy (e.g. an OASF leaf).
-    bytes32 public constant KIND_LEAF = keccak256(bytes("https://ontology.agenticprimitives.dev/cbox/skill-kind#Leaf"));
+    bytes32 public constant KIND_LEAF = keccak256(bytes("https://agenticprimitives.dev/ns/skill#Leaf"));
     /// @dev A domain/grouping concept (a non-leaf category).
-    bytes32 public constant KIND_DOMAIN = keccak256(bytes("https://ontology.agenticprimitives.dev/cbox/skill-kind#Domain"));
+    bytes32 public constant KIND_DOMAIN = keccak256(bytes("https://agenticprimitives.dev/ns/skill#Domain"));
     /// @dev A steward-defined custom skill outside the controlled set.
-    bytes32 public constant KIND_CUSTOM = keccak256(bytes("https://ontology.agenticprimitives.dev/cbox/skill-kind#Custom"));
+    bytes32 public constant KIND_CUSTOM = keccak256(bytes("https://agenticprimitives.dev/ns/skill#Custom"));
 
     // ─── Errors ─────────────────────────────────────────────────────────
     error NotSteward();
