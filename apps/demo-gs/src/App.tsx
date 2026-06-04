@@ -8,9 +8,9 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { PERSONA_META, actingAgents, loadPersona, savePersona, type Persona } from './lib/personas';
 import { allAgreements, allNeeds, allOfferings, needsForOrg, offeringsForPerson, resetStore, subscribe, version } from './lib/store';
 import {
-  activeGco, activeKc, createConnectedGco, createConnectedKc, createGco, createKc, gcoMembers, isEntered, kcMembers, membersVersion, setActiveGco, setActiveKc, setEntered, subscribeMembers,
+  activeGco, activeKc, attachGcoOrg, createConnectedGcoPerson, createConnectedKc, createGco, createKc, gcoMembers, isEntered, kcMembers, membersVersion, setActiveGco, setActiveKc, setEntered, subscribeMembers,
 } from './lib/members';
-import { exchangeCode, personAddressFromIdToken } from './connect-client';
+import { exchangeCode, personAddressFromIdToken, startOrgCreation } from './connect-client';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { MemberPicker } from './components/MemberPicker';
 import { OnboardPanel, CONNECT_KEY, type ConnectStash } from './components/OnboardPanel';
@@ -20,7 +20,12 @@ import { MatchBoard } from './components/MatchBoard';
 import { AgreementsPanel } from './components/AgreementsPanel';
 import { PublicSignalPanel } from './components/PublicSignalPanel';
 import { SubstrateClaimsPanel } from './components/SubstrateClaimsPanel';
-import { Banner, Card, Pill, SectionHead } from './components/ui';
+import { Banner, Card, Pill, SectionHead, inputStyle } from './components/ui';
+import { personalHome } from './lib/domain';
+
+/** sessionStorage key + stash for the in-flight org-create redirect (GCO step 2). */
+const ORG_KEY = 'agenticprimitives:demo-gs:org-create';
+interface OrgStash { state: string; orgName: string; authOrigin: string; codeVerifier: string; nonce: string }
 
 export function App() {
   const [persona, setPersona] = useState<Persona>(loadPersona() ?? 'gco');
@@ -32,7 +37,9 @@ export function App() {
   const select = (p: Persona) => { setPersona(p); savePersona(p); };
 
   // Connect return handler (Phase 1): a person came back from their secure home with ?code&state.
-  // KC → a connected person SA; GCO → the person + the org SA the home deployed. Becomes the active member.
+  // TWO ceremonies land here (mirrors demo-jp): (1) the site-login that enrolls the PERSON — KC acts
+  // as that individual, a GCO signatory becomes a member with the org still pending; and (2) the
+  // later org-create that deploys the GCO org SA — its return ATTACHES the org to the active member.
   useEffect(() => {
     const u = new URL(window.location.href);
     const code = u.searchParams.get('code');
@@ -40,6 +47,27 @@ export function App() {
     if (!code || !retState) return;
     for (const k of ['code', 'state']) u.searchParams.delete(k);
     window.history.replaceState({}, '', u.toString());
+
+    // Org-create return first — its state won't match the site-login stash.
+    let orgStash: Partial<OrgStash> = {};
+    try { orgStash = JSON.parse(sessionStorage.getItem(ORG_KEY) ?? '{}'); } catch { /* ignore */ }
+    if (orgStash.state && orgStash.state === retState) {
+      sessionStorage.removeItem(ORG_KEY);
+      if (!orgStash.authOrigin || !orgStash.codeVerifier) { setConnectError('Organization response was incomplete. Please try again.'); return; }
+      void (async () => {
+        try {
+          const tok = await exchangeCode(orgStash.authOrigin!, code, orgStash.codeVerifier!);
+          if (!tok.org) throw new Error('no organization was returned from your home');
+          attachGcoOrg(tok.org.orgName, tok.org.orgAgent);
+          select('gco');
+        } catch (e) {
+          setConnectError(e instanceof Error ? e.message : String(e));
+        }
+      })();
+      return;
+    }
+
+    // Site-login return — enroll the person.
     let stash: Partial<ConnectStash> = {};
     try { stash = JSON.parse(sessionStorage.getItem(CONNECT_KEY) ?? '{}'); } catch { /* ignore */ }
     sessionStorage.removeItem(CONNECT_KEY);
@@ -52,8 +80,7 @@ export function App() {
         const tok = await exchangeCode(stash.authOrigin!, code, stash.codeVerifier!);
         const person = personAddressFromIdToken(tok.idToken);
         if (stash.mode === 'gco') {
-          if (!tok.org) throw new Error('no organization was returned from your home');
-          createConnectedGco(stash.name!, tok.org.orgName, person, tok.org.orgAgent);
+          createConnectedGcoPerson(stash.name!, person);
           select('gco');
         } else {
           createConnectedKc(stash.name!, person);
@@ -135,12 +162,69 @@ function IntranetHeader({ label, role, onSignOut }: { label: string; role: strin
   );
 }
 
+// GCO step 2: the person has connected; now create the ORG that takes the GCO role. The org SA is
+// deployed + custodied by the person's ROOT credential at their home (org-create ceremony) — demo-gs
+// is never a custodian. On return the org is attached to this member (see App's org-create handler).
+function GcoOrgCreate({ gco, onSignOut }: { gco: ReturnType<typeof activeGco>; onSignOut: () => void }) {
+  const [orgName, setOrgName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function createOrg() {
+    if (!orgName.trim()) { setErr('Name the organization that takes the GCO role.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const r = await startOrgCreation(gco.signatory, orgName.trim());
+      const stash: OrgStash = { state: r.state, orgName: orgName.trim(), authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce };
+      sessionStorage.setItem(ORG_KEY, JSON.stringify(stash));
+      window.location.href = r.url; // → the signatory's home; deploys the org SA; returns with ?code&state
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <IntranetHeader label={`${gco.signatory} · connected`} role="GCO Organization" onSignOut={onSignOut} />
+      <Card style={{ maxWidth: 640 }}>
+        <div className="eyebrow">GCO Organization · step 2 of 2</div>
+        <h2 style={{ fontSize: '1.35rem', marginTop: '.35rem' }}>Create the organization that holds the GCO role</h2>
+        <p style={{ color: 'var(--c-g600)', marginTop: '.6rem', fontSize: '.9rem' }}>
+          You&rsquo;re connected as <strong>{gco.signatory}</strong>. Now name the organization (e.g. <em>Hope Church
+          Missions Team</em>) — it becomes a Smart Agent that takes the Great Commission Organization role and posts
+          the skill Needs. It&rsquo;s deployed + custodied by <strong>your</strong> credential at your home; Global
+          Switchboard is never a custodian.
+        </p>
+        <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '.6rem', maxWidth: 460 }}>
+          <input
+            type="text" value={orgName} placeholder="GCO organization name (e.g. Hope Church Missions Team)" disabled={busy}
+            onChange={(e) => setOrgName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void createOrg(); }}
+            style={{ ...inputStyle, padding: '.7rem .9rem', fontSize: '.95rem' }}
+          />
+          <button className="btn-sso" onClick={createOrg} disabled={!orgName.trim() || busy}>
+            <span className="btn-sso-glyph" aria-hidden="true">🏛️</span>
+            {busy ? 'Opening your home…' : 'Create the GCO organization'}
+          </button>
+          {err && <Banner tone="err">{err}</Banner>}
+          <span className="soon" style={{ background: 'var(--c-primary-subtle)', borderColor: 'var(--c-primary-border)', color: 'var(--c-primary-active)' }}>
+            You&rsquo;ll confirm with your device at <b>{personalHome(gco.signatory)}</b> to deploy the org, then come back here.
+          </span>
+        </div>
+      </Card>
+    </>
+  );
+}
+
 // The GCO Organization (demand). Until the member has registered (connected via Global.Church or
 // chosen a sample identity) we show the onboarding landing; then the intranet — a connected person
 // CREATES an org that holds the GCO role + posts Needs; you act as its signatory. (demo-jp Adopter.)
 function GcoView() {
   if (!isEntered('gco')) return <OnboardPanel kind="gco" onExplore={() => setEntered('gco', true)} />;
   const gco = activeGco();
+  // The person connected but hasn't created the org yet (step 2) — run the org-create ceremony.
+  if (!gco.org) return <GcoOrgCreate gco={gco} onSignOut={() => setEntered('gco', false)} />;
   const myNeeds = needsForOrg(gco.org);
   return (
     <>

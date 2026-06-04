@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { GS, type OnboardKind } from '../lib/gs-brand';
 import { personalHome, toAgentName } from '../lib/domain';
-import { startOrgCreation, startSiteEnrollment } from '../connect-client';
+import { startSiteEnrollment } from '../connect-client';
 import { Banner, Card, inputStyle } from './ui';
 
 export const CONNECT_KEY = 'agenticprimitives:demo-gs:connect';
@@ -15,32 +15,31 @@ const LAST_NAME_KEY = 'agenticprimitives:demo-gs:last-name';
 export interface ConnectStash {
   mode: OnboardKind;
   name: string;
-  orgName?: string;
   state: string;
   authOrigin: string;
   codeVerifier: string;
+  nonce: string;
 }
 
+// Both roles first enroll the PERSON via the shared identity (site-login). A KC then acts as that
+// individual; a GCO signatory creates the org that holds the GCO role as a SECOND step from inside
+// the intranet (org-create needs an existing person — exactly demo-jp's Adopter two-step).
 export function OnboardPanel({ kind, onExplore }: { kind: OnboardKind; onExplore: () => void }) {
   const p = GS.paths[kind];
   const [name, setName] = useState<string>(() => {
     try { return localStorage.getItem(LAST_NAME_KEY) ?? ''; } catch { return ''; }
   });
-  const [orgName, setOrgName] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const trimmed = name.trim();
 
   async function connect() {
     if (!trimmed) { setErr(`Choose your ${GS.community} name (e.g. rich-pedersen).`); return; }
-    if (kind === 'gco' && !orgName.trim()) { setErr('Name the organization that takes the GCO role.'); return; }
     setBusy(true); setErr(null);
     try { localStorage.setItem(LAST_NAME_KEY, trimmed); } catch { /* ignore */ }
     try {
-      const r = kind === 'kc'
-        ? await startSiteEnrollment(trimmed)
-        : await startOrgCreation(trimmed, orgName.trim());
-      const stash: ConnectStash = { mode: kind, name: trimmed, orgName: orgName.trim(), state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier };
+      const r = await startSiteEnrollment(trimmed);
+      const stash: ConnectStash = { mode: kind, name: trimmed, state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce };
       sessionStorage.setItem(CONNECT_KEY, JSON.stringify(stash));
       window.location.href = r.url; // → <name>.impact-agent.me; returns with ?code&state
     } catch (e) {
@@ -70,15 +69,13 @@ export function OnboardPanel({ kind, onExplore }: { kind: OnboardKind; onExplore
         <input
           type="text" value={name} placeholder="e.g. rich-pedersen" autoCapitalize="none" spellCheck={false} disabled={busy}
           onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-          onKeyDown={(e) => { if (e.key === 'Enter' && kind === 'kc') void connect(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') void connect(); }}
           style={{ ...inputStyle, padding: '.7rem .9rem', fontSize: '1rem', fontFamily: "'SF Mono','Roboto Mono',monospace" }}
         />
         {kind === 'gco' && (
-          <input
-            type="text" value={orgName} placeholder="GCO organization name (e.g. Hope Church Missions Team)" disabled={busy}
-            onChange={(e) => setOrgName(e.target.value)}
-            style={{ ...inputStyle, padding: '.7rem .9rem', fontSize: '.95rem' }}
-          />
+          <p style={{ fontSize: '.76rem', color: 'var(--c-g500)', margin: 0 }}>
+            You&rsquo;ll name + create the organization that takes the GCO role right after you connect.
+          </p>
         )}
         {trimmed && (
           <div style={{ fontSize: '.75rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>

@@ -11,13 +11,15 @@ import { privateKeyToAccount } from 'viem/accounts';
 import type { Address } from '@agenticprimitives/types';
 import { GCO_ORG, GCO_PERSON_EOA, KC_EOA } from './personas';
 
-/** A GCO Organization member: a signatory PERSON who created an ORG that holds the GCO role. */
+/** A GCO Organization member: a signatory PERSON who created an ORG that holds the GCO role.
+ *  Two-step (mirrors demo-jp Adopter): the person connects first (`org` pending = undefined),
+ *  then creates the org from inside the intranet, which fills in `orgName` + `org`. */
 export interface GcoMember {
   id: string;
-  signatory: string; // the person who created the org
-  orgName: string; // the org that takes the GCO role
+  signatory: string; // the connected person (their Global.Church name) — the org's signatory
+  orgName: string; // the org that takes the GCO role ('' until created)
   person: Address; // the signatory's agent
-  org: Address; // the GCO org agent (the role belongs here)
+  org?: Address; // the GCO org agent (the role belongs here); undefined until org-create completes
 }
 
 /** A KC Expert member: an individual person agent with skills. */
@@ -94,7 +96,7 @@ export function memberName(addr?: string): string | undefined {
   if (!addr) return undefined;
   const lc = addr.toLowerCase();
   for (const m of _db.gco) {
-    if (m.org.toLowerCase() === lc) return `${m.orgName} (GCO)`;
+    if (m.org && m.org.toLowerCase() === lc) return `${m.orgName} (GCO)`;
     if (m.person.toLowerCase() === lc) return `${m.signatory} (GCO signatory)`;
   }
   for (const m of _db.kc) if (m.person.toLowerCase() === lc) return `${m.name} (KC)`;
@@ -145,15 +147,28 @@ export function createConnectedKc(name: string, person: Address): KcMember {
   return m;
 }
 
-/** A GCO Organization backed by a real connected signatory person + the org SA they created. */
-export function createConnectedGco(signatory: string, orgName: string, person: Address, org: Address): GcoMember {
+/** Step 1 of the GCO flow: the connected signatory PERSON (org still pending). The org is created
+ *  in a second ceremony from inside the intranet (org-create needs an existing person), then
+ *  `attachGcoOrg` fills it in — exactly like demo-jp's Adopter (connect person → create org later).
+ *  `signatory` is the person's Global.Church name (used to resolve their home for org-create). */
+export function createConnectedGcoPerson(signatory: string, person: Address): GcoMember {
   _db.enteredGco = true;
-  const existing = _db.gco.find((m) => m.org.toLowerCase() === org.toLowerCase());
+  const existing = _db.gco.find((m) => m.person.toLowerCase() === person.toLowerCase());
   if (existing) { _db.activeGcoId = existing.id; commit(); return existing; }
   const n = (_db.counter += 1);
-  const m: GcoMember = { id: `gco-c-${n}`, signatory, orgName, person, org };
+  const m: GcoMember = { id: `gco-c-${n}`, signatory, orgName: '', person };
   _db.gco.unshift(m);
   _db.activeGcoId = m.id;
+  commit();
+  return m;
+}
+
+/** Step 2 of the GCO flow: the org-create ceremony returned the deployed org SA — attach it to the
+ *  active GCO member (the person who just created it), giving the org the GCO role. */
+export function attachGcoOrg(orgName: string, org: Address): GcoMember {
+  const m = activeGco();
+  m.orgName = orgName;
+  m.org = org;
   commit();
   return m;
 }
