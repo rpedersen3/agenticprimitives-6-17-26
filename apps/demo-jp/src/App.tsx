@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box } from '@mui/material';
+import { Box, Card as MuiCard, CardContent, Typography, Link as MuiLink, Stack, Chip } from '@mui/material';
 import type { Address, Hex } from '@agenticprimitives/types';
 import { JP } from './lib/brand';
 import { startSiteEnrollment, startOrgCreation, exchangeCode, verifyIdToken, listRelatedOrgs, type RelatedOrgLink } from './connect-client';
@@ -7,6 +7,11 @@ import { orgPurpose } from './lib/member-org';
 import { predictOrgAddress } from './lib/onchain';
 import { MemberOrgSection } from './components/MemberOrgSection';
 import { IntentRequest } from './components/IntentRequest';
+import { LifecycleRail } from './components/LifecycleRail';
+import { NextBestAction, type NextAction } from './components/NextBestAction';
+import { AccessRequestState } from './components/AccessRequestState';
+import { adopterLifecycle, type AdopterLifecyclePosition, type AdopterRequestStatus } from './lib/adopter-lifecycle';
+import { loadIntents, type BoardIntent } from './lib/broker-store';
 import { personalAuthOrigin, nameLabel } from './lib/domain';
 import {
   type AdopterStep, type AdopterType, type Attestation,
@@ -638,6 +643,8 @@ export function App() {
             relatedOrgs={relatedOrgs}
             onCreateOrg={(name) => goCreateOrg('adopter', name)}
             onSignOut={signOut}
+            onReconnect={goConnect}
+            onOpenHome={onOpenHome}
             onOpenWea={() => setModal({ kind: 'wea' })}
             onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
             onGoSignWea={() => goSignWeaAtImpact(session.name)}
@@ -827,26 +834,57 @@ function DemoAdminBanner() {
 // these ceremonies). Steps that Impact already satisfies show as "✓ on file";
 // JP-specific steps expand into inline forms when active.
 
-function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
+// Wave 3 restructure (design spec §10 + §15a/§15b/§15c/§15d) — the adopter workspace, in MUI, mirrors
+// demo-gs's `GcoView`: an active-role header (the Wave-1 `IntranetTopbar` shell), a `LifecycleRail`,
+// a PRIMARY TASK card (the facilitator request, re-homed from `IntentRequest`) + a `NextBestAction`
+// right rail, an adopter-org setup card (`MemberOrgSection`), the match/agreement surfaces
+// (`AdoptionSummary` / `MatchedFacilitatorsPanel`), and a data/trust footer. The adopter business
+// logic (`adopterSteps`, `MemberOrgSection`, `IntentRequest`, the vault loads) is re-homed, not
+// rewritten. Grant-missing is a first-class `AccessRequestState` (the §15c "reconnect to refresh JP
+// access" recovery), since the member→JP grant is the ONE read mechanism (ADR-0013, no fallback).
+function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, onReconnect, onOpenHome, onOpenWea, onGoEditProfile, onGoSignWea }: {
   session: Session; org: RelatedOrgLink | null; relatedOrgs: RelatedOrgLink[]; onCreateOrg: (orgName: string) => void;
-  onSignOut: () => void; onOpenWea: () => void;
+  onSignOut: () => void; onReconnect: () => void; onOpenHome: () => void; onOpenWea: () => void;
   onGoEditProfile: (missingKeys: string[]) => void;
   onGoSignWea: () => void;
 }) {
   const [impact, setImpact] = useState<ImpactProfile>({ v: 1, attestations: {} });
   const [record, setRecord] = useState<JpAdopterRecord>({ v: 1, attestations: {} });
-  // Profile + JP record live in JP Org's vault (spec 247); load on mount (the parent
-  // re-mounts this on vaultBump after handoff-return merges, so edits reload).
+  // The member→JP grant is the single mechanism (ADR-0013) for reading the JP-program records. If it is
+  // absent or the vault read throws, that is grant-missing — a first-class state (§15c), not a raw error.
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'grant-missing'>('loading');
+  // Existing facilitator requests for this adopter, from the JP board — drives the duplicate/edit/
+  // withdraw state (§15c "Adopter request duplicated") + the lifecycle tail. Person SA + the person's
+  // related orgs are the principals an intent can be expressed by.
+  const [boardIntents, setBoardIntents] = useState<BoardIntent[]>([]);
+
+  // Profile + JP record live in the member's vault (spec 247), read via the grant; load on mount (the
+  // parent re-mounts this on vaultBump after handoff-return merges, so edits reload).
   useEffect(() => {
     const grant = session.grant;
-    if (!grant) return;
+    if (!grant) { setLoadState('grant-missing'); return; }
     let cancelled = false;
+    setLoadState('loading');
     void (async () => {
-      const [i, r] = await Promise.all([loadImpactProfile(grant), loadJpAdopterRecord(grant)]);
-      if (!cancelled) { setImpact(i); setRecord(r); }
+      try {
+        const [i, r] = await Promise.all([loadImpactProfile(grant), loadJpAdopterRecord(grant)]);
+        if (cancelled) return;
+        setImpact(i); setRecord(r); setLoadState('ready');
+      } catch {
+        if (!cancelled) setLoadState('grant-missing');
+      }
     })();
     return () => { cancelled = true; };
   }, [session.grant]);
+
+  // The facilitator-request board is JP-org-owned (idempotent read); informational for the lifecycle/
+  // duplicate state, so a failure is non-blocking (it just leaves the tail empty).
+  useEffect(() => {
+    let cancelled = false;
+    void loadIntents().then((rows) => { if (!cancelled) setBoardIntents(rows); }).catch(() => { if (!cancelled) setBoardIntents([]); });
+    return () => { cancelled = true; };
+  }, [session.grant]);
+
   const update = useCallback((next: JpAdopterRecord) => {
     if (session.grant) void saveJpAdopterRecord(session.grant, next);
     setRecord(next);
@@ -859,7 +897,57 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
   const canDeclare = useMemo(() => canDeclareAdoption(impact, record), [impact, record]);
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
 
+  // This adopter's own facilitator requests (expressed by the person SA or one of their related orgs).
+  const myRequests = useMemo(() => {
+    const principals = new Set<string>([session.address.toLowerCase(), ...relatedOrgs.map((o) => o.orgAgent.toLowerCase())]);
+    return boardIntents.filter((b) => b.object === 'facilitator' && principals.has(b.expressedBy.toLowerCase()));
+  }, [boardIntents, session.address, relatedOrgs]);
+
+  const requestStatus: AdopterRequestStatus = useMemo(() => ({
+    // A request exists if a board intent was written OR the declaration carries the request flag.
+    requested: myRequests.length > 0 || !!record.adoption?.requestFacilitator,
+    // "matched" once any of this adopter's requests has been brokered into a match on the board.
+    matched: myRequests.some((b) => b.state === 'matched'),
+    // No on-chain agreement signal in the adopter's entitled view yet; keep it honest (false).
+    agreement: false,
+  }), [myRequests, record.adoption?.requestFacilitator]);
+
+  const lifecycle = useMemo(
+    () => adopterLifecycle({ impact, record, hasAdopterOrg: !!org, request: requestStatus }),
+    [impact, record, org, requestStatus],
+  );
+  const nextAction = useMemo(
+    () => adopterNextAction(lifecycle.position, { canRequest: complete, hasRequest: myRequests.length > 0 }),
+    [lifecycle.position, complete, myRequests.length],
+  );
+
   const displayName = displayNameFromImpact(impact, session.name);
+
+  // ── Grant-missing: render the request-access state instead of a raw error (§15c / §15b.1). The ONE
+  // recovery is to reconnect (re-mint the session grant); a limited "open your home" escape is offered.
+  if (loadState === 'grant-missing') {
+    return (
+      <>
+        <IntranetTopbar session={session} subtitle="Adopter dashboard" onSignOut={onSignOut} impact={null} />
+        <section className="section wrap">
+          <AccessRequestState
+            title="Please reconnect to refresh JP access"
+            body={`${JP.org} can’t read your adopter records right now — the access you approved at sign-in is missing or expired. Reconnect through your ${JP.impactName} home to refresh it. There’s no silent fallback: this grant is the only way ${JP.org} reads your records.`}
+            disclosure={{
+              owner: `You — your ${JP.impactName} home`,
+              scope: `Your JP adopter program records (intended JP program scope; record-level enforcement lands with spec 248)`,
+              grantee: JP.org,
+              revoke: `Anytime, from your ${JP.impactName} home`,
+            }}
+            primary={{ label: 'Reconnect to refresh JP access', onClick: onReconnect }}
+            limited={{ label: `Open your ${JP.impactName} home`, onClick: onOpenHome }}
+          />
+        </section>
+        <IntranetFooter />
+      </>
+    );
+  }
+
   return (
     <>
       <IntranetTopbar session={session} subtitle="Adopter dashboard" onSignOut={onSignOut} impact={impact} />
@@ -876,12 +964,41 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
         </div>
       )}
 
-      <MemberOrgSection kind="adopter" org={org} onCreateOrg={onCreateOrg} />
+      <section className="section wrap">
+        {/* Active-role pill (§10 header) + the lifecycle rail. */}
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+          <Chip label="Working as Adopter" color="primary" size="small" sx={{ fontWeight: 700 }} />
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Your next adoption action, by where you are in the journey.
+          </Typography>
+        </Stack>
+        <LifecycleRail eyebrow="Adopter lifecycle" steps={lifecycle.steps} />
 
-      <section className="section wrap" style={{ paddingTop: 0 }}>
-        <IntentRequest personSa={session.address} personName={session.name} orgs={relatedOrgs} />
+        {/* Primary task (request a facilitator) + next-best-action right rail (stacks on mobile). */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 2fr) minmax(260px, 1fr)' },
+            gap: 2.5,
+            alignItems: 'start',
+            mt: 2,
+          }}
+        >
+          <Box>
+            <Typography variant="overline" sx={{ display: 'block', color: 'primary.main', fontWeight: 700, letterSpacing: '.08em', mb: 0.5 }}>
+              Primary task · request a facilitator
+            </Typography>
+            <AdopterRequestState requests={myRequests} homeUrl={homeUrl} />
+            <IntentRequest personSa={session.address} personName={session.name} orgs={relatedOrgs} />
+          </Box>
+          <NextBestAction action={nextAction} />
+        </Box>
       </section>
 
+      {/* Adopter-org setup card (§10 secondary card) — re-homed `MemberOrgSection`. */}
+      <MemberOrgSection kind="adopter" org={org} onCreateOrg={onCreateOrg} />
+
+      {/* Setup / declaration steps + the match/agreement section. */}
       {complete ? (
         <AdoptionSummary session={session} record={record} impact={impact} />
       ) : (
@@ -934,8 +1051,123 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
         </>
       )}
 
+      <AdopterTrustFooter homeUrl={homeUrl} onOpenHome={onOpenHome} />
       <IntranetFooter />
     </>
+  );
+}
+
+// The single most useful next step for the adopter, by lifecycle position (design spec §10 right rail
+// + §15a primary-task states). White-label/faith copy lives in the app (ADR-0021).
+function adopterNextAction(
+  position: AdopterLifecyclePosition,
+  { canRequest, hasRequest }: { canRequest: boolean; hasRequest: boolean },
+): NextAction {
+  switch (position) {
+    case 'ready-to-request':
+      return {
+        title: hasRequest ? 'Your facilitator request is in' : 'Request a facilitator',
+        body: hasRequest
+          ? `Your declaration is complete and your request is on ${JP.org}’s network. You can edit or withdraw it from the request card on the left.`
+          : `Your adoption is declared. Tell ${JP.org} which people group you’re adopting and who is adopting — they’ll broker a facilitator match. Use the request card on the left.`,
+        tone: 'action',
+      };
+    case 'under-jp-review':
+      return {
+        title: `Awaiting ${JP.org} review`,
+        body: `Your request is on the network. ${JP.org} scores it against facilitators serving your people group and will introduce one when there’s a fit. Nothing to do right now.`,
+        tone: 'wait',
+      };
+    case 'match-ready':
+      return {
+        title: 'Review your match',
+        body: `${JP.org} introduced a facilitator who serves your people group with capacity for your adopter type. Review them — and request contact exchange — in the match section below.`,
+        tone: 'action',
+      };
+    case 'agreement':
+      return {
+        title: 'View your agreement',
+        body: 'A facilitator match has moved toward an agreement. Track its consent and issuance status in the match/agreement section below.',
+        tone: 'action',
+      };
+    default: // setup-needed
+      return {
+        title: canRequest ? 'Declare your adoption' : 'Finish your setup',
+        body: `Complete the steps in the lifecycle rail — profile, ADOPT MOU, WEA where required, and your adoption declaration — to unlock requesting a facilitator from ${JP.org}.`,
+        tone: 'action',
+      };
+  }
+}
+
+// The §15c "Adopter request duplicated" state: when a facilitator request already exists, show its
+// status + the honest edit/withdraw affordance, instead of letting the user submit a duplicate. The
+// underlying board does not support withdraw in W1, so we show status + an explained (disabled-style)
+// withdraw affordance pointing at the member's Impact home — honest, no invented store (§15d).
+function AdopterRequestState({ requests, homeUrl }: { requests: BoardIntent[]; homeUrl: string }) {
+  if (requests.length === 0) return null;
+  const stateLabel = (s: BoardIntent['state']): { label: string; color: 'warning' | 'info' | 'success' } => {
+    if (s === 'matched') return { label: 'Matched', color: 'success' };
+    if (s === 'acknowledged') return { label: `${JP.org} reviewing`, color: 'info' };
+    return { label: 'On the network', color: 'warning' };
+  };
+  return (
+    <MuiCard sx={{ mb: 1.5, bgcolor: 'grey.50' }}>
+      <CardContent>
+        <Typography variant="overline" sx={{ display: 'block', color: 'text.secondary', fontWeight: 700, letterSpacing: '.08em' }}>
+          You already have {requests.length === 1 ? 'a request' : `${requests.length} requests`} in
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, mb: 1, lineHeight: 1.5 }}>
+          {JP.org} already has {requests.length === 1 ? 'this request' : 'these requests'}. You don’t need to send a
+          duplicate — submitting again only adds another row. To change or withdraw a request, edit your adoption
+          from your <MuiLink href={homeUrl} target="_blank" rel="noopener noreferrer">{JP.impactName} home</MuiLink>.
+        </Typography>
+        <Stack spacing={1}>
+          {requests.map((r) => {
+            const st = stateLabel(r.state);
+            return (
+              <Box key={r.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Chip label={st.label} color={st.color} size="small" sx={{ fontWeight: 700 }} />
+                <Typography variant="body2" sx={{ color: 'text.primary' }}>{r.label}</Typography>
+              </Box>
+            );
+          })}
+        </Stack>
+      </CardContent>
+    </MuiCard>
+  );
+}
+
+// The persistent data/trust footer (§10 + §15b): where your data lives, what JP can access, how to
+// revoke — with the spec-248 caveat. White-label/faith copy stays in the app (ADR-0021).
+function AdopterTrustFooter({ homeUrl, onOpenHome }: { homeUrl: string; onOpenHome: () => void }) {
+  return (
+    <section className="section wrap" style={{ paddingTop: 0 }}>
+      <MuiCard sx={{ bgcolor: 'grey.50' }}>
+        <CardContent>
+          <Typography variant="overline" sx={{ display: 'block', color: 'text.secondary', fontWeight: 700, letterSpacing: '.08em' }}>
+            Your data &amp; access
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.primary', mt: 0.5, lineHeight: 1.6 }}>
+            Your profile, organizations, and signed documents (the ADOPT MOU and WEA) live in your{' '}
+            <strong>{JP.impactName} home</strong> — {JP.org} never holds them. {JP.org} can use the{' '}
+            <strong>JP-program access you approved</strong> at sign-in: its intended scope is your adopter program
+            records, though record-level enforcement is the intended product model and not yet cryptographically
+            enforced (spec 248). You can <strong>revoke that access anytime from your {JP.impactName} home</strong>,
+            and {JP.org}’s visibility goes to zero.
+          </Typography>
+          <MuiLink
+            component="button"
+            onClick={onOpenHome}
+            sx={{ mt: 1, fontWeight: 700, fontSize: '.85rem', display: 'inline-block' }}
+          >
+            Open your {JP.impactName} home →
+          </MuiLink>
+          <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
+            Home: <MuiLink href={homeUrl} target="_blank" rel="noopener noreferrer">{homeUrl}</MuiLink>
+          </Typography>
+        </CardContent>
+      </MuiCard>
+    </section>
   );
 }
 
