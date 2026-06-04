@@ -1,17 +1,19 @@
-// demo-gs shell (spec 250 + spec 252 Wave 2). 4 roles mirroring demo-jp: a GCO Organization (demand;
-// a person creates an org that holds the GCO role + posts Needs), a KC Expert (supply; an individual
-// person with skills), Jane/Global Switchboard (broker), Pete/Global Church (issuer).
+// demo-gs shell (spec 250 + spec 252 Wave 2; production UX Wave A/B). 4 roles mirroring demo-jp: a GCO
+// Organization (demand; a person creates an org that holds the GCO role + posts Needs), a KC Expert
+// (supply; an individual person with skills), Jane/Global Switchboard (broker), Pete/Global Church
+// (issuer).
 //
-// Wave 2 = STRICT least-privilege. Members come ONLY from a real Connect sign-in; there are no sample
-// identities. Member-owned data (KC offerings, GCO needs) lives in each member's OWN vault; the store
-// hydrates the ACTIVE identity's ENTITLED view (own data + a coarsened public feed). Jane (the broker)
-// sees the full member view via the grants members issued her; Pete (issuer) sees agreements only.
+// Wave A/B reshell (production UX): the free persona toggle (RoleSwitcher) is retired. Member roles now
+// require a real Connect session; Jane/Pete are DEMO ADMIN dropdown shortcuts that never disturb a
+// member session. Routing: signed-out → Landing → ConnectGrantReview → (Global.Church) → RoleDiscovery
+// (while hydrating) → RoleHub / active workspace. The entitlement layer (store/session/member-vault)
+// and the connect-return handler + workspace BODIES are unchanged — this restructures the SHELL.
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import { PERSONA_META, actingAgents, loadPersona, savePersona, type Persona } from './lib/personas';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { actingAgents, type Persona } from './lib/personas';
 import { ensureSwitchboardDeployed } from './lib/onchain';
 import {
-  allAgreements, allNeeds, allOfferings, hydrate, isHydrated, loadError, publicNeedEntries,
+  allAgreements, allNeeds, allOfferings, isHydrated, loadError, publicNeedEntries,
   publicOfferingEntries, setActiveContext, subscribe, version,
 } from './lib/store';
 import {
@@ -19,8 +21,16 @@ import {
 } from './lib/session';
 import { registerMember } from './lib/member-vault';
 import { exchangeCode, personAddressFromIdToken, startOrgCreation } from './connect-client';
-import { RoleSwitcher } from './components/RoleSwitcher';
-import { OnboardPanel, CONNECT_KEY, type ConnectStash } from './components/OnboardPanel';
+import { CONNECT_KEY, type ConnectStash } from './lib/connect-launch';
+import { deriveRoleCapabilities, type RoleKind } from './lib/role-capabilities';
+import { loadActiveRole, saveActiveRole } from './lib/active-role';
+import { personalHome } from './lib/domain';
+import { AppShellHeader, type ConnectedIdentity } from './components/AppShellHeader';
+import { Landing } from './components/Landing';
+import { ConnectGrantReview } from './components/ConnectGrantReview';
+import { RoleDiscovery } from './components/RoleDiscovery';
+import { RoleHub } from './components/RoleHub';
+import { OnboardPanel } from './components/OnboardPanel';
 import { GcoNeedWizard } from './components/GcoNeedWizard';
 import { ExpertOfferingWizard } from './components/ExpertOfferingWizard';
 import { MatchBoard } from './components/MatchBoard';
@@ -30,14 +40,26 @@ import { SubstrateClaimsPanel } from './components/SubstrateClaimsPanel';
 import { SwitchboardBridgePanel } from './components/SwitchboardBridgePanel';
 import { DirectoryPanel } from './components/DirectoryPanel';
 import { Banner, Card, Pill, SectionHead } from './components/ui';
-import { personalHome } from './lib/domain';
 
 /** sessionStorage key + stash for the in-flight org-create redirect (GCO step 2). */
 const ORG_KEY = 'agenticprimitives:demo-gs:org-create';
 interface OrgStash { state: string; signatory: string; orgName: string; authOrigin: string; codeVerifier: string; nonce: string }
 
+// The shell route. `landing` = signed out; `entry` = role-aware connect/grant review; `discovery` =
+// post-connect hydration timeline; `hub` = connected role chooser; `workspace` = an active workspace OR
+// a demo-admin surface (persona carries which). `demoPersona` is set ONLY for jane/pete shortcuts.
+type View = 'landing' | 'entry' | 'discovery' | 'hub' | 'workspace';
+
 export function App() {
-  const [persona, setPersona] = useState<Persona>(loadPersona() ?? 'gco');
+  const [view, setView] = useState<View>('landing');
+  // The active member workspace role (gco/kc) when view==='workspace' and not a demo surface.
+  const [activeRole, setActiveRoleState] = useState<RoleKind | null>(null);
+  // A demo-admin surface (jane/pete) — orthogonal to the member session; never mutates it.
+  const [demoPersona, setDemoPersona] = useState<'jane' | 'pete' | null>(null);
+  // The role being set up in the entry (grant-review) screen, or null for help-me-choose.
+  const [entryKind, setEntryKind] = useState<RoleKind | null>(null);
+  // The kind we're discovering after a connect-return (drives the RoleDiscovery access table).
+  const [discoverKind, setDiscoverKind] = useState<RoleKind>('kc');
   const [connectError, setConnectError] = useState<string | null>(null);
   // A GCO signatory who finished step 1 (site-login) but hasn't created the org yet. Not a session
   // (no org SA / grant yet) — a transient between the two ceremonies, kept in component state.
@@ -47,19 +69,75 @@ export function App() {
   useSyncExternalStore(subscribe, version, version);
   useSyncExternalStore(subscribeSessions, sessionsVersion, sessionsVersion);
 
-  // Activate a persona's entitled context (re-hydrates the store from the right vault(s)). Members
-  // carry their session; operators (jane/pete) have none.
+  const kcSession = loadSession('kc');
+  const gcoSession = loadSession('gco');
+  const caps = useMemo(
+    () => deriveRoleCapabilities({ kcSession, gcoSession, pendingGco: !!pendingGco }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kcSession?.sa, gcoSession?.sa, pendingGco?.signatory],
+  );
+  // The canonical person key for the active-role preference: the KC person SA when present, else the
+  // GCO signatory name (a GCO session's `sa` is the ORG SA, not the person).
+  const personKey = kcSession?.sa ?? gcoSession?.signatory ?? gcoSession?.name ?? '';
+  const connected = !!kcSession || !!gcoSession;
+
+  // Activate a persona's entitled context (re-hydrates the store from the right vault(s)).
   const activate = (p: Persona) =>
     setActiveContext({ persona: p, session: p === 'kc' || p === 'gco' ? loadSession(p) : null });
-  const select = (p: Persona) => {
-    setPersona(p);
-    savePersona(p);
+
+  // Open a member workspace for a ready role: persist the preference, hydrate, route.
+  const openWorkspace = (role: RoleKind) => {
+    setDemoPersona(null);
+    setActiveRoleState(role);
+    if (personKey) saveActiveRole(personKey, role);
+    setView('workspace');
+    void activate(role).catch(() => { /* surfaced via loadError() */ });
+  };
+
+  // Open a demo-admin surface WITHOUT touching the member session (spec §15c).
+  const openDemo = (p: 'jane' | 'pete') => {
+    setDemoPersona(p);
+    setView('workspace');
     void activate(p).catch(() => { /* surfaced via loadError() */ });
   };
 
-  // Initial hydrate for the starting persona.
+  // Begin (or resume) setup for a role → the role-aware connect entry.
+  const beginEntry = (kind: RoleKind | null) => { setEntryKind(kind); setView('entry'); };
+
+  const goHub = () => { setDemoPersona(null); setActiveRoleState(null); setView('hub'); };
+
+  const disconnect = () => {
+    clearSession('kc');
+    clearSession('gco');
+    setPendingGco(null);
+    setActiveRoleState(null);
+    setDemoPersona(null);
+    setView('landing');
+    void setActiveContext({ persona: 'jane', session: null }).catch(() => { /* ignore */ });
+  };
+
+  // After a connect-return, the App sets pendingGco / a session + a discovery kind; once the store is
+  // hydrated we route on. This effect performs that transition. It runs on every hydrate change.
   useEffect(() => {
-    void activate(persona).catch(() => { /* surfaced via loadError() */ });
+    if (view !== 'discovery') return;
+    if (loadError()) return; // stay on discovery; RoleDiscovery shows the error + retry
+    if (isHydrated()) openWorkspace(discoverKind);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, discoverKind, version()]);
+
+  // Restore the connected view on load (a returning member with a saved session, no ?code in the URL).
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    if (u.searchParams.get('code')) return; // the connect-return effect owns this case
+    const kc = loadSession('kc');
+    const gco = loadSession('gco');
+    if (!kc && !gco) { setView('landing'); return; }
+    const pk = kc?.sa ?? gco?.signatory ?? gco?.name ?? '';
+    const pref = (pk && loadActiveRole(pk)) ?? (gco ? 'gco' : 'kc');
+    const ready: RoleKind = (pref === 'gco' && gco) || (pref === 'kc' && kc) ? pref : (gco ? 'gco' : 'kc');
+    setActiveRoleState(ready);
+    setView('workspace');
+    void setActiveContext({ persona: ready, session: loadSession(ready) }).catch(() => { /* loadError() */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -96,7 +174,11 @@ export function App() {
           setSession(session);
           setPendingGco(null); // org created — leave the step-2 transient
           await registerMember({ kind: 'gco', sa: tok.org.orgAgent, name: tok.org.orgName, orgName: tok.org.orgName, signatory: orgStash.signatory!, delegation: tok.org.brokerDelegation });
-          setPersona('gco'); savePersona('gco');
+          saveActiveRole(orgStash.signatory!, 'gco');
+          // Route through visible discovery while the entitled view hydrates.
+          setActiveRoleState('gco');
+          setDiscoverKind('gco');
+          setView('discovery');
           await setActiveContext({ persona: 'gco', session });
         } catch (e) {
           setConnectError(e instanceof Error ? e.message : String(e));
@@ -122,15 +204,20 @@ export function App() {
           // grant come from step 2). Stash the signatory name so GcoOrgCreate can launch the ceremony.
           void person;
           setPendingGco({ signatory: stash.name! });
-          setPersona('gco'); savePersona('gco');
+          setActiveRoleState('gco');
+          setView('workspace'); // → GcoView renders GcoOrgCreate (step 2)
         } else {
           // KC: the site-login `tok.delegation` IS the grant (person → DEMO_GS_DELEGATE). No grant =
           // no vault access; surface it (ADR-0013, no silent fallback).
           if (!tok.delegation) throw new Error('your home did not return a Switchboard access grant — please retry sign-in');
           const session: MemberSession = { kind: 'kc', sa: person, name: stash.name!, grant: tok.delegation };
           setSession(session);
+          saveActiveRole(person, 'kc');
           await registerMember({ kind: 'kc', sa: person, name: stash.name!, delegation: tok.delegation });
-          setPersona('kc'); savePersona('kc');
+          // Route through visible discovery while the entitled view hydrates.
+          setActiveRoleState('kc');
+          setDiscoverKind('kc');
+          setView('discovery');
           await setActiveContext({ persona: 'kc', session });
         }
       } catch (e) {
@@ -140,51 +227,75 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const meta = PERSONA_META[persona];
+  // The identity pill shows the connected person + active role (member surfaces only; demo surfaces
+  // keep the underlying member identity in the header but flag the demo banner in the body).
+  const identity: ConnectedIdentity | null = connected
+    ? { name: kcSession?.name ?? gcoSession?.signatory ?? gcoSession?.name ?? 'you', activeRole: activeRole ?? caps.recommendedRole ?? 'kc' }
+    : null;
+
+  const onOpenHome = () => {
+    const n = kcSession?.name ?? gcoSession?.signatory ?? gcoSession?.name;
+    if (n) window.open(`https://${personalHome(n)}`, '_blank', 'noopener');
+  };
 
   return (
     <>
-      <header className="topbar">
-        <div className="wrap">
-          <div className="brand">
-            <span className="brand-glyph" aria-hidden="true">🎛️</span>
-            <span>Global Switchboard<small>skills · needs · offerings · matches</small></span>
-          </div>
-          <span className="powered">powered by <b>agentic primitives</b></span>
-        </div>
-      </header>
+      <AppShellHeader
+        identity={identity}
+        caps={connected ? caps : null}
+        onConnect={() => beginEntry(null)}
+        onDemoJane={() => openDemo('jane')}
+        onDemoPete={() => openDemo('pete')}
+        onHelp={() => beginEntry(null)}
+        onOpenHome={onOpenHome}
+        onDisconnect={disconnect}
+        onSwitchRole={(k) => openWorkspace(k)}
+        onSetupRole={(k) => beginEntry(k)}
+      />
 
       <div className="wrap" style={{ padding: '1.5rem 1.25rem 0' }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          <RoleSwitcher active={persona} onSelect={select} />
-        </div>
-
-        <Card style={{ marginBottom: '1.25rem', background: 'var(--c-primary-subtle)', borderColor: 'var(--c-primary-border)' }}>
-          <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '1.4rem' }} aria-hidden="true">{meta.glyph}</span>
-            <div>
-              <strong style={{ fontSize: '.95rem' }}>{meta.label} · {meta.org}</strong>
-              <p style={{ fontSize: '.82rem', color: 'var(--c-g600)', marginTop: '.15rem' }}>{meta.blurb}</p>
-            </div>
-            <span style={{ marginLeft: 'auto', fontSize: '.72rem', color: 'var(--c-g500)' }}>
-              <Pill tone="neutral">Need → Offering → IntentMatch → Agreement</Pill>
-            </span>
-          </div>
-        </Card>
-
         {connectError && <div style={{ marginBottom: '1rem' }}><Banner tone="err">{connectError}</Banner></div>}
-        {loadError() && <div style={{ marginBottom: '1rem' }}><Banner tone="err">Couldn&rsquo;t reach the vault: {loadError()}. This view may be out of date until it reconnects.</Banner></div>}
-        {!isHydrated() && !loadError() && (
-          <div style={{ marginBottom: '1rem', fontSize: '.78rem', color: 'var(--c-g500)' }}>
-            ⟳ loading your entitled view from the vault…
-          </div>
+        {view === 'workspace' && loadError() && (
+          <div style={{ marginBottom: '1rem' }}><Banner tone="err">Couldn&rsquo;t reach the vault: {loadError()}. This view may be out of date until it reconnects.</Banner></div>
         )}
 
         <div style={{ display: 'grid', gap: '1.25rem', paddingBottom: '2rem' }}>
-          {persona === 'gco' && <GcoView pendingGco={pendingGco} onClearPending={() => setPendingGco(null)} />}
-          {persona === 'kc' && <KcView />}
-          {persona === 'jane' && <JaneView />}
-          {persona === 'pete' && <PeteView />}
+          {view === 'landing' && <Landing onChoose={(k) => beginEntry(k)} />}
+
+          {view === 'entry' && entryKind && (
+            <ConnectGrantReview kind={entryKind} onSwitchPath={(k) => setEntryKind(k)} onBack={() => setView('landing')} />
+          )}
+          {view === 'entry' && !entryKind && (
+            // Help-me-choose: pick a role intent, then its grant review.
+            <div style={{ display: 'grid', gap: '1rem', maxWidth: 560, margin: '0 auto' }}>
+              <SectionHead eyebrow="Choose a role" title="Post a need, or offer a skill?" sub="You connect once through your Global.Church home — a role is a workspace, not a separate account." />
+              <div style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap' }}>
+                <button className="btn-primary" onClick={() => setEntryKind('gco')} style={chooseBtn}>Post a need (GCO →)</button>
+                <button className="btn-ghost" onClick={() => setEntryKind('kc')} style={chooseBtn}>Offer a skill (KC →)</button>
+              </div>
+            </div>
+          )}
+
+          {view === 'discovery' && <RoleDiscovery kind={discoverKind} onRetry={() => void activate(discoverKind)} />}
+
+          {view === 'hub' && (
+            <RoleHub
+              name={identity?.name ?? 'there'}
+              caps={caps}
+              onOpen={(k) => openWorkspace(k)}
+              onResumeOrg={() => { setDemoPersona(null); setActiveRoleState('gco'); setView('workspace'); }}
+              onSetup={(k) => beginEntry(k)}
+              onOpenHome={onOpenHome}
+            />
+          )}
+
+          {view === 'workspace' && demoPersona && <DemoBanner />}
+          {view === 'workspace' && demoPersona === 'jane' && <JaneView />}
+          {view === 'workspace' && demoPersona === 'pete' && <PeteView />}
+          {view === 'workspace' && !demoPersona && activeRole === 'gco' && (
+            <GcoView pendingGco={pendingGco} onClearPending={() => setPendingGco(null)} onHub={goHub} caps={caps} />
+          )}
+          {view === 'workspace' && !demoPersona && activeRole === 'kc' && <KcView onHub={goHub} caps={caps} />}
         </div>
       </div>
 
@@ -198,15 +309,33 @@ export function App() {
   );
 }
 
-// Thin "you're inside the member intranet" bar with a sign-out (clears the session credential).
-function IntranetHeader({ label, role, onSignOut }: { label: string; role: string; onSignOut: () => void }) {
+const chooseBtn: React.CSSProperties = {
+  borderRadius: 10, padding: '.7rem 1.3rem', fontWeight: 700, fontSize: '.92rem', cursor: 'pointer', border: 'none',
+};
+
+// Demo-admin banner — Jane/Pete are demo shortcuts, never production authorization (spec §15c).
+function DemoBanner() {
+  return (
+    <Banner tone="warn">
+      Demo admin surface — Jane/Pete run on deterministic demo keys (spec 248 hardening pending). Not production
+      authorization, and your connected member session (if any) is untouched.
+    </Banner>
+  );
+}
+
+// Thin "you're inside the member intranet" bar. Hub returns to the role chooser; sign-out clears the
+// session credential for this role.
+function IntranetHeader({ label, role, onSignOut, onHub }: { label: string; role: string; onSignOut: () => void; onHub?: () => void }) {
   return (
     <Card style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', background: 'var(--c-g50)', padding: '.7rem 1rem' }}>
       <span style={{ fontSize: '.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--c-g500)' }}>{role} intranet</span>
       <span style={{ fontSize: '.9rem', fontWeight: 700, color: 'var(--c-g800)' }}>{label}</span>
-      <button onClick={onSignOut} style={{ marginLeft: 'auto', fontSize: '.76rem', color: 'var(--c-g500)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-        sign out
-      </button>
+      <span style={{ marginLeft: 'auto', display: 'flex', gap: '.9rem' }}>
+        {onHub && <button onClick={onHub} style={{ fontSize: '.76rem', color: 'var(--c-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>role hub</button>}
+        <button onClick={onSignOut} style={{ fontSize: '.76rem', color: 'var(--c-g500)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+          sign out
+        </button>
+      </span>
     </Card>
   );
 }
@@ -273,7 +402,10 @@ function GcoOrgCreate({ signatory, onSignOut }: { signatory: string; onSignOut: 
 // The GCO Organization (demand). No session → onboarding landing. Connected but org not yet created
 // (pendingGco) → the org-create ceremony. Connected with a session → the org intranet: post Needs to
 // your OWN org vault, browse the COARSENED public supply, see YOUR agreements.
-function GcoView({ pendingGco, onClearPending }: { pendingGco: { signatory: string } | null; onClearPending: () => void }) {
+function GcoView({ pendingGco, onClearPending, onHub, caps }: {
+  pendingGco: { signatory: string } | null; onClearPending: () => void; onHub: () => void;
+  caps: ReturnType<typeof deriveRoleCapabilities>;
+}) {
   const session = loadSession('gco');
   if (!session) {
     if (pendingGco) return <GcoOrgCreate signatory={pendingGco.signatory} onSignOut={onClearPending} />;
@@ -286,6 +418,7 @@ function GcoView({ pendingGco, onClearPending }: { pendingGco: { signatory: stri
       <IntranetHeader
         label={`${session.orgName ?? session.name} · signatory ${session.signatory ?? session.name}`}
         role="GCO Organization"
+        onHub={caps.canSwitch ? onHub : undefined}
         onSignOut={() => { clearSession('gco'); void setActiveContext({ persona: 'gco', session: null }); }}
       />
       <GcoNeedWizard ownerOrg={org} signatory={org} session={session} />
@@ -333,14 +466,19 @@ function JaneView() {
 // The KC Expert (supply) — an INDIVIDUAL connected person agent. No session → onboarding. Connected →
 // the intranet: publish ONE Offering to your OWN vault, browse the COARSENED public demand, accept
 // requests on YOUR agreements.
-function KcView() {
+function KcView({ onHub, caps }: { onHub: () => void; caps: ReturnType<typeof deriveRoleCapabilities> }) {
   const session = loadSession('kc');
   if (!session) return <OnboardPanel kind="kc" />;
   const kc = session.sa;
   const myOfferings = allOfferings();
   return (
     <>
-      <IntranetHeader label={session.name} role="KC Expert" onSignOut={() => { clearSession('kc'); void setActiveContext({ persona: 'kc', session: null }); }} />
+      <IntranetHeader
+        label={session.name}
+        role="KC Expert"
+        onHub={caps.canSwitch ? onHub : undefined}
+        onSignOut={() => { clearSession('kc'); void setActiveContext({ persona: 'kc', session: null }); }}
+      />
       <ExpertOfferingWizard owner={kc} ownerName={session.name} session={session} />
       <Card>
         <SectionHead eyebrow="KC Expert · my offering" title="Your published offering" sub="Lives in YOUR vault; the Switchboard reads it only through the grant you issued at sign-in." />

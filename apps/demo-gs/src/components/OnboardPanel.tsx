@@ -8,20 +8,12 @@
 import { useState } from 'react';
 import { GS, type OnboardKind } from '../lib/gs-brand';
 import { personalHome, toAgentName } from '../lib/domain';
-import { startSiteEnrollment } from '../connect-client';
+import { LAST_NAME_KEY, startConnect } from '../lib/connect-launch';
 import { Banner, Card, inputStyle } from './ui';
 
-export const CONNECT_KEY = 'agenticprimitives:demo-gs:connect';
-const LAST_NAME_KEY = 'agenticprimitives:demo-gs:last-name';
-
-export interface ConnectStash {
-  mode: OnboardKind;
-  name: string;
-  state: string;
-  authOrigin: string;
-  codeVerifier: string;
-  nonce: string;
-}
+// Stash key + shape now live in `lib/connect-launch` (shared with ConnectGrantReview); re-exported
+// here for the App's connect-return handler, which still imports them from OnboardPanel.
+export { CONNECT_KEY, type ConnectStash } from '../lib/connect-launch';
 
 // Both roles first enroll the PERSON via the shared identity (site-login). A KC then acts as that
 // individual; a GCO signatory creates the org that holds the GCO role as a SECOND step from inside
@@ -38,12 +30,8 @@ export function OnboardPanel({ kind }: { kind: OnboardKind }) {
   async function connect() {
     if (!trimmed) { setErr(`Choose your ${GS.community} name (e.g. rich-pedersen).`); return; }
     setBusy(true); setErr(null);
-    try { localStorage.setItem(LAST_NAME_KEY, trimmed); } catch { /* ignore */ }
     try {
-      const r = await startSiteEnrollment(trimmed);
-      const stash: ConnectStash = { mode: kind, name: trimmed, state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce };
-      sessionStorage.setItem(CONNECT_KEY, JSON.stringify(stash));
-      window.location.href = r.url; // → <name>.impact-agent.me; returns with ?code&state
+      await startConnect(kind, trimmed); // stashes PKCE + redirects to the person's home
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
       setBusy(false);
