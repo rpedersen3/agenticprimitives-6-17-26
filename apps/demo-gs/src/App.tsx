@@ -4,21 +4,23 @@
 // can be CREATED in-app (the Adopter/Facilitator analog). The Need → Offering → IntentMatch →
 // Agreement loop is visible end-to-end. v1 is fixture-driven; Phase 1 swaps creation for demo-sso.
 
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { PERSONA_META, actingAgents, loadPersona, savePersona, type Persona } from './lib/personas';
 import { allAgreements, allNeeds, allOfferings, needsForOrg, offeringsForPerson, resetStore, subscribe, version } from './lib/store';
 import {
-  activeGco, activeKc, createGco, createKc, gcoMembers, kcMembers, membersVersion, setActiveGco, setActiveKc, subscribeMembers,
+  activeGco, activeKc, createConnectedGco, createConnectedKc, createGco, createKc, gcoMembers, kcMembers, membersVersion, setActiveGco, setActiveKc, subscribeMembers,
 } from './lib/members';
+import { exchangeCode, personAddressFromIdToken } from './connect-client';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { MemberPicker } from './components/MemberPicker';
+import { ConnectPanel, CONNECT_KEY, type ConnectStash } from './components/ConnectPanel';
 import { GcoNeedWizard } from './components/GcoNeedWizard';
 import { ExpertOfferingWizard } from './components/ExpertOfferingWizard';
 import { MatchBoard } from './components/MatchBoard';
 import { AgreementsPanel } from './components/AgreementsPanel';
 import { PublicSignalPanel } from './components/PublicSignalPanel';
 import { SubstrateClaimsPanel } from './components/SubstrateClaimsPanel';
-import { Card, Pill, SectionHead } from './components/ui';
+import { Banner, Card, Pill, SectionHead } from './components/ui';
 
 export function App() {
   const [persona, setPersona] = useState<Persona>(loadPersona() ?? 'gco');
@@ -26,7 +28,43 @@ export function App() {
   useSyncExternalStore(subscribe, version, version);
   useSyncExternalStore(subscribeMembers, membersVersion, membersVersion);
 
+  const [connectError, setConnectError] = useState<string | null>(null);
   const select = (p: Persona) => { setPersona(p); savePersona(p); };
+
+  // Connect return handler (Phase 1): a person came back from their secure home with ?code&state.
+  // KC → a connected person SA; GCO → the person + the org SA the home deployed. Becomes the active member.
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const code = u.searchParams.get('code');
+    const retState = u.searchParams.get('state');
+    if (!code || !retState) return;
+    for (const k of ['code', 'state']) u.searchParams.delete(k);
+    window.history.replaceState({}, '', u.toString());
+    let stash: Partial<ConnectStash> = {};
+    try { stash = JSON.parse(sessionStorage.getItem(CONNECT_KEY) ?? '{}'); } catch { /* ignore */ }
+    sessionStorage.removeItem(CONNECT_KEY);
+    if (!stash.state || stash.state !== retState || !stash.authOrigin || !stash.codeVerifier || !stash.name) {
+      setConnectError("We couldn't verify that sign-in response. Please try again.");
+      return;
+    }
+    void (async () => {
+      try {
+        const tok = await exchangeCode(stash.authOrigin!, code, stash.codeVerifier!);
+        const person = personAddressFromIdToken(tok.idToken);
+        if (stash.mode === 'gco') {
+          if (!tok.org) throw new Error('no organization was returned from your home');
+          createConnectedGco(stash.name!, tok.org.orgName, person, tok.org.orgAgent);
+          select('gco');
+        } else {
+          createConnectedKc(stash.name!, person);
+          select('kc');
+        }
+      } catch (e) {
+        setConnectError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+  }, []);
+
   // For gco/kc the identity is the ACTIVE created member; operators use their fixed org.
   const me = persona === 'gco' ? { person: activeGco().person, org: activeGco().org }
     : persona === 'kc' ? { person: activeKc().person }
@@ -64,6 +102,8 @@ export function App() {
           </div>
         </Card>
 
+        {connectError && <div style={{ marginBottom: '1rem' }}><Banner tone="err">{connectError}</Banner></div>}
+
         <div style={{ display: 'grid', gap: '1.25rem', paddingBottom: '2rem' }}>
           {persona === 'gco' && <GcoView />}
           {persona === 'kc' && <KcView />}
@@ -100,6 +140,7 @@ function GcoView() {
         fields={[{ key: 'signatory', placeholder: 'Signatory name (the person)' }, { key: 'orgName', placeholder: 'GCO org name (e.g. Hope Church Missions Team)' }]}
         onCreate={(v) => createGco(v.signatory!, v.orgName!)}
       />
+      <ConnectPanel mode="gco" />
       <GcoNeedWizard ownerOrg={gco.org} signatory={gco.person} />
       <Card>
         <SectionHead eyebrow="GCO Org · my needs" title="Posted needs" sub={`Needs ${gco.orgName} has declared. The Switchboard scores them against KC offerings on the match board below — request a connection to start an agreement.`} />
@@ -157,6 +198,7 @@ function KcView() {
         fields={[{ key: 'name', placeholder: 'KC expert name (e.g. Alex — Bible Translation)' }]}
         onCreate={(v) => createKc(v.name!)}
       />
+      <ConnectPanel mode="kc" />
       <ExpertOfferingWizard owner={kc.person} ownerName={kc.name} />
       <Card>
         <SectionHead eyebrow="KC Expert · my offerings" title="Published offerings" />

@@ -117,3 +117,31 @@ export function createKc(name: string): KcMember {
 
 export function setActiveGco(id: string): void { _db.activeGcoId = id; commit(); }
 export function setActiveKc(id: string): void { _db.activeKcId = id; commit(); }
+
+// ── Connect-backed members (Phase 1 — real demo-sso person/org SAs) ──
+// A KC connects as an INDIVIDUAL (their person SA); a GCO signatory connects + creates an ORG
+// (the home deploys the org SA custodied by their ROOT credential). Deduped by SA address.
+
+/** A KC Expert backed by a real connected person SA. */
+export function createConnectedKc(name: string, person: Address): KcMember {
+  const existing = _db.kc.find((m) => m.person.toLowerCase() === person.toLowerCase());
+  if (existing) { _db.activeKcId = existing.id; commit(); return existing; }
+  const n = (_db.counter += 1);
+  const m: KcMember = { id: `kc-c-${n}`, name, person };
+  _db.kc.unshift(m);
+  _db.activeKcId = m.id;
+  commit();
+  return m;
+}
+
+/** A GCO Organization backed by a real connected signatory person + the org SA they created. */
+export function createConnectedGco(signatory: string, orgName: string, person: Address, org: Address): GcoMember {
+  const existing = _db.gco.find((m) => m.org.toLowerCase() === org.toLowerCase());
+  if (existing) { _db.activeGcoId = existing.id; commit(); return existing; }
+  const n = (_db.counter += 1);
+  const m: GcoMember = { id: `gco-c-${n}`, signatory, orgName, person, org };
+  _db.gco.unshift(m);
+  _db.activeGcoId = m.id;
+  commit();
+  return m;
+}
