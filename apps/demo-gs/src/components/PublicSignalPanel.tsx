@@ -4,44 +4,12 @@
 // out of "open". In v1 this computes from the local store; Phase 4 serves it from the GC graph/API.
 
 import { useMemo } from 'react';
-import { categoryLabel, regionByUri } from '../data/taxonomy';
 import type { GcoNeedIntent, ExpertOffering } from '../domain/gs-types';
+import { computeSignal } from '../lib/signal';
 import { Card, Pill, SectionHead } from './ui';
 
-const OPEN: GcoNeedIntent['status'][] = ['open', 'matched', 'requested'];
-
 export function PublicSignalPanel({ needs, offerings }: { needs: GcoNeedIntent[]; offerings: ExpertOffering[] }) {
-  const agg = useMemo(() => {
-    const open = needs.filter((n) => OPEN.includes(n.status));
-    const bySkill = new Map<string, { label: string; n: number }>();
-    const byCategory = new Map<string, { label: string; n: number }>();
-    const byRegion = new Map<string, { label: string; n: number }>();
-    const offeringByCategory = new Map<string, number>();
-
-    for (const o of offerings.filter((x) => x.status === 'active')) {
-      for (const s of o.offeredSkills) offeringByCategory.set(s.categoryUri, (offeringByCategory.get(s.categoryUri) ?? 0) + 1);
-    }
-    for (const need of open) {
-      for (const s of need.requiredSkills) {
-        bySkill.set(s.gcUri, { label: s.label, n: (bySkill.get(s.gcUri)?.n ?? 0) + 1 });
-        byCategory.set(s.categoryUri, { label: categoryLabel(s.categoryUri), n: (byCategory.get(s.categoryUri)?.n ?? 0) + 1 });
-      }
-      for (const g of need.geoFacets) {
-        const sens = regionByUri(g.uri)?.sensitivity ?? g.sensitivity;
-        // Collapse sensitive regions into one coarse bucket (no specific sensitive geo leak).
-        const key = sens === 'creative_access' || sens === 'closed' ? 'sensitive' : g.uri;
-        const label = key === 'sensitive' ? 'Sensitive region (coarsened)' : g.label;
-        byRegion.set(key, { label, n: (byRegion.get(key)?.n ?? 0) + 1 });
-      }
-    }
-    const unmet = [...byCategory.entries()]
-      .map(([uri, v]) => ({ uri, label: v.label, needs: v.n, offerings: offeringByCategory.get(uri) ?? 0 }))
-      .filter((c) => c.needs > c.offerings)
-      .sort((a, b) => b.needs - a.needs);
-
-    const sort = (m: Map<string, { label: string; n: number }>) => [...m.values()].sort((a, b) => b.n - a.n);
-    return { openCount: open.length, bySkill: sort(bySkill), byCategory: sort(byCategory), byRegion: sort(byRegion), unmet };
-  }, [needs, offerings]);
+  const agg = useMemo(() => computeSignal(needs, offerings), [needs, offerings]);
 
   return (
     <Card>
@@ -55,7 +23,7 @@ export function PublicSignalPanel({ needs, offerings }: { needs: GcoNeedIntent[]
         {agg.byCategory.map((s) => <Row key={s.label} label={s.label} n={s.n} />)}
       </Group>
       <Group title="Open needs by region">
-        {agg.byRegion.map((s) => <Row key={s.label} label={s.label} n={s.n} sensitive={s.label.includes('Sensitive')} />)}
+        {agg.byRegion.map((s) => <Row key={s.uri} label={s.label} n={s.n} sensitive={s.sensitive} />)}
       </Group>
       <Group title="Unmet skill categories (needs > active offerings)">
         {agg.unmet.length === 0 && <p style={{ fontSize: '.82rem', color: 'var(--c-g400)' }}>Supply currently covers demand.</p>}
