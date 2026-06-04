@@ -1,16 +1,16 @@
-// Signed-out landing (spec 252 design spec §8/§15a). Hero (demand vs supply value) + role CTAs that
-// preserve intent into the role-aware connect path, the public skill-gap signal as an acquisition
-// surface (computed from the deterministic public bridged demand — pure, no network), and trust cards.
-// The header `Connect` opens a chooser; the CTAs here pre-select a role into the grant-review entry.
+// Signed-out landing (spec 252 design spec §8/§15a; reworked per direct UX feedback). The primary CTA is
+// a SINGLE Connect — there is no connect-time role gate. The demand (GCO) vs supply (KC) value is kept
+// as informational cards below, but they are NOT role gates: any CTA leads to the same role-agnostic
+// connect screen, and the user picks a role afterwards from the hub. The public skill-gap signal is an
+// acquisition surface (pure, no network); trust cards explain the model.
 
 import { useMemo } from 'react';
-import type { OnboardKind } from '../lib/gs-brand';
 import { GS } from '../lib/gs-brand';
 import { computeSignal } from '../lib/signal';
 import { publicNeeds, publicOfferings } from '../lib/public-data';
 import { Card } from './ui';
 
-export function Landing({ onChoose }: { onChoose: (kind: OnboardKind) => void }) {
+export function Landing({ onConnect }: { onConnect: () => void }) {
   // The public skill-gap signal — the same dataset the public /api/signal serves (no member data).
   const signal = useMemo(() => computeSignal(publicNeeds(), publicOfferings()), []);
   const topSkills = signal.bySkill.slice(0, 6);
@@ -28,9 +28,26 @@ export function Landing({ onChoose }: { onChoose: (kind: OnboardKind) => void })
           every one. You grant scoped access at sign-in and revoke it any time.
         </p>
         <div style={{ display: 'flex', gap: '.75rem', marginTop: '1.25rem', flexWrap: 'wrap' }}>
-          <button className="btn-primary" onClick={() => onChoose('gco')} style={cta}>Post a need (GCO →)</button>
-          <button className="btn-ghost" onClick={() => onChoose('kc')} style={cta}>Offer a skill (KC →)</button>
+          <button className="btn-primary" onClick={onConnect} style={cta}>{GS.ssoCta}</button>
         </div>
+        <p style={{ fontSize: '.82rem', color: 'var(--c-g500)', marginTop: '.6rem' }}>
+          Connect once, then choose what you want to do — post needs as an organization, or offer your
+          expertise.
+        </p>
+      </div>
+
+      {/* Demand vs supply — informational only; both lead to the same Connect (role chosen later). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+        <Card>
+          <div style={{ display: 'inline-block', background: 'var(--c-primary-subtle)', border: '1px solid var(--c-primary-border)', borderRadius: 999, padding: '.15rem .6rem', fontSize: '.66rem', fontWeight: 800, color: 'var(--c-primary-active)', letterSpacing: '.04em' }}>DEMAND · GCO</div>
+          <p style={{ fontSize: '.86rem', color: 'var(--c-g700)', marginTop: '.7rem' }}>{GS.paths.gco.body}</p>
+          <button onClick={onConnect} style={linkCta}>Connect to post a need →</button>
+        </Card>
+        <Card>
+          <div style={{ display: 'inline-block', background: 'var(--c-primary-subtle)', border: '1px solid var(--c-primary-border)', borderRadius: 999, padding: '.15rem .6rem', fontSize: '.66rem', fontWeight: 800, color: 'var(--c-primary-active)', letterSpacing: '.04em' }}>SUPPLY · KC</div>
+          <p style={{ fontSize: '.86rem', color: 'var(--c-g700)', marginTop: '.7rem' }}>{GS.paths.kc.body}</p>
+          <button onClick={onConnect} style={linkCta}>Connect to offer a skill →</button>
+        </Card>
       </div>
 
       <Card>
@@ -66,7 +83,7 @@ export function Landing({ onChoose }: { onChoose: (kind: OnboardKind) => void })
       </div>
 
       <p style={{ fontSize: '.82rem', color: 'var(--c-g500)' }}>
-        Three steps: Connect via {GS.community} → choose your role → work from your secure workspace.
+        Three steps: Connect via {GS.community} → choose what you want to do → work from your secure workspace.
       </p>
     </div>
   );
@@ -74,4 +91,8 @@ export function Landing({ onChoose }: { onChoose: (kind: OnboardKind) => void })
 
 const cta: React.CSSProperties = {
   borderRadius: 10, padding: '.7rem 1.3rem', fontWeight: 700, fontSize: '.92rem', cursor: 'pointer', border: 'none',
+};
+const linkCta: React.CSSProperties = {
+  marginTop: '.8rem', background: 'none', border: 'none', color: 'var(--c-primary)', fontWeight: 700,
+  fontSize: '.84rem', cursor: 'pointer', padding: 0,
 };

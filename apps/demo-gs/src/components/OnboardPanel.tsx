@@ -11,8 +11,8 @@ import { personalHome, toAgentName } from '../lib/domain';
 import { LAST_NAME_KEY, startConnect } from '../lib/connect-launch';
 import { Banner, Card, inputStyle } from './ui';
 
-// Stash key + shape now live in `lib/connect-launch` (shared with ConnectGrantReview); re-exported
-// here for the App's connect-return handler, which still imports them from OnboardPanel.
+// Stash key + shape now live in `lib/connect-launch` (shared with ConnectScreen); re-exported here
+// for the App's connect-return handler, which still imports them from OnboardPanel.
 export { CONNECT_KEY, type ConnectStash } from '../lib/connect-launch';
 
 // Both roles first enroll the PERSON via the shared identity (site-login). A KC then acts as that
@@ -31,7 +31,7 @@ export function OnboardPanel({ kind }: { kind: OnboardKind }) {
     if (!trimmed) { setErr(`Choose your ${GS.community} name (e.g. rich-pedersen).`); return; }
     setBusy(true); setErr(null);
     try {
-      await startConnect(kind, trimmed); // stashes PKCE + redirects to the person's home
+      await startConnect(trimmed); // role-agnostic person login; stashes PKCE + redirects to the home
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
       setBusy(false);

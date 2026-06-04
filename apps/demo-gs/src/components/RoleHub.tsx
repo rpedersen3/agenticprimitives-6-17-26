@@ -1,7 +1,12 @@
-// Connected role hub (spec 252 design spec §9/§15a). Shown when a person is connected but no active
-// workspace is selected (or chosen from the header dropdown). Two cards — GCO (demand) + KC (supply) —
-// each driven by the per-role state from `deriveRoleCapabilities`: `ready` → Open; `org-pending` →
-// resume org-create; `empty` → set up. The actions are the App's responsibility; this is presentation.
+// Connected role hub (spec 252 design spec §9/§15a; reworked per direct UX feedback). This IS the
+// connected intranet home — a person lands here right after connecting (not auto into a workspace) and
+// chooses what to do. Two cards:
+//   • KC (supply) — "Offer your expertise" → open the KC workspace immediately (the person session
+//     already grants KC vault access; no extra ceremony).
+//   • GCO (demand) — "Set up an organization to post needs" → launch the org-create ceremony directly
+//     (the connected person is the signatory). If a gco session already exists → "Open GCO workspace".
+//     If an org-create is in flight (org-pending) → "Resume org setup".
+// The actions are the App's responsibility; this is presentation.
 
 import type { RoleCapabilities, RoleKind } from '../lib/role-capabilities';
 import { GS } from '../lib/gs-brand';
@@ -10,43 +15,45 @@ import { Card, Pill } from './ui';
 interface CardCopy { side: string; title: string; sub: string; bullets: string[] }
 
 const COPY: Record<RoleKind, CardCopy> = {
-  gco: {
-    side: 'DEMAND',
-    title: 'GCO Organization',
-    sub: 'An organization you create + sign for',
-    bullets: ['Create org + mint grant', 'Post a skill need', 'Review explainable matches'],
-  },
   kc: {
     side: 'SUPPLY',
-    title: 'KC Expert',
-    sub: 'Your own individual person agent',
+    title: 'Offer your expertise (KC)',
+    sub: 'Act as your own individual person agent',
     bullets: ['Publish your expertise offering', 'Browse coarsened demand', 'Accept requests on your terms'],
+  },
+  gco: {
+    side: 'DEMAND',
+    title: 'Set up an organization to post needs (GCO)',
+    sub: 'An organization you create + sign for',
+    bullets: ['Create the org + mint its grant', 'Post a skill need', 'Review explainable matches'],
   },
 };
 
-export function RoleHub({ name, caps, onOpen, onResumeOrg, onSetup, onOpenHome }: {
+export function RoleHub({ name, caps, onOpen, onResumeOrg, onSetupGco, onOpenHome }: {
   name: string;
   caps: RoleCapabilities;
-  /** Open a ready workspace. */
+  /** Open a ready workspace (KC immediately, or an already-created GCO). */
   onOpen: (kind: RoleKind) => void;
   /** Resume the GCO org-create (org-pending). */
   onResumeOrg: () => void;
-  /** Begin setup for a not-started role (routes to the grant-review/connect entry). */
-  onSetup: (kind: RoleKind) => void;
+  /** Launch the GCO org-create ceremony from the hub (connected person = signatory). */
+  onSetupGco: () => void;
   /** Open the person's Global.Church home. */
   onOpenHome: () => void;
 }) {
   return (
     <div style={{ display: 'grid', gap: '1.25rem' }}>
       <div>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Welcome back, {name}</h1>
+        <h1 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Welcome, {name}</h1>
         <p style={{ fontSize: '.9rem', color: 'var(--c-g600)', marginTop: '.3rem' }}>
-          Choose or resume a workspace. You&rsquo;re connected as one person; roles are workspaces.
+          You&rsquo;re connected. Choose what you want to do — you can do both, and switch any time. Roles are
+          workspaces, not separate accounts.
         </p>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
-        {(['gco', 'kc'] as RoleKind[]).map((kind) => {
+        {/* KC first: "offer your expertise" is the no-ceremony path the connected person can take now. */}
+        {(['kc', 'gco'] as RoleKind[]).map((kind) => {
           const cap = caps.byKind[kind];
           const c = COPY[kind];
           return (
@@ -65,7 +72,7 @@ export function RoleHub({ name, caps, onOpen, onResumeOrg, onSetup, onOpenHome }
                   state={cap.state}
                   onOpen={() => onOpen(kind)}
                   onResumeOrg={onResumeOrg}
-                  onSetup={() => onSetup(kind)}
+                  onSetupGco={onSetupGco}
                 />
               </div>
             </Card>
@@ -91,20 +98,26 @@ function StatePill({ state }: { state: RoleCapabilities['byKind']['gco']['state'
   return <Pill tone="neutral">not started</Pill>;
 }
 
-function RoleAction({ kind, state, onOpen, onResumeOrg, onSetup }: {
+function RoleAction({ kind, state, onOpen, onResumeOrg, onSetupGco }: {
   kind: RoleKind;
   state: RoleCapabilities['byKind']['gco']['state'];
   onOpen: () => void;
   onResumeOrg: () => void;
-  onSetup: () => void;
+  onSetupGco: () => void;
 }) {
   if (state === 'ready') {
-    return <button className="btn-primary" onClick={onOpen} style={btn}>Open {kind.toUpperCase()} workspace</button>;
+    const label = kind === 'kc' ? 'Offer your expertise' : 'Open GCO workspace';
+    return <button className="btn-primary" onClick={onOpen} style={btn}>{label}</button>;
   }
   if (state === 'org-pending') {
     return <button className="btn-primary" onClick={onResumeOrg} style={btn}>Resume org setup</button>;
   }
-  return <button className="btn-ghost" onClick={onSetup} style={btn}>Set up {kind.toUpperCase()}</button>;
+  // empty: KC opens immediately (no ceremony — the person session already grants it); GCO launches the
+  // org-create ceremony directly from the hub.
+  if (kind === 'kc') {
+    return <button className="btn-primary" onClick={onOpen} style={btn}>Offer your expertise</button>;
+  }
+  return <button className="btn-ghost" onClick={onSetupGco} style={btn}>Set up an organization</button>;
 }
 
 const btn: React.CSSProperties = {

@@ -1,11 +1,14 @@
-// App shell header (spec 252 design spec §6/§15a). Replaces the free RoleSwitcher: member roles now
-// require a real Connect session, and Jane/Pete are clearly-labeled DEMO ADMIN shortcuts in a dropdown.
+// App shell header (spec 252 design spec §6/§15a; reworked per direct UX feedback). Member roles require
+// a real Connect session. Connecting is ONE simple action (the dropdown's primary item is just Connect —
+// no role selection). Jane/Pete are DEMO ADMIN shortcuts hidden behind a collapsed "Admin ▾" expander so
+// regular users don't see them prominently.
 //
 // Two states:
-//   • signed out  — brand (left) + primary `Connect ▾` (right) with the demo-admin shortcuts + help link.
-//   • connected   — identity pill (name · active role) + a dropdown with the identity summary, Open
-//                   Global.Church home, Disconnect, role switch/setup (only when caps are known), and
-//                   the same demo shortcuts.
+//   • signed out  — brand (left) + primary `Connect ▾` (right). The dropdown is just Connect + the Admin
+//                   expander + a privacy link.
+//   • connected   — identity pill (name · active role, or "name · choose a workspace" in the hub) + a
+//                   dropdown with the identity summary, Open Global.Church home, Disconnect, role
+//                   switch/setup (when caps are known), and the Admin expander.
 // All actions are lifted to the App (it owns routing + the store/session); this is presentation.
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
@@ -17,7 +20,8 @@ const ROLE_LABEL: Record<RoleKind, string> = { gco: 'GCO', kc: 'KC Expert' };
 
 export interface ConnectedIdentity {
   name: string;
-  activeRole: RoleKind;
+  /** The active workspace role, or null when in the hub (no workspace open → "choose a workspace"). */
+  activeRole: RoleKind | null;
 }
 
 export function AppShellHeader({
@@ -69,7 +73,7 @@ export function AppShellHeader({
         <div ref={ref} style={{ position: 'relative' }}>
           {identity ? (
             <button onClick={() => setOpen((v) => !v)} className="btn-primary" style={pillBtn} aria-haspopup="menu" aria-expanded={open}>
-              <span>{identity.name} · {ROLE_LABEL[identity.activeRole]}</span>
+              <span>{identity.name}{identity.activeRole ? ` · ${ROLE_LABEL[identity.activeRole]}` : ' · choose a workspace'}</span>
               <span aria-hidden="true">▾</span>
             </button>
           ) : (
@@ -120,7 +124,8 @@ function ConnectedMenu({ identity, caps, onOpenHome, onDisconnect, onSwitchRole,
   onSwitchRole: (k: RoleKind) => void; onSetupRole: (k: RoleKind) => void;
   onDemoJane: () => void; onDemoPete: () => void; onHelp: () => void;
 }) {
-  // Role switch/setup entries — only the OTHER role(s), and only when capabilities are known.
+  // Role switch/setup entries — the role(s) OTHER than the active one (or both when in the hub, where
+  // there is no active role), and only when capabilities are known.
   const others: RoleKind[] = (['gco', 'kc'] as RoleKind[]).filter((k) => k !== identity.activeRole);
   return (
     <>
@@ -128,7 +133,7 @@ function ConnectedMenu({ identity, caps, onOpenHome, onDisconnect, onSwitchRole,
         <div style={{ fontWeight: 800, fontSize: '.95rem', color: 'var(--c-g900)' }}>{identity.name}</div>
         <div style={{ fontSize: '.76rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>{personalHome(identity.name)}</div>
         <div style={{ marginTop: '.4rem', display: 'inline-block', background: 'var(--c-primary-subtle)', border: '1px solid var(--c-primary-border)', borderRadius: 999, padding: '.15rem .55rem', fontSize: '.72rem', fontWeight: 700, color: 'var(--c-primary-active)' }}>
-          Working as {ROLE_LABEL[identity.activeRole]}
+          {identity.activeRole ? `Working as ${ROLE_LABEL[identity.activeRole]}` : 'Choose a workspace'}
         </div>
       </div>
       <Divider />
@@ -148,14 +153,29 @@ function ConnectedMenu({ identity, caps, onOpenHome, onDisconnect, onSwitchRole,
   );
 }
 
+// Demo-admin (Jane/Pete) shortcuts behind a collapsed "Admin ▾" expander so they aren't prominent for
+// regular users. Collapsed by default; expanding reveals the demo-admin label + the two shortcuts.
 function DemoShortcuts({ onDemoJane, onDemoPete }: { onDemoJane: () => void; onDemoPete: () => void }) {
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div style={{ padding: '.4rem .6rem .2rem' }}>
-      <div style={{ fontSize: '.66rem', fontWeight: 800, letterSpacing: '.06em', color: 'var(--c-g400)', padding: '.1rem .3rem .35rem' }}>
-        DEMO ADMIN — NOT PRODUCTION AUTHORIZATION
-      </div>
-      <button role="menuitem" onClick={onDemoJane} style={demoItem}>🎛️ Jane / Switchboard (broker)</button>
-      <button role="menuitem" onClick={onDemoPete} style={demoItem}>⛪ Pete / Global Church (issuer)</button>
+    <div>
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        style={{ ...itemBase, color: 'var(--c-g500)', fontWeight: 500, fontSize: '.82rem', display: 'flex', alignItems: 'center', gap: '.4rem' }}
+      >
+        <span>Admin</span>
+        <span aria-hidden="true" style={{ fontSize: '.7rem' }}>{expanded ? '▴' : '▾'}</span>
+      </button>
+      {expanded && (
+        <div style={{ padding: '.2rem .6rem .2rem' }}>
+          <div style={{ fontSize: '.66rem', fontWeight: 800, letterSpacing: '.06em', color: 'var(--c-g400)', padding: '.1rem .3rem .35rem' }}>
+            DEMO ADMIN — NOT PRODUCTION AUTHORIZATION
+          </div>
+          <button role="menuitem" onClick={onDemoJane} style={demoItem}>🎛️ Jane / Switchboard (broker)</button>
+          <button role="menuitem" onClick={onDemoPete} style={demoItem}>⛪ Pete / Global Church (issuer)</button>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,11 +3,14 @@
 // (supply; an individual person with skills), Jane/Global Switchboard (broker), Pete/Global Church
 // (issuer).
 //
-// Wave A/B reshell (production UX): the free persona toggle (RoleSwitcher) is retired. Member roles now
-// require a real Connect session; Jane/Pete are DEMO ADMIN dropdown shortcuts that never disturb a
-// member session. Routing: signed-out → Landing → ConnectGrantReview → (Global.Church) → RoleDiscovery
-// (while hydrating) → RoleHub / active workspace. The entitlement layer (store/session/member-vault)
-// and the connect-return handler + workspace BODIES are unchanged — this restructures the SHELL.
+// Connect-then-choose-role (reworked per direct UX feedback): connecting is ONE simple, role-agnostic
+// action — the member never picks GCO/KC before connecting. Routing: signed-out → Landing → ConnectScreen
+// (role-agnostic person site-login) → (Global.Church) → RoleDiscovery (while hydrating) → RoleHub (the
+// connected intranet home). The ROLE is chosen IN the hub: "Offer your expertise (KC)" opens the KC
+// workspace immediately; "Set up an organization (GCO)" launches the org-create ceremony directly, with
+// the connected person as signatory. Jane/Pete are DEMO ADMIN dropdown shortcuts (behind an Admin
+// expander) that never disturb a member session. The entitlement layer (store/session/member-vault) and
+// the org-create RETURN handler + workspace BODIES are unchanged — this restructures the SHELL.
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { actingAgents, type Persona } from './lib/personas';
@@ -27,7 +30,7 @@ import { loadActiveRole, saveActiveRole } from './lib/active-role';
 import { personalHome } from './lib/domain';
 import { AppShellHeader, type ConnectedIdentity } from './components/AppShellHeader';
 import { Landing } from './components/Landing';
-import { ConnectGrantReview } from './components/ConnectGrantReview';
+import { ConnectScreen } from './components/ConnectScreen';
 import { RoleDiscovery } from './components/RoleDiscovery';
 import { RoleHub } from './components/RoleHub';
 import { OnboardPanel } from './components/OnboardPanel';
@@ -51,10 +54,11 @@ import { Banner, Card, Pill, SectionHead } from './components/ui';
 const ORG_KEY = 'agenticprimitives:demo-gs:org-create';
 interface OrgStash { state: string; signatory: string; orgName: string; authOrigin: string; codeVerifier: string; nonce: string }
 
-// The shell route. `landing` = signed out; `entry` = role-aware connect/grant review; `discovery` =
-// post-connect hydration timeline; `hub` = connected role chooser; `workspace` = an active workspace OR
-// a demo-admin surface (persona carries which). `demoPersona` is set ONLY for jane/pete shortcuts.
-type View = 'landing' | 'entry' | 'discovery' | 'hub' | 'workspace';
+// The shell route. `landing` = signed out; `connect` = the role-agnostic connect screen; `discovery` =
+// post-connect hydration timeline; `hub` = the connected intranet home (role chooser); `workspace` = an
+// active workspace OR a demo-admin surface (persona carries which). `demoPersona` is set ONLY for
+// jane/pete shortcuts.
+type View = 'landing' | 'connect' | 'discovery' | 'hub' | 'workspace';
 
 export function App() {
   const [view, setView] = useState<View>('landing');
@@ -62,13 +66,15 @@ export function App() {
   const [activeRole, setActiveRoleState] = useState<RoleKind | null>(null);
   // A demo-admin surface (jane/pete) — orthogonal to the member session; never mutates it.
   const [demoPersona, setDemoPersona] = useState<'jane' | 'pete' | null>(null);
-  // The role being set up in the entry (grant-review) screen, or null for help-me-choose.
-  const [entryKind, setEntryKind] = useState<RoleKind | null>(null);
   // The kind we're discovering after a connect-return (drives the RoleDiscovery access table).
   const [discoverKind, setDiscoverKind] = useState<RoleKind>('kc');
+  // Where discovery routes once hydrated: 'hub' after a plain person connect (the user picks a role in
+  // the hub); 'workspace' after the GCO org-create return (the gco workspace is the destination).
+  const [discoverDest, setDiscoverDest] = useState<'hub' | 'workspace'>('hub');
   const [connectError, setConnectError] = useState<string | null>(null);
-  // A GCO signatory who finished step 1 (site-login) but hasn't created the org yet. Not a session
-  // (no org SA / grant yet) — a transient between the two ceremonies, kept in component state.
+  // An org-create launched from the hub: the connected person (signatory) started the GCO org-create
+  // ceremony but the org isn't created yet. Not a session (no org SA / grant yet) — a transient between
+  // the connect and the org-create return, kept in component state.
   const [pendingGco, setPendingGco] = useState<{ signatory: string } | null>(null);
 
   // Re-render on store / session change.
@@ -86,6 +92,9 @@ export function App() {
   // GCO signatory name (a GCO session's `sa` is the ORG SA, not the person).
   const personKey = kcSession?.sa ?? gcoSession?.signatory ?? gcoSession?.name ?? '';
   const connected = !!kcSession || !!gcoSession;
+  // The connected person's name (the signatory for a hub-launched GCO org-create). Prefer the KC person
+  // session's name; fall back to a GCO session's signatory for a returning GCO-only member.
+  const connectedPersonName = kcSession?.name ?? gcoSession?.signatory ?? gcoSession?.name ?? '';
 
   // Activate a persona's entitled context (re-hydrates the store from the right vault(s)).
   const activate = (p: Persona) =>
@@ -107,10 +116,22 @@ export function App() {
     void activate(p).catch(() => { /* surfaced via loadError() */ });
   };
 
-  // Begin (or resume) setup for a role → the role-aware connect entry.
-  const beginEntry = (kind: RoleKind | null) => { setEntryKind(kind); setView('entry'); };
+  // Open the role-agnostic connect screen (header Connect + the landing CTA both land here).
+  const goConnect = () => { setView('connect'); };
 
   const goHub = () => { setDemoPersona(null); setActiveRoleState(null); setView('hub'); };
+
+  // Launch the GCO org-create ceremony from the hub, with the connected person as signatory. There is
+  // no separate "GCO connect" — the person is already connected; this only marks the org-create as
+  // in-flight (pendingGco) + routes to the GCO workspace, which renders GcoOrgCreate (step 2). The
+  // org-create RETURN handler (unchanged) finishes it: builds the gco session + registerMember.
+  const setupGcoOrg = (signatory: string) => {
+    setDemoPersona(null);
+    setPendingGco({ signatory });
+    setActiveRoleState('gco');
+    setView('workspace');
+    void setActiveContext({ persona: 'gco', session: null }).catch(() => { /* loadError() */ });
+  };
 
   const disconnect = () => {
     clearSession('kc');
@@ -127,9 +148,13 @@ export function App() {
   useEffect(() => {
     if (view !== 'discovery') return;
     if (loadError()) return; // stay on discovery; RoleDiscovery shows the error + retry
-    if (isHydrated()) openWorkspace(discoverKind);
+    if (!isHydrated()) return;
+    // Plain person connect → land in the role hub (the connected intranet home) so the user chooses a
+    // role there. The GCO org-create return already built the gco session → go straight to its workspace.
+    if (discoverDest === 'workspace') openWorkspace(discoverKind);
+    else goHub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, discoverKind, version()]);
+  }, [view, discoverKind, discoverDest, version()]);
 
   // Restore the connected view on load (a returning member with a saved session, no ?code in the URL).
   useEffect(() => {
@@ -181,9 +206,10 @@ export function App() {
           setPendingGco(null); // org created — leave the step-2 transient
           await registerMember({ kind: 'gco', sa: tok.org.orgAgent, name: tok.org.orgName, orgName: tok.org.orgName, signatory: orgStash.signatory!, delegation: tok.org.brokerDelegation });
           saveActiveRole(orgStash.signatory!, 'gco');
-          // Route through visible discovery while the entitled view hydrates.
+          // Route through visible discovery while the entitled view hydrates → the GCO workspace.
           setActiveRoleState('gco');
           setDiscoverKind('gco');
+          setDiscoverDest('workspace');
           setView('discovery');
           await setActiveContext({ persona: 'gco', session });
         } catch (e) {
@@ -205,27 +231,22 @@ export function App() {
       try {
         const tok = await exchangeCode(stash.authOrigin!, code, stash.codeVerifier!);
         const person = personAddressFromIdToken(tok.idToken);
-        if (stash.mode === 'gco') {
-          // Step 1 done — the person is enrolled (we don't need the person SA; the org SA + its broker
-          // grant come from step 2). Stash the signatory name so GcoOrgCreate can launch the ceremony.
-          void person;
-          setPendingGco({ signatory: stash.name! });
-          setActiveRoleState('gco');
-          setView('workspace'); // → GcoView renders GcoOrgCreate (step 2)
-        } else {
-          // KC: the site-login `tok.delegation` IS the grant (person → DEMO_GS_DELEGATE). No grant =
-          // no vault access; surface it (ADR-0013, no silent fallback).
-          if (!tok.delegation) throw new Error('your home did not return a Switchboard access grant — please retry sign-in');
-          const session: MemberSession = { kind: 'kc', sa: person, name: stash.name!, grant: tok.delegation };
-          setSession(session);
-          saveActiveRole(person, 'kc');
-          await registerMember({ kind: 'kc', sa: person, name: stash.name!, delegation: tok.delegation });
-          // Route through visible discovery while the entitled view hydrates.
-          setActiveRoleState('kc');
-          setDiscoverKind('kc');
-          setView('discovery');
-          await setActiveContext({ persona: 'kc', session });
-        }
+        // Role-agnostic person connect: the site-login `tok.delegation` IS the person → Switchboard
+        // grant. No grant = no vault access; surface it (ADR-0013, no silent fallback). The person is
+        // enrolled as a KC ('kc') member session; they choose their role (KC workspace / create a GCO
+        // org) from the hub afterwards.
+        if (!tok.delegation) throw new Error('your home did not return a Switchboard access grant — please retry sign-in');
+        const session: MemberSession = { kind: 'kc', sa: person, name: stash.name!, grant: tok.delegation };
+        setSession(session);
+        saveActiveRole(person, 'kc');
+        await registerMember({ kind: 'kc', sa: person, name: stash.name!, delegation: tok.delegation });
+        // Route through visible discovery while the entitled view hydrates → the role hub (the user
+        // picks a workspace there, not auto into one).
+        setActiveRoleState('kc');
+        setDiscoverKind('kc');
+        setDiscoverDest('hub');
+        setView('discovery');
+        await setActiveContext({ persona: 'kc', session });
       } catch (e) {
         setConnectError(e instanceof Error ? e.message : String(e));
       }
@@ -235,8 +256,13 @@ export function App() {
 
   // The identity pill shows the connected person + active role (member surfaces only; demo surfaces
   // keep the underlying member identity in the header but flag the demo banner in the body).
+  // In a workspace the pill shows the active role; in the hub (no active workspace) it shows the name
+  // + "choose a workspace" (activeRole === null).
   const identity: ConnectedIdentity | null = connected
-    ? { name: kcSession?.name ?? gcoSession?.signatory ?? gcoSession?.name ?? 'you', activeRole: activeRole ?? caps.recommendedRole ?? 'kc' }
+    ? {
+        name: kcSession?.name ?? gcoSession?.signatory ?? gcoSession?.name ?? 'you',
+        activeRole: view === 'workspace' && !demoPersona ? activeRole : null,
+      }
     : null;
 
   const onOpenHome = () => {
@@ -249,14 +275,14 @@ export function App() {
       <AppShellHeader
         identity={identity}
         caps={connected ? caps : null}
-        onConnect={() => beginEntry(null)}
+        onConnect={goConnect}
         onDemoJane={() => openDemo('jane')}
         onDemoPete={() => openDemo('pete')}
-        onHelp={() => beginEntry(null)}
+        onHelp={goConnect}
         onOpenHome={onOpenHome}
         onDisconnect={disconnect}
         onSwitchRole={(k) => openWorkspace(k)}
-        onSetupRole={(k) => beginEntry(k)}
+        onSetupRole={(k) => { if (k === 'gco') setupGcoOrg(connectedPersonName); else openWorkspace('kc'); }}
       />
 
       <div className="wrap" style={{ padding: '1.5rem 1.25rem 0' }}>
@@ -268,21 +294,9 @@ export function App() {
         )}
 
         <div style={{ display: 'grid', gap: '1.25rem', paddingBottom: '2rem' }}>
-          {view === 'landing' && <Landing onChoose={(k) => beginEntry(k)} />}
+          {view === 'landing' && <Landing onConnect={goConnect} />}
 
-          {view === 'entry' && entryKind && (
-            <ConnectGrantReview kind={entryKind} onSwitchPath={(k) => setEntryKind(k)} onBack={() => setView('landing')} />
-          )}
-          {view === 'entry' && !entryKind && (
-            // Help-me-choose: pick a role intent, then its grant review.
-            <div style={{ display: 'grid', gap: '1rem', maxWidth: 560, margin: '0 auto' }}>
-              <SectionHead eyebrow="Choose a role" title="Post a need, or offer a skill?" sub="You connect once through your Global.Church home — a role is a workspace, not a separate account." />
-              <div style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap' }}>
-                <button className="btn-primary" onClick={() => setEntryKind('gco')} style={chooseBtn}>Post a need (GCO →)</button>
-                <button className="btn-ghost" onClick={() => setEntryKind('kc')} style={chooseBtn}>Offer a skill (KC →)</button>
-              </div>
-            </div>
-          )}
+          {view === 'connect' && <ConnectScreen onBack={() => setView('landing')} />}
 
           {view === 'discovery' && <RoleDiscovery kind={discoverKind} onRetry={() => void activate(discoverKind)} />}
 
@@ -292,7 +306,7 @@ export function App() {
               caps={caps}
               onOpen={(k) => openWorkspace(k)}
               onResumeOrg={() => { setDemoPersona(null); setActiveRoleState('gco'); setView('workspace'); }}
-              onSetup={(k) => beginEntry(k)}
+              onSetupGco={() => setupGcoOrg(connectedPersonName)}
               onOpenHome={onOpenHome}
             />
           )}
@@ -329,10 +343,6 @@ export function App() {
     </>
   );
 }
-
-const chooseBtn: React.CSSProperties = {
-  borderRadius: 10, padding: '.7rem 1.3rem', fontWeight: 700, fontSize: '.92rem', cursor: 'pointer', border: 'none',
-};
 
 // Demo-admin banner — Jane/Pete are demo shortcuts, never production authorization (spec §15c).
 function DemoBanner() {
