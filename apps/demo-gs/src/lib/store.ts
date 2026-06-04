@@ -4,9 +4,12 @@
 // agreements + the bridged public demand, and a member browsing the marketplace sees only a COARSENED
 // public projection of the other side.
 //
-// ONE mechanism (ADR-0013): `hydrate()` loads the active context's entitled datasets from the vault(s);
-// `_view` is an in-memory CACHE of exactly that. `setActiveContext` re-hydrates when the persona (or its
-// session) changes; agreement mutations write through to Jane's broker vault and re-hydrate.
+// Source of truth is the MCP vault, NOT the browser (Wave 2; ADR-0013, one mechanism). `_view` is a
+// transient in-memory CACHE — it is NEVER written to localStorage, and nothing here reads operational
+// data back from the browser. `hydrate()` loads the active context's entitled datasets from the
+// vault(s); `setActiveContext` re-hydrates when the persona (or its session) changes; agreement
+// mutations write through to Jane's broker vault and re-hydrate. On reload the view is rebuilt from the
+// vault, never from a stored blob.
 //
 //   jane : full broker view — every member's needs/offerings via their grants (UNCOARSENED, she's
 //          entitled) ∪ bridged public demand; agreements from Jane's vault.

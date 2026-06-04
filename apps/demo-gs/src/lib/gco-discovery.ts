@@ -7,6 +7,12 @@
 // One mechanism (ADR-0013): related-orgs (person-authorized) tells us WHICH org SA belongs to this
 // person; the registry holds the grant. If either is absent/unreachable we return null (not recognized)
 // — we never fabricate a grant or fall back to a different read.
+//
+// Purpose is REQUIRED (ADR-0013, no silent fallback): we recognize ONLY links explicitly tagged
+// `gs-gco-org`. A missing purpose is stale / migration-era data, NOT product truth — accepting it would
+// be exactly the silent-fallback pattern we forbid (treating "no answer" as "yes"). The org-create path
+// always sets it (App `GcoOrgCreate` → `startOrgCreation(signatory, name, 'gs-gco-org', switchboardSa)`
+// → `org_purpose=gs-gco-org`), so a legitimately-created GCO org is never dropped by this check.
 
 import { listRelatedOrgs } from '../connect-client';
 import { loadMembers } from './member-vault';
@@ -18,7 +24,7 @@ const GCO_PURPOSE = 'gs-gco-org';
 export async function discoverGcoSession(personName: string, idToken: string): Promise<MemberSession | null> {
   let orgs;
   try { orgs = await listRelatedOrgs(personName, idToken); } catch { return null; }
-  const gcoOrgs = orgs.filter((o) => !o.purpose || o.purpose === GCO_PURPOSE);
+  const gcoOrgs = orgs.filter((o) => o.purpose === GCO_PURPOSE);
   if (gcoOrgs.length === 0) return null;
 
   let members;

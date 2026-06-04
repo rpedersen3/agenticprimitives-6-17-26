@@ -122,6 +122,11 @@ export function actingAgents(p: 'jane' | 'pete'): { person: Address; org: Addres
   }
 }
 
+// The persisted Pete/Jane demo-shortcut selection. TESTNET / DEMO ONLY (mirrors demo-jp's accepted
+// AUDIT C-1 hole): the operators run on deterministic demo keys the app holds, so this is a convenience
+// shortcut for which operator surface to show — it is NEVER production authorization, and it never
+// disturbs a connected member's session. Storing the selection in the browser is non-authoritative UI
+// state; the operator's actual authority is its deterministic key, not this preference.
 const KEY = 'agenticprimitives:demo-gs:persona';
 
 export function loadPersona(): Persona | null {

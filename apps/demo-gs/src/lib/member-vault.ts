@@ -3,7 +3,10 @@
 // demo-jp's vault.ts pattern (storeMemberGrant/loadMemberGrants + *WithDelegation member records).
 //
 // Least-privilege: a connected member touches only its OWN vault; Jane sees a member's data only
-// because that member delegated read access to the Switchboard delegate. No operational blob.
+// because that member delegated read access to the Switchboard delegate. The MCP vault is the SOLE
+// source of truth for the member registry + member-owned records — none of it lives in the browser
+// (no localStorage operational blob); every read/write below flows through `vault-client.ts` to the
+// demo-a2a `/a2a/mcp/vault/*` proxy.
 
 import type { Address } from '@agenticprimitives/types';
 import type { ExpertOffering, GcoNeedIntent } from '../domain/gs-types';

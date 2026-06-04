@@ -23,3 +23,11 @@ export function saveActiveRole(personKey: string, role: RoleKind): void {
     try { localStorage.setItem(KEY(personKey), role); } catch { /* ignore */ }
   }
 }
+
+/** Drop the active-role preference for an identity. Called on sign-out / session-expiry (session.ts) so
+ *  a stale workspace choice can't linger after the credential that backed it is gone. */
+export function clearActiveRole(personKey: string): void {
+  if (typeof localStorage !== 'undefined' && personKey) {
+    try { localStorage.removeItem(KEY(personKey)); } catch { /* ignore */ }
+  }
+}
