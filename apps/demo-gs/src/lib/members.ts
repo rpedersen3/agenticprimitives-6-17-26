@@ -33,6 +33,9 @@ interface MembersDb {
   activeGcoId: string;
   activeKcId: string;
   counter: number;
+  /** Whether the member has passed the onboarding landing into the intranet (per role). */
+  enteredGco: boolean;
+  enteredKc: boolean;
 }
 
 const SEED_GCO: GcoMember = { id: 'seed-gco', signatory: 'Maria', orgName: 'Hope Church Missions Team', person: GCO_PERSON_EOA, org: GCO_ORG };
@@ -41,7 +44,14 @@ const SEED_KC: KcMember = { id: 'seed-kc', name: 'Dana — Grant & Foundation St
 const KEY = 'agenticprimitives:demo-gs:members:v1';
 
 function seed(): MembersDb {
-  return { gco: [SEED_GCO], kc: [SEED_KC], activeGcoId: SEED_GCO.id, activeKcId: SEED_KC.id, counter: 0 };
+  return { gco: [SEED_GCO], kc: [SEED_KC], activeGcoId: SEED_GCO.id, activeKcId: SEED_KC.id, counter: 0, enteredGco: false, enteredKc: false };
+}
+
+/** Has the member passed onboarding into the intranet (per role)? */
+export const isEntered = (role: 'gco' | 'kc'): boolean => (role === 'gco' ? _db.enteredGco : _db.enteredKc);
+export function setEntered(role: 'gco' | 'kc', v: boolean): void {
+  if (role === 'gco') _db.enteredGco = v; else _db.enteredKc = v;
+  commit();
 }
 
 function load(): MembersDb {
@@ -124,6 +134,7 @@ export function setActiveKc(id: string): void { _db.activeKcId = id; commit(); }
 
 /** A KC Expert backed by a real connected person SA. */
 export function createConnectedKc(name: string, person: Address): KcMember {
+  _db.enteredKc = true;
   const existing = _db.kc.find((m) => m.person.toLowerCase() === person.toLowerCase());
   if (existing) { _db.activeKcId = existing.id; commit(); return existing; }
   const n = (_db.counter += 1);
@@ -136,6 +147,7 @@ export function createConnectedKc(name: string, person: Address): KcMember {
 
 /** A GCO Organization backed by a real connected signatory person + the org SA they created. */
 export function createConnectedGco(signatory: string, orgName: string, person: Address, org: Address): GcoMember {
+  _db.enteredGco = true;
   const existing = _db.gco.find((m) => m.org.toLowerCase() === org.toLowerCase());
   if (existing) { _db.activeGcoId = existing.id; commit(); return existing; }
   const n = (_db.counter += 1);

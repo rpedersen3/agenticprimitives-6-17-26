@@ -8,12 +8,12 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { PERSONA_META, actingAgents, loadPersona, savePersona, type Persona } from './lib/personas';
 import { allAgreements, allNeeds, allOfferings, needsForOrg, offeringsForPerson, resetStore, subscribe, version } from './lib/store';
 import {
-  activeGco, activeKc, createConnectedGco, createConnectedKc, createGco, createKc, gcoMembers, kcMembers, membersVersion, setActiveGco, setActiveKc, subscribeMembers,
+  activeGco, activeKc, createConnectedGco, createConnectedKc, createGco, createKc, gcoMembers, isEntered, kcMembers, membersVersion, setActiveGco, setActiveKc, setEntered, subscribeMembers,
 } from './lib/members';
 import { exchangeCode, personAddressFromIdToken } from './connect-client';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { MemberPicker } from './components/MemberPicker';
-import { ConnectPanel, CONNECT_KEY, type ConnectStash } from './components/ConnectPanel';
+import { OnboardPanel, CONNECT_KEY, type ConnectStash } from './components/OnboardPanel';
 import { GcoNeedWizard } from './components/GcoNeedWizard';
 import { ExpertOfferingWizard } from './components/ExpertOfferingWizard';
 import { MatchBoard } from './components/MatchBoard';
@@ -122,13 +122,33 @@ export function App() {
   );
 }
 
-// The GCO Organization (demand). A connected person CREATES an org that holds the GCO role + posts
-// Needs; you act as its signatory. New GCO orgs can be created + switched between (demo-jp Adopter).
+// Thin "you're inside the member intranet" bar with a sign-out back to the onboarding landing.
+function IntranetHeader({ label, role, onSignOut }: { label: string; role: string; onSignOut: () => void }) {
+  return (
+    <Card style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', background: 'var(--c-g50)', padding: '.7rem 1rem' }}>
+      <span style={{ fontSize: '.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--c-g500)' }}>{role} intranet</span>
+      <span style={{ fontSize: '.9rem', fontWeight: 700, color: 'var(--c-g800)' }}>{label}</span>
+      <button onClick={onSignOut} style={{ marginLeft: 'auto', fontSize: '.76rem', color: 'var(--c-g500)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+        sign out / register another
+      </button>
+    </Card>
+  );
+}
+
+// The GCO Organization (demand). Until the member has registered (connected via Global.Church or
+// chosen a sample identity) we show the onboarding landing; then the intranet — a connected person
+// CREATES an org that holds the GCO role + posts Needs; you act as its signatory. (demo-jp Adopter.)
 function GcoView() {
+  if (!isEntered('gco')) return <OnboardPanel kind="gco" onExplore={() => setEntered('gco', true)} />;
   const gco = activeGco();
   const myNeeds = needsForOrg(gco.org);
   return (
     <>
+      <IntranetHeader
+        label={`${gco.orgName} · signatory ${gco.signatory}`}
+        role="GCO Organization"
+        onSignOut={() => setEntered('gco', false)}
+      />
       <MemberPicker
         eyebrow="GCO Organization · demand"
         title="Your GCO organization"
@@ -140,7 +160,6 @@ function GcoView() {
         fields={[{ key: 'signatory', placeholder: 'Signatory name (the person)' }, { key: 'orgName', placeholder: 'GCO org name (e.g. Hope Church Missions Team)' }]}
         onCreate={(v) => createGco(v.signatory!, v.orgName!)}
       />
-      <ConnectPanel mode="gco" />
       <GcoNeedWizard ownerOrg={gco.org} signatory={gco.person} />
       <Card>
         <SectionHead eyebrow="GCO Org · my needs" title="Posted needs" sub={`Needs ${gco.orgName} has declared. The Switchboard scores them against KC offerings on the match board below — request a connection to start an agreement.`} />
@@ -179,14 +198,16 @@ function JaneView({ personaActor }: { personaActor: `0x${string}` }) {
 }
 
 // The KC Expert (supply) — an INDIVIDUAL person agent with skills (the facilitator analog).
-// Publishes an Offering + accepts requests. New KC people can be created + matched against.
+// Onboarding landing until registered; then the intranet: publish an Offering + accept requests.
 function KcView() {
+  if (!isEntered('kc')) return <OnboardPanel kind="kc" onExplore={() => setEntered('kc', true)} />;
   const kc = activeKc();
   const myOfferings = offeringsForPerson(kc.person);
   const myAgreements = allAgreements().filter((a) => a.kcPersonAgentId.toLowerCase().includes(kc.person.toLowerCase()));
   const openNeeds = allNeeds().filter((n) => n.status === 'open');
   return (
     <>
+      <IntranetHeader label={kc.name} role="KC Expert" onSignOut={() => setEntered('kc', false)} />
       <MemberPicker
         eyebrow="KC Expert · supply"
         title="Your KC expert"
@@ -198,7 +219,6 @@ function KcView() {
         fields={[{ key: 'name', placeholder: 'KC expert name (e.g. Alex — Bible Translation)' }]}
         onCreate={(v) => createKc(v.name!)}
       />
-      <ConnectPanel mode="kc" />
       <ExpertOfferingWizard owner={kc.person} ownerName={kc.name} />
       <Card>
         <SectionHead eyebrow="KC Expert · my offerings" title="Published offerings" />

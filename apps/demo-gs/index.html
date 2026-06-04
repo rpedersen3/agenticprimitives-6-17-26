@@ -51,6 +51,21 @@
       .brand small { display: block; font-size: .66rem; font-weight: 600; color: var(--c-g500); letter-spacing: .02em; }
       .powered { display: inline-flex; align-items: center; gap: .4rem; font-size: .7rem; font-weight: 700; color: var(--c-g600); background: var(--c-g100); border: 1px solid var(--c-g200); border-radius: 999px; padding: .3rem .65rem; }
       .powered b { color: var(--c-primary); }
+      .btn-sso {
+        display: flex; align-items: center; gap: .6rem; width: 100%;
+        background: linear-gradient(150deg, var(--c-primary), var(--c-primary-active));
+        color: #fff; border: none; border-radius: var(--r-md); padding: .8rem 1rem;
+        font-weight: 800; font-size: .95rem; cursor: pointer; box-shadow: var(--sh-sm);
+        transition: filter .12s ease, transform .12s ease;
+      }
+      .btn-sso:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+      .btn-sso:disabled { opacity: .55; cursor: not-allowed; }
+      .btn-sso-glyph { font-size: 1.1rem; }
+      .soon {
+        display: inline-block; font-size: .76rem; font-weight: 600; line-height: 1.4;
+        background: var(--c-g100); border: 1px solid var(--c-g200); color: var(--c-g600);
+        border-radius: var(--r-sm); padding: .45rem .65rem;
+      }
       footer { border-top: 1px solid var(--c-g200); padding: 2rem 0; color: var(--c-g500); font-size: .8rem; margin-top: 3rem; }
     </style>
   </head>

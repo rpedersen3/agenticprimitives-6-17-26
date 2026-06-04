@@ -1,0 +1,104 @@
+// The onboarding landing for a new member (mirrors demo-jp's OnboardPanel). Shows the flow steps,
+// takes a Global.Church name, previews <name>.impact-agent.me, and connects via the shared identity
+// (KC = individual person login; GCO = person login + create the org that holds the GCO role).
+// Once connected (or after choosing a sample identity) the view becomes the member intranet.
+
+import { useState } from 'react';
+import { GS, type OnboardKind } from '../lib/gs-brand';
+import { personalHome, toAgentName } from '../lib/domain';
+import { startOrgCreation, startSiteEnrollment } from '../connect-client';
+import { Banner, Card, inputStyle } from './ui';
+
+export const CONNECT_KEY = 'agenticprimitives:demo-gs:connect';
+const LAST_NAME_KEY = 'agenticprimitives:demo-gs:last-name';
+
+export interface ConnectStash {
+  mode: OnboardKind;
+  name: string;
+  orgName?: string;
+  state: string;
+  authOrigin: string;
+  codeVerifier: string;
+}
+
+export function OnboardPanel({ kind, onExplore }: { kind: OnboardKind; onExplore: () => void }) {
+  const p = GS.paths[kind];
+  const [name, setName] = useState<string>(() => {
+    try { return localStorage.getItem(LAST_NAME_KEY) ?? ''; } catch { return ''; }
+  });
+  const [orgName, setOrgName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const trimmed = name.trim();
+
+  async function connect() {
+    if (!trimmed) { setErr(`Choose your ${GS.community} name (e.g. rich-pedersen).`); return; }
+    if (kind === 'gco' && !orgName.trim()) { setErr('Name the organization that takes the GCO role.'); return; }
+    setBusy(true); setErr(null);
+    try { localStorage.setItem(LAST_NAME_KEY, trimmed); } catch { /* ignore */ }
+    try {
+      const r = kind === 'kc'
+        ? await startSiteEnrollment(trimmed)
+        : await startOrgCreation(trimmed, orgName.trim());
+      const stash: ConnectStash = { mode: kind, name: trimmed, orgName: orgName.trim(), state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier };
+      sessionStorage.setItem(CONNECT_KEY, JSON.stringify(stash));
+      window.location.href = r.url; // → <name>.impact-agent.me; returns with ?code&state
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card style={{ maxWidth: 720 }}>
+      <div className="eyebrow">{kind === 'gco' ? 'GCO Organization · demand' : 'KC Expert · supply'}</div>
+      <h2 style={{ fontSize: '1.5rem', marginTop: '.35rem' }}>{p.title}</h2>
+      <div style={{ color: 'var(--c-primary)', fontWeight: 700, fontSize: '.8rem', textTransform: 'uppercase', letterSpacing: '.04em', marginTop: '.25rem' }}>{p.who}</div>
+      <p style={{ color: 'var(--c-g600)', marginTop: '.75rem' }}>{p.body}</p>
+
+      <p style={{ marginTop: '1rem', fontWeight: 700, color: 'var(--c-g800)' }}>Here&rsquo;s the flow:</p>
+      <ol style={{ paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '.4rem', marginTop: '.4rem' }}>
+        {p.steps.map((s, i) => <li key={i} style={{ fontSize: '.9rem', color: 'var(--c-g700)' }}>{s}</li>)}
+      </ol>
+      <p style={{ marginTop: '1rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
+        {GS.org} runs the marketplace. {GS.community} is your private identity + data vault — Switchboard only
+        sees what you grant, and you can revoke it any time.
+      </p>
+
+      <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '.6rem', maxWidth: 460 }}>
+        <label style={{ fontSize: '.78rem', fontWeight: 800, color: 'var(--c-g700)', letterSpacing: '.02em' }}>Your {GS.community} name</label>
+        <input
+          type="text" value={name} placeholder="e.g. rich-pedersen" autoCapitalize="none" spellCheck={false} disabled={busy}
+          onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+          onKeyDown={(e) => { if (e.key === 'Enter' && kind === 'kc') void connect(); }}
+          style={{ ...inputStyle, padding: '.7rem .9rem', fontSize: '1rem', fontFamily: "'SF Mono','Roboto Mono',monospace" }}
+        />
+        {kind === 'gco' && (
+          <input
+            type="text" value={orgName} placeholder="GCO organization name (e.g. Hope Church Missions Team)" disabled={busy}
+            onChange={(e) => setOrgName(e.target.value)}
+            style={{ ...inputStyle, padding: '.7rem .9rem', fontSize: '.95rem' }}
+          />
+        )}
+        {trimmed && (
+          <div style={{ fontSize: '.75rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
+            {toAgentName(trimmed)} · home at {personalHome(trimmed)}
+          </div>
+        )}
+        <button className="btn-sso" onClick={connect} disabled={!trimmed || busy} title={GS.ssoCta}>
+          <span className="btn-sso-glyph" aria-hidden="true">🌐</span>
+          {busy ? 'Opening your home…' : GS.ssoCta}
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: '.72rem', fontWeight: 600, color: 'var(--c-g400)' }}>SSO + your vault</span>
+        </button>
+        {err && <Banner tone="err">{err}</Banner>}
+        <span className="soon" style={{ background: 'var(--c-primary-subtle)', borderColor: 'var(--c-primary-border)', color: 'var(--c-primary-active)' }}>
+          You&rsquo;ll confirm with your device at <b>{personalHome(trimmed || 'your-name')}</b>, then come back here to continue.
+        </span>
+        <button onClick={onExplore} style={{ background: 'none', border: 'none', color: 'var(--c-g500)', fontSize: '.8rem', textDecoration: 'underline', cursor: 'pointer', alignSelf: 'flex-start', padding: 0 }}>
+          Or explore with a sample identity (no sign-in) →
+        </button>
+      </div>
+    </Card>
+  );
+}
