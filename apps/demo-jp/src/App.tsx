@@ -11,6 +11,7 @@ import { LifecycleRail } from './components/LifecycleRail';
 import { NextBestAction, type NextAction } from './components/NextBestAction';
 import { AccessRequestState } from './components/AccessRequestState';
 import { adopterLifecycle, type AdopterLifecyclePosition, type AdopterRequestStatus } from './lib/adopter-lifecycle';
+import { facilitatorLifecycle, type FacilitatorLifecyclePosition, type FacilitatorMatchStatus } from './lib/facilitator-lifecycle';
 import { loadIntents, type BoardIntent } from './lib/broker-store';
 import { personalAuthOrigin, nameLabel } from './lib/domain';
 import {
@@ -662,6 +663,8 @@ export function App() {
           org={caps.byKind.facilitator.org}
           onCreateOrg={(name) => goCreateOrg('facilitator', name)}
           onSignOut={signOut}
+          onReconnect={goConnect}
+          onOpenHome={onOpenHome}
           onOpenWea={() => setModal({ kind: 'wea' })}
           onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
           onGoSignWea={() => goSignWeaAtImpact(session.name)}
@@ -2333,26 +2336,49 @@ function ProjBox({ label, value, mono = false }: { label: string; value: string;
 
 // ── Facilitator Intranet (placeholder, wired next) ──────────────────────────
 
-function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, onGoEditProfile, onGoSignWea }: {
+// ── Facilitator workspace (production UX Wave 4) ────────────────────────────
+// The §11 "Facilitator Workspace" hierarchy: active-role header → lifecycle rail → command-center
+// summary cards → primary task (declare coverage & capacity) + next-best-action rail → match review
+// queue → update publisher → data/trust footer. Mirrors the adopter workspace (Wave 3) + demo-gs's
+// KcView (Wave D). Re-homes the existing `facilitatorSteps`/coverage form, `MemberOrgSection`,
+// `MatchedAdoptersPanel`, `ContactExchangeWidget`, and publish-updates logic — it does NOT rewrite
+// them. White-label/faith copy stays in the app (ADR-0021).
+function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onReconnect, onOpenHome, onOpenWea, onGoEditProfile, onGoSignWea }: {
   session: Session; org: RelatedOrgLink | null; onCreateOrg: (orgName: string) => void;
-  onSignOut: () => void; onOpenWea: () => void;
+  onSignOut: () => void; onReconnect: () => void; onOpenHome: () => void; onOpenWea: () => void;
   onGoEditProfile: (missingKeys: string[]) => void;
   onGoSignWea: () => void;
 }) {
   const [impact, setImpact] = useState<ImpactProfile>({ v: 1, attestations: {} });
   const [record, setRecord] = useState<JpFacilitatorRecord>({ v: 1, attestations: {} });
-  // Profile + JP facilitator record live in the member's own vault (spec 247), read
-  // through the member's grant; load on mount.
+  // The member→JP grant is the single mechanism (ADR-0013) for reading the JP-program records. If it is
+  // absent or the vault read throws, that is grant-missing — a first-class state (§15c), not a raw error.
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'grant-missing'>('loading');
+  // Adopters JP introduced to this facilitator — intersect on FPG + adopter type. Lifted to the
+  // workspace root (Wave 4) so the command-center + lifecycle + match-queue all read one source. The
+  // viewer's own address is passed so their own adopter persona (if any) is included (same-browser
+  // dual-persona case).
+  const [matchedAdopters, setMatchedAdopters] = useState<MatchedAdopter[]>([]);
+
+  // Profile + JP facilitator record live in the member's own vault (spec 247), read through the
+  // member's grant; load on mount (the parent re-mounts this on vaultBump after handoff-return merges).
   useEffect(() => {
     const grant = session.grant;
-    if (!grant) return;
+    if (!grant) { setLoadState('grant-missing'); return; }
     let cancelled = false;
+    setLoadState('loading');
     void (async () => {
-      const [i, r] = await Promise.all([loadImpactProfile(grant), loadJpFacilitatorRecord(grant)]);
-      if (!cancelled) { setImpact(i); setRecord(r); }
+      try {
+        const [i, r] = await Promise.all([loadImpactProfile(grant), loadJpFacilitatorRecord(grant)]);
+        if (cancelled) return;
+        setImpact(i); setRecord(r); setLoadState('ready');
+      } catch {
+        if (!cancelled) setLoadState('grant-missing');
+      }
     })();
     return () => { cancelled = true; };
   }, [session.grant]);
+
   const update = useCallback((next: JpFacilitatorRecord) => {
     if (session.grant) void saveJpFacilitatorRecord(session.grant, next);
     setRecord(next);
@@ -2364,8 +2390,61 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, 
   const completeness = useMemo(() => profileCompleteness(impact, FACILITATOR_PROFILE_TYPE), [impact]);
   const canDeclare = useMemo(() => canDeclareCoverage(impact, record), [impact, record]);
 
+  const coverage = record.coverage;
+  // Match lookup runs only once coverage exists (the broker has something to match against).
+  useEffect(() => {
+    if (!coverage) { setMatchedAdopters([]); return; }
+    let cancelled = false;
+    void matchAdoptersForFacilitator(coverage, session.address)
+      .then((a) => { if (!cancelled) setMatchedAdopters(a); })
+      .catch(() => { if (!cancelled) setMatchedAdopters([]); });
+    return () => { cancelled = true; };
+  }, [coverage, session.address]);
+
+  const hasMatches = matchedAdopters.length > 0;
+  const matchStatus: FacilitatorMatchStatus = useMemo(() => ({
+    matched: hasMatches,
+    // No on-chain agreement signal in the facilitator's entitled view yet; keep it honest (false).
+    agreement: false,
+  }), [hasMatches]);
+
+  const lifecycle = useMemo(
+    () => facilitatorLifecycle({ impact, record, hasFacilitatorOrg: !!org, match: matchStatus }),
+    [impact, record, org, matchStatus],
+  );
+  const nextAction = useMemo(
+    () => facilitatorNextAction(lifecycle.position),
+    [lifecycle.position],
+  );
+
   const displayName = displayNameFromImpact(impact, session.name);
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const orgName = impact.contact?.organizationName;
+
+  // ── Grant-missing: render the request-access state instead of a raw error (§15c / §15b.1). The ONE
+  // recovery is to reconnect (re-mint the session grant); a limited "open your home" escape is offered.
+  if (loadState === 'grant-missing') {
+    return (
+      <>
+        <IntranetTopbar session={session} subtitle="Facilitator dashboard" onSignOut={onSignOut} impact={null} />
+        <section className="section wrap">
+          <AccessRequestState
+            title="Please reconnect to refresh JP access"
+            body={`${JP.org} can’t read your facilitator coverage right now — the access you approved at sign-in is missing or expired. Reconnect through your ${JP.impactName} home to refresh it. There’s no silent fallback: this grant is the only way ${JP.org} reads your records.`}
+            disclosure={{
+              owner: `You — your ${JP.impactName} home`,
+              scope: `Your JP facilitator program records — coverage + capacity (intended JP program scope; record-level enforcement lands with spec 248)`,
+              grantee: JP.org,
+              revoke: `Anytime, from your ${JP.impactName} home`,
+            }}
+            primary={{ label: 'Reconnect to refresh JP access', onClick: onReconnect }}
+            limited={{ label: `Open your ${JP.impactName} home`, onClick: onOpenHome }}
+          />
+        </section>
+        <IntranetFooter />
+      </>
+    );
+  }
 
   return (
     <>
@@ -2382,62 +2461,269 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onOpenWea, 
         </div>
       )}
 
-      <MemberOrgSection kind="facilitator" org={org} onCreateOrg={onCreateOrg} />
+      <section className="section wrap">
+        {/* Active-role pill (§11 header) + the lifecycle rail. */}
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+          <Chip label="Working as Facilitator" color="primary" size="small" sx={{ fontWeight: 700 }} />
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Publish your coverage, then review the adopters {JP.org} matches to you.
+          </Typography>
+        </Stack>
+        <LifecycleRail eyebrow="Facilitator lifecycle" steps={lifecycle.steps} />
 
-      {complete ? (
-        <FacilitatorSummary session={session} record={record} impact={impact} onUpdate={update} />
-      ) : (
-        <>
-          <section className="hero" style={{ padding: '3rem 0 2rem' }}>
-            <div className="wrap">
-              <div className="eyebrow">{JP.paths.facilitator.who}</div>
-              <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>{JP.paths.facilitator.title}</h1>
-              <p className="hero-sub" style={{ fontSize: '1rem' }}>
-                {JP.org} runs the program; {JP.impactName} holds your data + signed agreements. We&apos;re only asking
-                you for what JP needs that isn&apos;t already on file with your home.
-              </p>
-            </div>
-          </section>
+        {/* Command-center summary cards (§11): facilitator org · JP association · coverage · open matches. */}
+        <FacilitatorCommandCenter
+          orgName={org ? (orgName ?? org.orgName) : orgName}
+          hasOrg={!!org}
+          mouSigned={!!record.attestations.mou}
+          coverageGroups={coverage?.peopleGroupIds.length ?? 0}
+          openMatches={matchedAdopters.length}
+        />
 
-          <section className="section wrap" style={{ paddingTop: 0 }}>
-            <div className="sec-head">
-              <div className="eyebrow">Facilitator onboarding</div>
-              <h2>{completeness.missing.length === 0 ? 'Sign + declare your coverage — your home holds the rest' : `${JP.org} needs a few things from your ${JP.impactName} profile`}</h2>
-            </div>
-            {completeness.missing.length > 0 && (
-              <ProfileCompletenessBanner
+        {/* Primary task (declare coverage & capacity) + next-best-action right rail (stacks on mobile). */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 2fr) minmax(260px, 1fr)' },
+            gap: 2.5,
+            alignItems: 'start',
+            mt: 2,
+          }}
+        >
+          <Box>
+            <Typography variant="overline" sx={{ display: 'block', color: 'primary.main', fontWeight: 700, letterSpacing: '.08em', mb: 0.5 }}>
+              Primary task · declare coverage &amp; capacity
+            </Typography>
+            {complete && coverage ? (
+              <FacilitatorCoverageSummary session={session} impact={impact} coverage={coverage} />
+            ) : (
+              <FacilitatorPrimaryTaskCard
+                steps={steps}
+                activeStep={activeStep}
                 completeness={completeness}
-                onGoEditProfile={() => onGoEditProfile(completeness.missing.map((f) => f.key))}
+                impact={impact}
+                record={record}
+                session={session}
+                canDeclare={canDeclare}
+                onUpdate={update}
+                onOpenWea={onOpenWea}
+                onGoEditProfile={onGoEditProfile}
+                onGoSignWea={onGoSignWea}
               />
             )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '.875rem', marginTop: '1.5rem' }}>
-              {steps.map((s, i) => (
-                <FacilitatorStepCard
-                  key={s.step}
-                  n={i + 1}
-                  step={s.step}
-                  ownedBy={s.ownedBy}
-                  active={s.step === activeStep}
-                  satisfied={s.satisfied}
-                  impact={impact}
-                  record={record}
-                  session={session}
-                  canDeclare={canDeclare}
-                  onUpdate={update}
-                  onOpenWea={onOpenWea}
-                  onGoEditProfile={onGoEditProfile}
-                  onGoSignWea={onGoSignWea}
-                />
-              ))}
-            </div>
-          </section>
+          </Box>
+          <NextBestAction action={nextAction} />
+        </Box>
+      </section>
 
-          <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
+      {/* Facilitator-org setup card (§11 secondary card) — re-homed `MemberOrgSection`. */}
+      <MemberOrgSection kind="facilitator" org={org} onCreateOrg={onCreateOrg} />
+
+      {/* Match review queue + update publisher are only meaningful once coverage is published. */}
+      {complete && coverage && (
+        <>
+          <MatchedAdoptersPanel adopters={matchedAdopters} grant={session.grant} />
+          <PublishUpdatesPanel record={record} coverage={coverage} matchedAdopters={matchedAdopters} onUpdate={update} />
         </>
       )}
 
+      <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
+      <FacilitatorTrustFooter homeUrl={homeUrl} onOpenHome={onOpenHome} />
       <IntranetFooter />
     </>
+  );
+}
+
+// Command-center summary cards (design spec §11): facilitator org · JP association status · coverage
+// declared · open matches. MUI cards in a responsive grid. White-label/faith copy stays in the app.
+function FacilitatorCommandCenter({
+  orgName, hasOrg, mouSigned, coverageGroups, openMatches,
+}: {
+  orgName: string | undefined; hasOrg: boolean; mouSigned: boolean; coverageGroups: number; openMatches: number;
+}) {
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+        gap: 1.5,
+        mt: 2,
+      }}
+    >
+      <FacilitatorSummaryCard
+        label="Facilitator org"
+        value={orgName ?? (hasOrg ? 'Linked' : 'Not linked')}
+        hint={hasOrg ? 'Linked to your home' : 'Optional — link below'}
+        tone={hasOrg ? 'ok' : 'neutral'}
+      />
+      <FacilitatorSummaryCard
+        label="JP association"
+        value={mouSigned ? 'ADOPT MOU signed' : 'Pending'}
+        hint={mouSigned ? 'Trust status on file' : 'Sign the MOU to associate'}
+        tone={mouSigned ? 'ok' : 'warn'}
+      />
+      <FacilitatorSummaryCard
+        label="Coverage declared"
+        value={coverageGroups > 0 ? `${coverageGroups} group${coverageGroups === 1 ? '' : 's'}` : 'Not yet'}
+        hint={coverageGroups > 0 ? 'Available for JP matching' : 'Declare below to get matched'}
+        tone={coverageGroups > 0 ? 'ok' : 'neutral'}
+      />
+      <FacilitatorSummaryCard
+        label="Open matches"
+        value={String(openMatches)}
+        hint={openMatches > 0 ? 'Adopters to review' : 'None right now'}
+        tone={openMatches > 0 ? 'warn' : 'neutral'}
+      />
+    </Box>
+  );
+}
+
+function FacilitatorSummaryCard({ label, value, hint, tone }: {
+  label: string; value: string; hint: string; tone: 'ok' | 'warn' | 'neutral';
+}) {
+  const toneColor = tone === 'ok' ? 'success.main' : tone === 'warn' ? 'warning.main' : 'text.disabled';
+  return (
+    <MuiCard sx={{ height: '100%' }}>
+      <CardContent sx={{ py: 1.5, px: 2 }}>
+        <Typography variant="overline" sx={{ display: 'block', color: 'text.secondary', fontWeight: 700, letterSpacing: '.06em' }}>
+          {label}
+        </Typography>
+        <Typography sx={{ fontWeight: 800, fontSize: '1.05rem', lineHeight: 1.2, mt: 0.25 }}>
+          {value}
+        </Typography>
+        <Typography sx={{ fontSize: '.72rem', mt: 0.5, color: toneColor, fontWeight: 600 }}>
+          {hint}
+        </Typography>
+      </CardContent>
+    </MuiCard>
+  );
+}
+
+// The setup/onboarding primary-task body (the §11 "declare coverage & capacity" framing). Re-homes the
+// existing `facilitatorSteps` + `CoverageDeclareForm` under the primary-task column — same logic, new
+// home. Shown until onboarding is complete; once coverage is declared the parent swaps in the summary.
+function FacilitatorPrimaryTaskCard({
+  steps, activeStep, completeness, impact, record, session, canDeclare, onUpdate, onOpenWea, onGoEditProfile, onGoSignWea,
+}: {
+  steps: ReturnType<typeof facilitatorSteps>;
+  activeStep: FacilitatorStep | null;
+  completeness: ReturnType<typeof profileCompleteness>;
+  impact: ImpactProfile; record: JpFacilitatorRecord; session: Session; canDeclare: boolean;
+  onUpdate: (next: JpFacilitatorRecord) => void; onOpenWea: () => void;
+  onGoEditProfile: (missingKeys: string[]) => void;
+  onGoSignWea: () => void;
+}) {
+  return (
+    <MuiCard sx={{ bgcolor: 'grey.50' }}>
+      <CardContent>
+        <Typography variant="h6" sx={{ fontWeight: 800 }}>
+          {completeness.missing.length === 0 ? 'Sign + declare your coverage — your home holds the rest' : `${JP.org} needs a few things from your ${JP.impactName} profile`}
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, lineHeight: 1.5 }}>
+          {JP.org} runs the program; {JP.impactName} holds your data + signed agreements. We&apos;re only asking
+          you for what JP needs that isn&apos;t already on file with your home.
+        </Typography>
+        {completeness.missing.length > 0 && (
+          <Box sx={{ mt: 1.5 }}>
+            <ProfileCompletenessBanner
+              completeness={completeness}
+              onGoEditProfile={() => onGoEditProfile(completeness.missing.map((f) => f.key))}
+            />
+          </Box>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '.875rem', marginTop: '1.25rem' }}>
+          {steps.map((s, i) => (
+            <FacilitatorStepCard
+              key={s.step}
+              n={i + 1}
+              step={s.step}
+              ownedBy={s.ownedBy}
+              active={s.step === activeStep}
+              satisfied={s.satisfied}
+              impact={impact}
+              record={record}
+              session={session}
+              canDeclare={canDeclare}
+              onUpdate={onUpdate}
+              onOpenWea={onOpenWea}
+              onGoEditProfile={onGoEditProfile}
+              onGoSignWea={onGoSignWea}
+            />
+          ))}
+        </div>
+      </CardContent>
+    </MuiCard>
+  );
+}
+
+// The single most useful next step for the facilitator, by lifecycle position (design spec §11 right
+// rail + §15a primary-task states). White-label/faith copy lives in the app (ADR-0021).
+function facilitatorNextAction(position: FacilitatorLifecyclePosition): NextAction {
+  switch (position) {
+    case 'coverage-draft':
+      return {
+        title: 'Declare coverage & capacity',
+        body: `Your setup is done. Tell ${JP.org} which Frontier People Groups you serve and the shape of adopters you can host — that’s what makes you discoverable. Use the coverage form on the left.`,
+        tone: 'action',
+      };
+    case 'coverage-published':
+    case 'matches-empty':
+      return {
+        title: 'Matches will appear here',
+        body: `Your coverage is published to ${JP.org}. Nothing needs your action right now — when an adopter declares a people group + adopter type you serve, ${JP.org} introduces them and they show up in your match queue below.`,
+        tone: 'wait',
+      };
+    case 'matches-pending':
+      return {
+        title: 'Review adopter requests',
+        body: `${JP.org} matched one or more adopters to your declared coverage. Review them in the match queue below — and request contact exchange to move toward an agreement.`,
+        tone: 'action',
+      };
+    case 'agreement-requested':
+      return {
+        title: 'View your agreement',
+        body: 'A match has moved toward an agreement. Track its consent + contact-exchange status in the match queue below.',
+        tone: 'action',
+      };
+    default: // setup-needed
+      return {
+        title: 'Finish your setup',
+        body: `Complete the steps in the lifecycle rail — profile, WEA, and the ADOPT MOU — to unlock declaring your coverage & capacity for ${JP.org}.`,
+        tone: 'action',
+      };
+  }
+}
+
+// The persistent data/trust footer (§11 + §15b): where your data lives, what JP can access, how to
+// revoke — with the spec-248 caveat. White-label/faith copy stays in the app (ADR-0021).
+function FacilitatorTrustFooter({ homeUrl, onOpenHome }: { homeUrl: string; onOpenHome: () => void }) {
+  return (
+    <section className="section wrap" style={{ paddingTop: 0 }}>
+      <MuiCard sx={{ bgcolor: 'grey.50' }}>
+        <CardContent>
+          <Typography variant="overline" sx={{ display: 'block', color: 'text.secondary', fontWeight: 700, letterSpacing: '.08em' }}>
+            Your data &amp; access
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.primary', mt: 0.5, lineHeight: 1.6 }}>
+            Your profile, organization, and signed documents (the ADOPT MOU and WEA) live in your{' '}
+            <strong>{JP.impactName} home/org</strong> — {JP.org} never holds them. Your coverage + capacity
+            declaration and published updates are read by {JP.org} through the{' '}
+            <strong>JP-program access you approved</strong> at sign-in: its intended scope is your facilitator
+            program records, though record-level enforcement is the intended product model and not yet
+            cryptographically enforced (spec 248). You can{' '}
+            <strong>revoke that access anytime from your {JP.impactName} home</strong>, and {JP.org}’s
+            visibility goes to zero. <MuiLink href={homeUrl} target="_blank" rel="noopener noreferrer">{homeUrl}</MuiLink>
+          </Typography>
+          <MuiLink
+            component="button"
+            onClick={onOpenHome}
+            sx={{ mt: 1, fontWeight: 700, fontSize: '.85rem', display: 'inline-block' }}
+          >
+            Open your {JP.impactName} home →
+          </MuiLink>
+        </CardContent>
+      </MuiCard>
+    </section>
   );
 }
 
@@ -2780,52 +3066,38 @@ const redBtn: React.CSSProperties = {
   padding: '.6rem 1rem', borderRadius: 999, fontWeight: 700, fontSize: '.88rem', cursor: 'pointer',
 };
 
-// ── Facilitator completion + projection ─────────────────────────────────────
-
-function FacilitatorSummary({ session, record, impact, onUpdate }: { session: Session; record: JpFacilitatorRecord; impact: ImpactProfile; onUpdate: (next: JpFacilitatorRecord) => void }) {
-  const coverage = record.coverage!;
+// ── Facilitator coverage summary (Wave 4 primary-task column) ───────────────
+// The "coverage declared" detail view, re-homed under the §11 primary-task column once onboarding is
+// complete. Pure display of the declared coverage + capacity; the match queue + update publisher +
+// projection now live at the workspace root (`FacilitatorIntranet`), so this no longer loads matches.
+function FacilitatorCoverageSummary({ session, impact, coverage }: {
+  session: Session; impact: ImpactProfile; coverage: import('./lib/vault').FacilitatorCoverage;
+}) {
   const groups = coverage.peopleGroupIds.map(findPeopleGroup).filter((g): g is NonNullable<typeof g> => !!g);
   const homeUrl = personalAuthOrigin(nameLabel(session.name));
   const displayName = displayNameFromImpact(impact, session.name);
   const orgName = impact.contact?.organizationName;
-  // Adopters JP introduced to this facilitator — intersect on FPG + adopter type.
-  // Pass the viewer's own address so their own adopter persona (if any) is
-  // included alongside the seeded adopters — same-browser dual-persona case.
-  const [matchedAdopters, setMatchedAdopters] = useState<MatchedAdopter[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    void matchAdoptersForFacilitator(coverage, session.address)
-      .then((a) => { if (!cancelled) setMatchedAdopters(a); })
-      .catch(() => { if (!cancelled) setMatchedAdopters([]); });
-    return () => { cancelled = true; };
-  }, [coverage, session.address]);
 
   return (
-    <>
-      <section className="hero" style={{ padding: '3rem 0 2rem' }}>
-        <div className="wrap">
-          <div className="eyebrow" style={{ color: 'var(--c-primary)' }}>✓ Coverage declared</div>
-          <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>
-            {displayName} of <span style={{ color: 'var(--c-primary)' }}>{orgName ?? 'your organization'}</span>, you&apos;re facilitating <span style={{ color: 'var(--c-primary)' }}>{groups.length}</span> people group{groups.length === 1 ? '' : 's'}.
-          </h1>
-          <p className="hero-sub" style={{ fontSize: '1rem' }}>
-            {JP.org} will match new adopters of {groups.length === 1 ? 'this group' : 'these groups'} to you when their preferences fit your capacity.
-          </p>
-        </div>
-      </section>
+    <MuiCard sx={{ bgcolor: 'grey.50' }}>
+      <CardContent>
+        <Typography variant="overline" sx={{ display: 'block', color: 'success.main', fontWeight: 700, letterSpacing: '.08em' }}>
+          ✓ Coverage declared
+        </Typography>
+        <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.25 }}>
+          {displayName} of {orgName ?? 'your organization'} — facilitating {groups.length} people group{groups.length === 1 ? '' : 's'}.
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, lineHeight: 1.5 }}>
+          {JP.org} will match new adopters of {groups.length === 1 ? 'this group' : 'these groups'} to you when their
+          preferences fit your capacity. Edit your coverage from your {JP.impactName} home.
+        </Typography>
 
-      <section className="section wrap" style={{ paddingTop: 0 }}>
-        <div className="sec-head">
-          <div className="eyebrow">Your coverage</div>
-          <h2>People groups you serve</h2>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '.6rem', marginTop: '.75rem' }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 800, mt: 2, mb: 0.75 }}>People groups you serve</Typography>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '.6rem' }}>
           {groups.map((g) => <FpgCard key={g.id} g={g} active onPick={() => { /* read-only */ }} />)}
         </div>
-      </section>
 
-      <section className="section wrap" style={{ paddingTop: 0 }}>
-        <div className="agreements" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '.875rem' }}>
+        <div className="agreements" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '.75rem', marginTop: '1rem' }}>
           <CapacityCard
             title="Adopter types you host"
             values={coverage.capacity.adopterTypes.map((t) => FACILITATOR_ADOPTER_TYPE_LABEL[t])}
@@ -2840,55 +3112,50 @@ function FacilitatorSummary({ session, record, impact, onUpdate }: { session: Se
           />
         </div>
         {coverage.description && (
-          <div className="agreement" style={{ marginTop: '.875rem' }}>
-            <h3>How you engage</h3>
-            <p style={{ color: 'var(--c-g700)', marginTop: '.35rem' }}>{coverage.description}</p>
-          </div>
+          <Box sx={{ mt: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>How you engage</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25, lineHeight: 1.5 }}>{coverage.description}</Typography>
+          </Box>
         )}
-      </section>
 
-      <section className="section wrap" style={{ paddingTop: 0 }}>
-        <div className="agreements" style={{ gridTemplateColumns: '1fr', gap: '.875rem' }}>
-          <div className="agreement">
-            <h3>What now</h3>
-            <p style={{ color: 'var(--c-g600)' }}>
-              {JP.org} will introduce new adopters of your declared people groups to you when their
-              preferences fit your capacity. You&apos;ll send quarterly updates back through the same
-              scoped delegation. Both flows ride over the permission you granted at sign-in.
-            </p>
-          </div>
-          <div className="agreement" style={{ background: '#fff' }}>
-            <h3>Where everything lives</h3>
-            <p style={{ color: 'var(--c-g600)' }}>
-              Your ADOPT MOU + WEA Statement of Faith are in your {JP.impactName} vault at{' '}
-              <a href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{homeUrl}</b></a>.
-              {JP.org} holds the attestations + your public coverage declaration. Revisit and revoke
-              any time from your home.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <PublishUpdatesPanel record={record} coverage={coverage} matchedAdopters={matchedAdopters} onUpdate={onUpdate} />
-
-      <MatchedAdoptersPanel adopters={matchedAdopters} grant={session.grant} />
-
-      <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
-    </>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1.5, lineHeight: 1.5 }}>
+          Your ADOPT MOU + WEA Statement of Faith stay in your {JP.impactName} vault at{' '}
+          <MuiLink href={homeUrl} target="_blank" rel="noopener noreferrer"><b>{homeUrl}</b></MuiLink>.
+          {' '}{JP.org} holds the attestations + your coverage declaration (its intended program scope;
+          record-level enforcement lands with spec 248). Revisit and revoke any time from your home.
+        </Typography>
+      </CardContent>
+    </MuiCard>
   );
 }
 
+// ── Match review queue (§11) ────────────────────────────────────────────────
+// The pending adopter requests JP introduced for this facilitator's declared coverage. Re-homed as the
+// review queue: review → contact-exchange (`ContactExchangeWidget`) → agreement. The empty state (§15a
+// `matches-empty`) explains how JP matching works + how to improve coverage when no adopters fit yet.
 function MatchedAdoptersPanel({ adopters, grant }: { adopters: MatchedAdopter[]; grant: DelegationWire | undefined }) {
   if (adopters.length === 0) {
     return (
       <section className="section wrap" style={{ paddingTop: 0 }}>
-        <div className="agreement" style={{ background: '#fff' }}>
-          <h3>No adopter matches yet</h3>
-          <p style={{ color: 'var(--c-g600)' }}>
-            No declared adopters currently fit your coverage. JP will introduce them as new adopters
-            declare the people groups + adopter types you serve.
-          </p>
-        </div>
+        <MuiCard>
+          <CardContent>
+            <Typography variant="overline" sx={{ display: 'block', color: 'text.secondary', fontWeight: 700, letterSpacing: '.08em' }}>
+              Match review queue
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.25 }}>No adopter matches yet</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.75, lineHeight: 1.6 }}>
+              No declared adopters currently fit your coverage. {JP.org} introduces an adopter here as soon as one
+              declares a <strong>people group</strong> + <strong>adopter type</strong> you said you can host — you
+              don’t hunt for them. When a match lands you’ll review a scoped slice (their vault stays sealed) and can
+              request contact exchange to move toward an agreement.
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1, lineHeight: 1.6 }}>
+              To improve your fit, widen your coverage from the primary task above: add more Frontier People Groups,
+              broaden the adopter types + size bands you can host, or refine your ministry areas. The more your
+              declared coverage overlaps real demand, the more adopters {JP.org} can match to you.
+            </Typography>
+          </CardContent>
+        </MuiCard>
       </section>
     );
   }
