@@ -1,6 +1,7 @@
 # Spec 253 — One-prompt org-create via batched on-chain hash approval
 
-**Status:** draft, 2026-06-04.
+**Status:** draft, 2026-06-04. **Security-auditor verdict: GO-WITH-CONDITIONS** (see §5 — conditions 1–5
+are gates; the contract change MUST NOT merge until conditions 1–4 land with their tests).
 **Owner:** `packages/contracts` (`AgentAccount.isValidSignature` + the `ApprovedHashRegistry` it must
 honor) + `apps/demo-sso-next` (the home org-create ceremony) + `apps/demo-a2a` (the delegation verify
 path). Affects BOTH demo-jp and demo-gs (shared Impact home).
@@ -60,17 +61,31 @@ try-block and rides the org batch.
 wired only into the QuorumEnforcer `v==1` path, never the ERC-1271 path the delegations verify through. So
 this is a **contract change + impl redeploy**, not a home-only tweak.
 
-- `packages/contracts/src/AgentAccount.sol` `isValidSignature` / `_validateSig`: add a branch that, when
-  `signature == SENTINEL (0x03)`, returns `ERC1271_MAGIC` iff `ApprovedHashRegistry.isApproved(address(this), hash)`.
-  The branch MUST run **before** the `sig.length < 1` reject and MUST be sentinel-gated (never check the
-  registry for a normal signature). The account learns the registry address via a **factory-view lookup**
-  (mirroring `bundlerSigner()`) so it rotates without per-account migration.
+- `packages/contracts/src/AgentAccount.sol`: add the sentinel branch in **`isValidSignature` ONLY** — when
+  `signature == SENTINEL (0x03)`, return `ERC1271_MAGIC` iff `_approvedHashRegistry().isApproved(address(this), hash)`.
+  **CRITICAL (auditor P0 / F-4):** the branch MUST be inlined in `isValidSignature` BEFORE it delegates to
+  the shared `_validateSig`, and MUST be **provably unreachable** from `_validateSignature` (the ERC-4337
+  userOp-authorization path) / `_validateSig` / `executeFromBundler`. `_validateSig` is shared by BOTH the
+  userOp-auth path and ERC-1271; putting the approved-hash branch in `_validateSig` would let a userOp whose
+  `userOpHash` is pre-approved authorize with `signature=0x03` — an auth bypass. So: sentinel handling is an
+  ERC-1271-entrypoint-only wrapper; `_validateSig` is unchanged.
+- **Registry address is IMMUTABLE (auditor P1 / F-5), NOT a factory-view.** Trusting an owner-mutable
+  factory-view (`bundlerSigner`-style) would let a factory-owner-key compromise re-point every account at an
+  attacker registry that returns `isApproved == true` for any `(account, hash)` → forge a "valid signature"
+  for any hash on any account. Bind the registry as a compile-time `immutable` (or set-once in the impl
+  initializer, never rotatable) = the deployed `0x0Fb3C1495CE94D947205422A0CE79590B714E4E0`. Rotation, if ever
+  needed, goes through a custody-gated UUPS impl upgrade — never a setter.
+- **Fail closed (auditor P1 / F-6, ADR-0013).** If the registry resolves to `address(0)` or the call reverts,
+  `isValidSignature(hash, 0x03)` MUST return `0xffffffff` (reject) — never fall through to `_validateSig`
+  (which would mis-parse `0x03` anyway) and never treat "no registry" as "skip the check." (An immutable
+  non-zero registry largely subsumes this; the explicit reject is belt-and-suspenders.)
 - UUPS upgrade: redeploy the impl; point `AgentAccountFactory`'s default impl at it so **freshly-deployed
   org SAs** (deployed in the same one-prompt op) carry the new `isValidSignature`. Existing delegator
   proxies that must use the sentinel elsewhere need a UUPS upgrade (org SAs created via this flow are new,
   so they get it at deploy).
-- The on-chain redeem path (`DelegationManager._validateSignature`) also uses ERC-1271 → the same change
-  covers verify AND redeem with one contract edit.
+- The on-chain redeem path (`DelegationManager._validateDelegation` → ERC-1271) also benefits — but it
+  ALREADY gates on `_revoked[dHash]` first (`:410`), so redeem honors revocation; only the off-chain relayer
+  is blind (see §5.2). One contract edit covers verify AND redeem.
 
 ## 4. Sentinel + verify
 
@@ -81,39 +96,66 @@ this is a **contract change + impl redeploy**, not a home-only tweak.
   sentinel (delegate-match + timestamp-caveat checks are signature-independent); update the diagnostics tag
   switch to recognize `0x03` (skip WebAuthn parsing).
 
-## 5. Security analysis (MUST be reviewed before shipping)
+## 5. Security analysis — auditor verdict GO-WITH-CONDITIONS
 
-This widens the ERC-1271 surface; it is the riskiest part and goes through the **security-auditor** before
-the contract change merges.
+A pre-implementation security-auditor review (2026-06-04) confirmed the core idea is sound — the load-bearing
+ADR-0011 invariant **holds by construction**: custody/recovery never routes through `isValidSignature`
+(`CustodyPolicy._verifyQuorum` recovers signers directly via `SignatureSlotRecovery` + `isCustodian`/`trustees`;
+all custody mutators are `onlySelf`, not ERC-1271-gated). So a pre-approved hash can never be consumed as
+custody consent. The verdict is **GO-WITH-CONDITIONS** — these are gates; the contract change MUST NOT merge
+until conditions 1–4 land with their tests.
 
-1. **Novel ERC-1271 approved-hash surface.** `isValidSignature` now returns "valid" for any hash the
-   account pre-approved. Mitigations: (a) sentinel-gated — only when `signature == 0x03`; (b) registry
-   keyed by `address(this)` (an account can only approve its OWN hashes); (c) `approveHash` is only callable
-   via the account's own `execute`/`executeBatch` (msg.sender = the account), i.e. already custody-gated.
-   ADR-0011 invariant: this must NOT let a delegate gain custody — an approved delegation hash authorizes
-   the *delegation*, not a custody change; custody operations do not flow through `isValidSignature`-of-a-
-   delegation. Verify no custody/recovery path treats an approved hash as consent.
-2. **Revocation gap (FIX REQUIRED).** `approveHash` is permanent until `revokeHash`. The off-chain
-   `verifyDelegation` does NOT check `DelegationManager.isRevoked` today — so an approved-hash delegation
-   could pass off-chain verify after the delegation was revoked off-chain. FIX: `verifyDelegation` MUST
-   check `isRevoked(delegator, digest)` for sentinel (approved-hash) delegations (it can skip it for
-   signature-bearing ones as today, or add it for all). A delegation's expiry still rides its timestamp
-   caveat (checked off-chain + on-chain at redeem); the approved hash itself never expires, so revocation is
-   the only kill switch — it must be honored on BOTH paths.
-3. **Digest determinism.** The struct hashed-for-approve MUST be byte-identical to the struct put on the
-   wire (same salt, caveats, delegate) or `isApproved` is false. Do not re-randomize salt between approve
-   and wire.
-4. **Gas/atomicity.** The extra `approveHash` calls inflate the deploy `callGasLimit` (~20k each); size it
-   up. The whole op (deploy+name+approvals) is atomic + paymaster-sponsored — if undersized it reverts and
-   no org is created (fail-closed, acceptable).
-5. **Testnet-demo scope.** Ship behind the existing demo posture; the ERC-1271 approved-hash extension is
-   unaudited. Pre-launch hardening (the audit dossier) must cover it before any real pilot.
+1. **(P0) Sentinel in `isValidSignature` ONLY.** `_validateSig` is shared with the userOp-auth path; the
+   approved-hash branch must be unreachable from `_validateSignature`/`executeFromBundler` or it becomes a
+   no-signature userOp-authorization bypass. (Implemented per §3.) Test: a userOp with `signature=0x03` over a
+   pre-approved hash is REJECTED by `_validateSignature`, while `isValidSignature` accepts it.
+2. **(P0) Off-chain revocation must fail closed.** `revokeDelegationByOwner` sets `_revoked[dHash]` but does
+   NOT touch `ApprovedHashRegistry`, so `isApproved`/`isValidSignature(0x03)` stay valid forever after
+   revocation. The off-chain relayer `verifyDelegation` does NOT check `isRevoked` today → it would accept a
+   revoked sentinel delegation. FIX: `verifyDelegation` MUST call `DelegationManager.isRevoked(digest)` and
+   fail closed — required for **all** delegations (the gap exists for signature-bearing ones too), critical for
+   sentinel ones (the approved hash is otherwise a permanent credential). DECISION (document explicitly):
+   `revokeDelegationByOwner` is the single kill switch; once relayer + on-chain redeem both gate on `isRevoked`,
+   the stale `isApproved` bit is defense-not-relied-upon. We do NOT also `revokeHash` (it would be a second
+   passkey prompt). Any future consumer that trusts the registry directly must be aware the bit outlives revoke.
+3. **(P1) Immutable registry, fail-closed.** Per §3 — no owner-mutable factory-view (forge-any-signature
+   pivot); `address(0)`/unreachable ⇒ reject. Test: registry==`address(0)` ⇒ sentinel rejected.
+4. **(P2) Cross-purpose isolation + time-unbounded result.** The sentinel ERC-1271 result is **time-unbounded**
+   (the registry has no expiry; expiry rides the `TimestampEnforcer` caveat, enforced by the relayer off-chain
+   + the DM on-chain — NOT by `isValidSignature`, which knows nothing about caveats). Document: any consumer
+   treating `isValidSignature(digest,0x03)==magic` as full authorization WITHOUT evaluating caveats is using it
+   wrong. The same registry singleton backs CustodyPolicy's `v==1` quorum path; a delegation digest approved by
+   an SA cannot satisfy `_verifyQuorum` (distinct domain separators/typehashes; SA not its own trustee) — ship a
+   test proving this isolation.
+5. **(doc) `approveHash` is permissionless but address-bound.** Anyone may call `approveHash`, but it records
+   `msg.sender` as the approver, so `isApproved(orgSA, hash)` only matches what the org SA itself approved
+   (made inside its custody-gated deploy op). Not "custody-gated function"; "approval bound to the caller."
+
+**Digest determinism.** The struct hashed-for-approve MUST be byte-identical to the wire struct (same
+delegator/delegate/caveats/salt; `hashDelegation` excludes only `args`, confirmed safe). Do not re-randomize
+salt between approve and wire, or `isApproved` is false.
+
+**Gas/atomicity.** The extra `approveHash` calls inflate the deploy `callGasLimit` (~20k each); size it up. The
+whole op (deploy+name+approvals) is atomic + paymaster-sponsored — undersized ⇒ revert ⇒ no org (fail-closed,
+acceptable).
+
+**Testnet-demo scope.** The ERC-1271 approved-hash extension is novel/unaudited beyond this design review; the
+pre-launch hardening dossier must cover the shipped implementation before any real pilot.
+
+### Foundry test matrix (gate before merge)
+1. userOp `signature=0x03` over a pre-approved hash ⇒ `_validateSignature` REJECTS (P0/F-4).
+2. `isValidSignature(approvedHash, 0x03)` ⇒ magic; un-approved hash ⇒ `0xffffffff`.
+3. Cross-account isolation: account B's `0x03` against a hash A approved ⇒ reject.
+4. Registry `address(0)`/unreachable ⇒ sentinel rejected, no fallback (P1/F-6).
+5. Revoked-by-owner sentinel delegation ⇒ rejected on on-chain redeem; off-chain `verifyDelegation` rejects
+   once `isRevoked` lands (P0/F-1).
+6. A delegation digest pre-approved by an SA cannot satisfy `CustodyPolicy._verifyQuorum` (P2/F-2).
+7. Non-sentinel signatures byte-for-byte unaffected (regression).
 
 ## 6. Files to change
 
-- `packages/contracts/src/AgentAccount.sol` (`isValidSignature`/`_validateSig` + registry-address source)
-  + Foundry tests (approved-hash sentinel validates; non-sentinel unaffected; revoked → rejected;
-  cross-account approval isolation).
+- `packages/contracts/src/AgentAccount.sol` (sentinel branch in `isValidSignature` ONLY + an `immutable`
+  registry address) + the §5 Foundry test matrix (all 7).
 - `packages/contracts/script/Deploy.s.sol` — wire the factory/impl to the (already-deployed) registry;
   redeploy impl + factory default.
 - `apps/demo-sso-next/src/connect-client.ts` `createChildAgentForSite` — build the org-as-delegator
@@ -121,8 +163,9 @@ the contract change merges.
   remove the #2/#3/#5 passkey prompts, defer #4.
 - `apps/demo-sso-next/src/lib/delegation.ts` `issueSiteDelegation` — add an unsigned variant returning the
   delegation + digest (no `signHash`).
-- `apps/demo-a2a/src/index.ts` `verifyDelegation` — recognize the `0x03` sentinel in diagnostics; **add the
-  `isRevoked` check for sentinel delegations** (the revocation-gap fix).
+- `apps/demo-a2a/src/index.ts` `verifyDelegation` — recognize the `0x03` sentinel in diagnostics; **add a
+  fail-closed `DelegationManager.isRevoked(digest)` check for ALL delegations** (the revocation-gap fix; the
+  gap exists for signature-bearing ones too, critical for sentinel ones).
 
 ## 7. Phasing
 
