@@ -303,11 +303,13 @@ export function App() {
     if (u.searchParams.get('code')) return; // the connect-return effect owns this case
     const s = restoreMemberSession();
     if (!s) { setView('landing'); return; }
-    // Land returning members in the hub (production UX spec §9: connect → hub, the user resumes a
-    // workspace there). The hub remembers the last active role via the dropdown switch + the cards.
+    // Resume the workspace the member was last in (mirrors demo-gs). CRITICAL: every Impact handoff
+    // (sign WEA/MOU, edit profile, org-create) returns to the root `/`, so this runs after those too —
+    // a returning facilitator/adopter must land back in their WORKSPACE, not be bounced to the hub's
+    // "set up" card. Only fall back to the hub when there is no remembered active role (first arrival).
     const pref = loadActiveRole(s.address);
-    if (pref) setActiveRoleState(pref);
-    setView('hub');
+    if (pref) { setActiveRoleState(pref); setView('workspace'); }
+    else setView('hub');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
