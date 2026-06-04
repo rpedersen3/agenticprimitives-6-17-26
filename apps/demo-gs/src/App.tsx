@@ -21,6 +21,7 @@ import { AgreementsPanel } from './components/AgreementsPanel';
 import { PublicSignalPanel } from './components/PublicSignalPanel';
 import { SubstrateClaimsPanel } from './components/SubstrateClaimsPanel';
 import { SwitchboardBridgePanel } from './components/SwitchboardBridgePanel';
+import { DirectoryPanel } from './components/DirectoryPanel';
 import { Banner, Card, Pill, SectionHead, inputStyle } from './components/ui';
 import { personalHome } from './lib/domain';
 
@@ -258,6 +259,7 @@ function GcoView() {
         ))}
       </Card>
       <MatchBoard needs={myNeeds} requestAsPerson={gco.person} />
+      <DirectoryPanel needs={allNeeds()} offerings={allOfferings()} scope="offering" eyebrow="Directory · supply" title="Browse Kingdom Consultants" sub="Search the public expertise offerings — by skill, region, or cause — to see who could serve your need. Contact is released only when a connection is accepted." />
       <AgreementsPanel agreements={allAgreements()} role="gco" actorPerson={gco.person} />
       <PublicSignalPanel needs={allNeeds()} offerings={allOfferings()} />
     </>
@@ -276,6 +278,7 @@ function JaneView({ personaActor }: { personaActor: `0x${string}` }) {
         </div>
       </Card>
       <SwitchboardBridgePanel />
+      <DirectoryPanel needs={allNeeds()} offerings={allOfferings()} scope="all" title="Switchboard directory" sub="Browse + search the full public projection — demand (needs) and supply (offerings) together. Confidential anchors are coarsened, sensitive regions collapsed, contact withheld until a connection is accepted." />
       <MatchBoard needs={allNeeds()} />
       <AgreementsPanel agreements={allAgreements()} role="jane" actorPerson={personaActor} />
       <PublicSignalPanel needs={allNeeds()} offerings={allOfferings()} />
@@ -290,7 +293,6 @@ function KcView() {
   const kc = activeKc();
   const myOfferings = offeringsForPerson(kc.person);
   const myAgreements = allAgreements().filter((a) => a.kcPersonAgentId.toLowerCase().includes(kc.person.toLowerCase()));
-  const openNeeds = allNeeds().filter((n) => n.status === 'open');
   return (
     <>
       <IntranetHeader label={kc.name} role="KC Expert" onSignOut={() => setEntered('kc', false)} />
@@ -319,16 +321,7 @@ function KcView() {
       </Card>
       <SubstrateClaimsPanel offerings={myOfferings} />
       <AgreementsPanel agreements={myAgreements} role="kc" actorPerson={kc.person} />
-      <Card>
-        <SectionHead eyebrow="Open needs" title="Where the demand is" sub="Public open needs you could serve. Switch to Jane to see the scored match board." />
-        {openNeeds.map((n) => (
-          <div key={n.id} style={{ display: 'flex', gap: '.5rem', alignItems: 'center', padding: '.35rem 0', fontSize: '.85rem', flexWrap: 'wrap' }}>
-            <span style={{ flex: 1 }}>{n.title}</span>
-            {n.requiredSkills.map((s) => <Pill key={s.gcUri} tone="ok">{s.label}</Pill>)}
-            {n.geoFacets.map((g) => <Pill key={g.uri}>{g.label}</Pill>)}
-          </div>
-        ))}
-      </Card>
+      <DirectoryPanel needs={allNeeds()} offerings={allOfferings()} scope="need" eyebrow="Directory · demand" title="Where the demand is" sub="Search the public open needs you could serve — by skill, region, or cause. Switch to Jane to see the scored match board with the contact released on accept." />
     </>
   );
 }
