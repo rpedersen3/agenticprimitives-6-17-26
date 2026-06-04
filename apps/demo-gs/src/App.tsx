@@ -13,6 +13,7 @@ import { ExpertOfferingWizard } from './components/ExpertOfferingWizard';
 import { MatchBoard } from './components/MatchBoard';
 import { AgreementsPanel } from './components/AgreementsPanel';
 import { PublicSignalPanel } from './components/PublicSignalPanel';
+import { SubstrateClaimsPanel } from './components/SubstrateClaimsPanel';
 import { Card, Pill, SectionHead } from './components/ui';
 
 export function App() {
@@ -131,6 +132,7 @@ function ExpertView({ person }: { person: `0x${string}` }) {
           </div>
         ))}
       </Card>
+      <SubstrateClaimsPanel offerings={myOfferings} />
       <AgreementsPanel agreements={myAgreements} role="expert" actorPerson={person} />
       <Card>
         <SectionHead eyebrow="Open needs" title="Where the demand is" sub="Public open needs you could serve. Switch to Jane to see the scored match board." />
