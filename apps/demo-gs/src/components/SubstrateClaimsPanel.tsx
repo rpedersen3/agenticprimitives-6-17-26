@@ -3,11 +3,24 @@
 // (skillId / featureId, version), held in the KC's vault. This is the bridge between the
 // Switchboard domain projection and the generic agent-skills / geo-features substrate.
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ExpertOffering } from '../domain/gs-types';
 import { skillByUri } from '../data/taxonomy';
 import { offeringGeoClaims, offeringSkillClaims } from '../lib/substrate';
+import { featureOnChain, skillOnChain } from '../lib/chain';
 import { Card, Mono, Pill, SectionHead, shortHex } from './ui';
+
+/** A live "resolves on chain" badge — reads the definition registry for this claim's pinned id. */
+function OnChainBadge({ check }: { check: () => Promise<boolean> }) {
+  const [state, setState] = useState<'checking' | 'on' | 'off'>('checking');
+  useEffect(() => {
+    let cancelled = false;
+    check().then((r) => !cancelled && setState(r ? 'on' : 'off')).catch(() => !cancelled && setState('off'));
+    return () => { cancelled = true; };
+  }, []);
+  if (state === 'checking') return <Pill tone="neutral">…resolving on chain</Pill>;
+  return state === 'on' ? <Pill tone="live">✓ definition on chain</Pill> : <Pill tone="warn">definition not on chain</Pill>;
+}
 
 export function SubstrateClaimsPanel({ offerings }: { offerings: ExpertOffering[] }) {
   const rows = useMemo(
@@ -34,6 +47,7 @@ export function SubstrateClaimsPanel({ offerings }: { offerings: ExpertOffering[
               <div key={c.credentialSubject.claimId} style={claimRow}>
                 <Pill tone="ok">{skillUri ? skillByUri(skillUri.gcUri)?.label ?? skillUri.label : 'skill'}</Pill>
                 <span style={meta}>skillId <Mono>{shortHex(c.credentialSubject.definition.skillId, 8, 6)}</Mono> v{c.credentialSubject.definition.version}</span>
+                <OnChainBadge check={() => skillOnChain(c.credentialSubject.definition)} />
                 <Pill tone="neutral">{c.credentialSubject.visibility}</Pill>
                 <span style={meta}>claim <Mono>{shortHex(c.credentialSubject.claimId, 6, 4)}</Mono></span>
               </div>
@@ -47,6 +61,7 @@ export function SubstrateClaimsPanel({ offerings }: { offerings: ExpertOffering[
                 <div key={c.credentialSubject.claimId} style={claimRow}>
                   <Pill>{(offering.geoFacets ?? []).find((g) => g.featureId === c.credentialSubject.feature.featureId)?.label ?? 'region'}</Pill>
                   <span style={meta}>featureId <Mono>{shortHex(c.credentialSubject.feature.featureId, 8, 6)}</Mono> v{c.credentialSubject.feature.version}</span>
+                  <OnChainBadge check={() => featureOnChain(c.credentialSubject.feature)} />
                   <Pill tone="neutral">{c.credentialSubject.visibility}</Pill>
                 </div>
               ))}

@@ -98,6 +98,9 @@ importers:
       '@agenticprimitives/agent-skills':
         specifier: workspace:*
         version: link:../../packages/agent-skills
+      '@agenticprimitives/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@agenticprimitives/geo-features':
         specifier: workspace:*
         version: link:../../packages/geo-features
