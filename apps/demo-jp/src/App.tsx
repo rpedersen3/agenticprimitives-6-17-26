@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Box } from '@mui/material';
 import type { Address, Hex } from '@agenticprimitives/types';
-import { JP, GATEWAY } from './lib/brand';
+import { JP } from './lib/brand';
 import { startSiteEnrollment, startOrgCreation, exchangeCode, verifyIdToken, listRelatedOrgs, type RelatedOrgLink } from './connect-client';
 import { orgPurpose } from './lib/member-org';
 import { predictOrgAddress } from './lib/onchain';
 import { MemberOrgSection } from './components/MemberOrgSection';
 import { IntentRequest } from './components/IntentRequest';
-import { toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
+import { personalAuthOrigin, nameLabel } from './lib/domain';
 import {
   type AdopterStep, type AdopterType, type Attestation,
   type FacilitatorAdopterType, type FacilitatorMinistryArea, type FacilitatorSizeBand,
@@ -37,9 +38,17 @@ import type { PublishedUpdate } from './lib/vault';
 import { MOU_DOC_ID, MOU_TEXT, attestDocConsentBound } from './lib/mou';
 import { WEA_AFFIRMATIONS as WEA_AFFIRMATIONS_LIB, verifyWeaHash } from './lib/wea';
 import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from './lib/people-groups';
-import { PersonaBar } from './components/PersonaBar';
 import { PeteDashboard, JillDashboard } from './components/OperatorDashboards';
-import { loadPersona, savePersona, clearPersona, isOperator, type Persona } from './lib/persona-mode';
+import { AppShellHeader, type ConnectedIdentity } from './components/AppShellHeader';
+import { ConnectScreen } from './components/ConnectScreen';
+import { RoleDiscovery } from './components/RoleDiscovery';
+import { RoleHub } from './components/RoleHub';
+import {
+  restoreSession as restoreMemberSession, setSession as persistSession, clearSession as clearMemberSession,
+  addrFromToken, type MemberSession,
+} from './lib/session';
+import { loadActiveRole, saveActiveRole, clearActiveRole, type RoleKind } from './lib/active-role';
+import { deriveRoleCapabilities } from './lib/role-capabilities';
 
 // JP-Adopt is a RELYING APP (spec 236). JP runs the program; the member's Impact Community
 // home holds the data + delegates scoped access. Onboarding is a JOINT flow — Impact already
@@ -52,10 +61,11 @@ import { loadPersona, savePersona, clearPersona, isOperator, type Persona } from
 // bytes that demo-sso-next mirrors so hash verification works end-to-end).
 const WEA_AFFIRMATIONS = WEA_AFFIRMATIONS_LIB;
 
-type Kind = 'adopter' | 'facilitator';
-type Modal = null | { kind: Kind } | { kind: 'wea' };
+// `Kind` (adopter | facilitator) is now the active-WORKSPACE role (production UX spec §7), not a session
+// identity field. It is an alias of `RoleKind`; the dashboards downstream keep using `Kind` unchanged.
+type Kind = RoleKind;
+type Modal = null | { kind: 'wea' };
 
-const SESSION_KEY = 'agenticprimitives:demo-jp:session';
 const ENROLL_KEY = 'agenticprimitives:demo-jp:enroll';
 /** Stash for the org-create ceremony redirect (parallel to ENROLL_KEY). */
 const ORG_KEY = 'agenticprimitives:demo-jp:org-create';
@@ -83,17 +93,13 @@ function randomB64url(n: number): string {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-interface Session {
-  token: string;
-  name: string;
-  address: Address;
-  kind: Kind;
-  fresh: boolean;
-  /** The scoped read+write delegation the member granted JP at sign-in (spec 247).
-   *  JP reads/writes the member's JP-program records in the MEMBER's own vault
-   *  through this grant — the data lives with the member, JP holds the delegation. */
-  grant?: DelegationWire;
-}
+// `Session` is now the WORKSPACE session the dashboards consume: the connected `MemberSession`
+// (token / name / address / fresh / grant — identity, NOT role; see lib/session.ts) PLUS the active
+// workspace `kind` (adopter | facilitator), which the App stamps on from `activeRole` when it opens a
+// workspace. Production UX spec §7: identity persists; role is a separate UI preference. The dashboard
+// bodies below are UNCHANGED — they still read `session.kind`, but `kind` is now the active workspace
+// role the shell chose, not a field baked into the stored session.
+type Session = MemberSession & { kind: Kind };
 
 interface EnrollStash {
   state?: string;
@@ -101,43 +107,6 @@ interface EnrollStash {
   authOrigin?: string;
   codeVerifier?: string;
   nonce?: string;
-  kind?: Kind;
-}
-
-function decodeToken(token: string): { sub?: string; exp?: number } | null {
-  try {
-    const seg = token.split('.')[1] ?? '';
-    const json = atob(seg.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice((2 - (seg.length & 3)) & 3));
-    return JSON.parse(json) as { sub?: string; exp?: number };
-  } catch {
-    return null;
-  }
-}
-
-function addrFromSub(sub?: string): Address | null {
-  const m = sub?.match(/0x[0-9a-fA-F]{40}$/);
-  return (m?.[0] as Address) ?? null;
-}
-
-function restoreSession(): Session | null {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const s = JSON.parse(raw) as { token?: string; name?: string; kind?: Kind; grant?: DelegationWire };
-    if (!s.token || !s.name || (s.kind !== 'adopter' && s.kind !== 'facilitator')) return null;
-    const dec = decodeToken(s.token);
-    const addr = addrFromSub(dec?.sub);
-    if (!addr || !dec?.exp || dec.exp * 1000 <= Date.now()) {
-      localStorage.removeItem(SESSION_KEY);
-      return null;
-    }
-    // SEC-019: localStorage gives us a tentative session (we still gate exp here so a
-    // visibly-stale token never opens the dashboard). A useEffect at mount re-verifies
-    // the JWT signature against the home's JWKS — if it fails, the session is dropped.
-    return { token: s.token, name: s.name, address: addr, kind: s.kind, fresh: false, grant: s.grant };
-  } catch {
-    return null;
-  }
 }
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -182,46 +151,107 @@ function SelfBadge() {
 
 // ── App ─────────────────────────────────────────────────────────────────────
 
+// The shell route (mirrors demo-gs's App). `landing` = signed out marketing; `connect` = the
+// role-agnostic connect entry + grant review; `discovery` = the post-connect hydration timeline;
+// `hub` = the connected intranet home (role chooser); `workspace` = an active adopter/facilitator
+// workspace. Pete/Jill demo-admin surfaces are orthogonal (`demoPersona`), reached ONLY via the header
+// Admin expander; they NEVER mutate the member session (production UX spec §6/§15c).
+type View = 'landing' | 'connect' | 'discovery' | 'hub' | 'workspace';
+
 export function App() {
-  const [session, setSession] = useState<Session | null>(restoreSession);
+  const [view, setView] = useState<View>('landing');
+  // The connected member (identity only — NO role). Restored from localStorage at mount.
+  const [member, setMember] = useState<MemberSession | null>(restoreMemberSession);
+  // The active workspace role (UI preference; production UX spec §7) when view === 'workspace'.
+  const [activeRole, setActiveRoleState] = useState<Kind | null>(null);
+  // A demo-admin surface (pete/jill) — orthogonal to the member session; never mutates it.
+  const [demoPersona, setDemoPersona] = useState<'pete' | 'jill' | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  /** Bumped whenever the Impact profile is updated externally (e.g. returning from the
-   *  member's /profile editor at their Impact home). Used as the `key` on AdopterIntranet
-   *  so it re-mounts and reloads the vault from localStorage. */
+  /** Bumped whenever the Impact profile / vault is updated externally (e.g. returning from the
+   *  member's /profile editor at their Impact home, or after an org-create return). Used as the `key`
+   *  on the dashboards so they re-mount and reload the vault from localStorage. */
   const [vaultBump, setVaultBump] = useState(0);
-  /** Active demo persona (Wave 8.13). Operator personas (Pete/Jill) render the
-   *  issuer/broker dashboards; member personas keep the SSO flow below. */
-  const [persona, setPersona] = useState<Persona | null>(loadPersona);
 
-  const switchPersona = useCallback((p: Persona | null) => {
-    setPersona(p);
-    setError(null);
-    if (p) savePersona(p);
-    else clearPersona();
-    // Selecting a member persona with no session opens that onboarding flow.
-    if ((p === 'adopter' || p === 'facilitator') && !restoreSession()) setModal({ kind: p });
-  }, []);
+  // Set the connected member into a `Session` the dashboards consume by stamping the active workspace
+  // role onto it. Identity (member) + role (activeRole) are separate concerns (production UX spec §7).
+  const session: Session | null = member && activeRole ? { ...member, kind: activeRole } : null;
+  // The canonical person key for the active-role preference: the person SA address.
+  const personKey = member?.address ?? '';
 
-  /** ADR-0025 / spec 246: demo-jp keeps NO local person→org store. It asks Connect
-   *  (the person's home) for the orgs related to THIS app, authorized by the person's
-   *  session id_token. Re-queries on `vaultBump` (e.g. after an org-create return). */
+  /** ADR-0025 / spec 246: demo-jp keeps NO local person→org store. It asks Connect (the person's home)
+   *  for the orgs related to THIS app, authorized by the person's session id_token. Re-queries on
+   *  `vaultBump` (e.g. after an org-create return). `relatedOrgsLoaded` drives the discovery timeline. */
   const [relatedOrgs, setRelatedOrgs] = useState<RelatedOrgLink[]>([]);
+  const [relatedOrgsLoaded, setRelatedOrgsLoaded] = useState(false);
   useEffect(() => {
-    const s = restoreSession();
-    if (!s) { setRelatedOrgs([]); return; }
+    const s = restoreMemberSession();
+    if (!s) { setRelatedOrgs([]); setRelatedOrgsLoaded(false); return; }
     let cancelled = false;
-    void listRelatedOrgs(s.name, s.token).then((orgs) => { if (!cancelled) setRelatedOrgs(orgs); }).catch(() => {});
+    setRelatedOrgsLoaded(false);
+    void listRelatedOrgs(s.name, s.token)
+      .then((orgs) => { if (!cancelled) setRelatedOrgs(orgs); })
+      .catch(() => { /* empty is an answer (ADR-0013) */ })
+      .finally(() => { if (!cancelled) setRelatedOrgsLoaded(true); });
     return () => { cancelled = true; };
-  }, [vaultBump]);
+  }, [vaultBump, member?.address]);
+
+  // The connected member's JP records — loaded at App level so the role resolver + discovery can
+  // resolve which workspaces are ready BEFORE we route into one (production UX spec §9; no blank/wrong
+  // dashboard while reads run). The dashboards still load their own records (UNCHANGED) for their
+  // interactive flows; this read is for routing only. ONE mechanism (ADR-0013): on a read error we
+  // record `recordsLoadFailed` and surface it in discovery — never a fallback path.
+  const [impact, setImpact] = useState<ImpactProfile | null>(null);
+  const [adopterRecord, setAdopterRecord] = useState<JpAdopterRecord | null>(null);
+  const [facilitatorRecord, setFacilitatorRecord] = useState<JpFacilitatorRecord | null>(null);
+  const [recordsLoaded, setRecordsLoaded] = useState(false);
+  const [recordsLoadFailed, setRecordsLoadFailed] = useState(false);
+  useEffect(() => {
+    const grant = member?.grant;
+    if (!member) { setImpact(null); setAdopterRecord(null); setFacilitatorRecord(null); setRecordsLoaded(false); setRecordsLoadFailed(false); return; }
+    if (!grant) { setRecordsLoaded(true); setRecordsLoadFailed(false); return; } // grant-missing is resolved by the resolver
+    let cancelled = false;
+    setRecordsLoaded(false); setRecordsLoadFailed(false);
+    void (async () => {
+      try {
+        const [i, a, f] = await Promise.all([
+          loadImpactProfile(grant), loadJpAdopterRecord(grant), loadJpFacilitatorRecord(grant),
+        ]);
+        if (cancelled) return;
+        setImpact(i); setAdopterRecord(a); setFacilitatorRecord(f);
+      } catch {
+        if (!cancelled) setRecordsLoadFailed(true);
+      } finally {
+        if (!cancelled) setRecordsLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [vaultBump, member?.address, member?.grant]);
+
+  // The role resolver (production UX spec §7) — pure derivation from the session + related orgs +
+  // loaded records. Drives the hub cards + the header switch/setup entries.
+  const caps = useMemo(
+    () => deriveRoleCapabilities({
+      connected: !!member,
+      hasGrant: !!member?.grant,
+      relatedOrgs,
+      impact,
+      adopterRecord,
+      facilitatorRecord,
+      adopterLoadFailed: recordsLoadFailed,
+      facilitatorLoadFailed: recordsLoadFailed,
+      recordsLoaded,
+    }),
+    [member, relatedOrgs, impact, adopterRecord, facilitatorRecord, recordsLoadFailed, recordsLoaded],
+  );
 
   /** Kick off the Impact org-create ceremony — the connected user custodies the new
    *  org SA via their ROOT credential at their home. We tag the org with a purpose
    *  (jp-adopter-org / jp-facilitator-org) so the private vault link is scoped; on
    *  return we re-query Connect (no local person→org store — ADR-0025). */
   const goCreateOrg = useCallback(async (kind: Kind, orgName: string) => {
-    const s = restoreSession();
+    const s = restoreMemberSession();
     if (!s) { setError('Connect first, then create your organization.'); return; }
     try {
       // Grant the JP broker org scoped read access to the new org (spec 246 §5) so
@@ -238,25 +268,21 @@ export function App() {
     }
   }, []);
 
-  // SEC-019: re-verify the restored JWT's signature against the home's JWKS. If we
-  // can't fetch the JWKS OR the signature doesn't verify, drop the session. Runs once
-  // per mount when there's a restored token; the OIDC return path mints a fresh token
-  // that has already been verified inside `completeAuth`, so we skip re-verify when
-  // `session.fresh === true`.
+  // SEC-019: re-verify the restored JWT's signature against the home's JWKS. If we can't fetch the JWKS
+  // OR the signature doesn't verify, drop the session. Runs once per mount when there's a restored
+  // token that isn't `fresh` (a fresh OIDC return was already verified inside the return handler).
   useEffect(() => {
-    if (!session || session.fresh) return;
+    if (!member || member.fresh) return;
     let cancelled = false;
     void (async () => {
       try {
-        const authOrigin = personalAuthOrigin(nameLabel(session.name));
-        // Empty `expectedNonce` — session restore can't replay the original; signature
-        // + exp + iss are the load-bearing checks here.
-        await verifyIdToken(authOrigin, session.token, '');
+        const authOrigin = personalAuthOrigin(nameLabel(member.name));
+        await verifyIdToken(authOrigin, member.token, '');
       } catch (e) {
         if (cancelled) return;
-        // Restored token failed signature/iss/exp/allowlist; force a fresh sign-in.
-        setSession(null);
-        try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
+        setMember(null);
+        clearMemberSession();
+        setView('landing');
         setError(`Saved sign-in could not be re-verified (${e instanceof Error ? e.message : 'unknown'}). Please sign in again.`);
       }
     })();
@@ -264,38 +290,86 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const openSession = useCallback((token: string, name: string, kind: Kind, fresh: boolean, grant?: DelegationWire) => {
-    const addr = addrFromSub(decodeToken(token)?.sub);
-    if (!addr) {
-      setError("We couldn't read your agent address from the session token.");
-      return;
-    }
-    setSession({ token, name, address: addr, kind, fresh, grant });
-    try {
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ token, name, kind, grant }));
-    } catch {
-      /* ignore */
-    }
-    // spec 247: register the member's grant in JP's vault (the broker pool), so the
-    // broker can later read this member's records through it. Idempotent; deploys JP
-    // (Jill's key, in this demo browser) if needed.
-    if (grant) {
-      void (async () => {
-        try {
-          await ensureOrgDeployed('jp');
-          await storeMemberGrant(addr, grant);
-        } catch { /* broker pool registration is best-effort in the demo */ }
-      })();
-    }
+  // Restore the connected view on load (a returning member with a saved session, no ?code in the URL).
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    if (u.searchParams.get('code')) return; // the connect-return effect owns this case
+    const s = restoreMemberSession();
+    if (!s) { setView('landing'); return; }
+    // Land returning members in the hub (production UX spec §9: connect → hub, the user resumes a
+    // workspace there). The hub remembers the last active role via the dropdown switch + the cards.
+    const pref = loadActiveRole(s.address);
+    if (pref) setActiveRoleState(pref);
+    setView('hub');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Open the connected member's session in JP's broker pool (spec 247) — register the grant so the
+  // broker can later read this member's records through it. Idempotent; best-effort in the demo.
+  const registerGrant = useCallback((address: Address, grant?: DelegationWire) => {
+    if (!grant) return;
+    void (async () => {
+      try {
+        await ensureOrgDeployed('jp');
+        await storeMemberGrant(address, grant);
+      } catch { /* broker pool registration is best-effort in the demo */ }
+    })();
+  }, []);
+
+  // Establish the connected member identity (NO role) + route through discovery → hub. Mirrors
+  // demo-gs's connect-return → discovery → hub reflow.
+  const openMember = useCallback((token: string, name: string, grant?: DelegationWire) => {
+    const addr = addrFromToken(token);
+    if (!addr) { setError("We couldn't read your agent address from the session token."); return; }
+    const next: MemberSession = { token, name, address: addr, fresh: true, grant };
+    setMember(next);
+    persistSession(next);
+    registerGrant(addr, grant);
+    setView('discovery');
+  }, [registerGrant]);
+
+  const openWorkspace = useCallback((role: Kind) => {
+    setDemoPersona(null);
+    setActiveRoleState(role);
+    if (personKey) saveActiveRole(personKey, role);
+    setView('workspace');
+  }, [personKey]);
+
+  // Open a demo-admin surface (Pete/Jill) WITHOUT touching the member session (production UX spec §15c).
+  const openDemo = useCallback((p: 'pete' | 'jill') => {
+    setDemoPersona(p);
+    setError(null);
+    setView('workspace');
+  }, []);
+
+  const goConnect = useCallback(() => { setError(null); setBusy(null); setView('connect'); }, []);
+  const goHub = useCallback(() => { setDemoPersona(null); setActiveRoleState(null); setView('hub'); }, []);
 
   const signOut = useCallback(() => {
-    setSession(null);
+    if (personKey) clearActiveRole(personKey);
+    setMember(null);
+    setActiveRoleState(null);
+    setDemoPersona(null);
     setError(null);
-    try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
-  }, []);
+    clearMemberSession();
+    setView('landing');
+  }, [personKey]);
 
-  // OIDC return-path handler (demo-org / spec 230 pattern).
+  // Route on once discovery has hydrated (related orgs + records loaded) → the hub. On a vault read
+  // error we STAY on discovery (RoleDiscovery shows the error + retry; no fallback — ADR-0013).
+  useEffect(() => {
+    if (view !== 'discovery') return;
+    if (recordsLoadFailed) return;
+    if (!relatedOrgsLoaded || !recordsLoaded) return;
+    goHub();
+  }, [view, relatedOrgsLoaded, recordsLoaded, recordsLoadFailed, goHub]);
+
+  const onOpenHome = useCallback(() => {
+    if (member) window.open(`${personalAuthOrigin(nameLabel(member.name))}/you`, '_blank', 'noopener');
+  }, [member]);
+
+  // OIDC return-path handler (demo-org / spec 230 pattern). Role-agnostic now: the connect ceremony
+  // enrolls the PERSON; the role is chosen later in the hub.
   useEffect(() => {
     const u = new URL(window.location.href);
     const code = u.searchParams.get('code');
@@ -313,7 +387,7 @@ export function App() {
     try { orgStash = JSON.parse(sessionStorage.getItem(ORG_KEY) ?? '{}') as OrgStash; } catch { /* ignore */ }
     if (code && orgStash.state && retState && orgStash.state === retState) {
       sessionStorage.removeItem(ORG_KEY);
-      if (!orgStash.authOrigin || !orgStash.codeVerifier || !orgStash.kind) {
+      if (!orgStash.authOrigin || !orgStash.codeVerifier) {
         setError('Organization response was incomplete. Please try again.');
         return;
       }
@@ -351,7 +425,7 @@ export function App() {
       return;
     }
     sessionStorage.removeItem(ENROLL_KEY);
-    if (!code || !stash.authOrigin || !stash.codeVerifier || !stash.kind) {
+    if (!code || !stash.authOrigin || !stash.codeVerifier) {
       setError('Sign-in response was incomplete. Please try again.');
       return;
     }
@@ -360,7 +434,8 @@ export function App() {
         const tok = await exchangeCode(stash.authOrigin!, code, stash.codeVerifier!);
         const claims = await verifyIdToken(stash.authOrigin!, tok.idToken, stash.nonce ?? '');
         const name = claims.agent_name ?? stash.name ?? '';
-        openSession(tok.idToken, name, stash.kind!, true, tok.delegation);
+        // Role-agnostic: enroll the PERSON; the role is chosen in the hub afterwards (mirrors demo-gs).
+        openMember(tok.idToken, name, tok.delegation);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'sign-in failed');
       }
@@ -399,7 +474,7 @@ export function App() {
     }
     sessionStorage.removeItem(PROFILE_HANDOFF_KEY);
 
-    const restored = restoreSession();
+    const restored = restoreMemberSession();
     if (!restored?.grant) return;
     const grant = restored.grant;
     void (async () => {
@@ -476,7 +551,7 @@ export function App() {
         setError('The WEA attestation hash did not match our canonical document — please re-sign.');
         return;
       }
-      const restored = restoreSession();
+      const restored = restoreMemberSession();
       if (!restored?.grant) return;
       const grant = restored.grant;
       const existing = await loadImpactProfile(grant);
@@ -493,12 +568,14 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const beginConnect = useCallback(async (name: string, kind: Kind) => {
+  // Role-agnostic person connect (mirrors demo-gs): launches the SAME `startSiteEnrollment` ceremony,
+  // with NO role in the stash. The role is chosen later in the hub.
+  const beginConnect = useCallback(async (name: string) => {
     setError(null);
     try {
       setBusy('Opening your secure home…');
       const { url, state, authOrigin, codeVerifier, nonce } = await startSiteEnrollment(name);
-      const stash: EnrollStash = { state, name, authOrigin, codeVerifier, nonce, kind };
+      const stash: EnrollStash = { state, name, authOrigin, codeVerifier, nonce };
       sessionStorage.setItem(ENROLL_KEY, JSON.stringify(stash));
       window.location.href = url;
     } catch (e) {
@@ -507,60 +584,128 @@ export function App() {
     }
   }, []);
 
-  const bar = <PersonaBar active={persona} onSwitch={switchPersona} />;
+  // The header identity pill (connected only; demo surfaces keep the member identity in the pill but
+  // flag the demo banner in the body). In a workspace the pill shows the active role; in the hub /
+  // discovery (no active workspace) it shows "choose a workspace" (activeRole === null).
+  const identity: ConnectedIdentity | null = member
+    ? {
+        displayName: displayNameFromImpact(impact, member.name),
+        handle: member.name,
+        activeRole: view === 'workspace' && !demoPersona ? activeRole : null,
+      }
+    : null;
 
-  // Operator personas (Pete / Jill) short-circuit the SSO flow.
-  if (persona && isOperator(persona)) {
-    return <>{bar}{persona === 'pete' ? <PeteDashboard /> : <JillDashboard />}</>;
+  const header = (
+    <AppShellHeader
+      admin={!!demoPersona}
+      identity={identity}
+      caps={member ? caps : null}
+      onConnect={goConnect}
+      onDemoPete={() => openDemo('pete')}
+      onDemoJill={() => openDemo('jill')}
+      onHelp={goConnect}
+      onOpenHome={onOpenHome}
+      onDisconnect={signOut}
+      onSwitchRole={(k) => openWorkspace(k)}
+      onSetupRole={(k) => openWorkspace(k)}
+    />
+  );
+
+  // Demo-admin surfaces (Pete/Jill) — reached ONLY via the header Admin expander; the member session is
+  // untouched (production UX spec §15c). A demo-admin banner makes the non-production status explicit.
+  if (view === 'workspace' && demoPersona) {
+    return (
+      <>
+        {header}
+        <DemoAdminBanner />
+        {demoPersona === 'pete' ? <PeteDashboard /> : <JillDashboard />}
+        {modal && modal.kind === 'wea' && <WeaModal onClose={() => setModal(null)} />}
+      </>
+    );
   }
 
-  if (session) {
+  // Connected member workspace — the existing dashboards, UNCHANGED (only routed differently). The role
+  // resolver/§7 split chose `activeRole`; we stamp it onto the session the dashboards consume.
+  if (view === 'workspace' && session) {
     if (session.kind === 'adopter') {
       return (
-        <>{bar}
-        <AdopterIntranet
+        <>
+          {header}
+          <AdopterIntranet
+            key={vaultBump}
+            session={session}
+            org={caps.byKind.adopter.org}
+            relatedOrgs={relatedOrgs}
+            onCreateOrg={(name) => goCreateOrg('adopter', name)}
+            onSignOut={signOut}
+            onOpenWea={() => setModal({ kind: 'wea' })}
+            onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
+            onGoSignWea={() => goSignWeaAtImpact(session.name)}
+          />
+          {modal && modal.kind === 'wea' && <WeaModal onClose={() => setModal(null)} />}
+        </>
+      );
+    }
+    return (
+      <>
+        {header}
+        <FacilitatorIntranet
           key={vaultBump}
           session={session}
-          org={relatedOrgs.find((o) => o.purpose === orgPurpose('adopter')) ?? relatedOrgs.find((o) => o.stewardshipDelegation) ?? null}
-          relatedOrgs={relatedOrgs}
-          onCreateOrg={(name) => goCreateOrg('adopter', name)}
+          org={caps.byKind.facilitator.org}
+          onCreateOrg={(name) => goCreateOrg('facilitator', name)}
           onSignOut={signOut}
           onOpenWea={() => setModal({ kind: 'wea' })}
           onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
           onGoSignWea={() => goSignWeaAtImpact(session.name)}
         />
-        </>
-      );
-    }
-    return (
-      <>{bar}
-      <FacilitatorIntranet
-        key={vaultBump}
-        session={session}
-        org={relatedOrgs.find((o) => o.purpose === orgPurpose('facilitator')) ?? relatedOrgs.find((o) => o.stewardshipDelegation) ?? null}
-        onCreateOrg={(name) => goCreateOrg('facilitator', name)}
-        onSignOut={signOut}
-        onOpenWea={() => setModal({ kind: 'wea' })}
-        onGoEditProfile={(missingKeys) => goEditProfileAtImpact(session.name, missingKeys)}
-        onGoSignWea={() => goSignWeaAtImpact(session.name)}
-      />
+        {modal && modal.kind === 'wea' && <WeaModal onClose={() => setModal(null)} />}
       </>
     );
   }
 
-  // ── Signed-out marketing page (unchanged from the user-approved version) ────
+  // Connect entry, discovery, and hub — the new MUI shell surfaces (production UX spec §8/§9/§15a).
+  if (view === 'connect' || view === 'discovery' || view === 'hub') {
+    return (
+      <>
+        {header}
+        {error && (
+          <div role="alert" style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca', color: '#991b1b', padding: '.75rem 1.25rem', textAlign: 'center', fontSize: '.875rem' }}>{error}</div>
+        )}
+        <Box sx={{ maxWidth: 1080, mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 3, sm: 4 } }}>
+          {view === 'connect' && (
+            <ConnectScreen busy={busy} error={error} onConnect={(name) => beginConnect(name)} onBack={() => setView('landing')} />
+          )}
+          {view === 'discovery' && (
+            <RoleDiscovery
+              relatedOrgsLoaded={relatedOrgsLoaded}
+              recordsLoaded={recordsLoaded}
+              error={recordsLoadFailed ? 'a vault read failed' : null}
+              onRetry={() => setVaultBump((n) => n + 1)}
+            />
+          )}
+          {view === 'hub' && (
+            <RoleHub
+              name={identity?.displayName ?? member?.name ?? 'there'}
+              caps={caps}
+              onOpen={(k) => openWorkspace(k)}
+              onSetup={(k) => openWorkspace(k)}
+              onReconnect={goConnect}
+              onOpenHome={onOpenHome}
+            />
+          )}
+        </Box>
+        {modal && modal.kind === 'wea' && <WeaModal onClose={() => setModal(null)} />}
+      </>
+    );
+  }
+
+  // ── Signed-out landing (production UX spec §8) — the existing marketing page, with the PersonaBar
+  // retired and the role CTAs reflowed to the role-agnostic connect entry (mirrors demo-gs: connect
+  // first, choose your role in the hub). ────
   return (
     <>
-      {bar}
-      <header className="topbar">
-        <div className="wrap">
-          <div className="brand">
-            <span className="brand-glyph" aria-hidden="true"><GlobeGlyph /></span>
-            <div>{JP.appName}<small>{JP.org} · Frontier People Groups</small></div>
-          </div>
-          <span className="powered">Powered by <b>{GATEWAY.community}</b></span>
-        </div>
-      </header>
+      {header}
 
       {error && (
         <div role="alert" style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca', color: '#991b1b', padding: '.75rem 1.25rem', textAlign: 'center', fontSize: '.875rem' }}>{error}</div>
@@ -573,8 +718,8 @@ export function App() {
           <p className="hero-sub">{JP.hero.sub}</p>
           <p className="hero-note">{JP.hero.note}</p>
           <div className="hero-cta">
-            <button className="btn btn-primary btn-lg" onClick={() => setModal({ kind: 'adopter' })}>{JP.paths.adopter.cta}</button>
-            <button className="btn btn-ghost btn-lg" onClick={() => setModal({ kind: 'facilitator' })}>{JP.paths.facilitator.cta}</button>
+            <button className="btn btn-primary btn-lg" onClick={goConnect}>{JP.paths.adopter.cta}</button>
+            <button className="btn btn-ghost btn-lg" onClick={goConnect}>{JP.paths.facilitator.cta}</button>
           </div>
           <div className="stats">
             {JP.stats.map((s) => (
@@ -615,7 +760,7 @@ export function App() {
                 <div className="path-who">{p.who}</div>
                 <p className="path-body">{p.body}</p>
                 <ol>{p.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
-                <button className={`btn ${k === 'adopter' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setModal({ kind: k })}>{p.cta}</button>
+                <button className={`btn ${k === 'adopter' ? 'btn-primary' : 'btn-ghost'}`} onClick={goConnect}>{p.cta}</button>
               </div>
             );
           })}
@@ -660,75 +805,18 @@ export function App() {
         </div>
       </footer>
 
-      {modal && (modal.kind === 'adopter' || modal.kind === 'facilitator') && (
-        <OnboardPanel
-          kind={modal.kind}
-          busy={busy}
-          onClose={() => { setModal(null); setBusy(null); }}
-          onConnect={(name) => beginConnect(name, modal.kind as Kind)}
-        />
-      )}
       {modal && modal.kind === 'wea' && <WeaModal onClose={() => setModal(null)} />}
     </>
   );
 }
 
-// ── Onboarding-entry panel (unchanged) ──────────────────────────────────────
-
-function OnboardPanel({ kind, busy, onClose, onConnect }: {
-  kind: Kind; busy: string | null; onClose: () => void; onConnect: (name: string) => void;
-}) {
-  const p = JP.paths[kind];
-  const [name, setName] = useState<string>(() => {
-    try { return localStorage.getItem('agenticprimitives:demo-jp:last-name') ?? ''; } catch { return ''; }
-  });
-  const trimmed = name.trim();
-  const submit = () => {
-    if (!trimmed || busy) return;
-    try { localStorage.setItem('agenticprimitives:demo-jp:last-name', trimmed); } catch { /* ignore */ }
-    onConnect(trimmed);
-  };
+// Demo-admin banner — Pete/Jill are demo shortcuts on deterministic demo keys (AUDIT.md C-1 / spec
+// 248), never production authorization; opening them never mutates the connected member session.
+function DemoAdminBanner() {
   return (
-    <div className="scrim" onClick={onClose}>
-      <div className="panel" onClick={(e) => e.stopPropagation()}>
-        <button className="panel-x" onClick={onClose} aria-label="Close">×</button>
-        <h2>{p.cta}</h2>
-        <div className="who">{p.who}</div>
-        <p style={{ color: 'var(--c-g600)', marginTop: '.75rem' }}>{p.body}</p>
-        <p style={{ marginTop: '1rem', fontWeight: 700, color: 'var(--c-g800)' }}>Here’s the flow:</p>
-        <ol>{p.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
-        <p style={{ marginTop: '1rem', fontSize: '.85rem', color: 'var(--c-g600)' }}>
-          {JP.org} runs the adoption program. {JP.impactName} is your private identity + data
-          vault — JP only sees what you grant, and you can revoke it any time.
-        </p>
-        <div className="panel-foot" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '.6rem' }}>
-          <label htmlFor="jp-impact-name" style={{ fontSize: '.78rem', fontWeight: 700, color: 'var(--c-g700)', letterSpacing: '.02em' }}>
-            Your {JP.impactName} name
-          </label>
-          <input
-            id="jp-impact-name" type="text" value={name}
-            onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-            onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-            placeholder="e.g. rich-pedersen" autoComplete="username" autoCapitalize="none"
-            spellCheck={false} disabled={!!busy}
-            style={{ padding: '.75rem .9rem', fontSize: '1rem', borderRadius: 10, border: '1.5px solid var(--c-g300)', background: '#fff', width: '100%', fontFamily: "'SF Mono','Roboto Mono',monospace" }}
-          />
-          {trimmed && (
-            <div style={{ fontSize: '.75rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
-              {fullName(trimmed)} · home at {personalHome(trimmed)}
-            </div>
-          )}
-          <button className="btn-sso" onClick={submit} disabled={!trimmed || !!busy} title="Connect via Impact Community">
-            <span className="btn-sso-glyph" aria-hidden="true"><GlobeGlyph size={16} /></span>
-            {busy ?? JP.ssoCta}
-            <span style={{ flex: 1 }} />
-            <span style={{ fontSize: '.72rem', fontWeight: 600, color: 'var(--c-g400)' }}>SSO + your vault</span>
-          </button>
-          <span className="soon" style={{ background: 'var(--c-primary-subtle)', borderColor: 'var(--c-primary-border)', color: 'var(--c-primary-active)' }}>
-            You’ll confirm with your device at <b>{personalHome(trimmed || 'your-name')}</b>, then come back here to continue with JP.
-          </span>
-        </div>
-      </div>
+    <div role="note" style={{ background: '#fffbeb', borderBottom: '1px solid #fcd34d', color: '#92400e', padding: '.7rem 1.25rem', textAlign: 'center', fontSize: '.85rem' }}>
+      Demo admin surface — Pete/Jill run on deterministic demo keys (spec 248 hardening pending). This is
+      not production authorization, and your connected member session (if any) is untouched.
     </div>
   );
 }
