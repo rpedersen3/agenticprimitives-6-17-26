@@ -420,6 +420,14 @@ export function App() {
             } catch { /* received-delegation registration is best-effort in the demo */ }
           }
           setVaultBump((n) => n + 1);
+          // Route back to the workspace the org was created FROM. The org-create return carries `?code`,
+          // so the restore-on-load effect skips it (it owns the ?code case) — this handler MUST route,
+          // or the view stays at its initial 'landing' and the user sees the connect screen even though
+          // their session is intact (reported bug). Resume the active role (adopter/facilitator).
+          const s = restoreMemberSession();
+          const pref = orgStash.kind ?? (s ? loadActiveRole(s.address) : null);
+          if (pref) { setActiveRoleState(pref); if (s) saveActiveRole(s.address, pref); setView('workspace'); }
+          else setView('hub');
         } catch (e) {
           setError(e instanceof Error ? e.message : 'organization creation failed');
         }
@@ -934,7 +942,6 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
   if (loadState === 'grant-missing') {
     return (
       <>
-        <IntranetTopbar session={session} subtitle="Adopter dashboard" onSignOut={onSignOut} impact={null} />
         <section className="section wrap">
           <AccessRequestState
             title="Please reconnect to refresh JP access"
@@ -956,7 +963,6 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
 
   return (
     <>
-      <IntranetTopbar session={session} subtitle="Adopter dashboard" onSignOut={onSignOut} impact={impact} />
       <HeaderAlerts
         impact={impact}
         adopterType={record.adopterType}
@@ -2476,7 +2482,6 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onReconnect
   if (loadState === 'grant-missing') {
     return (
       <>
-        <IntranetTopbar session={session} subtitle="Facilitator dashboard" onSignOut={onSignOut} impact={null} />
         <section className="section wrap">
           <AccessRequestState
             title="Please reconnect to refresh JP access"
@@ -2498,7 +2503,6 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onReconnect
 
   return (
     <>
-      <IntranetTopbar session={session} subtitle="Facilitator dashboard" onSignOut={onSignOut} impact={impact} />
       <HeaderAlerts
         impact={impact}
         adopterType={FACILITATOR_PROFILE_TYPE}
