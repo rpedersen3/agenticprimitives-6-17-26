@@ -1,0 +1,96 @@
+{
+  "name": "@agenticprimitives/agent-skills",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/251-skills-and-geo-features.md",
+  "summary": "Off-chain skill CLAIM credentials + SkillDefinitionRegistry helpers (spec 251). Definitions on chain; claims are private vault credentials pointing to a (skillId, version).",
+  "owns": {
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "@agenticprimitives/ontology",
+    "viem",
+    "@noble/hashes"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/geo-features",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/connect",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "Uri",
+    "Hex32",
+    "SKILL_KIND",
+    "SKILL_KIND_URI",
+    "SKILL_RELATION",
+    "SkillVisibility",
+    "SELF_FORBIDDEN_RELATIONS",
+    "SELF_MAX_PROFICIENCY",
+    "MAX_PROFICIENCY",
+    "computeSkillId",
+    "conceptHash",
+    "SkillDefinitionPublishInput",
+    "SkillDefinitionRef",
+    "SkillClaimSubject",
+    "SkillClaimCredential",
+    "skillClaimId",
+    "SKILL_ENDORSEMENT_TYPEHASH",
+    "skillEndorsementDigest",
+    "buildSelfSkillClaim",
+    "buildEndorsedSkillClaim",
+    "skillClaimHash",
+    "SKILL_DEFINITION_READ_ABI",
+    "ReadContractFn",
+    "skillDefinitionExists"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "@modelcontextprotocol",
+      "reason": "Transport-specific; this is a transport-agnostic credential SDK (MCP/A2A wiring lives in apps).",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    },
+    {
+      "term": "people group",
+      "reason": "Faith-domain vocabulary belongs in apps, not reusable substrate (spec 251 'People groups are excluded').",
+      "owningPackage": "apps/demo-jp"
+    },
+    {
+      "term": "Kingdom Consultant",
+      "reason": "Faith-domain vocabulary belongs in apps (spec 251).",
+      "owningPackage": "apps/demo-gs"
+    }
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1500,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

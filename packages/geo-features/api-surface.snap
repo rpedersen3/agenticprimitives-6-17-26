@@ -1,0 +1,22 @@
+const GEO_ENDORSEMENT_TYPEHASH: Hex32
+const GEO_FEATURE_READ_ABI: readonly [{ readonly type: "function"
+const GEO_KIND: { readonly Planet: `0x${string}`
+const GEO_KIND_URI: { readonly Planet: "https://agenticprimitives.dev/ns/geo#Planet"
+const GEO_RELATION: { readonly servesWithin: `0x${string}`
+const PACKAGE_STATUS: "w1-foundational"
+function buildEndorsedGeoClaim(args:
+function buildSelfGeoClaim(args:
+function computeFeatureId(canonicalKey: string): Hex32
+function geoClaimHash(credential: GeoClaimCredential): Hex
+function geoClaimId(args:
+function geoEndorsementDigest(args:
+function geoFeatureExists(read: ReadContractFn, registry: Address, ref: GeoFeatureRef): Promise<boolean>
+function geometryHash(canonicalGeoJson: string): Hex32
+interface GeoClaimCredential
+interface GeoClaimSubject
+interface GeoFeaturePublishInput
+interface GeoFeatureRef
+type GeoVisibility = 'public' | 'public-coarse' | 'private-commitment' | 'private-zk' | 'offchain-only'
+type Hex32 = `0x${string}`
+type ReadContractFn = (args: { address: Address
+type Uri = string

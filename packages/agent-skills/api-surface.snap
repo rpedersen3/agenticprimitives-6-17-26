@@ -1,0 +1,23 @@
+const PACKAGE_STATUS: "w1-foundational"
+const SELF_FORBIDDEN_RELATIONS: readonly Hex32[]
+const SKILL_DEFINITION_READ_ABI: readonly [{ readonly type: "function"
+const SKILL_ENDORSEMENT_TYPEHASH: Hex32
+const SKILL_KIND: { readonly Leaf: `0x${string}`
+const SKILL_KIND_URI: { readonly Leaf: "https://agenticprimitives.dev/ns/skill#Leaf"
+const SKILL_RELATION: { readonly hasSkill: `0x${string}`
+function buildEndorsedSkillClaim(args:
+function buildSelfSkillClaim(args:
+function computeSkillId(canonicalKey: string): Hex32
+function conceptHash(prefLabel: string, ancestors?: string[]): Hex32
+function skillClaimHash(credential: SkillClaimCredential): Hex
+function skillClaimId(args:
+function skillDefinitionExists(read: ReadContractFn, registry: Address, ref: SkillDefinitionRef): Promise<boolean>
+function skillEndorsementDigest(args:
+interface SkillClaimCredential
+interface SkillClaimSubject
+interface SkillDefinitionPublishInput
+interface SkillDefinitionRef
+type Hex32 = `0x${string}`
+type ReadContractFn = (args: { address: Address
+type SkillVisibility = 'public' | 'public-coarse' | 'private-commitment' | 'private-zk' | 'offchain-only'
+type Uri = string

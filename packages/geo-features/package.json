@@ -1,0 +1,28 @@
+{
+  "name": "@agenticprimitives/geo-features",
+  "version": "0.0.0-stub.0",
+  "private": true,
+  "description": "Off-chain geo CLAIM credentials + on-chain GeoFeatureRegistry helpers (spec 251). Features on chain; the agent↔feature claim is a private vault credential pointing to a (featureId, version).",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git", "directory": "packages/geo-features" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["LICENSE", "dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run test/unit --passWithNoTests",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": { "access": "public" },
+  "peerDependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*"
+  },
+  "devDependencies": { "vitest": "^4.1.8" },
+  "keywords": ["agentic", "primitives", "geo"],
+  "dependencies": { "@noble/hashes": "^1.5.0" }
+}
