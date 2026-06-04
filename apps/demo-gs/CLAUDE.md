@@ -27,6 +27,11 @@ registries, the GC graph + C-Box registry, the read-only Switchboard bridge, the
 | **Substrate wiring (spec 251 Phase 3)** | `src/lib/substrate.ts` — Offerings → `SkillClaimCredential`/`GeoClaimCredential` via `@agenticprimitives/agent-skills`+`geo-features`; taxonomy `SkillRef.skillId`/`GeoFacet.featureId` are canonical substrate ids (`computeSkillId`/`computeFeatureId`). |
 | UI shell + screens | `src/App.tsx` + `src/components/*` |
 
+## Deploy (read first)
+- **Live:** https://agenticprimitives-demo-gs.pages.dev (Cloudflare Pages, direct-upload, **production branch `main`**).
+- Redeploy: `cd apps/demo-gs && pnpm build && npx wrangler pages deploy dist --project-name=agenticprimitives-demo-gs --branch=main` (any other branch → preview).
+- The bundle reads the **live, seeded** SkillDefinitionRegistry / GeoFeatureRegistry (spec 251) via `src/lib/chain.ts` + the `@agenticprimitives/contracts/deployments` subpath; RPC overridable with `VITE_RPC_URL`.
+
 ## Hard rules (this app)
 - **Identity is demo-sso's job, NOT demo-gs's.** v1 stubs an `AgentSession`; never call Privy/Firebase directly (spec 250 §"Identity boundary").
 - **Skills are canonical references, never free text.** Both Needs and Offerings cite the same `SkillRef.gcUri` so they join on concept identity (the cross-app payoff). Labels are display only.
