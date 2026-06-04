@@ -16,7 +16,11 @@ import { Banner, Btn, Card, Field, Pill, SectionHead, inputStyle } from './ui';
 
 const AVAIL: Capacity['availabilityStatus'][] = ['available', 'limited', 'paused', 'unavailable'];
 
-export function ExpertOfferingWizard({ owner, ownerName, session, onCreated }: { owner: Address; ownerName?: string; session: MemberSession; onCreated?: () => void }) {
+export function ExpertOfferingWizard({ owner, ownerName, session, onCreated, eyebrow, title: titleProp, sub }: {
+  owner: Address; ownerName?: string; session: MemberSession; onCreated?: () => void;
+  /** Card header overrides (Wave D re-homes this as the workspace primary-task card). */
+  eyebrow?: string; title?: string; sub?: string;
+}) {
   const [headline, setHeadline] = useState('');
   const [skills, setSkills] = useState<Uri[]>([]);
   const [regionUris, setRegionUris] = useState<Uri[]>([]);
@@ -65,7 +69,11 @@ export function ExpertOfferingWizard({ owner, ownerName, session, onCreated }: {
 
   return (
     <Card>
-      <SectionHead eyebrow="KC · publish an offering" title="Offer your expertise" sub="Which skills can you serve with, and under what constraints? Your identity + contact stay confidential until a connection is accepted." />
+      <SectionHead
+        eyebrow={eyebrow ?? 'KC · publish an offering'}
+        title={titleProp ?? 'Offer your expertise'}
+        sub={sub ?? 'Which skills can you serve with, and under what constraints? Your identity + contact stay confidential until a connection is accepted.'}
+      />
       <Field label="Headline"><input value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="e.g. Grant writing + foundation strategy for missions" style={inputStyle} /></Field>
       <SkillPicker label="Offered skills" selected={skills} onChange={setSkills} />
       <Field label="Region focus">

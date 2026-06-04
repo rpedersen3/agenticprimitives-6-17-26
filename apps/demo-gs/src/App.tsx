@@ -45,8 +45,10 @@ import { DirectoryPanel } from './components/DirectoryPanel';
 import { LifecycleRail } from './components/LifecycleRail';
 import { NextBestAction, type NextAction } from './components/NextBestAction';
 import { GcoPostedNeeds } from './components/GcoPostedNeeds';
+import { KcRequestQueue } from './components/KcRequestQueue';
 import { AccessRequestState } from './components/AccessRequestState';
 import { gcoLifecycle } from './lib/gco-lifecycle';
+import { kcLifecycle } from './lib/kc-lifecycle';
 import type { GcoNeedIntent } from './domain/gs-types';
 import { Banner, Card, Pill, SectionHead } from './components/ui';
 
@@ -287,8 +289,8 @@ export function App() {
 
       <div className="wrap" style={{ padding: '1.5rem 1.25rem 0' }}>
         {connectError && <div style={{ marginBottom: '1rem' }}><Banner tone="err">{connectError}</Banner></div>}
-        {view === 'workspace' && loadError() && !(activeRole === 'gco' && !demoPersona) && (
-          // The GCO workspace renders its OWN first-class request-access state for a missing grant
+        {view === 'workspace' && loadError() && !((activeRole === 'gco' || activeRole === 'kc') && !demoPersona) && (
+          // The GCO + KC workspaces render their OWN first-class request-access state for a missing grant
           // (below); every other surface shows the generic vault-error banner.
           <div style={{ marginBottom: '1rem' }}><Banner tone="err">Couldn&rsquo;t reach the vault: {loadError()}. This view may be out of date until it reconnects.</Banner></div>
         )}
@@ -571,38 +573,149 @@ function JaneView() {
   );
 }
 
-// The KC Expert (supply) — an INDIVIDUAL connected person agent. No session → onboarding. Connected →
-// the intranet: publish ONE Offering to your OWN vault, browse the COARSENED public demand, accept
-// requests on YOUR agreements.
+// The KC Expert (supply) — an INDIVIDUAL connected person agent (production UX Wave D, design spec §11).
+// No session → onboarding. A missing person→Switchboard grant (a hydrate failure on the KC's own
+// offering) → a first-class request-access state, NOT a raw error banner (§15c, no silent fallback).
+// Connected + a readable grant → the KC intranet, restructured into the §11 hierarchy: lifecycle rail →
+// command-center summary cards (offering status · open requests · demand-fit hint) → primary task card
+// (publish/update your offering) + a next-best-action right rail → request queue (the AgreementsPanel
+// accept/decline surface, framed with the matched-skill "why this match") → coarsened demand directory →
+// the on-chain substrate badge → a data/trust footer.
 function KcView({ onHub, caps }: { onHub: () => void; caps: ReturnType<typeof deriveRoleCapabilities> }) {
   const session = loadSession('kc');
   if (!session) return <OnboardPanel kind="kc" />;
   const kc = session.sa;
+
+  const signOut = () => { clearSession('kc'); void setActiveContext({ persona: 'kc', session: null }); };
+
+  // Grant-missing: the KC's own offering is unreadable (the person→Switchboard grant never minted or
+  // failed). ONE mechanism (ADR-0013) → no fallback read; surface the request-access state instead. For
+  // the KC the recovery is to reconnect (only the home can re-mint the grant), not to re-create an org.
+  if (loadError()) {
+    return (
+      <>
+        <IntranetHeader label={session.name} role="KC Expert"
+          onHub={caps.canSwitch ? onHub : undefined} onSignOut={signOut} />
+        <AccessRequestState
+          title="Switchboard can’t read your offering yet"
+          body="Your Global.Church home didn’t return (or your saved) Switchboard access grant is missing or expired — and there’s no silent fallback (ADR-0013). Reconnect to refresh your Switchboard access, or continue with a limited view."
+          disclosure={{ owner: 'You (KC person)', scope: 'Read the expertise offering you publish (gs:offering)', grantee: 'Global Switchboard' }}
+          primary={{ label: 'Reconnect to refresh your Switchboard access', onClick: () => { signOut(); onHub(); } }}
+          limited={{ label: 'Continue with a limited view (no demand directory)', onClick: onHub }}
+        />
+      </>
+    );
+  }
+
   const myOfferings = allOfferings();
+  const hasOffering = myOfferings.length > 0;
+  const agreements = allAgreements();
+  const openRequests = agreements.filter((a) => a.status === 'requested' || a.status === 'proposed').length;
+  const lc = kcLifecycle({ hasOffering, agreements });
+
+  // Demand-fit hint: how many coarsened open needs in the public feed overlap the KC's offered-skill
+  // CATEGORIES (kept simple + coarsened — it's the public feed, never the GCO's raw need).
+  const myCategoryUris = new Set(myOfferings.flatMap((o) => o.offeredSkills.map((s) => s.categoryUri)));
+  const demandFit = hasOffering
+    ? publicNeedEntries().filter((n) => n.categoryUris.some((c) => myCategoryUris.has(c))).length
+    : 0;
+
+  const next = kcNextAction(lc.position);
+
   return (
     <>
-      <IntranetHeader
-        label={session.name}
-        role="KC Expert"
-        onHub={caps.canSwitch ? onHub : undefined}
-        onSignOut={() => { clearSession('kc'); void setActiveContext({ persona: 'kc', session: null }); }}
-      />
-      <ExpertOfferingWizard owner={kc} ownerName={session.name} session={session} />
-      <Card>
-        <SectionHead eyebrow="KC Expert · my offering" title="Your published offering" sub="Lives in YOUR vault; the Switchboard reads it only through the grant you issued at sign-in." />
-        {myOfferings.length === 0 && <p style={{ fontSize: '.86rem', color: 'var(--c-g500)' }}>None yet — publish one above.</p>}
-        {myOfferings.map((o) => (
-          <div key={o.id} style={{ display: 'flex', gap: '.5rem', alignItems: 'center', padding: '.4rem 0', borderBottom: '1px solid var(--c-g100)', fontSize: '.86rem', flexWrap: 'wrap' }}>
-            <Pill tone={o.status === 'active' ? 'live' : 'neutral'}>{o.capacity?.availabilityStatus ?? o.status}</Pill>
-            <span style={{ flex: 1 }}>{o.headline}</span>
-            {o.offeredSkills.slice(0, 4).map((s) => <span key={s.gcUri} style={{ fontSize: '.74rem', color: 'var(--c-g400)' }}>{s.label}</span>)}
-          </div>
-        ))}
-      </Card>
+      <IntranetHeader label={session.name} role="KC Expert" onHub={caps.canSwitch ? onHub : undefined} onSignOut={signOut} />
+      <LifecycleRail eyebrow="KC lifecycle" steps={lc.steps} />
+
+      {/* Command-center summary cards (§11): offering status · open requests · demand-fit hint. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+        <KcSummaryCard label="Offering" value={hasOffering ? 'Published' : 'Not yet'} hint={hasOffering ? 'Live in your own vault' : 'Publish below to get matched'} tone={hasOffering ? 'ok' : 'neutral'} />
+        <KcSummaryCard label="Open requests" value={String(openRequests)} hint={openRequests > 0 ? 'Awaiting your accept/decline' : 'None right now'} tone={openRequests > 0 ? 'warn' : 'neutral'} />
+        <KcSummaryCard label="Demand fit" value={hasOffering ? String(demandFit) : '—'} hint={hasOffering ? `open need${demandFit === 1 ? '' : 's'} match your skills` : 'Publish to see your fit'} tone={demandFit > 0 ? 'live' : 'neutral'} />
+      </div>
+
+      {/* Primary task (publish/update offering) + the next-best-action right rail (stacks on mobile). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(260px, 1fr)', gap: '1.25rem', alignItems: 'start' }}>
+        <ExpertOfferingWizard
+          owner={kc} ownerName={session.name} session={session}
+          eyebrow="Primary task · publish your offering"
+          title={hasOffering ? 'Update your offering' : 'Publish your expertise offering'}
+        />
+        <NextBestAction action={next} />
+      </div>
+
+      {hasOffering && (
+        <Card>
+          <SectionHead eyebrow="KC Expert · my offering" title="Your published offering" sub="Lives in YOUR vault; the Switchboard reads it only through the grant you issued at sign-in." />
+          {myOfferings.map((o) => (
+            <div key={o.id} style={{ display: 'flex', gap: '.5rem', alignItems: 'center', padding: '.4rem 0', borderBottom: '1px solid var(--c-g100)', fontSize: '.86rem', flexWrap: 'wrap' }}>
+              <Pill tone={o.status === 'active' ? 'live' : 'neutral'}>{o.capacity?.availabilityStatus ?? o.status}</Pill>
+              <span style={{ flex: 1 }}>{o.headline}</span>
+              {o.offeredSkills.slice(0, 4).map((s) => <span key={s.gcUri} style={{ fontSize: '.74rem', color: 'var(--c-g400)' }}>{s.label}</span>)}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Request queue: the matched-skill "why this match" framing, then the accept/decline surface. */}
+      <KcRequestQueue agreements={agreements} />
+      <AgreementsPanel agreements={agreements} role="kc" actorPerson={kc} onChanged={() => void setActiveContext({ persona: 'kc', session })} />
+
+      <DirectoryPanel entries={publicNeedEntries()} scope="need" eyebrow="Directory · coarsened demand · where the demand is" title="Where the demand is" sub="The public projection of open needs you could serve — by skill, region, or cause. Confidential GCO need details are coarsened; you never see raw confidential demand." />
       <SubstrateClaimsPanel offerings={myOfferings} />
-      <AgreementsPanel agreements={allAgreements()} role="kc" actorPerson={kc} onChanged={() => void setActiveContext({ persona: 'kc', session })} />
-      <DirectoryPanel entries={publicNeedEntries()} scope="need" eyebrow="Directory · demand" title="Where the demand is" sub="The public projection of open needs you could serve — by skill, region, or cause. Confidential GCO need details are coarsened; you never see raw confidential demand." />
+
+      <KcTrustFooter onOpenHome={() => { const h = personalHome(session.name); window.open(`https://${h}`, '_blank', 'noopener'); }} />
     </>
+  );
+}
+
+// A command-center summary card for the KC workspace (design spec §11 summary cards).
+function KcSummaryCard({ label, value, hint, tone }: { label: string; value: string; hint: string; tone: 'ok' | 'warn' | 'neutral' | 'live' }) {
+  return (
+    <Card style={{ padding: '.9rem 1.1rem' }}>
+      <div className="eyebrow">{label}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '.5rem', marginTop: '.3rem' }}>
+        <span style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--c-g900, #0f172a)' }}>{value}</span>
+        <Pill tone={tone}>{hint}</Pill>
+      </div>
+    </Card>
+  );
+}
+
+// The single most useful next step for the KC, by lifecycle position (design spec §11 right rail).
+function kcNextAction(position: ReturnType<typeof kcLifecycle>['position']): NextAction {
+  switch (position) {
+    case 'no-offering':
+      return { title: 'Publish your expertise offering', body: 'Declare the skills you can serve with — canonical skills, regions, causes, languages, availability, and evidence. Use the form on the left; your contact stays private until you accept a connection.', tone: 'action' };
+    case 'offering-published':
+      return { title: 'Browse open demand you could serve', body: 'Your offering is live. Nothing needs your action yet — browse the coarsened demand directory below to see the open needs that match your skills while the Switchboard routes requests to you.', tone: 'wait' };
+    case 'requests-pending':
+      return { title: 'Review & accept a connection request', body: 'A GCO requested a connection. Review the overlapping skills that drove the match in the request queue below, then accept (contact is released) or decline on your terms.', tone: 'action' };
+    case 'accepted':
+    case 'agreement-issued':
+      return { title: 'View your agreement', body: 'You accepted a connection and the agreement is live. Track its lifecycle in the agreements card below.', tone: 'action' };
+    default:
+      return { title: 'Publish your expertise offering', body: 'Publish an offering to start receiving explainable match requests.', tone: 'action' };
+  }
+}
+
+// The persistent data/trust footer for the KC (design spec §11 + §15b): where your data lives, what
+// Switchboard can read, when contact is released, and how to revoke. White-label copy stays in the app.
+function KcTrustFooter({ onOpenHome }: { onOpenHome: () => void }) {
+  return (
+    <Card style={{ background: 'var(--c-g50)' }}>
+      <div className="eyebrow">Your data &amp; access</div>
+      <p style={{ fontSize: '.85rem', color: 'var(--c-g700)', marginTop: '.4rem', lineHeight: 1.55 }}>
+        Your offering lives in <strong>your own Global.Church vault</strong> — a private store only your home credential can
+        open. Global Switchboard reads it <strong>only through the grant you issued at sign-in</strong> (its intended program
+        scope; record-level enforcement lands with spec 248). Your <strong>contact is released only when you accept</strong> a
+        connection — never before. You can <strong>revoke that access anytime from your Global.Church home</strong>, and
+        Switchboard&rsquo;s visibility goes to zero.
+      </p>
+      <button onClick={onOpenHome} style={{ marginTop: '.6rem', background: 'none', border: 'none', color: 'var(--c-primary)', fontWeight: 700, fontSize: '.85rem', cursor: 'pointer', padding: 0 }}>
+        Open your Global.Church home →
+      </button>
+    </Card>
   );
 }
 
