@@ -16,6 +16,7 @@
 import type { Address } from '@agenticprimitives/types';
 import type { DelegationWire } from './delegation';
 import { clearActiveRole } from './active-role';
+import { CONTRACTS } from './chain';
 
 export type SessionKind = 'kc' | 'gco';
 
@@ -42,6 +43,11 @@ interface SessionEnvelope extends MemberSession {
   v: number;
   /** Epoch ms the credential was cached; the loader rejects anything older than SESSION_TTL_MS. */
   savedAt: number;
+  /** The DelegationManager the grant was signed against. The grant's EIP-712 digest binds the DM as
+   *  `verifyingContract`, so a contract redeploy (new DM) makes every pre-redeploy grant fail ERC-1271.
+   *  The loader rejects a session whose `dm` ≠ the current DM, forcing a fresh reconnect — this is what
+   *  auto-recovers from a full redeploy (R11) instead of stranding members on stale grants. */
+  dm: Address;
 }
 
 const SESSION_VERSION = 1;
@@ -73,6 +79,9 @@ function validate(kind: SessionKind, parsed: unknown): MemberSession | null {
   const e = parsed as Partial<SessionEnvelope>;
   if (e.v !== SESSION_VERSION) return null; // version skew → stale credential, sign out
   if (typeof e.savedAt !== 'number' || Date.now() - e.savedAt > SESSION_TTL_MS) return null; // expired
+  // Grant signed against a different DelegationManager (e.g. before a contract redeploy) → its ERC-1271
+  // digest no longer matches, so the vault path would hang/fail. Treat as signed-out (fail-closed).
+  if (typeof e.dm !== 'string' || e.dm.toLowerCase() !== CONTRACTS.delegationManager.toLowerCase()) return null;
   if (e.kind !== kind || !e.sa || typeof e.sa !== 'string' || !e.name || typeof e.name !== 'string') return null;
   if (!isValidGrant(e.grant)) return null;
   // Strip the envelope metadata; callers only ever see the MemberSession.
@@ -99,7 +108,7 @@ export function loadSession(kind: SessionKind): MemberSession | null {
 /** Persist (or replace) a member's session, stamped with the current version + savedAt. */
 export function setSession(s: MemberSession): void {
   if (typeof localStorage !== 'undefined') {
-    const env: SessionEnvelope = { ...s, v: SESSION_VERSION, savedAt: Date.now() };
+    const env: SessionEnvelope = { ...s, v: SESSION_VERSION, savedAt: Date.now(), dm: CONTRACTS.delegationManager };
     try { localStorage.setItem(KEY(s.kind), JSON.stringify(env)); } catch { /* ignore */ }
   }
   bump();

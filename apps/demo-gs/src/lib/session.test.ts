@@ -4,6 +4,11 @@ import {
   clearSession, loadSession, setSession, SESSION_TTL_MS, type MemberSession,
 } from './session';
 import { loadActiveRole, saveActiveRole } from './active-role';
+import { CONTRACTS } from './chain';
+
+// The current DelegationManager the grant must be bound to; a session stamped with a different DM
+// (e.g. after a contract redeploy) is rejected as stale (see session.ts).
+const DM = CONTRACTS.delegationManager;
 
 // The vitest env is `node` (no DOM) — install a minimal in-memory localStorage stub so the storage
 // modules under test behave as they would in the browser.
@@ -45,31 +50,48 @@ describe('session validation (fail-closed, ADR-0013)', () => {
   });
 
   it('rejects + purges a malformed blob (missing grant)', () => {
-    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, savedAt: Date.now(), kind: 'kc', sa: SA, name: 'x' }));
+    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, savedAt: Date.now(), kind: 'kc', sa: SA, name: 'x', dm: DM }));
     expect(loadSession('kc')).toBeNull();
     expect(store.has(SESSION_KEY('kc'))).toBe(false); // purged
   });
 
   it('rejects a grant that is structurally invalid (not a delegation shape)', () => {
-    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, savedAt: Date.now(), kind: 'kc', sa: SA, name: 'x', grant: { foo: 1 } }));
+    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, savedAt: Date.now(), kind: 'kc', sa: SA, name: 'x', grant: { foo: 1 }, dm: DM }));
     expect(loadSession('kc')).toBeNull();
   });
 
   it('rejects a version-skewed blob (stale schema)', () => {
-    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 0, savedAt: Date.now(), kind: 'kc', sa: SA, name: 'x', grant: GRANT }));
+    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 0, savedAt: Date.now(), kind: 'kc', sa: SA, name: 'x', grant: GRANT, dm: DM }));
     expect(loadSession('kc')).toBeNull();
   });
 
   it('rejects an expired blob (older than the TTL)', () => {
     const old = Date.now() - SESSION_TTL_MS - 1000;
-    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, savedAt: old, kind: 'kc', sa: SA, name: 'x', grant: GRANT }));
+    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, savedAt: old, kind: 'kc', sa: SA, name: 'x', grant: GRANT, dm: DM }));
     expect(loadSession('kc')).toBeNull();
     expect(store.has(SESSION_KEY('kc'))).toBe(false);
   });
 
   it('rejects a blob with no savedAt (legacy / un-stamped)', () => {
-    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, kind: 'kc', sa: SA, name: 'x', grant: GRANT }));
+    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, kind: 'kc', sa: SA, name: 'x', grant: GRANT, dm: DM }));
     expect(loadSession('kc')).toBeNull();
+  });
+
+  it('rejects + purges a session signed against a different DelegationManager (stale after redeploy)', () => {
+    const staleDm = '0x000000000000000000000000000000000000dEaD' as Address;
+    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, savedAt: Date.now(), kind: 'kc', sa: SA, name: 'x', grant: GRANT, dm: staleDm }));
+    expect(loadSession('kc')).toBeNull();
+    expect(store.has(SESSION_KEY('kc'))).toBe(false); // purged → forces a fresh reconnect
+  });
+
+  it('rejects a session with no dm (pre-binding legacy blob)', () => {
+    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, savedAt: Date.now(), kind: 'kc', sa: SA, name: 'x', grant: GRANT }));
+    expect(loadSession('kc')).toBeNull();
+  });
+
+  it('accepts a raw envelope bound to the current DelegationManager', () => {
+    store.set(SESSION_KEY('kc'), JSON.stringify({ v: 1, savedAt: Date.now(), kind: 'kc', sa: SA, name: 'casey', grant: GRANT, dm: DM }));
+    expect(loadSession('kc')?.name).toBe('casey');
   });
 
   it('rejects a kind mismatch', () => {

@@ -60,14 +60,32 @@ async function ownerDelegationWire(o: VaultOwner): Promise<DelegationWire> {
   return wire;
 }
 
+/** A stalled relayer (or RPC) must not hang the hydrate timeline forever. Bound every vault call with a
+ *  timeout so a stall surfaces as a clear error the discovery screen can show + retry (ADR-0013: the
+ *  error is the answer, never an infinite wait). */
+const VAULT_TIMEOUT_MS = 20_000;
+
 async function postVault(path: 'get' | 'set' | 'list', body: Record<string, unknown>): Promise<Record<string, unknown>> {
   await ensureCsrfToken();
-  const r = await fetch(`/a2a/mcp/vault/${path}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', ...csrfHeaders() },
-    body: JSON.stringify(body),
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), VAULT_TIMEOUT_MS);
+  let r: Response;
+  try {
+    r = await fetch(`/a2a/mcp/vault/${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new Error(`vault ${path} timed out after ${VAULT_TIMEOUT_MS / 1000}s — the relayer or RPC is slow/unreachable. Please retry.`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   const j = (await r.json().catch(() => null)) as Record<string, unknown> | null;
   if (!r.ok || !j || j.ok !== true) {
     throw new Error((j?.detail as string) ?? (j?.error as string) ?? `vault ${path} failed (HTTP ${r.status})`);
