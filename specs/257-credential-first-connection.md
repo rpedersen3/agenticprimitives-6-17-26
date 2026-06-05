@@ -188,5 +188,11 @@ terms (`check:forbidden-terms`); no CAIP-10/AgentSession in primary UI; one-SA-p
 ## 12. Acceptance (spec-level)
 
 The architecture reviews confirmed the spine is built; this spec's acceptance is the Phase-1..3 "done" criteria
-above. The visual walkthrough (the proposed screen flow) lives in `docs/design/257-credential-first/` (SVG
-mockups + an index) and is the companion artifact to this spec.
+above. Visual walkthroughs (SVG mockups + a clickable index) live in `docs/design/257-credential-first/`:
+- **`greenfield/`** — the PREFERRED first-time experience (Privy-simple, 3 taps, name DEFERRED). The Connect
+  ceremony is a **popup over the dimmed relying site** (embedded feel, credential at the Connect origin); the
+  segue is a button-loading-state + simultaneous popup (no interstitial), with the co-brand "From
+  Global.Church" pill as the load-bearing trust element. Screens `01→07` (first-time) · `08–09` (deferred
+  handle/security) · `10` (return) · `11` (popup-blocked fallback). **This is the target flow for Phase 1.**
+- the top-level SVGs — the earlier credential-first mockups (entry → resolution → recovery), retained as the
+  recovery/ladder reference.
