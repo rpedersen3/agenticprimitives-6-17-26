@@ -16,7 +16,7 @@ const C = {
   ok: '#16a34a', okSub: '#f0fdf4', okBd: '#bbf7d0', amber: '#d97706', amberSub: '#fffbeb', amberBd: '#fde68a', bg: '#f1f5f9',
 };
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const F = "font-family='Inter',-apple-system,Segoe UI,Roboto,sans-serif";
+const F = `font-family="'Inter',-apple-system,'Segoe UI',Roboto,sans-serif"`;
 const T = (x, y, s, { size = 14, fill = C.ink, weight = 400, anchor = 'start', op = 1 } = {}) =>
   `<text x="${x}" y="${y}" ${F} font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}" opacity="${op}">${esc(s)}</text>`;
 const R = (x, y, w, h, { r = 12, fill = C.white, stroke = 'none', sw = 1, op = 1 } = {}) =>
