@@ -95,6 +95,9 @@ interface Deployments {
   /** Permissionless `.agent` subregistry (spec 234 W2) — relayer-sponsored name
    *  registration during onboarding (secure-home, no user signature). */
   permissionlessSubregistry?: string;
+  /** spec 256 — AgentRelationship; the Google-KMS org-create grants scope their
+   *  allowed-targets caveat to it (matches the passkey path's site grants). */
+  agentRelationship?: string;
 }
 
 function run(cmd: string, opts: { cwd?: string } = {}): void {
@@ -222,6 +225,8 @@ if (d.agentNameUniversalResolver) contractVars.AGENT_NAME_UNIVERSAL_RESOLVER = d
 // Permissionless subregistry (spec 234 W2) — demo-a2a's /session/register-name registers a
 // name with owner = the new SA, sponsored by the relayer (no user signature).
 if (d.permissionlessSubregistry)  contractVars.PERMISSIONLESS_SUBREGISTRY     = d.permissionlessSubregistry;
+// spec 256 — Google-KMS org-create grants scope to AgentRelationship.
+if (d.agentRelationship)          contractVars.AGENT_RELATIONSHIP             = d.agentRelationship;
 
 // 3. Deploy demo-mcp Worker (no external deps — deploy first so we can pass
 //    its URL into demo-a2a as MCP_URL)
