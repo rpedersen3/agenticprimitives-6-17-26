@@ -55,7 +55,7 @@
     "@agenticprimitives/agent-account": "workspace:*",
     "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
-    "viem": "^2.50.0"
+    "viem": "^2.52.2"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

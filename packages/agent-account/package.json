@@ -42,7 +42,7 @@
   "peerDependencies": {
     "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
-    "viem": "^2.50.0"
+    "viem": "^2.52.2"
   },
   "devDependencies": {
     "vitest": "^4.1.8"

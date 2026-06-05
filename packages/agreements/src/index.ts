@@ -5,8 +5,8 @@
  * Authoritative spec: specs/241-agreement-commitment-registry.md
  */
 
-import { keccak_256 } from '@noble/hashes/sha3';
-import { utf8ToBytes } from '@noble/hashes/utils';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 import type { Address, Hex } from '@agenticprimitives/types';
 
 export const PACKAGE_NAME = '@agenticprimitives/agreements';

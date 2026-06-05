@@ -12,8 +12,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex } from 'viem';
 import {
   GcpKmsSigner,
@@ -232,7 +232,7 @@ describe('normalizeLowS', () => {
   });
 
   it('flips s when s > N/2', () => {
-    const N = secp256k1.CURVE.n;
+    const N = secp256k1.Point.Fn.ORDER;
     const highS = N - 1n;
     const flipped = normalizeLowS(highS);
     expect(flipped).toBe(1n);
@@ -243,7 +243,10 @@ describe('findRecoveryByte', () => {
   it('returns 27 or 28 and recovers the correct pubkey', async () => {
     const digest = keccak_256(new TextEncoder().encode('test'));
     // Sign with @noble to get a deterministic signature + recovery
-    const sig = secp256k1.sign(digest, SECP_PRIV);
+    const sig = secp256k1.Signature.fromBytes(
+      secp256k1.sign(digest, SECP_PRIV, { prehash: false, format: "recovered" }),
+      "recovered",
+    );
     const v = findRecoveryByte(sig.r, sig.s, digest, SECP_PUB_65);
     expect([27, 28]).toContain(v);
     expect(v - 27).toBe(sig.recovery);
@@ -308,7 +311,10 @@ describe('GcpKmsSigner (mocked fetch)', () => {
   }
 
   function signResponseForDigest(digest: Uint8Array): Response {
-    const sig = secp256k1.sign(digest, SECP_PRIV);
+    const sig = secp256k1.Signature.fromBytes(
+      secp256k1.sign(digest, SECP_PRIV, { prehash: false, format: "recovered" }),
+      "recovered",
+    );
     const der = derEncodeEcdsaSig(sig.r, sig.s);
     return new Response(
       JSON.stringify({ signature: bytesToBase64(der) }),
@@ -381,10 +387,10 @@ describe('GcpKmsSigner (mocked fetch)', () => {
     const compact = new Uint8Array(64);
     compact.set(r, 0);
     compact.set(s, 32);
-    const recovered = secp256k1.Signature.fromCompact(compact)
+    const recovered = secp256k1.Signature.fromBytes(compact)
       .addRecoveryBit(recovery)
       .recoverPublicKey(digest)
-      .toRawBytes(false);
+      .toBytes(false);
     expect(Array.from(recovered)).toEqual(Array.from(SECP_PUB_65));
   });
 

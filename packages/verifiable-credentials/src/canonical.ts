@@ -18,8 +18,8 @@
  * handle BigInt or Date — callers must serialise those upstream.
  */
 
-import { keccak_256 } from '@noble/hashes/sha3';
-import { utf8ToBytes } from '@noble/hashes/utils';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 export class JcsError extends Error {
   constructor(message: string, readonly path: string) {

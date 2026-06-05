@@ -190,15 +190,11 @@ describe('buildRemovePasskeyCredentialArgs', () => {
 // ─── Wave H2 — range/shape guards ──────────────────────────────────────
 
 import {
-  buildChangeCustodyModeArgs,
-  buildSetRecoveryApprovalsArgs,
-  buildChangeApprovalsRequiredArgs,
-  buildAddPasskeyCredentialArgs,
-  buildRemovePasskeyCredentialArgs,
-  buildAddCustodianArgs,
+  // Only the builders not already imported from '../src' above.
+  // (Wave H2 added these; the rest were duplicate ESM bindings that
+  // vitest 4 / esbuild rejects.)
   buildRotateAllCustodiansArgs,
   buildRecoverAccountArgs,
-  buildChangeValueCeilingArgs,
 } from '../src/actions';
 
 const A = '0x1111111111111111111111111111111111111111' as const;

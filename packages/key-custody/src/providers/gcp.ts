@@ -25,8 +25,8 @@
 // stub — that's a separate v0.2 follow-up. The signer covers the production
 // path for the agent's master-key requirement.
 
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex, type Address } from 'viem';
 import { buildEvent, type AuditSink } from '@agenticprimitives/audit';
 import type { A2AKeyProvider, KmsAccountBackend } from '../types';
@@ -40,7 +40,7 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const CLOUDKMS_SCOPE = 'https://www.googleapis.com/auth/cloudkms';
 const CLOUDKMS_BASE = 'https://cloudkms.googleapis.com/v1/';
 const TOKEN_EXPIRY_BUFFER_SECONDS = 60;
-const SECP256K1_N = secp256k1.CURVE.n;
+const SECP256K1_N = secp256k1.Point.Fn.ORDER;
 const SECP256K1_HALF_N = SECP256K1_N >> 1n;
 
 // ─────────────────────────────────────────────────────────────────────
@@ -307,8 +307,8 @@ export function findRecoveryByte(
   const attempts: string[] = [];
   for (let recovery = 0; recovery < 2; recovery++) {
     try {
-      const sig = secp256k1.Signature.fromCompact(compact).addRecoveryBit(recovery);
-      const recovered = sig.recoverPublicKey(digest).toRawBytes(false);
+      const sig = secp256k1.Signature.fromBytes(compact).addRecoveryBit(recovery);
+      const recovered = sig.recoverPublicKey(digest).toBytes(false);
       attempts.push(`v=${recovery + 27} recovered=${bytesToHex(recovered)}`);
       if (bytesEqual(recovered, knownPubKey65)) return recovery + 27;
     } catch (e) {

@@ -4,8 +4,8 @@
 // digest, recovers signer address, and asserts it matches the address in
 // the message.
 
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import type { Address, Hex } from '@agenticprimitives/types';
 
 export interface SiweMessageInput {
@@ -123,7 +123,7 @@ function recoverAddress(digest: Uint8Array, sigHex: Hex): Address {
   const v = parseInt(sig.slice(128, 130), 16);
   const recovery = v >= 27 ? v - 27 : v;
   const signature = new secp256k1.Signature(r, s).addRecoveryBit(recovery);
-  const pub = signature.recoverPublicKey(digest).toRawBytes(false);
+  const pub = signature.recoverPublicKey(digest).toBytes(false);
   const hash = keccak_256(pub.slice(1));
   let hex = '0x';
   for (const b of hash.slice(12)) hex += b.toString(16).padStart(2, '0');

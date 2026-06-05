@@ -27,8 +27,8 @@
 //   base64url(JSON.stringify({origin, ts, method?, path?, sessionSid?}))
 //     . base64url(hmac)
 
-import { hmac } from '@noble/hashes/hmac';
-import { sha256 } from '@noble/hashes/sha256';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes } from 'viem';
 
 const CSRF_VALIDITY_SECONDS = 60 * 60; // 1 hour

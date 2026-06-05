@@ -11,8 +11,8 @@
 //            over the session private key, plus the bound delegation.
 //   revoke   marks the row revoked; callers must mint a new session.
 
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import {
   bytesToHex,
   hexToBytes,
@@ -145,7 +145,7 @@ export class SessionManager {
     // Fresh secp256k1 keypair
     const priv = randomBytes(32);
     // secp256k1 priv keys MUST be in [1, n-1]. Retry on rare overflow / zero.
-    if (!secp256k1.utils.isValidPrivateKey(priv)) {
+    if (!secp256k1.utils.isValidSecretKey(priv)) {
       return this.init(accountAddress, chainId); // recurse — vanishingly rare
     }
     const pub = secp256k1.getPublicKey(priv, false);
@@ -288,7 +288,12 @@ export class SessionManager {
           // either way, but every signing path makes the invariant
           // load-bearing at the call site so future auditors don't
           // have to read noble release notes.
-          const sig = secp256k1.sign(digest, priv, { lowS: true });
+          // noble v2: sign() returns raw bytes; request recovered form and
+          // parse into an r/s/recovery object.
+          const sig = secp256k1.Signature.fromBytes(
+            secp256k1.sign(digest, priv, { lowS: true, prehash: false, format: "recovered" }),
+            "recovered",
+          );
           const r = sig.r.toString(16).padStart(64, '0');
           const s = sig.s.toString(16).padStart(64, '0');
           const v = (sig.recovery ?? 0) + 27;

@@ -17,7 +17,7 @@
 // stays reproducible), but external parties cannot enumerate addresses
 // from emails alone.
 
-import { keccak_256 } from '@noble/hashes/sha3';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 
 function keccakHex(input: string): string {
   const hash = keccak_256(new TextEncoder().encode(input));

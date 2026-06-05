@@ -18,7 +18,7 @@
 // resolve to a canonical Smart Agent — that binding is the directory's job
 // (spec 223) and the broker's (spec 224); connect-auth must not import them.
 
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 // ─── Provider config ──────────────────────────────────────────────────
 

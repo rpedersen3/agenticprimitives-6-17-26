@@ -4,7 +4,7 @@
 // Used for critical-tier operations where the user should authorize the
 // exact intent and nothing else.
 
-import { keccak_256 } from '@noble/hashes/sha3';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { ExactCallPolicy } from './types';
 

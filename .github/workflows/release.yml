@@ -210,7 +210,7 @@ jobs:
 
       - name: Attach SBOM to GitHub Release
         if: steps.changesets.outputs.published == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # changesets/action sets `published` + `publishedPackages`. We
           # tag the release at the first published version for convenience.

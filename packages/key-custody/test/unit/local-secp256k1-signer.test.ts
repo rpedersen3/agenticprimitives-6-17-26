@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { createMemoryAuditSink } from '@agenticprimitives/audit';
 import { LocalSecp256k1Signer } from '../../src/providers/local';
 
@@ -38,7 +38,7 @@ describe('LocalSecp256k1Signer', () => {
     const s = signature.slice(32, 64);
     const recovery = signature[64]! - 27;
     const sig = new secp256k1.Signature(bytesToBig(r), bytesToBig(s)).addRecoveryBit(recovery);
-    const recovered = sig.recoverPublicKey(digest).toRawBytes(false);
+    const recovered = sig.recoverPublicKey(digest).toBytes(false);
     // Recover the address from the recovered pubkey
     const recoveredHash = keccak_256(recovered.slice(1));
     const recoveredAddr = '0x' + bytesToHex(recoveredHash.slice(12));

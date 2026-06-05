@@ -8,8 +8,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { buildMessage, verify as siweVerify } from '../../src/methods/siwe';
 import { mintSession, verifySession } from '../../src/sessions';
 import type { Address, Hex } from '@agenticprimitives/types';
@@ -35,7 +35,10 @@ function eip191Digest(message: string): Uint8Array {
 
 function signEip191(message: string): Hex {
   const digest = eip191Digest(message);
-  const sig = secp256k1.sign(digest, privBytes());
+  const sig = secp256k1.Signature.fromBytes(
+    secp256k1.sign(digest, privBytes(), { prehash: false, format: "recovered" }),
+    "recovered",
+  );
   const r = sig.r.toString(16).padStart(64, '0');
   const s = sig.s.toString(16).padStart(64, '0');
   const v = (sig.recovery ?? 0) + 27;

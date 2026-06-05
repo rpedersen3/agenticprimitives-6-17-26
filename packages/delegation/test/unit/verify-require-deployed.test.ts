@@ -10,8 +10,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { mintDelegationToken, verifyDelegationToken } from '../../src/token';
 import { ROOT_AUTHORITY } from '../../src/types';
 import { buildCaveat, encodeTimestampTerms } from '../../src/caveats';
@@ -37,7 +37,10 @@ function eip191Sign(msg: string): `0x${string}` {
   combined.set(prefix, 0);
   combined.set(bytes, prefix.length);
   const digest = keccak_256(combined);
-  const s = secp256k1.sign(digest, priv());
+  const s = secp256k1.Signature.fromBytes(
+    secp256k1.sign(digest, priv(), { prehash: false, format: "recovered" }),
+    "recovered",
+  );
   const r = s.r.toString(16).padStart(64, '0');
   const ss = s.s.toString(16).padStart(64, '0');
   const v = (s.recovery ?? 0) + 27;

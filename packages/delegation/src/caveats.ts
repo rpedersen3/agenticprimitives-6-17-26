@@ -7,7 +7,7 @@
 // evaluator (off-chain only).
 
 import { encodeAbiParameters, keccak256, type Hex, type Address } from 'viem';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import type { Caveat, DataScopeGrant } from './types';
 
 // ─── Off-chain sentinel addresses ────────────────────────────────────────

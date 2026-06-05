@@ -25,15 +25,15 @@
 // CLOSED (no silent fallback to local-aes — ADR-0013) and point at the
 // follow-up (spec 235 §10: a per-subject KMS HMAC or asymmetric key).
 
-import { hkdf } from '@noble/hashes/hkdf';
-import { sha256 } from '@noble/hashes/sha256';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { hexToBytes, bytesToHex, type Hex } from 'viem';
 import type { BuildOpts, KmsAccountBackend, KmsBackend } from './types';
 import { LocalSecp256k1Signer } from './providers/local';
 
 const DERIVE_INFO_PREFIX = 'kms-custodian:v1';
-const SECP256K1_N = secp256k1.CURVE.n;
+const SECP256K1_N = secp256k1.Point.Fn.ORDER;
 
 /** The Google (OIDC) subject a custodian key is bound to. */
 export interface SubjectId {

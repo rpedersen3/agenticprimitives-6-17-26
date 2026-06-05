@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { hexToBytes } from 'viem';
 import {
   deriveSubjectSigner,
@@ -77,7 +77,7 @@ describe('deriveSubjectSigner / deriveSubjectPrivateKeyHex', () => {
   it('derived key is a valid secp256k1 scalar in [1, n-1]', () => {
     const priv = BigInt(deriveSubjectPrivateKeyHex(master, { iss: GOOGLE, sub: 'x' }));
     expect(priv).toBeGreaterThan(0n);
-    expect(priv).toBeLessThan(secp256k1.CURVE.n);
+    expect(priv).toBeLessThan(secp256k1.Point.Fn.ORDER);
   });
 
   it('the signer signs a 32-byte digest, recoverable to C_sub', async () => {
@@ -91,7 +91,7 @@ describe('deriveSubjectSigner / deriveSubjectPrivateKeyHex', () => {
       bytesToBig(signature.slice(0, 32)),
       bytesToBig(signature.slice(32, 64)),
     ).addRecoveryBit(signature[64]! - 27);
-    const recovered = sig.recoverPublicKey(digest).toRawBytes(false);
+    const recovered = sig.recoverPublicKey(digest).toBytes(false);
     let recoveredAddr = '0x';
     for (const b of keccak_256(recovered.slice(1)).slice(12)) recoveredAddr += b.toString(16).padStart(2, '0');
     expect(recoveredAddr).toBe(cSub);

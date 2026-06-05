@@ -71,7 +71,7 @@ jobs:
 
       - name: Upload Echidna corpus + coverage artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: echidna-custodypolicy-corpus
           path: packages/contracts/echidna-corpus/

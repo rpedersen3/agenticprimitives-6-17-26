@@ -54,7 +54,7 @@
     "@agenticprimitives/tool-policy": "workspace:*",
     "@agenticprimitives/types": "workspace:*",
     "@modelcontextprotocol/sdk": ">=1.29.0 <2",
-    "viem": "^2.50.0"
+    "viem": "^2.52.2"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

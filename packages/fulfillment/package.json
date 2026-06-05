@@ -45,11 +45,11 @@
     "@agenticprimitives/attestations": "workspace:*",
     "@agenticprimitives/agreements": "workspace:*",
     "@agenticprimitives/delegation": "workspace:*",
-    "viem": "^2.50.0"
+    "viem": "^2.52.2"
   },
   "devDependencies": {
     "vitest": "^4.1.8",
-    "viem": "^2.50.0"
+    "viem": "^2.52.2"
   },
   "keywords": [
     "agentic",
@@ -57,6 +57,6 @@
     "fulfillment"
   ],
   "dependencies": {
-    "@noble/hashes": "^1.5.0"
+    "@noble/hashes": "^2.2.0"
   }
 }

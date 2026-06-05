@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { exactCall, matchesExactCall } from '../../src/exact-call';
 
 function keccak256(hex: `0x${string}`): `0x${string}` {

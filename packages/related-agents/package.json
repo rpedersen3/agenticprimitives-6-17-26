@@ -43,11 +43,11 @@
     "@agenticprimitives/types": "workspace:*",
     "@agenticprimitives/verifiable-credentials": "workspace:*",
     "@agenticprimitives/delegation": "workspace:*",
-    "viem": "^2.50.0"
+    "viem": "^2.52.2"
   },
   "devDependencies": {
     "vitest": "^4.1.8",
-    "viem": "^2.50.0"
+    "viem": "^2.52.2"
   },
   "keywords": [
     "agentic",

@@ -11,8 +11,8 @@
 //   7. atomic JTI usage tracking
 //   8. return { principal: delegator }
 
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { createPublicClient, http, type Address, type Hex } from 'viem';
 import type {
   Delegation,
@@ -97,7 +97,7 @@ function recoverEoaFromEip191Sig(message: string, signature: Hex): Address {
   const recovery = v >= 27 ? v - 27 : v;
   const eipSig = new secp256k1.Signature(r, s).addRecoveryBit(recovery);
   const digest = eip191Digest(message);
-  const pub = eipSig.recoverPublicKey(digest).toRawBytes(false);
+  const pub = eipSig.recoverPublicKey(digest).toBytes(false);
   const hash = keccak_256(pub.slice(1));
   let hex = '0x';
   for (const b of hash.slice(12)) hex += b.toString(16).padStart(2, '0');

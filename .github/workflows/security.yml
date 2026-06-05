@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           # Cover web + Node ecosystems; the security-extended pack adds
@@ -54,7 +54,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: '/language:javascript-typescript'
 
@@ -150,7 +150,7 @@ jobs:
         run: |
           npx --yes @cyclonedx/cdxgen@^11 -t pnpm -o sbom.cyclonedx.json .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom-cyclonedx
           path: sbom.cyclonedx.json
@@ -249,7 +249,7 @@ jobs:
         working-directory: packages/contracts
         run: bash setup.sh
 
-      - uses: crytic/slither-action@v0.4.0
+      - uses: crytic/slither-action@v0.4.2
         with:
           target: packages/contracts/
           fail-on: high
@@ -260,7 +260,7 @@ jobs:
 
       - name: Upload Slither SARIF to GH Code Scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: slither-results.sarif
 
@@ -307,7 +307,7 @@ jobs:
 
       - name: Upload Aderyn report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aderyn-report
           path: aderyn-report.md

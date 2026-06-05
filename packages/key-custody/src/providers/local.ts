@@ -13,11 +13,11 @@
 //   - Holds a hardcoded private key from env (A2A_MASTER_PRIVATE_KEY).
 //   - secp256k1 signs a 32-byte digest; returns 65-byte (r,s,v) signature.
 
-import { hmac } from '@noble/hashes/hmac';
-import { sha256 } from '@noble/hashes/sha256';
-import { hkdf } from '@noble/hashes/hkdf';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { hexToBytes, bytesToHex, toHex, type Address, type Hex } from 'viem';
 import type { A2AKeyProvider, KmsAccountBackend } from '../types';
 import { canonicalContextBytes } from '../aad';
@@ -236,7 +236,12 @@ export class LocalSecp256k1Signer implements KmsAccountBackend {
     // `normalizeLowS(s)` invariant by making the option load-bearing
     // at every call. noble flips `recovery` when normalizing so the
     // emitted v byte stays consistent with the canonical s.
-    const sig = secp256k1.sign(input.digest, this.priv, { lowS: true });
+    // noble v2: sign() returns raw bytes; request the recovered (65-byte)
+    // form and parse it back into an r/s/recovery object.
+    const sig = secp256k1.Signature.fromBytes(
+      secp256k1.sign(input.digest, this.priv, { lowS: true, prehash: false, format: "recovered" }),
+      "recovered",
+    );
     // viem-compatible signature: r (32) | s (32) | v (1, 27 or 28)
     const out = new Uint8Array(65);
     out.set(numberTo32Bytes(sig.r), 0);

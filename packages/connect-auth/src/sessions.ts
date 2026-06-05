@@ -4,8 +4,8 @@
 // Multiple signing secrets are supported via SESSION_JWT_SECRETS=kid:hex,kid:hex.
 // The leftmost key signs; all keys can verify (rotation).
 
-import { hmac } from '@noble/hashes/hmac';
-import { sha256 } from '@noble/hashes/sha256';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes } from 'viem';
 import type { JwtClaims } from './types';
 
