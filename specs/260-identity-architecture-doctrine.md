@@ -235,7 +235,9 @@ and the reason recovery belongs at the home, never at a relying app. (https://ww
   · https://developer.apple.com/design/human-interface-guidelines/sign-in-with-apple)
 - **FedCM is the future of "Continue with X".** The browser-mediated Federated Credential Management API
   replaces third-party-cookie + redirect federation; Google has made it mandatory for GSI. Build on
-  FedCM-enabled GSI; do **not** design around third-party cookies. (https://www.w3.org/TR/fedcm/)
+  FedCM-enabled GSI; do **not** design around third-party cookies. We expose our home as a FedCM IdP — as
+  an **adapter** over the authority substrate, FedCM-first not FedCM-only (VII.4 · ADR-0031 · spec 264).
+  (https://www.w3.org/TR/fedcm/)
 - **Prompt passkey *creation* at account-create / settings / recovery — never mid-sign-in.** FIDO's UX
   research (Passkey Central) found mid-login prompts perform worse. Bookend the OS sheet with "handshake"
   copy showing your site + the OS cooperating. (https://www.passkeycentral.org/design-guidelines/principles)
@@ -444,7 +446,7 @@ This maps cleanly onto the marketplace integration, which already separates **pu
 from **confidential profile + connection data** — the relying marketplace keeps its app, backend,
 messaging, and confidential data posture; the home mirrors only the public board + taxonomy.
 
-### VII.4 FedCM = the browser-native "one-tap into the marketplace" handoff
+### VII.4 FedCM = the browser-native handoff — an **adapter**, not the substrate
 
 The conservative handoff is: the home signs the user in, issues a signed identity assertion, the user
 clicks "Continue to <marketplace>", and the marketplace verifies the assertion and mints its own local
@@ -452,8 +454,37 @@ session (VII.8 Level 1). **FedCM is the browser-native future of that seam** —
 federated sign-in with no third-party cookies or redirect-heavy flows, and protocol-agnostic (an OAuth
 server can layer FedCM on top and exchange the returned code for a token; Part III). The product
 invariant holds across both: **the home owns discovery + identity; the marketplace owns the marketplace
-experience; FedCM makes the seam browser-native.** It also reinforces *deep-link / handoff, not iframe* —
-the user actually uses the marketplace inside the marketplace's own UI.
+experience; FedCM makes the seam browser-native.** It also reinforces *deep-link / handoff, not iframe*.
+
+**Position FedCM as a browser-facing federation adapter over the authority substrate — FedCM-first, not
+FedCM-only ([ADR-0031](../docs/architecture/decisions/0031-fedcm-and-browser-credential-apis-are-adapters.md);
+adapter spec [264](264-fedcm-idp-adapter.md)).** The home exposes a **FedCM IdP interface** so "Sign in
+with my Person Agent" / "Sign in with my Organization Agent" can sit beside "Sign in with Google" (Chrome
+136 supports multiple IdPs in one call) — relying sites never have to learn wallets, caveats, smart
+accounts, DIDs, or registries. The strict rule: **the FedCM assertion is a THIN identity + intent
+bootstrap** (`sub` = the SA address, `intent`, `nonce`, optional `delegation_request_hash`); the deep
+capability/delegation object is issued by the substrate *afterward* (VII.5–7), **never** encoded as FedCM
+`scope` strings. *FedCM answers "who is this agent to this relying site?"; the substrate answers "what
+authority, from whom, under what caveats, sub-delegable, acting for which org, revoked how, audited how?"*
+
+- **FedCM is excellent for:** browser-native account selection, multi-relying-site login, privacy-
+  preserving federation, less third-party-cookie / redirect / iframe plumbing, mainstream onboarding.
+- **FedCM is NOT enough for:** agent-to-agent mandates, transaction-signing authority, multi-hop
+  delegation, caveated permissions, org governance, proof-of-revocation, audit trails, cross-chain
+  authority — those stay in the substrate.
+- **Adoption posture:** Google kept FedCM while retiring most of Privacy Sandbox (Oct 2025); shipped
+  Chrome 108; multi-IdP in 136; structured-JSON/endpoint-validation in 143 (breaking by 145); W3C First
+  Public Working Draft + active FedID WG; Chrome ≈70% share. **But** MDN marks it "Limited availability /
+  Experimental" (not Baseline) — so the spec-259 popup/redirect stays the **guaranteed fallback**, chosen
+  by feature-detection. The strategic line: *we are not betting the substrate on FedCM — we make the
+  substrate accessible through FedCM when the browser supports it.*
+- **Companion to watch:** the **Digital Credentials API** (browser-mediated *presentation/issuance* of
+  verifiable credentials — "present a proof/claim", §IV.2) slots into the same browser-integration seam as
+  FedCM (sign-in) and WebAuthn (key control); spec 264 Phase 4 keeps the adapter ready for it.
+
+The browser-integration layer is therefore: **FedCM · WebAuthn/passkeys · Digital Credentials API ·
+OAuth/OIDC fallback · SIWE/wallet fallback** — all swappable adapters over the one authority substrate
+(Person/Org/Service Agent · capability · delegation · caveat · mandate · revocation · audit).
 
 ### VII.5 OAuth is useful, but not enough for agentic multi-hop authority
 
