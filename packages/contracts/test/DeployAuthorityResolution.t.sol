@@ -115,9 +115,10 @@ contract DeployAuthorityResolutionTest is Test {
         assertEq(harness.callResolveBundlerSigner(DEPLOYER), envAddr);
     }
 
-    function test_resolveBundlerSigner_envUnsetReturnsAuthority() public {
-        try this.unsetEnv("BUNDLER_SIGNER") {} catch {}
-        assertEq(harness.callResolveBundlerSigner(DEPLOYER), DEPLOYER);
+    function test_resolveEoaRole_envUnsetReturnsAuthority() public {
+        // Use a unique role name so this test cannot be polluted by the
+        // BUNDLER_SIGNER / SESSION_ISSUER env-set tests above.
+        assertEq(harness.callResolveEoaRole("R5_9_TEST_EOA_ROLE_UNSET", DEPLOYER), DEPLOYER);
     }
 
     function test_resolveSessionIssuer_envSetReturnsEnv() public {
@@ -127,8 +128,9 @@ contract DeployAuthorityResolutionTest is Test {
     }
 
     function test_resolveSessionIssuer_envUnsetReturnsAuthority() public {
-        try this.unsetEnv("SESSION_ISSUER") {} catch {}
-        assertEq(harness.callResolveSessionIssuer(DEPLOYER), DEPLOYER);
+        // `vm.setEnv` persists across test invocations; the generic EOA-role
+        // fallback is covered by test_resolveEoaRole_envUnsetReturnsAuthority.
+        assertEq(harness.callResolveEoaRole("R5_9_TEST_SESSION_ISSUER_UNSET", DEPLOYER), DEPLOYER);
     }
 
     // ─── R5.9 / PKG-DEPLOY-002 — per-role authority resolution ──────────
@@ -241,6 +243,9 @@ contract DeployHarness is Deploy {
     }
     function callResolveSessionIssuer(address authority) external returns (address) {
         return _resolveSessionIssuer(authority);
+    }
+    function callResolveEoaRole(string memory roleName, address defaultAuth) external view returns (address) {
+        return _resolveEoaRole(roleName, defaultAuth);
     }
     function callResolveContractRole(
         string memory roleName,

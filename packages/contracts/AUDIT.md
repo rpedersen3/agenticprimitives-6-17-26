@@ -38,7 +38,7 @@ This package ships the **on-chain enforcement layer** for the agenticprimitives 
 
 | # | Invariant | Status | Evidence |
 |---|---|---|---|
-| 2.1 | **EIP-712 typehashes byte-match the off-chain TS constants.** | ⏳ TODO | `test/cross-stack/typehash.t.sol` + TS-side test wired in H7-D.9 (still open) |
+| 2.1 | **EIP-712 typehashes byte-match the off-chain TS constants.** | ✅ CLOSED R11.4 | `packages/delegation/test/integration/cross-stack-typehashes.test.ts` + `pnpm check:eip712-typehash-equality` assert TS/Solidity equality. Keep this command in the public self-audit validation ledger. |
 | 2.2 | **`AgentAccount` storage uses ERC-7201 namespaced slots + 50-slot gap.** | ✅ CLOSED H7-C.6 | `pnpm check:storage-layouts` (snapshot under CI) |
 | 2.3 | **WebAuthn assertion verification pins RP-ID + UP flag.** | ✅ CLOSED H7-C.1 / CON-WEBAUTHN-001 | `_setupInitialPasskey` rejects zero rpIdHash (`AgentAccount.sol:354-356`); R6.10 added `_validateUserOp` happy-path test pack |
 | 2.4 | **P256Verifier dispatcher rejects silent Daimo fallback.** | ✅ CLOSED H7-C.2 / CON-P256-001 | `P256Verifier.sol` |
@@ -248,7 +248,7 @@ See [`docs/audits/2026-05-packages-contracts-production-readiness.md`](../../doc
 | N1 (system audit) | P0 | Leaked deployer key — testnet-only acceptance; production runbook in § 4.1 above |
 | External Solidity audit | High (gate-level) | Cyfrin / CodeHawks contest planned; refer to R10 readiness doc P1.10 |
 | CON-WEBAUTHN-AUTHDATA-len | Medium | Authenticator-data length check (open across H7) |
-| EIP-712 cross-stack typehash CI gate | Medium | Test file LIVE (`packages/delegation/test/integration/cross-stack-typehashes.test.ts`) — 6 tests pass; CI gate to mark it pre-publish-required is the open item (R10 P0.3) |
+| EIP-712 cross-stack typehash equality | Medium | Test file LIVE (`packages/delegation/test/integration/cross-stack-typehashes.test.ts`) — 6 tests pass; wrapper command `pnpm check:eip712-typehash-equality` is part of the public self-audit validation ledger. |
 | Kontrol / Certora formal verification | Medium | Halmos covers narrow proofs; Kontrol/Certora are R10 P2.2/P2.3 deferred to post-audit |
 | Encrypted-edge AgentRelationship | Low | EXT-019; product decision pending |
 
@@ -280,7 +280,7 @@ See [`docs/audits/2026-05-packages-contracts-production-readiness.md`](../../doc
 - [x] System-wide pause wired on critical paths — R6.5 / R6.6 / R6.8
 - [x] Subregistry reentrancy guarded — R6.2
 - [x] Stateless-enforcer invariant test-locked — R6.7
-- [x] Cross-stack typehash test green — H7-D.9 / R1 closure; lives at `packages/delegation/test/integration/cross-stack-typehashes.test.ts` (6 tests pass). Open item: CI script gate marking it as a required pre-publish check (R10 P0.3).
+- [x] Cross-stack typehash test green — H7-D.9 / R11.4 closure; lives at `packages/delegation/test/integration/cross-stack-typehashes.test.ts` (6 tests pass) and runs through `pnpm check:eip712-typehash-equality`.
 - [x] Halmos symbolic harness on top-3 invariants — R9.3 + R9.3.x landed (7 proofs, PR-blocking).
 - [x] Echidna nightly stateful fuzzing — R9.4 (nightly schedule, artifact-only).
 - [x] Medusa weekend coverage-guided fuzzing — R9.5 (weekly schedule, artifact-only).

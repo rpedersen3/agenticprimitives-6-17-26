@@ -2,9 +2,9 @@
 
 | Field | Value |
 |---|---|
-| **Last refreshed** | 2026-06-01 |
-| **Purpose** | Single-page index pointing at every artifact a third-party auditor needs. **Read this first.** Each row gives (artifact, where it lives, generator workflow, last-green-run timestamp guidance). |
-| **Reading order for auditors** | (1) this doc → (2) [R10 readiness assessment](./2026-06-01-r10-internal-readiness-assessment.md) → (3) [`packages/contracts/AUDIT.md`](../../packages/contracts/AUDIT.md) → (4) per-package `AUDIT.md` files. Findings + ground truth pointers in each. |
+| **Last refreshed** | 2026-06-03 |
+| **Purpose** | Single-page index pointing at every artifact a third-party auditor or open-review participant needs. **Read this first.** Each row gives artifact, location, generator workflow, and last-green-run timestamp guidance. |
+| **Reading order for auditors** | (1) [Public self-audit packet](./self-audit-2026-06.md) → (2) this doc → (3) [R10 readiness assessment](./2026-06-01-r10-internal-readiness-assessment.md) → (4) [`packages/contracts/AUDIT.md`](../../packages/contracts/AUDIT.md) → (5) per-package `AUDIT.md` files. Findings + ground truth pointers in each. |
 
 This is the **manual minimum-viable** version of the
 [spec 237 § 4.1](../../specs/237-audit-evidence-layer.md) Audit Evidence
@@ -31,6 +31,11 @@ this doc will be auto-generated.
 
 | Artifact | Path | Last refreshed |
 |---|---|---|
+| **Public self-audit packet** | [`self-audit-2026-06.md`](./self-audit-2026-06.md) | 2026-06-03 |
+| Open review instructions | [`open-review-2026-06.md`](./open-review-2026-06.md) | 2026-06-03 |
+| Bug bounty terms | [`bug-bounty-2026-06.md`](./bug-bounty-2026-06.md) | 2026-06-03 |
+| Validation results ledger | [`validation-results-2026-06.md`](./validation-results-2026-06.md) | 2026-06-03 |
+| Open review announcement copy | [`open-review-announcement-2026-06.md`](./open-review-announcement-2026-06.md) | 2026-06-03 |
 | **R10 internal readiness assessment** (prioritized P0/P1/P2/P3) | [`2026-06-01-r10-internal-readiness-assessment.md`](./2026-06-01-r10-internal-readiness-assessment.md) | 2026-06-01 |
 | Product readiness audit (system-level) | [`docs/architecture/product-readiness-audit.md`](../architecture/product-readiness-audit.md) | 2026-06-01 (R9 wave) |
 | Contracts AUDIT.md (dossier) | [`packages/contracts/AUDIT.md`](../../packages/contracts/AUDIT.md) | 2026-06-01 (R9 wave) |
@@ -110,7 +115,7 @@ Both are `continue-on-error: true` (artifact-only); graduates to PR-blocking onc
 | No deployment domains in packages | `pnpm check:no-domain-in-packages` | enforces generic-package doctrine (ADR-0021) | PR-blocking |
 | Sentinel enforcer registry sync | `pnpm check:sentinel-enforcers` | off-chain sentinel addresses match on-chain enforcer registry | PR-blocking |
 | ABI sync | `pnpm check:abi-sync` | TS-side ABI exports match Foundry-built ABIs | PR-blocking via `ci.yml::ABI sync check` |
-| Cross-stack EIP-712 typehash equality | `packages/delegation/test/integration/cross-stack-typehashes.test.ts` | TS-side typehash computation == Solidity-side constant | Test passes today; CI gate to mark it pre-publish-required is R10 P0.3 |
+| Cross-stack EIP-712 typehash equality | `packages/delegation/test/integration/cross-stack-typehashes.test.ts` + `pnpm check:eip712-typehash-equality` | TS-side typehash computation == Solidity-side constant | Public self-audit validation command; keep green before review publication |
 | Vitest tests across packages | `pnpm -r test` | per-package unit + integration coverage | PR-blocking |
 | Tool-policy fail-closed matrix | `packages/tool-policy/test/unit/decision-fail-closed.test.ts` | unknown / missing classification → deny (N8 closure) | PR-blocking |
 | MCP-runtime production-strict surface | `packages/mcp-runtime/test/unit/with-delegation.test.ts` | production opts require classification + auditSink | PR-blocking |

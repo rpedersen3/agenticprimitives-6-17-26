@@ -2,9 +2,7 @@
  * Root Vitest configuration. Per-package configs extend this.
  * See specs/110-test-strategy.md §4.
  */
-import { defineConfig } from 'vitest/config';
-
-export default defineConfig({
+export default {
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],
@@ -31,4 +29,4 @@ export default defineConfig({
       },
     },
   },
-});
+};

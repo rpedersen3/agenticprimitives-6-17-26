@@ -40,8 +40,8 @@ What this package does NOT own (per its `CLAUDE.md`):
    ERC-1271 verification silently fails OR (much worse) accepts the
    wrong message.
    Tests: `test/unit/hash.test.ts` (8 tests, includes domain-separator
-   golden values). **Gap:** no cross-language test that derives the same
-   digest from a Solidity helper.
+   golden values) and `test/integration/cross-stack-typehashes.test.ts`
+   (6 tests, wrapped by `pnpm check:eip712-typehash-equality`).
 2. **Caveats are fail-closed.** Unknown enforcer → reject. Failed
   evaluator call → reject. Test: `test/unit/evaluator.test.ts:14` cases.
    Reference: `evaluateCaveats(opts.failClosed=true)` (the default).
@@ -87,7 +87,7 @@ What this package does NOT own (per its `CLAUDE.md`):
 
 | Threat                                     | Likelihood              | Impact                                             | Mitigation                                           | Status                                    |
 | ------------------------------------------ | ----------------------- | -------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------- |
-| EIP-712 domain drift between TS + Solidity | Low                     | Critical (silent verify failure or false-positive) | Golden hash tests; spec 202; on-chain CI cross-check | **Gap:** no automated cross-check; TODO   |
+| EIP-712 domain drift between TS + Solidity | Low                     | Critical (silent verify failure or false-positive) | Golden hash tests; spec 202; `pnpm check:eip712-typehash-equality` cross-stack check | Covered by R11.4 script + integration tests |
 | Replay of delegation token                 | Medium                  | High (unauthorized tool call after expiry)         | JTI atomic-insert in MCP store                       | Covered (jti-stores tests)                |
 | Revocation read failure swallowed          | High (RPC flake)        | High (revoked delegation accepted)                 | TODO: NODE_ENV gate (H3)                             | **Open: H3 (system)**                     |
 | Counterfactual account spoofed             | Low (validator handles) | High                                               | `requireDeployed=true` default + universal validator | Covered                                   |

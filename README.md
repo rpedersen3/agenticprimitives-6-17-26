@@ -82,6 +82,8 @@ Live deploy targets: Vercel (web) + Fly.io (a2a + mcp) + Base Sepolia (contracts
 
 **Alpha track — testnet-only.** Specs and APIs are stable; package boundaries are enforced by CI; ~635 Foundry tests across 28 contracts; the H1–H4 + R6 hardening waves are complete. Demo apps exercise the full chain (SIWE/passkey auth → smart-account deploy → custody policy + multi-sig → off-chain delegations + MCP tool calls) end-to-end on Base Sepolia.
 
+**Public self-audit:** the June 2026 open-review packet starts at [`docs/audits/self-audit-2026-06.md`](./docs/audits/self-audit-2026-06.md), with reproducible evidence linked from [`docs/audits/audit-evidence-index.md`](./docs/audits/audit-evidence-index.md).
+
 **Do not deploy to production yet.** Production launches are deferred pending operational steps independent of the architecture:
 
 1. **External contracts audit** (Cyfrin / CodeHawks contest planned).

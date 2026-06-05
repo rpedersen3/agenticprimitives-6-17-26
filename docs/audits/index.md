@@ -1,11 +1,16 @@
 # Security & Architecture Audit Index
 
-**Last refreshed:** 2026-06-01 (added R10 internal readiness assessment — `2026-06-01-r10-internal-readiness-assessment.md` — post-R9 wave, with prioritized P0/P1/P2/P3 backlog for the external-audit handoff. Replaces the predecessor `2026-05-packages-contracts-production-readiness.md` as the active tracker for package+contract production readiness.)
+**Last refreshed:** 2026-06-03 (added public self-audit/open-review packet for the June 2026 community review path.)
 
 ## Auditor packet (the third-party-audit-ready dossier)
 
 | Doc | Owner | Purpose |
 | --- | --- | --- |
+| [`self-audit-2026-06.md`](./self-audit-2026-06.md) | security + architect (2026-06-03) | **PUBLIC PACKET — start here for open review.** Executive summary, scope, evidence map, known blockers, manual checklist, residual risks. |
+| [`open-review-2026-06.md`](./open-review-2026-06.md) | security + architect (2026-06-03) | How to review, reproduce evidence, report findings, and run the open-review triage process. |
+| [`bug-bounty-2026-06.md`](./bug-bounty-2026-06.md) | security + architect (2026-06-03) | Low-cost community bounty terms, severity guide, eligibility, exclusions, and report template. |
+| [`validation-results-2026-06.md`](./validation-results-2026-06.md) | security + architect (2026-06-03) | Command-result ledger for the public self-audit packet. |
+| [`open-review-announcement-2026-06.md`](./open-review-announcement-2026-06.md) | security + architect (2026-06-03) | Ready-to-post launch copy and channel checklist for the open review. |
 | [`specs/214-production-audit-dossier.md`](../../specs/214-production-audit-dossier.md) | security + architect | **The master spec.** Closure gates + control list + continuous-update protocol. |
 | [`threat-model.md`](./threat-model.md) | security-auditor | STRIDE per trust boundary, mapped to packages. (Stale — does not yet cover `demo-jp`, `demo-sso-next`, or specs 232/234/235/236; refresh queued — see ARCH-005 in the pre-production audit below.) |
 | [`architecture-diagram.md`](./architecture-diagram.md) | technical-architect-auditor | System map, dependency graph, deployment topology, trust boundaries. (Same staleness — ARCH-005.) |
