@@ -12,7 +12,7 @@
 // expander) that never disturb a member session. The entitlement layer (store/session/member-vault) and
 // the org-create RETURN handler + workspace BODIES are unchanged — this restructures the SHELL.
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { Address } from 'viem';
 import { actingAgents, type Persona } from './lib/personas';
 import { ensureSwitchboardDeployed } from './lib/onchain';
@@ -25,8 +25,8 @@ import {
 } from './lib/session';
 import { registerMember } from './lib/member-vault';
 import { discoverGcoSession } from './lib/gco-discovery';
-import { exchangeCode, personAddressFromIdToken, startOrgCreation } from './connect-client';
-import { CONNECT_KEY, type ConnectStash } from './lib/connect-launch';
+import { decodeIdToken, exchangeCode, personAddressFromIdToken, startOrgCreation } from './connect-client';
+import { CONNECT_KEY, type ConnectStash, type ConnectPopupSuccess } from './lib/connect-launch';
 import { deriveRoleCapabilities, type RoleKind } from './lib/role-capabilities';
 import { loadActiveRole, loadActiveTab, saveActiveRole, saveActiveTab } from './lib/active-role';
 import { GCO_TABS, KC_TABS, TAB_IDS, type TabId } from './lib/workspace-tabs';
@@ -55,7 +55,7 @@ import { gcoLifecycle } from './lib/gco-lifecycle';
 import { kcLifecycle } from './lib/kc-lifecycle';
 import type { GcoNeedIntent } from './domain/gs-types';
 import { Banner, Btn, Card, Pill, SectionHead, Spinner, TextField, WorkspaceTabBar } from './components/ui';
-import { ToastProvider } from './components/Toast';
+import { ToastProvider, useToast } from './components/Toast';
 
 /** sessionStorage key + stash for the in-flight org-create redirect (GCO step 2). */
 const ORG_KEY = 'agenticprimitives:demo-gs:org-create';
@@ -76,6 +76,7 @@ export function App() {
 }
 
 function AppInner() {
+  const toast = useToast();
   const [view, setView] = useState<View>('landing');
   // The active member workspace role (gco/kc) when view==='workspace' and not a demo surface.
   const [activeRole, setActiveRoleState] = useState<RoleKind | null>(null);
@@ -157,6 +158,70 @@ function AppInner() {
     setView('landing');
     void setActiveContext({ persona: 'jane', session: null }).catch(() => { /* ignore */ });
   };
+
+  // The SINGLE source of site-login exchange + session truth (spec 257 Phase 1 Wave 2). BOTH the
+  // redirect-return mount path AND the new popup-success path call this — the exchange + grant check +
+  // `kc` session build + member registration + cross-browser GCO recognition live here ONCE, never forked.
+  //
+  // `inPlace=false` (REDIRECT return, the page already reloaded): route through the visible discovery
+  // hydration screen → the role hub, exactly as before. `inPlace=true` (POPUP success, NO page load):
+  // set the session, hydrate the entitled view in the background, route straight to the hub, and surface
+  // a "Connected · welcome" toast (greenfield 07) — the identity pill updates reactively from the session.
+  //
+  // Returns true on success, false on a surfaced error (the popup caller can branch on it).
+  const finishConnect = useCallback(
+    async (
+      authOrigin: string,
+      code: string,
+      codeVerifier: string,
+      stash: Pick<ConnectStash, 'name'>,
+      opts?: { inPlace?: boolean },
+    ): Promise<boolean> => {
+      try {
+        const tok = await exchangeCode(authOrigin, code, codeVerifier);
+        const person = personAddressFromIdToken(tok.idToken);
+        // Role-agnostic person connect: the site-login `tok.delegation` IS the person → Switchboard
+        // grant. No grant = no vault access; surface it (ADR-0013, no silent fallback). The person is
+        // enrolled as a KC ('kc') member session; they choose their role (KC workspace / create a GCO
+        // org) from the hub afterwards.
+        if (!tok.delegation) throw new Error('your home did not return a Switchboard access grant — please retry sign-in');
+        // The token `sub` binds the proven credential, not a client name (broker-enforced). When the user
+        // entered a name we keep it as the display label; an empty name (credential-first) falls back to
+        // the broker's on-chain `agent_name` claim (the public handle the home assigned), never a
+        // client-supplied substitute — then to the SA as a last resort.
+        const displayName = stash.name?.trim() || decodeIdToken(tok.idToken).agent_name || person;
+        const session: MemberSession = { kind: 'kc', sa: person, name: displayName, grant: tok.delegation, idToken: tok.idToken };
+        setSession(session);
+        saveActiveRole(person, 'kc');
+        await registerMember({ kind: 'kc', sa: person, name: displayName, delegation: tok.delegation });
+        // Recognize a GCO org this person ALREADY created (cross-browser) so the hub offers "Open GCO
+        // workspace" instead of a duplicate "set up an organization". Best-effort recognition — absent /
+        // unreachable → null, and they simply see the set-up option.
+        try { const existingGco = await discoverGcoSession(displayName, tok.idToken); if (existingGco) setSession(existingGco); } catch { /* best-effort */ }
+        setActiveRoleState('kc');
+        if (opts?.inPlace) {
+          // POPUP success: no full-reload discovery screen — set the session (pill updates), hydrate in
+          // the background, route to the hub, and toast. The hub reads the session reactively.
+          setDemoPersona(null);
+          setView('hub');
+          toast(`Connected · welcome${displayName ? `, ${displayName}` : ''}`, 'ok');
+          await setActiveContext({ persona: 'kc', session });
+        } else {
+          // REDIRECT return: route through the visible discovery hydration screen → the role hub.
+          setDiscoverKind('kc');
+          setDiscoverDest('hub');
+          setView('discovery');
+          await setActiveContext({ persona: 'kc', session });
+        }
+        return true;
+      } catch (e) {
+        setConnectError(e instanceof Error ? e.message : String(e));
+        return false;
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [toast],
+  );
 
   // After a connect-return, the App sets pendingGco / a session + a discovery kind; once the store is
   // hydrated we route on. This effect performs that transition. It runs on every hydrate change.
@@ -243,38 +308,14 @@ function AppInner() {
     let stash: Partial<ConnectStash> = {};
     try { stash = JSON.parse(sessionStorage.getItem(CONNECT_KEY) ?? '{}'); } catch { /* ignore */ }
     sessionStorage.removeItem(CONNECT_KEY);
-    if (!stash.state || stash.state !== retState || !stash.authOrigin || !stash.codeVerifier || !stash.name) {
+    if (!stash.state || stash.state !== retState || !stash.authOrigin || !stash.codeVerifier) {
       setConnectError("We couldn't verify that sign-in response. Please try again.");
       return;
     }
-    void (async () => {
-      try {
-        const tok = await exchangeCode(stash.authOrigin!, code, stash.codeVerifier!);
-        const person = personAddressFromIdToken(tok.idToken);
-        // Role-agnostic person connect: the site-login `tok.delegation` IS the person → Switchboard
-        // grant. No grant = no vault access; surface it (ADR-0013, no silent fallback). The person is
-        // enrolled as a KC ('kc') member session; they choose their role (KC workspace / create a GCO
-        // org) from the hub afterwards.
-        if (!tok.delegation) throw new Error('your home did not return a Switchboard access grant — please retry sign-in');
-        const session: MemberSession = { kind: 'kc', sa: person, name: stash.name!, grant: tok.delegation, idToken: tok.idToken };
-        setSession(session);
-        saveActiveRole(person, 'kc');
-        await registerMember({ kind: 'kc', sa: person, name: stash.name!, delegation: tok.delegation });
-        // Recognize a GCO org this person ALREADY created (cross-browser) so the hub offers "Open GCO
-        // workspace" instead of a duplicate "set up an organization". Best-effort recognition — absent /
-        // unreachable → null, and they simply see the set-up option.
-        try { const existingGco = await discoverGcoSession(stash.name!, tok.idToken); if (existingGco) setSession(existingGco); } catch { /* best-effort */ }
-        // Route through visible discovery while the entitled view hydrates → the role hub (the user
-        // picks a workspace there, not auto into one).
-        setActiveRoleState('kc');
-        setDiscoverKind('kc');
-        setDiscoverDest('hub');
-        setView('discovery');
-        await setActiveContext({ persona: 'kc', session });
-      } catch (e) {
-        setConnectError(e instanceof Error ? e.message : String(e));
-      }
-    })();
+    // The REDIRECT-return path delegates to the SAME `finishConnect` the popup path uses (single source
+    // of exchange + session truth). inPlace=false → it routes through the visible discovery screen, exactly
+    // as before (a full reload already happened here, so that's fine).
+    void finishConnect(stash.authOrigin, code, stash.codeVerifier, { name: stash.name ?? '' }, { inPlace: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -321,7 +362,18 @@ function AppInner() {
         <div style={{ display: 'grid', gap: '1.25rem', paddingBottom: '2rem' }}>
           {view === 'landing' && <Landing onConnect={goConnect} />}
 
-          {view === 'connect' && <ConnectScreen onBack={() => setView('landing')} />}
+          {view === 'connect' && (
+            <ConnectScreen
+              onBack={() => setView('landing')}
+              // POPUP-success: finish the connect IN PLACE (no reload) — exchange the code, set the
+              // session, hydrate, route to the hub + toast. Returns the success result so the screen can
+              // clear its busy state. NOTE: `finishConnect` reads the authOrigin/code/codeVerifier from the
+              // popup result (NOT a sessionStorage stash) so the success never touches the page.
+              onConnected={(r: ConnectPopupSuccess) =>
+                finishConnect(r.authOrigin, r.code, r.codeVerifier, { name: r.stash.name }, { inPlace: true })
+              }
+            />
+          )}
 
           {view === 'discovery' && (
             <RoleDiscovery
