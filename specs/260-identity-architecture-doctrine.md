@@ -260,6 +260,12 @@ and the reason recovery belongs at the home, never at a relying app. (https://ww
 
 ## Part IV — The future (3–5 years)
 
+> Part IV is the **standards-and-evidence** treatment of where identity is heading. **Part VII** turns it
+> into our **layered architecture direction** (passkeys for presence · wallets for attributes · FedCM for
+> federation · on-chain attenuated delegation for agents), with the applied demo-gs maturity levels and
+> the recommended architecture-doc language. Read IV for *what the standards say*; read VII for *how we
+> layer them*.
+
 ### IV.1 Passkeys become the default; portability arrives
 Microsoft made passkeys the **default for new accounts** (May 2025); FIDO cites **>3B passkeys in active
 use**. CXP/CXF portability (II.4) removes lock-in. Plan for passkey-first, password-as-legacy.
@@ -375,6 +381,179 @@ data). Everything **identity- and data-custody-shaped** is the home's. This is t
 WorkOS-hosted / Auth0-Universal-Login / Clerk / Privy SSO consensus **plus** the verifiable-credentials
 holder model (Part IV.2) — the home is both the authenticator *and* the wallet, and spec 259's rule is
 the consequence.
+
+---
+
+## Part VII — Future identity & delegation architecture (the layered model)
+
+> This part expands Part IV's brief "passkeys + wallets + FedCM + on-chain delegation converge" into the
+> full architecture direction. The near-term integration can stay conservative (VII.8 Level 1 — a signed
+> assertion the relying app verifies + a local session). The long-term direction is **not** "OAuth
+> everywhere" or "wallet login everywhere" — it is a **layered** model where each layer answers exactly
+> one question. New standards this part anchors: [AP-1](261-ap1-public-profile-schema.md) (profile),
+> [AP-2](262-ap2-agent-capability-descriptor.md) (capability), [ADR-0030](../docs/architecture/decisions/0030-agent-discovery-via-indexer-not-registry-scan.md) (discovery).
+
+### VII.1 The layered model
+
+| Layer | Is for | Answers |
+| --- | --- | --- |
+| **Passkeys** | default human login + presence / step-up approval | "Is this human present right now? Did they approve this sensitive action?" |
+| **Wallets / smart accounts** | durable agent identity, org identity, attributes, attestations, delegation | "What identity / authority / attributes does this account durably hold?" |
+| **FedCM** | browser-mediated cross-app sign-in & handoff (no redirects, iframes, or third-party cookies) | "Hand this already-signed-in human into a relying app, natively." |
+| **On-chain attenuated delegation** | portable, inspectable, multi-hop agent authority | "Who authorized this agent, to do *exactly* what, with what limits, and can it sub-delegate?" |
+
+Normal users get a simple **passkey-first** experience; the agentic system gets a **cryptographic
+authority model** underneath. The discipline is: each layer answers one question and is not asked to
+answer the others.
+
+### VII.2 Passkeys = the default human login
+
+Passkeys should become the default sign-in for the home and its relying surfaces (Impact / demo-sso /
+demo-gs and partner handoffs). A passkey is the right primitive for *human authentication* because it
+proves possession of a user-controlled authenticator with no shared secret — WebAuthn public-key
+credentials are RP-scoped, created with user consent, browser-mediated, and bound to authenticators, and
+one RP cannot detect another RP's credentials (Part II; privacy across RPs).
+
+The passkey answers: *"Is this human present right now?"*, *"Is this the same human-controlled account?"*,
+*"Did the human approve this sensitive action?"* It must **not** be the sole store of: organization
+membership, expertise/skill claims, signatory authority, attestations, app-to-agent or sub-agent
+delegation, agreement status, or cross-ecosystem authorization. Those belong in wallets, credentials,
+smart accounts, graph claims, and delegation records.
+
+### VII.3 Wallets-for-attributes, not wallet-login-first
+
+Do **not** make wallets the default login surface for ordinary users — wallet login is still too foreign
+for many non-crypto users. Wallets are excellent for **portable attributes and authority claims**. So the
+UX is: the user signs in with a passkey; *then* the platform resolves the Person Agent, Organization
+Agent, linked wallet / smart account, delegations, credentials, attestations, and claims. The wallet is
+the durable cryptographic container **behind** the account, not the front door.
+
+Attributes anchored through wallet/smart-account infrastructure (illustrative):
+
+- **Person Agent:** verified email/phone, preferred display name, linked passkey credential IDs, linked
+  EOA / smart account, expertise-profile reference, skill attestations.
+- **Organization Agent:** claimed org identity, public org URI, signatories, admin delegations, role
+  claim, category, public website/about.
+- **Expert/provider:** skills offered, causes/regions/languages served, evidence/endorsements,
+  confidentiality tier.
+- **Delegation:** "Person X can act for Org Y", "Impact Agent can draft needs for Org Y", "demo-gs can
+  compute matches", "the marketplace can read public need anchors", "contact release requires explicit
+  agreement."
+
+This maps cleanly onto the marketplace integration, which already separates **public discoverability**
+from **confidential profile + connection data** — the relying marketplace keeps its app, backend,
+messaging, and confidential data posture; the home mirrors only the public board + taxonomy.
+
+### VII.4 FedCM = the browser-native "one-tap into the marketplace" handoff
+
+The conservative handoff is: the home signs the user in, issues a signed identity assertion, the user
+clicks "Continue to <marketplace>", and the marketplace verifies the assertion and mints its own local
+session (VII.8 Level 1). **FedCM is the browser-native future of that seam** — a privacy-preserving
+federated sign-in with no third-party cookies or redirect-heavy flows, and protocol-agnostic (an OAuth
+server can layer FedCM on top and exchange the returned code for a token; Part III). The product
+invariant holds across both: **the home owns discovery + identity; the marketplace owns the marketplace
+experience; FedCM makes the seam browser-native.** It also reinforces *deep-link / handoff, not iframe* —
+the user actually uses the marketplace inside the marketplace's own UI.
+
+### VII.5 OAuth is useful, but not enough for agentic multi-hop authority
+
+OAuth/OIDC remains the right tool for **API sessions and partner interoperability**: sign-in, ID/access
+tokens, scopes, audiences; **OAuth Token Exchange (RFC 8693)** for swapping tokens incl. delegation and
+impersonation (and it distinguishes them — under *delegation*, actor A keeps its own identity while
+acting for principal B, surfaced via the `act` claim); the **JWT access-token profile** for interop; and
+**DPoP** for sender-constrained, proof-of-possession tokens that resist replay. But RFC 8693 is
+*deliberately scoped to the exchange* — it states the syntax, semantics, security characteristics, and
+trust model of the tokens are **out of scope**. OAuth answers *"can this client call this API right now
+with this token?"* It does not, on its own, answer *who originally authorized this agent, what exactly was
+delegated, whether it may sub-delegate, what constraints applied, which chain of authority led here,
+whether a hop was revoked, or whether any hop expanded authority.* That gap is the opening for the home's
+delegation model (Part IV.4 — we are ahead of the OAuth on-behalf-of-agents draft for multi-hop).
+
+### VII.6 Attenuated delegation = authority that can only narrow
+
+Attenuated delegation means **every hop can only narrow authority, never expand it** — a sub-agent can
+never receive more power than its delegator holds. Illustrative chain:
+
+```
+Person  → Impact Agent:   draft needs for Org Y · read public taxonomy · NO publish · NO contact release
+                          · expires 7d · may sub-delegate ONLY match computation
+Impact Agent → Match Worker: compute candidate matches · read public needs+offerings · NO messaging
+                          · NO agreement · NO confidential contact · expires 1h · may NOT sub-delegate
+```
+
+The policy check is therefore **authority-chain verification**, not scope checking. Not `token.scope
+includes match:compute`, but: `chain[0].issuer is the person/org authority` **AND** each hop is signed
+**AND** each hop attenuates the previous **AND** the action ⊆ final delegated scope **AND** the resource
+⊆ delegated resource set **AND** audience correct **AND** time window valid **AND** no active revocation
+**AND** the presenter proves possession of the delegated key. That is the difference between *scope
+checking* and *authority-chain verification*.
+
+### VII.7 Why on-chain / wallet delegation is ahead for multi-hop agents
+
+OAuth tokens are usually **session artifacts**; the home's delegations are **durable authority objects** —
+portable, verifiable across apps, revocable by the principal, discoverable by policy engines, anchored to
+the Person/Org Agent identity, composable across hops, independent of any one app's session database, and
+auditable after the fact. When an action crosses several boundaries
+(home → Impact Agent → matching service → marketplace handoff → agreement / contact release), OAuth can
+secure each API call, but the home's model describes the **whole authority graph**:
+
+```
+Passkey            proves the human is present.
+Wallet             proves they control / are linked to the Person Agent.
+Org smart account  proves they can act for the organization.
+Delegation registry proves an agent may perform a bounded action.
+Graph              records the NeedIntent, IntentMatch, Agreement, provenance.
+Marketplace        remains system of record for marketplace UX + messaging.
+```
+
+### VII.8 Applied to demo-gs / Switchboard — three maturity levels
+
+**Level 1 — current practical handoff.** Home identity → signed JWT/OIDC assertion → the marketplace
+verifies → the marketplace mints a local session. Maps onto the marketplace's existing magic-link/Google
+SSO and a shared identity provider; the one-tap arrival is a signed assertion it can verify.
+
+**Level 2 — passkeys-default + wallet-backed attributes.** User signs into the home with a passkey; the
+home resolves Person Agent, Organization Agent, expertise profile, role claim, signatory authority, skill
+attestations, and wallet/smart-account references; the home sends the marketplace a stable person URI, a
+stable org URI (if acting for an org), verified email (as allowed), a role hint, and a signed assertion.
+The marketplace still owns its local session, marketplace UI, needs board, matching UX, connection
+workflow, and messaging — the home owns discovery + handoff.
+
+**Level 3 — agentic delegated actions.** Human signs in with a passkey; delegates bounded authority to an
+Impact Agent; the Impact Agent drafts a NeedIntent; demo-gs computes an IntentMatch; the human approves
+the Agreement / contact release with a **passkey step-up**; the marketplace receives the handoff / status
+projection; the graph records provenance. This is where on-chain attenuated delegation is materially
+better than an OAuth-only design.
+
+**Worked example — an organization uses Impact to find grant-writing help.** *Passkey:* the person is
+present for sign-in and for the sensitive approval. *Wallet/delegation:* Impact can act, but only within a
+bounded scope. *demo-gs:* computes the match and records the IntentMatch. *Marketplace (Switchboard):*
+owns the actual connection workflow + messaging. *Graph:* records the public Need, match provenance, and
+the Agreement projection.
+
+### VII.9 Recommended architecture-doc language
+
+> The long-term identity model should be **passkeys-default, wallets-for-attributes, and FedCM-compatible
+> federation.** Passkeys provide the human-friendly, phishing-resistant login and step-up approval
+> surface. Wallets and smart accounts hold durable identity, organizational authority, skill
+> attestations, and revocable delegations. FedCM becomes the browser-mediated handoff from the home into
+> relying applications without iframe embedding, third-party-cookie dependence, or full account
+> re-onboarding. OAuth/OIDC remains useful for API sessions and partner interoperability, but agentic
+> multi-hop workflows require a stronger authority substrate than ordinary bearer tokens or app-local
+> scopes.
+>
+> The home's **on-chain attenuated delegation** model should be treated as a forward-looking advantage.
+> It models delegated authority as a portable, inspectable chain: each hop is signed, narrower than the
+> previous hop, time-bound, resource-bound, audience-bound, and revocable. This lets a Person Agent or
+> Organization Agent safely delegate limited work to an Impact Agent, which may further delegate a
+> narrower subtask to a broker or match worker, without losing provenance or expanding authority. OAuth
+> token exchange can express delegation concepts, but its standard layer deliberately leaves token
+> semantics and trust model to deployment profiles. The home can therefore become the cross-ecosystem
+> **authority graph underneath** future OAuth/FedCM sessions, rather than waiting for OAuth agent
+> standards to fully solve multi-hop agent delegation.
+
+**The one-line summary:** *Passkeys are for human presence. Wallets are for durable claims. FedCM is for
+cross-app login. OAuth is for API sessions. The home's delegation is for agent authority.*
 
 ---
 
