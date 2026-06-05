@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="760" viewBox="0 0 390 760">
+  <rect width="390" height="760" fill="#f1f5f9"/>
+  <rect x="16" y="18" width="358" height="724" rx="26" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <clipPath id="cp"><rect x="16" y="18" width="358" height="724" rx="26"/></clipPath>
+  <g clip-path="url(#cp)">
+    <rect x="16" y="18" width="358" height="54" rx="0" fill="#0b1324" stroke="none" stroke-width="1" opacity="1"/>
+    <circle cx="44" cy="45" r="11" fill="#0d9488"/>
+    <text x="64" y="50" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="15" font-weight="800" fill="#ffffff" text-anchor="start" opacity="1">Impact</text>
+    <text x="354" y="50" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" font-weight="600" fill="#94a3b8" text-anchor="end" opacity="1">home ready</text>
+    
+  <text x="40" y="116" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="19" font-weight="800" fill="#0f172a" text-anchor="start" opacity="1">You’re in, rich-pedersen 🎉</text>
+  <text x="40" y="140" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">Two quick ways to protect your home — later is fine.</text>
+  <rect x="40" y="164" width="310" height="92" rx="14" fill="#f0fdfa" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <text x="56" y="192" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="13.5" font-weight="800" fill="#0f766e" text-anchor="start" opacity="1">🔑  Add this device as a passkey</text>
+  <text x="56" y="214" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">Phishing-resistant, works across your</text>
+  <text x="56" y="230" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">devices. Then only you control your home.</text>
+  <text x="330" y="244" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12.5" font-weight="800" fill="#0f766e" text-anchor="end" opacity="1">Add  →</text>
+  <rect x="40" y="272" width="310" height="96" rx="14" fill="#fffbeb" stroke="#fde68a" stroke-width="1" opacity="1"/>
+  <text x="56" y="300" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="13.5" font-weight="800" fill="#d97706" text-anchor="start" opacity="1">⚠  Set up recovery</text>
+  <rect x="190" y="286" width="143" height="26" rx="13" fill="#fffbeb" stroke="#fde68a" stroke-width="1" opacity="1"/><circle cx="204" cy="299" r="4" fill="#d97706"/><text x="214" y="303" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#d97706" text-anchor="start" opacity="1">0 trusted people</text>
+  <text x="56" y="326" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="600" fill="#d97706" text-anchor="start" opacity="1">If you lose your Google sign-in with no</text>
+  <text x="56" y="342" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="600" fill="#d97706" text-anchor="start" opacity="1">backup, you could be locked out of your home.</text>
+  <text x="330" y="356" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12.5" font-weight="800" fill="#d97706" text-anchor="end" opacity="1">Set up  →</text>
+  <text x="195" y="412" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12.5" font-weight="700" fill="#94a3b8" text-anchor="middle" opacity="1">Maybe later</text>
+
+  </g>
+  <!-- caption -->
+  <text x="195" y="754" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#94a3b8" text-anchor="middle" opacity="1">05 · Soft nudge — secure + recovery readiness</text>
+</svg>

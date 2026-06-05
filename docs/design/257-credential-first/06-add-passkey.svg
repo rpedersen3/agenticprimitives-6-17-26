@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="760" viewBox="0 0 390 760">
+  <rect width="390" height="760" fill="#f1f5f9"/>
+  <rect x="16" y="18" width="358" height="724" rx="26" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <clipPath id="cp"><rect x="16" y="18" width="358" height="724" rx="26"/></clipPath>
+  <g clip-path="url(#cp)">
+    <rect x="16" y="18" width="358" height="54" rx="0" fill="#0b1324" stroke="none" stroke-width="1" opacity="1"/>
+    <circle cx="44" cy="45" r="11" fill="#0d9488"/>
+    <text x="64" y="50" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="15" font-weight="800" fill="#ffffff" text-anchor="start" opacity="1">Impact</text>
+    <text x="354" y="50" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" font-weight="600" fill="#94a3b8" text-anchor="end" opacity="1">custody step-up</text>
+    
+  <text x="40" y="118" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="18" font-weight="800" fill="#0f172a" text-anchor="start" opacity="1">Secure your home with this device</text>
+  <text x="40" y="144" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">Use your fingerprint, face, or PIN. A passkey</text>
+  <text x="40" y="162" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">is created on this device and added to your home.</text>
+  <rect x="40" y="188" width="310" height="120" rx="14" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <text x="56" y="214" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="800" fill="#475569" text-anchor="start" opacity="1">After this</text>
+  <text x="56" y="236" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#0f172a" text-anchor="start" opacity="1">✓ Your phone can sign you in + approve</text>
+  <text x="56" y="256" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#0f172a" text-anchor="start" opacity="1">✓ Phishing-resistant, cross-device</text>
+  <text x="56" y="276" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#0f172a" text-anchor="start" opacity="1">✓ Optional: remove Google as the controller</text>
+  <text x="56" y="296" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#94a3b8" text-anchor="start" opacity="1">   so only your devices control your home</text>
+  <rect x="40" y="326" width="310" height="50" rx="12" fill="#0d9488" stroke="none" stroke-width="1.5" opacity="1"/><text x="58" y="356" font-size="16">🔑</text><text x="82" y="356" font-family="Inter,sans-serif" font-size="15" font-weight="700" fill="#ffffff" text-anchor="start">Create your passkey</text>
+  <rect x="40" y="398" width="310" height="26" rx="8" fill="none" stroke="none" stroke-width="1" opacity="1"/>
+  <text x="56" y="416" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" font-weight="400" fill="#94a3b8" text-anchor="start" opacity="1">The prompt will say impact-agent.me — that’s your home.</text>
+
+  </g>
+  <!-- caption -->
+  <text x="195" y="754" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#94a3b8" text-anchor="middle" opacity="1">06 · Add a passkey (the quick migration)</text>
+</svg>

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="760" viewBox="0 0 390 760">
+  <rect width="390" height="760" fill="#f1f5f9"/>
+  <rect x="16" y="18" width="358" height="724" rx="26" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <clipPath id="cp"><rect x="16" y="18" width="358" height="724" rx="26"/></clipPath>
+  <g clip-path="url(#cp)">
+    <rect x="16" y="18" width="358" height="54" rx="0" fill="#0b1324" stroke="none" stroke-width="1" opacity="1"/>
+    <circle cx="44" cy="45" r="11" fill="#0d9488"/>
+    <text x="64" y="50" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="15" font-weight="800" fill="#ffffff" text-anchor="start" opacity="1">Impact</text>
+    <text x="354" y="50" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" font-weight="600" fill="#94a3b8" text-anchor="end" opacity="1">bootstrap</text>
+    
+  <text x="40" y="120" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="20" font-weight="800" fill="#0f172a" text-anchor="start" opacity="1">Pick your public name</text>
+  <text x="40" y="146" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="13" font-weight="400" fill="#475569" text-anchor="start" opacity="1">This is your agent’s public home — how</text>
+  <text x="40" y="164" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="13" font-weight="400" fill="#475569" text-anchor="start" opacity="1">others find and link to you. Not a password.</text>
+  <rect x="40" y="192" width="310" height="50" rx="12" fill="#ffffff" stroke="#0d9488" stroke-width="1.5" opacity="1"/>
+  <text x="56" y="223" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="16" font-weight="700" fill="#0f172a" text-anchor="start" opacity="1">rich-pedersen</text>
+  <text x="334" y="223" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="16" font-weight="700" fill="#94a3b8" text-anchor="end" opacity="1">.impact</text>
+  <rect x="40" y="256" width="234" height="26" rx="13" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1" opacity="1"/><circle cx="54" cy="269" r="4" fill="#16a34a"/><text x="64" y="273" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#16a34a" text-anchor="start" opacity="1">rich-pedersen.impact-agent.me</text>
+  <rect x="40" y="300" width="310" height="50" rx="12" fill="#0d9488" stroke="none" stroke-width="1.5" opacity="1"/><text x="195" y="330" font-family="Inter,sans-serif" font-size="15" font-weight="700" fill="#ffffff" text-anchor="middle">Create my home</text>
+  <rect x="40" y="372" width="310" height="96" rx="14" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <text x="56" y="400" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="800" fill="#475569" text-anchor="start" opacity="1">What happens</text>
+  <text x="56" y="422" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">• Your Smart Agent is created (sponsored)</text>
+  <text x="56" y="440" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">• Google controls it for now</text>
+  <text x="56" y="458" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">• No key gesture, no wallet needed</text>
+
+  </g>
+  <!-- caption -->
+  <text x="195" y="754" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#94a3b8" text-anchor="middle" opacity="1">04 · Signup — name = public handle (only place asked)</text>
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="760" viewBox="0 0 390 760">
+  <rect width="390" height="760" fill="#f1f5f9"/>
+  <rect x="16" y="18" width="358" height="724" rx="26" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <clipPath id="cp"><rect x="16" y="18" width="358" height="724" rx="26"/></clipPath>
+  <g clip-path="url(#cp)">
+    <rect x="16" y="18" width="358" height="54" rx="0" fill="#0b1324" stroke="none" stroke-width="1" opacity="1"/>
+    <circle cx="44" cy="45" r="11" fill="#0d9488"/>
+    <text x="64" y="50" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="15" font-weight="800" fill="#ffffff" text-anchor="start" opacity="1">Impact</text>
+    <text x="354" y="50" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" font-weight="600" fill="#94a3b8" text-anchor="end" opacity="1">profile</text>
+    
+  <text x="40" y="116" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="18" font-weight="800" fill="#0f172a" text-anchor="start" opacity="1">Your public agent</text>
+  <rect x="40" y="140" width="310" height="110" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <circle cx="80" cy="184" r="24" fill="#0d9488"/>
+  <text x="80" y="192" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="22" font-weight="800" fill="#ffffff" text-anchor="middle" opacity="1">R</text>
+  <text x="118" y="178" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="17" font-weight="800" fill="#0f172a" text-anchor="start" opacity="1">rich-pedersen.impact</text>
+  <text x="118" y="200" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="600" fill="#4f46e5" text-anchor="start" opacity="1">rich-pedersen.impact-agent.me</text>
+  <text x="118" y="226" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" font-weight="400" fill="#94a3b8" text-anchor="start" opacity="1">A2A agent · vault · profile</text>
+  <rect x="40" y="270" width="150" height="50" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" opacity="1"/><text x="115" y="300" font-family="Inter,sans-serif" font-size="15" font-weight="700" fill="#0f172a" text-anchor="middle">Share handle</text>
+  <rect x="200" y="270" width="150" height="50" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" opacity="1"/><text x="275" y="300" font-family="Inter,sans-serif" font-size="15" font-weight="700" fill="#0f172a" text-anchor="middle">Copy URL</text>
+  <rect x="40" y="340" width="310" height="132" rx="14" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <text x="56" y="366" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="800" fill="#475569" text-anchor="start" opacity="1">Sign-in methods</text>
+  <rect x="56" y="380" width="73" height="26" rx="13" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1" opacity="1"/><circle cx="70" cy="393" r="4" fill="#16a34a"/><text x="80" y="397" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#16a34a" text-anchor="start" opacity="1">Google</text><rect x="140" y="380" width="178" height="26" rx="13" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1" opacity="1"/><circle cx="154" cy="393" r="4" fill="#16a34a"/><text x="164" y="397" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#16a34a" text-anchor="start" opacity="1">This device (passkey)</text>
+  <rect x="56" y="416" width="136" height="26" rx="13" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1" opacity="1"/><circle cx="70" cy="429" r="4" fill="#16a34a"/><text x="80" y="433" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#16a34a" text-anchor="start" opacity="1">Recovery wallet</text><rect x="190" y="416" width="136" height="26" rx="13" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1" opacity="1"/><circle cx="204" cy="429" r="4" fill="#16a34a"/><text x="214" y="433" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#16a34a" text-anchor="start" opacity="1">2-of-3 recovery</text>
+  <text x="56" y="458" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" font-weight="400" fill="#94a3b8" text-anchor="start" opacity="1">Your name never changes — credentials can.</text>
+
+  </g>
+  <!-- caption -->
+  <text x="195" y="754" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#94a3b8" text-anchor="middle" opacity="1">10 · The name lives in the portal as a public handle</text>
+</svg>

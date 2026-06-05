@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="760" viewBox="0 0 390 760">
+  <rect width="390" height="760" fill="#f1f5f9"/>
+  <rect x="16" y="18" width="358" height="724" rx="26" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <clipPath id="cp"><rect x="16" y="18" width="358" height="724" rx="26"/></clipPath>
+  <g clip-path="url(#cp)">
+    <rect x="16" y="18" width="358" height="54" rx="0" fill="#0b1324" stroke="none" stroke-width="1" opacity="1"/>
+    <circle cx="44" cy="45" r="11" fill="#0d9488"/>
+    <text x="64" y="50" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="15" font-weight="800" fill="#ffffff" text-anchor="start" opacity="1">Impact</text>
+    <text x="354" y="50" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" font-weight="600" fill="#94a3b8" text-anchor="end" opacity="1">protected</text>
+    
+  <circle cx="195" cy="150" r="40" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="2"/>
+  <text x="195" y="162" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="34" font-weight="400" fill="#0f172a" text-anchor="middle" opacity="1">🛡</text>
+  <text x="195" y="218" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="19" font-weight="800" fill="#0f172a" text-anchor="middle" opacity="1">Your home is protected</text>
+  <rect x="135" y="234" width="136" height="26" rx="13" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1" opacity="1"/><circle cx="149" cy="247" r="4" fill="#16a34a"/><text x="159" y="251" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#16a34a" text-anchor="start" opacity="1">2-of-3 recovery</text>
+  <rect x="40" y="280" width="310" height="120" rx="14" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" opacity="1"/>
+  <text x="56" y="308" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">If you lose your Google or passkey access,</text>
+  <text x="56" y="328" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">two of your three trusted recovery contacts</text>
+  <text x="56" y="348" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12.5" font-weight="400" fill="#475569" text-anchor="start" opacity="1">can help you add a new sign-in method.</text>
+  <text x="56" y="376" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#94a3b8" text-anchor="start" opacity="1">Your name, your agent, and everything you</text>
+  <text x="56" y="392" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#94a3b8" text-anchor="start" opacity="1">connected stay exactly the same.</text>
+  <text x="195" y="440" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12.5" font-weight="700" fill="#4f46e5" text-anchor="middle" opacity="1">Manage recovery</text>
+
+  </g>
+  <!-- caption -->
+  <text x="195" y="754" font-family="'Inter',-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" font-weight="700" fill="#94a3b8" text-anchor="middle" opacity="1">08 · Recovery-readiness badge (protected)</text>
+</svg>
