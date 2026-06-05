@@ -22,7 +22,7 @@ import {
 } from '@agenticprimitives/delegation';
 import type { Address } from '@agenticprimitives/types';
 import { CHAIN_ID, CONTRACTS, personaSignHash } from './chain.js';
-import { ensureCsrfToken, csrfHeaders } from '../csrf.js';
+import { ensureCsrfToken, csrfHeaders, refreshCsrfToken } from '../csrf.js';
 import type { PersonaState } from './personas.js';
 import type { DelegationWire } from './delegation.js';
 
@@ -66,21 +66,37 @@ async function ownerDelegationWire(o: VaultOwner): Promise<DelegationWire> {
   return wire;
 }
 
+// The IN-PLACE post-connect window can transiently 403: a stale/rotated CSRF token, or a freshly
+// minted member→JP grant whose nameless SA is still confirming on-chain (ERC-1271 has no code yet →
+// `delegation_invalid`). Both self-heal within ~1–2s. So we do a SMALL bounded retry of the SAME call
+// — refreshing CSRF on a 403 — rather than let one transient miss storm the discovery hydrate. ADR-0013
+// permits bounded retries of the same call; this is NOT a fallback to a different mechanism.
+const VAULT_MAX_ATTEMPTS = 4;
+const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
+
 async function postVault(path: 'get' | 'set' | 'list', body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  await ensureCsrfToken();
-  const r = await fetch(`/a2a/mcp/vault/${path}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', ...csrfHeaders() },
-    body: JSON.stringify(body),
-  });
-  const j = (await r.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!r.ok || !j || j.ok !== true) {
-    throw new Error(
-      (j?.detail as string) ?? (j?.error as string) ?? `vault ${path} failed (HTTP ${r.status})`,
-    );
+  let lastErr: Error | null = null;
+  for (let attempt = 1; attempt <= VAULT_MAX_ATTEMPTS; attempt++) {
+    await ensureCsrfToken();
+    const r = await fetch(`/a2a/mcp/vault/${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify(body),
+    });
+    const j = (await r.json().catch(() => null)) as Record<string, unknown> | null;
+    if (r.ok && j && j.ok === true) return j;
+
+    // Retry ONLY transient classes — CSRF/auth (403) + server (5xx) — never a 4xx contract error
+    // (400 bad_body / 404). A 403 is most often a stale or rotated CSRF token, so force a fresh one
+    // before retrying; the backoff also covers a brief grant/SA-confirmation propagation window.
+    lastErr = new Error((j?.detail as string) ?? (j?.error as string) ?? `vault ${path} failed (HTTP ${r.status})`);
+    const transient = r.status === 403 || r.status >= 500;
+    if (!transient || attempt === VAULT_MAX_ATTEMPTS) throw lastErr;
+    if (r.status === 403) { try { await refreshCsrfToken(); } catch { /* the next ensureCsrfToken retries */ } }
+    await sleep(300 * attempt); // 300 / 600 / 900ms
   }
-  return j;
+  throw lastErr ?? new Error(`vault ${path} failed`);
 }
 
 /** Read one record from the agent's vault; `null` if absent or tombstoned. */

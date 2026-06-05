@@ -32,7 +32,16 @@ export async function ensureCsrfToken(): Promise<string> {
     cached = decodeURIComponent(fromCookie);
     return cached;
   }
-  const res = await fetch('/a2a/auth/csrf', { method: 'GET', credentials: 'include' });
+  return refreshCsrfToken();
+}
+
+/** FORCE a brand-new token+cookie from the server, bypassing the existing cookie/cache. Fetch
+ *  wrappers call this to SELF-HEAL on a 403 before a single bounded retry: `ensureCsrfToken` prefers
+ *  the existing cookie (so a stale/rotated token would be re-sent unchanged), whereas this always
+ *  re-mints. The GET sets a fresh `agentic-csrf` cookie, so `csrfHeaders()` then reads the new value. */
+export async function refreshCsrfToken(): Promise<string> {
+  cached = null;
+  const res = await fetch('/a2a/auth/csrf', { method: 'GET', credentials: 'include', cache: 'no-store' });
   if (!res.ok) throw new Error(`csrf token fetch failed: HTTP ${res.status}`);
   cached = ((await res.json()) as { token: string }).token;
   return cached;
