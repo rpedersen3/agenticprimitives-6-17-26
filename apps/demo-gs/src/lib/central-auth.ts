@@ -76,18 +76,17 @@ export function openCentralAuthPopup(
 
   return new Promise<PopupResult>((resolve) => {
     let done = false;
-    // Once the popup tells us it's leaving for the OAuth IdP, STOP trusting `popup.closed`: an IdP
-    // with COOP (Google) severs our handle, making `popup.closed` read `true` even though the popup
-    // is alive on the IdP — the result then comes back over the relay channel (or postMessage when
-    // the opener survives). We switch to an absolute timeout so an abandoned popup still resolves.
-    let leftForIdp = false;
+    // The broker sets COOP (`same-origin-allow-popups`), which SEVERS our cross-origin handle to the
+    // popup the moment it loads the broker — so `popup.closed` reads `true` even while the popup is
+    // alive, and postMessage from the popup can't reach us. We therefore CANNOT poll `popup.closed`
+    // for cancel: success arrives over the same-origin relay channel (or postMessage if the opener
+    // ever survives), and an abandoned popup resolves via the absolute timeout below.
     const finish = (r: PopupResult) => {
       if (done) return;
       done = true;
       window.removeEventListener('message', onMessage);
       if (relay) { relay.onmessage = null; try { relay.close(); } catch { /* ignore */ } }
-      clearInterval(closedTimer);
-      clearTimeout(idpTimeout);
+      clearTimeout(abandonTimeout);
       resolve(r);
     };
     if (relay) {
@@ -105,9 +104,6 @@ export function openCentralAuthPopup(
       const m = e.data as AcMessage | null;
       if (!m || typeof m.type !== 'string') return;
       if (m.type === 'AC_PROGRESS') {
-        // The broker signals `idp:true` right before redirecting the popup to the OAuth provider —
-        // from here `popup.closed` is unreliable (COOP severance), so disable the closed→cancel poll.
-        if (m.idp) leftForIdp = true;
         if (m.msg) onProgress?.(m.msg);
         return;
       }
@@ -141,13 +137,9 @@ export function openCentralAuthPopup(
       }
     };
     window.addEventListener('message', onMessage);
-    // If the user closes the popup before any result → cancelled. Suppressed once the popup left for
-    // the IdP (severance makes `popup.closed` lie); the absolute timeout below covers that case.
-    const closedTimer = window.setInterval(() => {
-      if (!leftForIdp && popup.closed) finish({ status: 'cancelled' });
-    }, 600);
-    // Safety net: an abandoned popup that already left for the IdP (no relay, no close we can see)
-    // resolves as cancelled after this window rather than hanging the caller's button forever.
-    const idpTimeout = window.setTimeout(() => finish({ status: 'cancelled' }), 5 * 60 * 1000);
+    // Abandon safety net: with our handle severed (COOP) we can't observe the popup closing, so a
+    // popup that never returns a result resolves as cancelled after this window instead of hanging
+    // the caller's button forever. A success/decline that DOES come back (relay/postMessage) clears it.
+    const abandonTimeout = window.setTimeout(() => finish({ status: 'cancelled' }), 5 * 60 * 1000);
   });
 }
