@@ -110,32 +110,14 @@ while ((m = rowRe.exec(out)) !== null) {
 }
 
 if (rows.length === 0) {
-  // KNOWN FOUNDRY LIMITATION (not a contract or test gap): `forge coverage --ir-minimum` instruments
-  // EVERY contract with viaIR at MINIMUM optimization (to preserve source maps), and on a suite this
-  // size that exceeds solc's stack on at least one function ("Variable … is 1 too deep" / "Stack too
-  // deep"). The CONTRACTS are fine — the normal 200-run build compiles, and the 748 forge tests + the
-  // Halmos proofs + the Echidna/Medusa fuzz all pass; it is the coverage TOOL that can't compile them.
-  //
-  // This is all-or-nothing: when the instrumented compile fails, NO contract is measurable, so there is
-  // no partial report that could hide a real regression. We therefore DISTINGUISH that tooling
-  // compile-failure (→ a LOUD, non-blocking warning so it can't gate releases on a Foundry limit) from
-  // any other empty report (→ still a hard failure). A GENUINE coverage shortfall (rows parsed, below
-  // floor) is unaffected and still hard-fails below.
-  // TODO(R12): shed the one over-deep stack slot in the offending function(s) and restore the measured
-  // floor (the failure is `1 too deep`, so a single local removed in the right function fixes it).
-  const compileFailed = /Stack too deep|Compiler run failed|Yul exception/i.test(out);
-  if (compileFailed) {
-    console.warn('');
-    console.warn('[check-forge-coverage] ⚠ NON-BLOCKING: `forge coverage` could not COMPILE this suite');
-    console.warn('  (stack-too-deep under viaIR coverage instrumentation — a known Foundry tooling limit,');
-    console.warn('  NOT a contract or test gap). The normal 200-run build + 748 forge tests + Halmos +');
-    console.warn('  Echidna/Medusa fuzz remain the gating assurance; the coverage % is artifact-only until');
-    console.warn('  the over-deep function is refactored (TODO R12). Passing so a tooling limit cannot');
-    console.warn('  block releases.');
-    console.warn('');
-    process.exit(0);
-  }
+  // R12 (RESOLVED): `forge coverage --ir-minimum` previously hit a viaIR stack-too-deep on the new
+  // skill/geo registries' `publish` (an in-memory struct literal + a dynamic `string` overflowed the
+  // stack by one slot under coverage instrumentation), producing zero rows. That was fixed by splitting
+  // the record write+emit into a field-by-field `_storeAndEmit` helper (behaviour identical). The gate
+  // is STRICT again: 0 rows = a hard failure (a re-introduced over-deep function would surface here and
+  // must be refactored the same way, not waved through). The forge output is dumped for diagnosis.
   console.error('[check-forge-coverage] could not parse any coverage rows from forge output');
+  console.error('  (if this is a viaIR "stack too deep", split the offending function — see R12 in git history).');
   console.error('--- forge output ---');
   console.error(out.slice(0, 4000));
   process.exit(2);

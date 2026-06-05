@@ -164,4 +164,67 @@ contract DefinitionRegistriesTest is Test {
         vm.expectRevert(GeoFeatureRegistry.FeatureNotFound.selector);
         geo.getLatest(FEATURE);
     }
+
+    // ─── geo revert-branch coverage (mirrors the skill cases; R12 floor) ───
+
+    function test_geo_emptyId_reverts() public {
+        GeoFeatureRegistry.PublishInput memory p;
+        p.featureKind = geo.KIND_REGION();
+        p.stewardAccount = steward;
+        p.metadataURI = "ipfs://x"; // featureId left 0x0
+        vm.prank(steward);
+        vm.expectRevert(GeoFeatureRegistry.EmptyId.selector);
+        geo.publish(p);
+    }
+
+    function test_geo_emptyMetadata_reverts() public {
+        GeoFeatureRegistry.PublishInput memory p;
+        p.featureId = FEATURE;
+        p.featureKind = geo.KIND_REGION();
+        p.stewardAccount = steward; // metadataURI left ""
+        vm.prank(steward);
+        vm.expectRevert(GeoFeatureRegistry.EmptyMetadata.selector);
+        geo.publish(p);
+    }
+
+    function test_geo_publish_v2_differentSteward_reverts() public {
+        _publishFeature(); // v1 by `steward`
+        GeoFeatureRegistry.PublishInput memory p;
+        p.featureId = FEATURE;
+        p.featureKind = geo.KIND_REGION();
+        p.stewardAccount = other;
+        p.metadataURI = "ipfs://x";
+        vm.prank(other);
+        vm.expectRevert(GeoFeatureRegistry.NotSteward.selector);
+        geo.publish(p);
+    }
+
+    function test_geo_deactivate_unknown_reverts() public {
+        vm.expectRevert(GeoFeatureRegistry.FeatureNotFound.selector);
+        geo.deactivate(FEATURE);
+    }
+
+    function test_geo_deactivate_nonSteward_reverts() public {
+        _publishFeature();
+        vm.prank(other);
+        vm.expectRevert(GeoFeatureRegistry.NotSteward.selector);
+        geo.deactivate(FEATURE);
+    }
+
+    function test_geo_setValidity_unknown_reverts() public {
+        vm.expectRevert(GeoFeatureRegistry.FeatureNotFound.selector);
+        geo.setValidity(FEATURE, 1, 0, 0);
+    }
+
+    function test_geo_setValidity_nonSteward_reverts() public {
+        _publishFeature();
+        vm.prank(other);
+        vm.expectRevert(GeoFeatureRegistry.NotSteward.selector);
+        geo.setValidity(FEATURE, 1, 0, 0);
+    }
+
+    function test_geo_getFeature_unknown_reverts() public {
+        vm.expectRevert(GeoFeatureRegistry.FeatureNotFound.selector);
+        geo.getFeature(FEATURE, 1);
+    }
 }

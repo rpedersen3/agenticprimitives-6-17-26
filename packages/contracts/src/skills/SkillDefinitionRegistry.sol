@@ -116,24 +116,30 @@ contract SkillDefinitionRegistry {
 
         version = prevVer + 1;
         bytes32 predecessorRoot = prevVer == 0 ? bytes32(0) : _records[p.skillId][prevVer].ontologyMerkleRoot;
-
-        _records[p.skillId][version] = SkillRecord({
-            skillId: p.skillId,
-            version: version,
-            stewardAccount: p.stewardAccount,
-            skillKind: p.skillKind,
-            conceptHash: p.conceptHash,
-            ontologyMerkleRoot: p.ontologyMerkleRoot,
-            predecessorRoot: predecessorRoot,
-            metadataURI: p.metadataURI,
-            validAfter: p.validAfter,
-            validUntil: p.validUntil,
-            active: true,
-            registeredAt: uint64(block.timestamp)
-        });
         latestVersion[p.skillId] = version;
         if (prevVer == 0) _allSkills.push(p.skillId);
+        // The heavy record write + event live in a helper so `publish`'s own stack stays shallow.
+        _storeAndEmit(p, version, predecessorRoot);
+    }
 
+    /// @dev Writes the record FIELD-BY-FIELD to storage (no in-memory struct literal) and emits.
+    ///      Behaviour is identical to the prior `_records[...] = SkillRecord({...})` literal; the split
+    ///      exists only to keep `publish` within solc's stack under `forge coverage --ir-minimum`
+    ///      instrumentation (the memory struct literal + a dynamic `string` overflowed it by one slot).
+    function _storeAndEmit(PublishInput calldata p, uint64 version, bytes32 predecessorRoot) internal {
+        SkillRecord storage r = _records[p.skillId][version];
+        r.skillId = p.skillId;
+        r.version = version;
+        r.stewardAccount = p.stewardAccount;
+        r.skillKind = p.skillKind;
+        r.conceptHash = p.conceptHash;
+        r.ontologyMerkleRoot = p.ontologyMerkleRoot;
+        r.predecessorRoot = predecessorRoot;
+        r.metadataURI = p.metadataURI;
+        r.validAfter = p.validAfter;
+        r.validUntil = p.validUntil;
+        r.active = true;
+        r.registeredAt = uint64(block.timestamp);
         emit SkillPublished(p.skillId, version, p.stewardAccount, p.skillKind, p.conceptHash, p.ontologyMerkleRoot, predecessorRoot, p.metadataURI);
     }
 

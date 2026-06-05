@@ -121,29 +121,36 @@ contract GeoFeatureRegistry {
         }
 
         version = prevVer + 1;
-        _records[p.featureId][version] = FeatureRecord({
-            featureId: p.featureId,
-            version: version,
-            stewardAccount: p.stewardAccount,
-            featureKind: p.featureKind,
-            geometryHash: p.geometryHash,
-            coverageRoot: p.coverageRoot,
-            sourceSetRoot: p.sourceSetRoot,
-            metadataURI: p.metadataURI,
-            centroidLat: p.centroidLat,
-            centroidLon: p.centroidLon,
-            bboxMinLat: p.bboxMinLat,
-            bboxMinLon: p.bboxMinLon,
-            bboxMaxLat: p.bboxMaxLat,
-            bboxMaxLon: p.bboxMaxLon,
-            validAfter: p.validAfter,
-            validUntil: p.validUntil,
-            active: true,
-            registeredAt: uint64(block.timestamp)
-        });
         latestVersion[p.featureId] = version;
         if (prevVer == 0) _allFeatures.push(p.featureId);
+        // The heavy record write + event live in a helper so `publish`'s own stack stays shallow.
+        _storeAndEmit(p, version);
+    }
 
+    /// @dev Writes the record FIELD-BY-FIELD to storage (no in-memory struct literal) and emits.
+    ///      Behaviour is identical to the prior `_records[...] = FeatureRecord({...})` literal; the
+    ///      split exists only to keep `publish` within solc's stack under `forge coverage --ir-minimum`
+    ///      instrumentation (the 18-field memory literal + a dynamic `string` overflowed it by one slot).
+    function _storeAndEmit(PublishInput calldata p, uint64 version) internal {
+        FeatureRecord storage r = _records[p.featureId][version];
+        r.featureId = p.featureId;
+        r.version = version;
+        r.stewardAccount = p.stewardAccount;
+        r.featureKind = p.featureKind;
+        r.geometryHash = p.geometryHash;
+        r.coverageRoot = p.coverageRoot;
+        r.sourceSetRoot = p.sourceSetRoot;
+        r.metadataURI = p.metadataURI;
+        r.centroidLat = p.centroidLat;
+        r.centroidLon = p.centroidLon;
+        r.bboxMinLat = p.bboxMinLat;
+        r.bboxMinLon = p.bboxMinLon;
+        r.bboxMaxLat = p.bboxMaxLat;
+        r.bboxMaxLon = p.bboxMaxLon;
+        r.validAfter = p.validAfter;
+        r.validUntil = p.validUntil;
+        r.active = true;
+        r.registeredAt = uint64(block.timestamp);
         emit FeaturePublished(p.featureId, version, p.stewardAccount, p.featureKind, p.geometryHash, p.coverageRoot, p.sourceSetRoot, p.metadataURI);
     }
 
