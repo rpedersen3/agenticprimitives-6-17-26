@@ -31,36 +31,36 @@ export function RoleDiscovery({ kind, onRetry, name, orgName }: {
   const receipt = !hydrated && !err
     ? kind === 'gco'
       ? `✓ ${orgName ?? 'Your organization'} is created and connected to Switchboard`
-      : `✓ Your Impact home is ready · welcome, ${name ?? 'there'}`
+      : `✓ Your ${GS.community} home is ready${name ? ` · welcome, ${name}` : ''}`
     : null;
 
   // The store hydrates the whole entitled view in one pass, so we model the timeline against the two
   // observable signals: verified sign-in (we got here from a return), and the vault read completing.
   const steps: Step[] = [
-    { label: `Verified your ${GS.community} sign-in`, done: true },
-    { label: 'Loaded the member registry + grant', done: hydrated || !!err },
-    { label: 'Read your vault (gs:needs / gs:offering)', done: hydrated },
-    { label: 'Resolved your workspace', done: hydrated },
+    { label: `Signed in to ${GS.community}`, done: true },
+    { label: 'Confirmed your access', done: hydrated || !!err },
+    { label: 'Loaded your information', done: hydrated },
+    { label: 'Ready', done: hydrated },
   ];
 
   const accessRows: Array<{ rec: string; access: string; tone: 'ok' | 'warn' }> =
     kind === 'gco'
       ? [
-          { rec: 'gs:needs (your org vault)', access: 'read + write', tone: 'ok' },
-          { rec: 'match status', access: 'read', tone: 'ok' },
-          { rec: 'your contact', access: 'only on accept', tone: 'warn' },
+          { rec: 'Your posted needs', access: 'read + write', tone: 'ok' },
+          { rec: 'Match status', access: 'read', tone: 'ok' },
+          { rec: 'Your contact', access: 'only on accept', tone: 'warn' },
         ]
       : [
-          { rec: 'gs:offering (your vault)', access: 'read + write', tone: 'ok' },
-          { rec: 'match status', access: 'read', tone: 'ok' },
-          { rec: 'your contact', access: 'only on accept', tone: 'warn' },
+          { rec: 'Your expertise offering', access: 'read + write', tone: 'ok' },
+          { rec: 'Match status', access: 'read', tone: 'ok' },
+          { rec: 'Your contact', access: 'only on accept', tone: 'warn' },
         ];
 
   return (
     <Card style={{ maxWidth: 560, margin: '0 auto' }}>
       {receipt && <div style={{ marginBottom: '1rem' }}><Banner tone="ok">{receipt}</Banner></div>}
-      <div className="eyebrow">Setting up your workspace</div>
-      <h2 style={{ fontSize: '1.35rem', marginTop: '.35rem' }}>Connection status</h2>
+      <div className="eyebrow">Connecting you to {GS.community}</div>
+      <h2 style={{ fontSize: '1.35rem', marginTop: '.35rem' }}>Getting things ready</h2>
 
       <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '.6rem' }}>
         {steps.map((s) => (

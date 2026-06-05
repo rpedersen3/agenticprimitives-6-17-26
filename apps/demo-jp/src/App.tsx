@@ -716,7 +716,7 @@ export function App() {
           )}
           {view === 'hub' && (
             <RoleHub
-              name={identity?.displayName ?? member?.name ?? 'there'}
+              name={identity?.displayName || ''}
               caps={caps}
               onOpen={(k) => openWorkspace(k)}
               onSetup={(k) => openWorkspace(k)}
@@ -1050,7 +1050,7 @@ function AdopterIntranetBody({
           variant="scrollable"
           scrollButtons="auto"
           allowScrollButtonsMobile
-          aria-label="Workspace sections"
+          aria-label="Sections"
           sx={{ mt: 2, borderBottom: 1, borderColor: 'divider', minHeight: 44 }}
         >
           {ADOPTER_TABS.map((t) => (
@@ -2729,7 +2729,7 @@ function FacilitatorIntranetBody({
           variant="scrollable"
           scrollButtons="auto"
           allowScrollButtonsMobile
-          aria-label="Workspace sections"
+          aria-label="Sections"
           sx={{ mt: 2, borderBottom: 1, borderColor: 'divider', minHeight: 44 }}
         >
           {FACILITATOR_TABS.map((t) => {

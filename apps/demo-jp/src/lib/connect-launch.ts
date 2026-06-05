@@ -15,8 +15,9 @@ import { openCentralAuthPopup } from './central-auth';
  *  MUST equal the App's ENROLL_KEY so the popup-blocked redirect fallback returns through the
  *  existing OIDC return handler unchanged. */
 export const CONNECT_KEY = 'agenticprimitives:demo-jp:enroll';
-/** Remembers the last Impact name typed (prefill convenience). */
-export const LAST_NAME_KEY = 'agenticprimitives:demo-jp:last-name';
+// spec 259: the relying site no longer collects (or remembers) an Impact name — credential choice +
+// name lookup/claim belong to the home. The old `LAST_NAME_KEY` last-name memory is gone; the launch
+// wrappers below always enroll NAMELESS (the ConnectScreen passes `undefined`).
 
 /** The in-flight site-login stash — shape-compatible with the App's `EnrollStash` (state / name /
  *  authOrigin / codeVerifier / nonce), so the existing connect-return handler reads it unchanged. */
@@ -35,7 +36,6 @@ export interface ConnectStash {
  *  platform origin (`resolveAuthOrigin`). */
 export async function startConnect(name?: string): Promise<void> {
   const trimmed = (name ?? '').trim();
-  if (trimmed) { try { localStorage.setItem(LAST_NAME_KEY, trimmed); } catch { /* ignore */ } }
   const r = await startSiteEnrollment(trimmed);
   const stash: ConnectStash = {
     name: trimmed, state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce,
@@ -79,7 +79,6 @@ export async function startConnectPopup(
   signal?: AbortSignal,
 ): Promise<ConnectPopupResult> {
   const trimmed = (name ?? '').trim();
-  if (trimmed) { try { localStorage.setItem(LAST_NAME_KEY, trimmed); } catch { /* ignore */ } }
   const r = await startSiteEnrollment(trimmed);
   const stash: ConnectStash = {
     name: trimmed, state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce,

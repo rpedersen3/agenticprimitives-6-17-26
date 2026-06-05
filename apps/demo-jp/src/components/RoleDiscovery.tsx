@@ -22,26 +22,26 @@ export function RoleDiscovery({ relatedOrgsLoaded, recordsLoaded, error, onRetry
   onRetry: () => void;
 }) {
   const steps: Step[] = [
-    { label: `Verified your ${JP.impactName} sign-in`, done: true, active: false },
-    { label: 'Loaded your related organizations from Connect', done: relatedOrgsLoaded || !!error, active: !relatedOrgsLoaded && !error },
-    { label: 'Read your JP adopter + facilitator records', done: recordsLoaded, active: relatedOrgsLoaded && !recordsLoaded && !error },
-    { label: 'Resolved your available workspaces', done: recordsLoaded && relatedOrgsLoaded && !error, active: false },
+    { label: `Signed in to ${JP.impactName}`, done: true, active: false },
+    { label: 'Loaded your organizations', done: relatedOrgsLoaded || !!error, active: !relatedOrgsLoaded && !error },
+    { label: `Loaded your ${JP.org} records`, done: recordsLoaded, active: relatedOrgsLoaded && !recordsLoaded && !error },
+    { label: 'Ready', done: recordsLoaded && relatedOrgsLoaded && !error, active: false },
   ];
 
   const accessRows: Array<{ rec: string; access: string; tone: 'ok' | 'warn' }> = [
-    { rec: 'Impact profile (name + contact)', access: 'read (approved fields)', tone: 'ok' },
-    { rec: 'jp:adopter / jp:facilitator records', access: 'read + write', tone: 'ok' },
-    { rec: 'match + agreement status', access: 'read', tone: 'ok' },
-    { rec: 'your contact details', access: 'only when you share', tone: 'warn' },
+    { rec: `Your ${JP.impactName} profile (name + contact)`, access: 'read (approved fields)', tone: 'ok' },
+    { rec: `Your ${JP.org} adopter + facilitator records`, access: 'read + write', tone: 'ok' },
+    { rec: 'Match + agreement status', access: 'read', tone: 'ok' },
+    { rec: 'Your contact details', access: 'only when you share', tone: 'warn' },
   ];
 
   return (
     <Card sx={{ maxWidth: 600, mx: 'auto' }}>
       <CardContent sx={{ p: { xs: 2.5, sm: 3.5 } }}>
         <Typography variant="overline" sx={{ color: 'primary.main', fontWeight: 800, letterSpacing: '.12em' }}>
-          Setting up your workspace
+          Connecting you to {JP.impactName}
         </Typography>
-        <Typography variant="h6" sx={{ mt: 0.5, fontWeight: 800 }}>Connection status</Typography>
+        <Typography variant="h6" sx={{ mt: 0.5, fontWeight: 800 }}>Getting things ready</Typography>
 
         <Stack spacing={1} sx={{ mt: 2 }}>
           {steps.map((s) => (

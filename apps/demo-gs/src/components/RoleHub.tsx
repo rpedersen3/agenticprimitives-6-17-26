@@ -30,6 +30,9 @@ const COPY: Record<RoleKind, CardCopy> = {
 };
 
 export function RoleHub({ name, caps, onOpen, onResumeOrg, onSetupGco, onOpenHome }: {
+  /** The connected person's display name, or '' when name-deferred (signed in with Google/passkey and
+   *  hasn't claimed a public handle yet). We NEVER render a placeholder name — the heading goes
+   *  identity-light instead of saying "Welcome, you". */
   name: string;
   caps: RoleCapabilities;
   /** Open a ready workspace (KC immediately, or an already-created GCO). */
@@ -44,10 +47,12 @@ export function RoleHub({ name, caps, onOpen, onResumeOrg, onSetupGco, onOpenHom
   return (
     <div style={{ display: 'grid', gap: '1.25rem' }}>
       <div>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Welcome, {name}</h1>
+        <h1 style={{ fontSize: '1.6rem', fontWeight: 800 }}>
+          {name ? `Welcome, ${name}` : `You’re connected to ${GS.community}`}
+        </h1>
         <p style={{ fontSize: '.9rem', color: 'var(--c-g600)', marginTop: '.3rem' }}>
-          You&rsquo;re connected. Choose what you want to do — you can do both, and switch any time. Roles are
-          workspaces, not separate accounts.
+          What would you like to do? You can do both and switch any time &mdash; it&rsquo;s all one
+          connection, not separate accounts.
         </p>
       </div>
 
@@ -106,7 +111,7 @@ function RoleAction({ kind, state, onOpen, onResumeOrg, onSetupGco }: {
   onSetupGco: () => void;
 }) {
   if (state === 'ready') {
-    const label = kind === 'kc' ? 'Offer your expertise' : 'Open GCO workspace';
+    const label = kind === 'kc' ? 'Offer your expertise' : 'Open your organization';
     return <Btn size="sm" onClick={onOpen}>{label}</Btn>;
   }
   if (state === 'org-pending') {

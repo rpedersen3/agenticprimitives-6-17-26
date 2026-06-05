@@ -120,8 +120,8 @@ export function AppShellHeader({
             sx={{ textTransform: 'none', fontWeight: 700 }}
             endIcon={<span aria-hidden>▾</span>}
           >
-            {identity.displayName}
-            {identity.activeRole ? ` · ${ROLE_LABEL[identity.activeRole]}` : ' · choose a workspace'}
+            {identity.displayName || 'Connected'}
+            {identity.activeRole ? ` · ${ROLE_LABEL[identity.activeRole]}` : ''}
           </Button>
         ) : (
           <Button
@@ -189,14 +189,16 @@ function connectedItems(
 ) {
   const items: ReactElement[] = [
     <Box key="summary" sx={{ px: 2, py: 1 }}>
-      <Typography sx={{ fontWeight: 800, fontSize: '.95rem' }}>{identity.displayName}</Typography>
+      <Typography sx={{ fontWeight: 800, fontSize: '.95rem' }}>{identity.displayName || 'Connected'}</Typography>
+      {/* A name-deferred member has no public handle yet → show the home generically, never a junk
+          `.impact-agent.me` subdomain derived from an empty handle. */}
       <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
-        {personalHome(identity.handle)}
+        {identity.handle ? personalHome(identity.handle) : `your ${JP.impactName} home`}
       </Typography>
       <Box sx={{ mt: 0.75 }}>
         <Chip
           size="small"
-          label={identity.activeRole ? `Working as ${ROLE_LABEL[identity.activeRole]}` : 'Choose a workspace'}
+          label={identity.activeRole ? `Working as ${ROLE_LABEL[identity.activeRole]}` : 'Pick what to do'}
           sx={{ bgcolor: 'primary.light', color: 'primary.dark', fontWeight: 700 }}
         />
       </Box>
@@ -210,8 +212,8 @@ function connectedItems(
       const cap = caps.byKind[k];
       items.push(
         cap.ready
-          ? <MenuItem key={`role-${k}`} onClick={run(() => actions.onSwitchRole(k))}>Switch workspace: {ROLE_LABEL[k]}</MenuItem>
-          : <MenuItem key={`role-${k}`} onClick={run(() => actions.onSetupRole(k))} sx={{ color: 'text.secondary' }}>Set up {ROLE_LABEL[k]} workspace</MenuItem>,
+          ? <MenuItem key={`role-${k}`} onClick={run(() => actions.onSwitchRole(k))}>Switch to {ROLE_LABEL[k]}</MenuItem>
+          : <MenuItem key={`role-${k}`} onClick={run(() => actions.onSetupRole(k))} sx={{ color: 'text.secondary' }}>Set up {ROLE_LABEL[k]}</MenuItem>,
       );
     }
   }

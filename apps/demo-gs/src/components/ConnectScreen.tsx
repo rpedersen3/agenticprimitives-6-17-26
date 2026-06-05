@@ -1,26 +1,29 @@
-// Role-agnostic, credential-first connect screen (spec 257 credential-first spine; spec 258 connect-UX
-// redesign). Connecting is ONE simple action — no GCO/KC choice here; the role is chosen AFTER connecting
-// from inside the intranet (the RoleHub).
+// Relying-site connect screen (spec 257 credential-first spine; spec 258 connect-UX; spec 259 relying ⇄
+// IdP responsibility split). The relying site answers ONLY: why am I connecting, what access is this app
+// asking for, what happens after, and launch / cancel / popup-blocked / retry. It NEVER asks for an
+// Impact name — credential choice, account discovery, the account chooser, name lookup/claim, recovery,
+// and delegation consent ALL belong to the Global.Church home (demo-sso). This mirrors how mature SSO
+// works (Google "Continue with", Apple, Clerk, Privy, WorkOS): the relying app trusts the returned
+// subject (`id_token.sub` = the Smart Account CAIP-10 address); the name is a public handle/profile
+// facet, never the login key. A NEW passkey may still need a handle — but that is collected INSIDE the
+// home popup (the WebAuthn RP ID is domain-bound), never here. See ADR-0029 + spec 259.
 //
 // Spec 258: ONE card, ONE primary CTA. "Continue with Global.Church" launches the Connect ceremony in a
-// POPUP over the (dimmed) site DIRECTLY — there is NO pre-popup handoff-bridge interstitial anymore. The
-// name is a SECONDARY disclosure ("Use my Impact name instead"): a public handle, not a login key. An
-// empty name lets the broker show its W1 credential-first entry (the token `sub` binds the PROVEN
-// credential, never a client name). The popup finishes IN PLACE — no page load.
+// POPUP over the (dimmed) site DIRECTLY — no pre-popup interstitial. The popup finishes IN PLACE.
 //
 // The audit-hardened launcher (`lib/central-auth.ts`) pins the resolved Connect origin. On popup-BLOCKED
 // we render the co-branded interstitial then fall back to the full-page redirect `startConnect` — an
 // EXPLICIT fallback, never a silent reflow (ADR-0013). On cancel we show a soft warn banner; on error we
 // surface it and let the user retry ("Try again").
 //
-// §15b.1 caveat: scope copy says "intended Switchboard program scope" — record-level enforcement is
-// owner-keyed today (spec 248 C-2), so we never claim cryptographic record-type isolation.
+// §15b.1 caveat: scope copy says "the access you approve" — record-level enforcement is owner-keyed today
+// (spec 248 C-2), so we never claim cryptographic record-type isolation. The full scope + consent is
+// shown at the home's consent step, not here.
 
 import { useEffect, useRef, useState } from 'react';
 import { GS } from '../lib/gs-brand';
-import { personalHome, toAgentName } from '../lib/domain';
-import { startConnect, startConnectPopup, LAST_NAME_KEY, type ConnectPopupSuccess } from '../lib/connect-launch';
-import { Banner, Btn, Card, Pill, Spinner, TextField } from './ui';
+import { startConnect, startConnectPopup, type ConnectPopupSuccess } from '../lib/connect-launch';
+import { Banner, Btn, Card, Pill, Spinner } from './ui';
 
 export function ConnectScreen({ onBack, onConnected }: {
   /** Back to the landing. */
@@ -29,49 +32,29 @@ export function ConnectScreen({ onBack, onConnected }: {
    *  Returns true on success; on a surfaced error we return to the form. */
   onConnected: (r: ConnectPopupSuccess) => Promise<boolean>;
 }) {
-  // Credential-first: the primary path NEVER carries a name, so this starts EMPTY (no LAST_NAME
-  // prefill). A prefilled name would make social login silently bind to that handle. The remembered
-  // last name is read only when the user EXPLICITLY opens the named path (see the disclosure below).
-  const [name, setName] = useState<string>('');
   const [busy, setBusy] = useState(false);
   // Driven by the popup `AC_PROGRESS` messages; shown on the CTA while the popup is open. Falls back to a
   // default opener label.
   const [progress, setProgress] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // The "Use my Impact name instead" disclosure. ALWAYS collapsed by default — the relying site leads
-  // credential-first and must NOT present name entry (or imply a named bind) up front. Opening it is a
-  // deliberate, intentional fallback for someone who knows the handle they want to open.
-  const [showNamePanel, setShowNamePanel] = useState(false);
   // spec 258 — soft "sign-in was cancelled" banner; cleared on the next cont().
   const [cancelled, setCancelled] = useState(false);
   // popups blocked → co-branded "Global.Church → Impact" interstitial, then the redirect.
   const [blocked, setBlocked] = useState(false);
-  const trimmed = name.trim();
 
   const ctaRef = useRef<HTMLButtonElement>(null);
-  const nameRef = useRef<HTMLInputElement>(null);
   // The in-flight popup's AbortController — the parent-side Cancel signals it (the only reliable cancel
   // under COOP; there is no popup.closed poll). Cleared when launch finishes/returns.
   const abortRef = useRef<AbortController | null>(null);
-  // The name the active connect is carrying: `undefined` = nameless (the primary, credential-first
-  // path); a handle = the explicit named path. Used by BOTH the popup launch and the popup-blocked
-  // redirect fallback so they agree on whether this is a named or nameless connect.
-  const launchNameRef = useRef<string | undefined>(undefined);
 
   // Focus the primary CTA on mount (spec 258 §9 focus management).
   useEffect(() => { ctaRef.current?.focus(); }, []);
-  // When the name panel expands, move focus into the field (spec 258 §9).
-  useEffect(() => { if (showNamePanel) nameRef.current?.focus(); }, [showNamePanel]);
 
-  // `named=false` → the primary, credential-first connect (NO name; Impact handles Google/passkey/
-  // wallet and shows the handle after it resolves). `named=true` → the explicit named path; only then
-  // do we carry the typed handle AND remember it as the last name.
-  function cont(named: boolean) {
+  // ONE action: launch the credential-first connect. NEVER carries a name — the home owns credential
+  // choice and (if a new passkey needs one) name entry.
+  function cont() {
     setErr(null);
     setCancelled(false);
-    const n = named && trimmed ? trimmed : undefined;
-    launchNameRef.current = n;
-    if (n) { try { localStorage.setItem(LAST_NAME_KEY, n); } catch { /* ignore */ } }
     void launch();
   }
 
@@ -79,11 +62,11 @@ export function ConnectScreen({ onBack, onConnected }: {
   // segue to the co-branded interstitial; on cancel we show the soft warn banner; on error we surface it.
   async function launch() {
     setBusy(true); setErr(null);
-    setProgress('Opening your Impact home…'); // spec 258 — segue label until the broker posts progress
+    setProgress(`Opening your ${GS.community} home…`); // spec 258 — segue label until the broker posts progress
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      const res = await startConnectPopup(launchNameRef.current, (msg) => setProgress(msg), ac.signal);
+      const res = await startConnectPopup(undefined, (msg) => setProgress(msg), ac.signal);
       if (res.status === 'success') {
         // Hand the CODE (only) to the App; it exchanges at /token + sets the session in place.
         const ok = await onConnected(res);
@@ -120,11 +103,11 @@ export function ConnectScreen({ onBack, onConnected }: {
   }
 
   // The popup-blocked redirect fallback: the same `startConnect` ceremony, full-page (stashes PKCE +
-  // navigates to the home, returns with ?code&state to the App's redirect-return handler).
+  // navigates to the home, returns with ?code&state to the App's redirect-return handler). Nameless.
   async function redirectFallback() {
     setBusy(true); setErr(null);
     try {
-      await startConnect(launchNameRef.current);
+      await startConnect(undefined);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -145,82 +128,40 @@ export function ConnectScreen({ onBack, onConnected }: {
       {busy && (
         <div aria-hidden="true" style={{ position: 'fixed', inset: 0, background: 'rgba(11, 19, 36, 0.52)', zIndex: 10, pointerEvents: 'none' }} />
       )}
-      <Card style={{ maxWidth: 560, margin: '0 auto', ...(busy ? { position: 'relative', zIndex: 20 } : {}) }}>
+      <Card style={{ maxWidth: 520, margin: '0 auto', ...(busy ? { position: 'relative', zIndex: 20 } : {}) }}>
         {cancelled && <Banner tone="warn">Sign-in was cancelled — you can try again below.</Banner>}
         {err && <Banner tone="err">{err}</Banner>}
 
         <div className="eyebrow" style={{ marginTop: cancelled || err ? '.9rem' : 0 }}>Connect</div>
         <h2 style={{ fontSize: '1.5rem', marginTop: '.35rem' }}>Connect with {GS.community}</h2>
-        <p style={{ fontSize: '.9rem', color: 'var(--c-g700)', marginTop: '.6rem', lineHeight: 1.55 }}>
-          Sign in with Google, passkey, or wallet through your {GS.community} home. Your {GS.community} name
-          is only a public handle &mdash; you do not need it to sign in. Switchboard only receives the access
-          you approve, and your contact details stay private until you accept a connection.
+        <p style={{ fontSize: '.92rem', color: 'var(--c-g700)', marginTop: '.6rem', lineHeight: 1.55 }}>
+          Sign in through your {GS.community} home. Switchboard only receives the access you approve, and
+          your contact details stay private until you accept a connection.
         </p>
 
-        <div style={{ marginTop: '1rem' }}><Pill tone="ok">One identity · roles are workspaces</Pill></div>
+        <div style={{ marginTop: '1rem' }}><Pill tone="ok">One identity · roles are just views</Pill></div>
 
         <div aria-busy={busy} style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '.6rem' }}>
-          {/* Primary CTA — ALWAYS credential-first / nameless. It never carries a name; Impact handles
-              Google/passkey/wallet in the popup and shows the handle after the credential resolves. */}
-          <button ref={ctaRef} className="btn-sso" onClick={() => void cont(false)} disabled={busy} title={GS.ssoCta}>
+          {/* The ONE primary CTA — always credential-first / nameless. Global.Church handles Google /
+              passkey / wallet in the popup, shows the account chooser, and (only for a new passkey home)
+              collects a name there — never here. */}
+          <button ref={ctaRef} className="btn-sso" onClick={() => cont()} disabled={busy} title={`Continue with ${GS.community}`}>
             <span className="btn-sso-glyph" aria-hidden="true">{busy ? <Spinner /> : '🌐'}</span>
             <span aria-live="polite">
-              {busy ? (progress ?? 'Opening your Impact home…') : err ? 'Try again' : `Continue with ${GS.community}`}
+              {busy ? (progress ?? `Opening your ${GS.community} home…`) : err ? 'Try again' : `Continue with ${GS.community}`}
             </span>
           </button>
 
           {/* Parent-side Cancel — visible only while the popup is in flight. The only reliable way to
               abort under COOP (no popup.closed poll). Sits directly under the busy CTA, above the dim. */}
           {busy && (
-            <button onClick={cancelInFlight} style={{ ...linkBtn, textAlign: 'center', alignSelf: 'center' }}>
+            <button onClick={cancelInFlight} style={{ ...linkBtn, textAlign: 'center', alignSelf: 'center', padding: '.4rem .8rem' }}>
               Cancel
             </button>
           )}
 
-          {/* Secondary disclosure — collapsed by default. Opening it is the ONLY moment we read the
-              remembered last name (so social login never feels like a named bind). */}
-          {!showNamePanel && !busy && (
-            <button
-              onClick={() => { try { setName(localStorage.getItem(LAST_NAME_KEY) ?? ''); } catch { /* ignore */ } setShowNamePanel(true); }}
-              style={linkBtn}
-            >
-              Use my Impact name instead
-            </button>
-          )}
-
-          {/* Named path — the deliberate, intentional fallback. Has its OWN "Continue with this name"
-              button; the primary CTA above stays credential-first/nameless. */}
-          {showNamePanel && (
-            <div style={{ borderTop: '1px solid var(--c-g200)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
-              <label style={{ fontSize: '.72rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--c-g500)' }}>
-                Use my Impact name
-              </label>
-              <p style={{ fontSize: '.82rem', color: 'var(--c-g600)', margin: 0 }}>
-                Only use this if you know the Impact handle you want to open.
-              </p>
-              <TextField
-                inputRef={nameRef}
-                value={name} placeholder="e.g. rp-adopt-4" mono disabled={busy}
-                onChange={(v) => setName(v.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-                onEnter={() => { if (trimmed) void cont(true); }}
-                style={{ padding: '.7rem .9rem', fontSize: '1rem' }}
-              />
-              {trimmed && (
-                <output style={{ fontSize: '.75rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
-                  {toAgentName(trimmed)} · home at {personalHome(trimmed)}
-                </output>
-              )}
-              <Btn variant="primary" onClick={() => void cont(true)} busy={busy} disabled={busy || !trimmed}>
-                Continue with this name
-              </Btn>
-              <button onClick={() => setShowNamePanel(false)} style={linkBtn} disabled={busy}>
-                Hide — use Google or passkey without a name
-              </button>
-            </div>
-          )}
-
           <div style={{ fontSize: '.82rem', color: 'var(--c-primary)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <button onClick={onBack} style={linkBtn} disabled={busy}>&larr; Back</button>
+            {!busy && <button onClick={onBack} style={{ ...linkBtn, padding: '.4rem .2rem' }}>&larr; Back</button>}
           </div>
         </div>
       </Card>
@@ -240,12 +181,12 @@ function PopupBlocked({ onContinue, onCancel, busy }: { onContinue: () => void; 
       </div>
       <h2 style={{ fontSize: '1.4rem', textAlign: 'center', marginTop: 0 }}>Blocked by your browser</h2>
       <p style={{ fontSize: '.92rem', color: 'var(--c-g700)', textAlign: 'center', marginTop: '.6rem', lineHeight: 1.55 }}>
-        Your browser blocked the secure sign-in window. We can take you to your Impact home in this tab and
-        bring you back to Switchboard after you confirm.
+        Your browser blocked the secure sign-in window. We can take you to your {GS.community} home in this
+        tab and bring you back to Switchboard after you confirm.
       </p>
       <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '.6rem' }}>
         <div ref={ctaRef}><Btn variant="primary" onClick={onContinue} busy={busy}>Continue in this tab</Btn></div>
-        <button onClick={onCancel} style={linkBtn} disabled={busy}>Cancel</button>
+        <button onClick={onCancel} style={{ ...linkBtn, padding: '.4rem .8rem' }} disabled={busy}>Cancel</button>
         <span style={{ fontSize: '.74rem', color: 'var(--c-g500)', textAlign: 'center' }}>
           The page that opens will say impact-agent.me &mdash; that is your home, not a new site.
         </span>

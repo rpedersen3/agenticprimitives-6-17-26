@@ -91,7 +91,7 @@ describe('spec 258 — OnboardPanel is content-only / credential-first (A7/A8)',
   });
 });
 
-describe('spec 258 — ConnectScreen launches the popup directly (A2/A3/A5)', () => {
+describe('spec 258/259 — ConnectScreen launches the popup directly (A2/A3/A5)', () => {
   const connect = read('components/ConnectScreen.tsx');
 
   it('no longer references the HandoffBridge or showBridge', () => {
@@ -108,9 +108,22 @@ describe('spec 258 — ConnectScreen launches the popup directly (A2/A3/A5)', ()
     expect(connect).toContain('redirectFallback');
   });
 
-  it('has the secondary name disclosure + soft cancelled banner', () => {
-    expect(connect).toContain('showNamePanel');
+  it('keeps the soft cancelled banner (popup-cancel under COOP)', () => {
     expect(connect).toContain('cancelled');
-    expect(connect).toContain('Use my Impact name instead');
+  });
+
+  // spec 259 — the relying site NEVER asks for an Impact name. Credential choice + name lookup/claim
+  // belong entirely to the home (demo-sso); the relying app launches credential-first / nameless and
+  // trusts the returned CAIP-10 `sub`. So the old collapsed name panel is GONE.
+  it('has NO name panel and NO name field (credential-first only)', () => {
+    expect(connect).not.toContain('showNamePanel');
+    expect(connect).not.toContain('Use my Impact name');
+    expect(connect).not.toContain('Continue with this name');
+    expect(connect).not.toContain('TextField');
+  });
+
+  it('launches the popup NAMELESS (startConnectPopup(undefined, …))', () => {
+    expect(connect).toContain('startConnectPopup(undefined');
+    expect(connect).toContain('startConnect(undefined)');
   });
 });

@@ -245,7 +245,7 @@ export function WorkspaceTabBar({ tabs, active, onChange }: {
   };
 
   return (
-    <nav className="workspace-tabs" aria-label="Workspace sections">
+    <nav className="workspace-tabs" aria-label="Sections">
       <div role="tablist">
         {tabs.map((t, i) => {
           const selected = t.id === active;

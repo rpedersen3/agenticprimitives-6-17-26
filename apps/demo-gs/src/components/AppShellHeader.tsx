@@ -77,7 +77,7 @@ export function AppShellHeader({
         <div ref={ref} style={{ position: 'relative' }}>
           {identity ? (
             <button onClick={() => setOpen((v) => !v)} className="btn-primary" style={pillBtn} aria-haspopup="menu" aria-expanded={open}>
-              <span>{identity.name}{identity.activeRole ? ` · ${ROLE_LABEL[identity.activeRole]}` : ' · choose a workspace'}</span>
+              <span>{identity.name || 'Connected'}{identity.activeRole ? ` · ${ROLE_LABEL[identity.activeRole]}` : ''}</span>
               <span aria-hidden="true">▾</span>
             </button>
           ) : (
@@ -134,10 +134,14 @@ function ConnectedMenu({ identity, caps, onOpenHome, onDisconnect, onSwitchRole,
   return (
     <>
       <div style={{ padding: '.6rem .9rem' }}>
-        <div style={{ fontWeight: 800, fontSize: '.95rem', color: 'var(--c-g900)' }}>{identity.name}</div>
-        <div style={{ fontSize: '.76rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>{personalHome(identity.name)}</div>
+        <div style={{ fontWeight: 800, fontSize: '.95rem', color: 'var(--c-g900)' }}>{identity.name || 'Connected'}</div>
+        {/* A name-deferred member has no public handle yet → show the home generically, never a junk
+            `.impact-agent.me` subdomain derived from an empty name. */}
+        <div style={{ fontSize: '.76rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
+          {identity.name ? personalHome(identity.name) : `your ${GS.community} home`}
+        </div>
         <div style={{ marginTop: '.4rem', display: 'inline-block', background: 'var(--c-primary-subtle)', border: '1px solid var(--c-primary-border)', borderRadius: 999, padding: '.15rem .55rem', fontSize: '.72rem', fontWeight: 700, color: 'var(--c-primary-active)' }}>
-          {identity.activeRole ? `Working as ${ROLE_LABEL[identity.activeRole]}` : 'Choose a workspace'}
+          {identity.activeRole ? `Working as ${ROLE_LABEL[identity.activeRole]}` : 'Pick what to do'}
         </div>
       </div>
       <Divider />
@@ -145,8 +149,8 @@ function ConnectedMenu({ identity, caps, onOpenHome, onDisconnect, onSwitchRole,
       {caps && others.map((k) => {
         const cap = caps.byKind[k];
         return cap.state === 'ready'
-          ? <MenuItem key={k} onClick={() => onSwitchRole(k)}>Switch workspace: {ROLE_LABEL[k]}</MenuItem>
-          : <MenuItem key={k} onClick={() => onSetupRole(k)} muted>Set up {ROLE_LABEL[k]} workspace</MenuItem>;
+          ? <MenuItem key={k} onClick={() => onSwitchRole(k)}>Switch to {ROLE_LABEL[k]}</MenuItem>
+          : <MenuItem key={k} onClick={() => onSetupRole(k)} muted>Set up {ROLE_LABEL[k]}</MenuItem>;
       })}
       <MenuItem onClick={onDisconnect} danger>Disconnect</MenuItem>
       <Divider />

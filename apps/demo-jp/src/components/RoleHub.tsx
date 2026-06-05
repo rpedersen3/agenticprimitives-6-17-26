@@ -32,6 +32,9 @@ const COPY: Record<RoleKind, CardCopy> = {
 };
 
 export function RoleHub({ name, caps, onOpen, onSetup, onReconnect, onOpenHome }: {
+  /** The connected person's display name, or '' when name-deferred (signed in with Google/passkey and
+   *  hasn't claimed a public handle yet). We NEVER render a placeholder name — the heading goes
+   *  identity-light instead of saying "Welcome, you". */
   name: string;
   caps: RoleCapabilities;
   /** Open a ready/incomplete workspace. */
@@ -46,10 +49,12 @@ export function RoleHub({ name, caps, onOpen, onSetup, onReconnect, onOpenHome }
   return (
     <Stack spacing={2.5}>
       <Box>
-        <Typography variant="h4" sx={{ fontWeight: 800 }}>Welcome, {name}</Typography>
+        <Typography variant="h4" sx={{ fontWeight: 800 }}>
+          {name ? `Welcome, ${name}` : `You’re connected to ${JP.impactName}`}
+        </Typography>
         <Typography sx={{ mt: 0.5, color: 'text.secondary', maxWidth: 720 }}>
-          You&rsquo;re connected. Choose what you want to do — you can do both, and switch any time. Roles
-          are workspaces, not separate accounts.
+          What would you like to do? You can do both and switch any time &mdash; it&rsquo;s all one
+          connection, not separate accounts.
         </Typography>
       </Box>
 
@@ -114,7 +119,7 @@ function RoleAction({ kind, state, onOpen, onSetup, onReconnect }: {
   kind: RoleKind; state: RoleState; onOpen: () => void; onSetup: () => void; onReconnect: () => void;
 }) {
   const label = kind === 'adopter' ? 'adopter' : 'facilitator';
-  if (state === 'ready') return <Button variant="contained" size="small" onClick={onOpen}>Open {label} workspace</Button>;
+  if (state === 'ready') return <Button variant="contained" size="small" onClick={onOpen}>Continue as {label}</Button>;
   if (state === 'incomplete') return <Button variant="contained" size="small" onClick={onOpen}>Resume setup</Button>;
   if (state === 'grant-missing' || state === 'load-failed') return <Button variant="outlined" size="small" color="error" onClick={onReconnect}>Reconnect</Button>;
   return <Button variant="outlined" size="small" onClick={onSetup}>Set up {label}</Button>;

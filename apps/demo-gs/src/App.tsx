@@ -335,11 +335,13 @@ function AppInner() {
   // keep the underlying member identity in the header but flag the demo banner in the body).
   // In a workspace the pill shows the active role; in the hub (no active workspace) it shows the name
   // + "choose a workspace" (activeRole === null).
-  // spec 257: a name-deferred member's session `name` is the EMPTY string (not null), so use `||`
-  // (not `??`) so an empty name falls through to "you" — NEVER render an address or a blank label.
+  // spec 257/259: a name-deferred member's session `name` is the EMPTY string (signed in with Google/
+  // passkey, hasn't claimed a public handle yet). We pass that empty string THROUGH — the header + hub
+  // render an identity-light variant ("Connected" / "You're connected to Global.Church"), NEVER a fake
+  // "you" placeholder and NEVER the raw SA address (the SA is the canonical identity, not a display label).
   const identity: ConnectedIdentity | null = connected
     ? {
-        name: kcSession?.name || gcoSession?.signatory || gcoSession?.name || 'you',
+        name: kcSession?.name || gcoSession?.signatory || gcoSession?.name || '',
         activeRole: view === 'workspace' && !demoPersona ? activeRole : null,
       }
     : null;
@@ -406,7 +408,7 @@ function AppInner() {
 
           {view === 'hub' && (
             <RoleHub
-              name={identity?.name ?? 'there'}
+              name={identity?.name ?? ''}
               caps={caps}
               onOpen={(k) => openWorkspace(k)}
               onResumeOrg={() => { setDemoPersona(null); setActiveRoleState('gco'); setView('workspace'); }}

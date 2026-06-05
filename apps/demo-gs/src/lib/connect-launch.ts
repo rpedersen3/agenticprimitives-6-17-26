@@ -13,8 +13,9 @@ import { openCentralAuthPopup } from './central-auth';
 
 /** sessionStorage key for the in-flight site-login stash (read by App's connect-return handler). */
 export const CONNECT_KEY = 'agenticprimitives:demo-gs:connect';
-/** Remembers the last Global.Church name typed (prefill convenience). */
-export const LAST_NAME_KEY = 'agenticprimitives:demo-gs:last-name';
+// spec 259: the relying site no longer collects (or remembers) an Impact name — credential choice +
+// name lookup/claim belong to the home. The old `LAST_NAME_KEY` last-name memory is gone; the launch
+// wrappers below always enroll NAMELESS (the ConnectScreen passes `undefined`).
 
 export interface ConnectStash {
   name: string;
@@ -31,7 +32,6 @@ export interface ConnectStash {
  *  resolves to the platform apex (`resolveAuthOrigin`). */
 export async function startConnect(name?: string): Promise<void> {
   const trimmed = (name ?? '').trim();
-  if (trimmed) { try { localStorage.setItem(LAST_NAME_KEY, trimmed); } catch { /* ignore */ } }
   const r = await startSiteEnrollment(trimmed);
   const stash: ConnectStash = {
     name: trimmed, state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce,
@@ -75,7 +75,6 @@ export async function startConnectPopup(
   signal?: AbortSignal,
 ): Promise<ConnectPopupResult> {
   const trimmed = (name ?? '').trim();
-  if (trimmed) { try { localStorage.setItem(LAST_NAME_KEY, trimmed); } catch { /* ignore */ } }
   const r = await startSiteEnrollment(trimmed);
   const stash: ConnectStash = {
     name: trimmed, state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce,
