@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/connect-auth",
-  "version": "1.0.0-alpha.4",
+  "version": "1.0.0-alpha.5",
   "description": "User authentication (passkey + SIWE + Google OAuth), JWT sessions, and pluggable signer interfaces.",
   "license": "MIT",
   "repository": {

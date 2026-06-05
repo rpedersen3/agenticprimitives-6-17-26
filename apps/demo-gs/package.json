@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives-demo/gs",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.1-alpha.1",
   "private": true,
   "description": "Global Switchboard (demo-gs): a relying-app prototype for skill-based Need/Offering brokerage. A GCO Organization Agent declares a skill Need, a KC Person Agent publishes an expertise Offering, and the app turns shared skill/geo/cause anchors into an explainable Need → Offering → IntentMatch → Agreement flow (spec 250). Sibling of demo-jp. Demo only — placeholder names; no real-program affiliation.",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/identity-directory",
-  "version": "1.0.0-alpha.4",
+  "version": "1.0.0-alpha.5",
   "description": "Evidence-backed read model over canonical agents and their facets (ADR-0015 / spec 223). Declares the ports (NamingPort / OnChainReadPort / IndexerPort) + the query API with provenance + assurance. Not an authority; no eth_getLogs; no fallback. Adapters live in identity-directory-adapters.",
   "license": "MIT",
   "repository": {

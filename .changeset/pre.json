@@ -28,7 +28,18 @@
     "@agenticprimitives/ontology": "0.1.0-alpha.1",
     "@agenticprimitives/tool-policy": "0.1.0-alpha.1",
     "@agenticprimitives/types": "0.1.0-alpha.1",
-    "@agenticprimitives-demo/e2e": "0.0.1"
+    "@agenticprimitives-demo/e2e": "0.0.1",
+    "@agenticprimitives-demo/gs": "0.0.1-alpha.0",
+    "@agenticprimitives/agent-skills": "0.0.0-stub.0",
+    "@agenticprimitives/agreements": "0.0.0-stub.0",
+    "@agenticprimitives/attestations": "0.0.0-stub.0",
+    "@agenticprimitives/fulfillment": "0.0.0-stub.0",
+    "@agenticprimitives/geo-features": "0.0.0-stub.0",
+    "@agenticprimitives/intent-marketplace": "0.0.0-stub.0",
+    "@agenticprimitives/intent-resolver": "0.0.0-stub.0",
+    "@agenticprimitives/payments": "0.0.0-stub.0",
+    "@agenticprimitives/related-agents": "0.0.0-stub.0",
+    "@agenticprimitives/verifiable-credentials": "0.0.0-stub.0"
   },
   "changesets": [
     "r1-cross-stack-typehash-convergence",
@@ -41,6 +52,18 @@
     "r5-12d-demo-a2a-relayer-migration",
     "r5-7-paymaster-explicit-dev-mode",
     "r5-8-verify-resource-prod-gate",
-    "r5-9-per-role-authority"
+    "r5-9-per-role-authority",
+    "r6-10-paymaster-coverage",
+    "r6-10b-custody-branch-coverage",
+    "r6-10c-custody-dispatcher-coverage",
+    "r6-2-permissionless-subregistry-reentrancy",
+    "r6-3-slither-suppress-aderyn-ci",
+    "r6-5-agent-account-pause-checks",
+    "r6-6-custody-policy-pause-checks",
+    "r6-7-enforcer-pause-invariant",
+    "r6-8-naming-pause-checks",
+    "r6-9-coverage-aggregator",
+    "r8-1-required-audit-sink",
+    "r8-2-uv-runtime-enforcement"
   ]
 }

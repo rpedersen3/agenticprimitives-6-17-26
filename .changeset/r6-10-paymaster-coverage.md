@@ -1,5 +1,5 @@
 ---
-"@agenticprimitives-demo/contracts": patch
+"@agenticprimitives/contracts": patch
 ---
 
 R6.10 — SmartAgentPaymaster validation-path coverage push.

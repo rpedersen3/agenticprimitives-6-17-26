@@ -1,5 +1,13 @@
 # @agenticprimitives/connect
 
+## 1.0.0-alpha.5
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.5
+- @agenticprimitives/connect-auth@1.0.0-alpha.5
+- @agenticprimitives/identity-directory@1.0.0-alpha.5
+
 ## 1.0.0-alpha.4
 
 ### Patch Changes

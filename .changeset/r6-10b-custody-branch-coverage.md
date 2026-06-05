@@ -1,5 +1,5 @@
 ---
-"@agenticprimitives-demo/contracts": patch
+"@agenticprimitives/contracts": patch
 ---
 
 R6.10b — CustodyPolicy branch-coverage push.

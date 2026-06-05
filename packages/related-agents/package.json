@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/related-agents",
-  "version": "0.0.0-stub.0",
+  "version": "0.0.0-alpha.1",
   "private": true,
   "description": "Private, holder-resident related-agent credentials (person↔org links as vault situation credentials, never on-chain edges — ADR-0025) + scoped-delegation read caveats + list-query shapes. Composes verifiable-credentials + delegation.",
   "license": "MIT",

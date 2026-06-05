@@ -1,5 +1,535 @@
 # @agenticprimitives/contracts
 
+## 1.0.0-alpha.5
+
+### Minor Changes
+
+- 41967b6: R6.5 / CON-AgentAccount-005 — Wire system-pause checks into
+  `AgentAccount.sol` (HEADLINE).
+
+  ### Why
+
+  R6.1 recon (`docs/audits/r6-contracts-recon-2026-05-31.md` § 2.2)
+  identified that `AgentAccount.sol` had **ZERO pause checks across
+  13 mutating external functions**. When governance paused the system,
+  every deployed account continued operating normally — funds kept
+  moving, modules kept installing, upgrades kept landing. R5.7 made
+  the paymaster refuse to sponsor gas, but the account itself never
+  refused.
+
+  **Largest defensive gap in the codebase for an engagement platform.**
+
+  ### Changes
+
+  **New error:** `SystemPaused`.
+
+  **New modifier:** `whenNotPaused` — reverts when
+  `AgenticGovernance.isPaused() == true`.
+
+  **New helper:** `_systemPaused()` — chains `staticcall(_factory)
+→ factory.governance()` then `staticcall(governance) → isPaused()`.
+  Any non-conforming hop returns `false` for legacy compatibility
+  (mirrors `GovernanceManaged._pausedSafe()`).
+
+  **New interface methods:**
+  - `IAgentAccountFactoryView.governance()` — read the factory's
+    governance pointer
+  - `IAgentAccountPauseView.isPaused()` — read the pause flag
+
+  ### Modifier applied to 6 mutating entrypoints
+
+  | Function                | Reasoning                           |
+  | ----------------------- | ----------------------------------- |
+  | `execute`               | Asset movement                      |
+  | `executeBatch`          | Asset movement                      |
+  | `executeFromModule`     | Module-driven asset action          |
+  | `installModule`         | Adds attack surface                 |
+  | `executePendingUpgrade` | Could land malicious queued upgrade |
+  | `addCustodian`          | Grants authority                    |
+
+  ### 3 RECOVERY primitives deliberately left UNGUARDED
+
+  | Function               | Reasoning                          |
+  | ---------------------- | ---------------------------------- |
+  | `uninstallModule`      | Removing attack surface = recovery |
+  | `cancelPendingUpgrade` | Cancelling = recovery              |
+  | `removeCustodian`      | Revoking authority = recovery      |
+
+  ### 3 `onlySelf` ceremonies also unguarded
+
+  `setUpgradeTimelock`, `setDelegationManager`,
+  `acceptSessionDelegation` — already gated by the owner's signature
+  (self-recovery shape).
+
+  ### `executeFromBundler` is `view`
+
+  Validation-only, not state-mutating. The EntryPoint then calls
+  `execute` which IS paused.
+
+  ### Tests
+
+  14 new R6.5 regression tests in `test/AgentAccountPauseR65.t.sol`:
+  - 6 paused-reverts (one per guarded fn)
+  - 3 recovery-still-works-when-paused
+  - 3 ceremony-still-works-when-paused
+  - 1 unpaused-doesn't-revert-with-SystemPaused
+  - 1 legacy-EOA-governance-never-pauses
+
+  ✅ 14/14 R6.5 tests pass.
+  ✅ 558/559 full contracts suite (only failure: pre-existing R5.9
+  env-var-bleed in `DeployAuthorityResolution.t.sol`, unrelated).
+
+  ### Audit doc
+
+  `CON-AgentAccount-005` new row, R6.5 closure.
+
+- 8285ab2: R6.8 / CON-NAMING-005 — wire system-pause checks into the naming
+  layer (`AgentNameRegistry` + `PermissionlessSubregistry`).
+
+  ### Why
+
+  R6.1 recon § 2.5 identified that the naming layer had ZERO pause
+  checks. Names could be registered, owned, renewed, primaries set,
+  subregistry authority granted during a system pause. Less catastrophic
+  than `AgentAccount` (no funds at risk), but a paused system shouldn't
+  be writing new state.
+
+  Closes pause coverage to 100% across the protocol surface.
+
+  ### Fix
+
+  **`AgentNameRegistry` now inherits `GovernanceManaged`.** Constructor
+  signature is now `(address initializer_, address governance_)`.
+  Breaking; `Deploy.s.sol` and 4 test files updated.
+
+  ### Modifier applied to 7 mutating entrypoints
+
+  `register`, `backfillLabel`, `setOwner`, `setResolver`,
+  `setSubregistry`, `renew`, `setPrimaryName`.
+
+  ### `initializeRoot` deliberately unguarded
+
+  One-shot bootstrap callable only by the immutable initializer in the
+  same deploy tx — pause is a runtime concern, not a deploy-time
+  concern. Locking it would brick fresh deploys whenever the system
+  happens to be paused at deploy time, which is the wrong default.
+
+  ### `PermissionlessSubregistry` inherits pause coverage TRANSITIVELY
+
+  Its `register()` calls `REGISTRY.register(...)` which fires
+  `whenNotPaused`. The revert propagates back through the outer call.
+  Proven by `test_R6_8_subregistryRegister_pausedRevertsTransitively`.
+  No separate modifier or constructor change needed on the subregistry.
+
+  ### Tests
+
+  12 new R6.8 regression tests in
+  `test/naming/AgentNameRegistryPauseR68.t.sol`:
+  - 7 paused-reverts (one per guarded fn)
+  - 1 unpaused-succeeds sanity check
+  - 1 initializeRoot-still-works-when-paused (deliberately unguarded)
+  - 1 subregistry-pause-propagates-transitively
+  - 1 legacy-EOA-governance-never-pauses
+  - 1 ZeroGovernance-constructor-reverts
+
+  ✅ 12/12 R6.8 tests pass.
+  ✅ 555-556/557 full suite (only failure: pre-existing R5.9 env-bleed
+  in `DeployAuthorityResolution.t.sol`, unrelated).
+
+  ### Deploy script + test files updated
+  - `Deploy.s.sol` line 310: passes `address(governance)` as the
+    second constructor arg
+  - 4 test files updated to `new AgentNameRegistry(deployer, deployer)`
+    (EOA-governance fallback = "not paused" per
+    `GovernanceManaged._pausedSafe()`)
+
+  ### Audit doc
+
+  `CON-NAMING-005` new row, R6.8 closure.
+
+- 2949c6a: R8.2 — close ATL-SEC-03: UV is now runtime-enforced on every WebAuthn
+  assertion at the contract layer.
+
+### Patch Changes
+
+- 879397a: R6.10 — SmartAgentPaymaster validation-path coverage push.
+
+  Adds `test/SmartAgentPaymasterValidateR610.t.sol` (20 tests) that
+  exercise `_validatePaymasterUserOp` via real `validatePaymasterUserOp`
+  calls (using `vm.prank(address(ep))` to satisfy
+  BasePaymaster's `_requireFromEntryPoint` gate).
+
+  R6.9 surfaced SmartAgentPaymaster at 50.9% lines / 22.2% branches —
+  below the 70% security-critical floor. The pre-existing tests
+  asserted off-chain hash recovery sanity but never exercised the
+  validation body's branches.
+
+  Coverage after R6.10:
+  - SmartAgentPaymaster lines: 50.9% → **98.2%** (+47.3pp)
+  - SmartAgentPaymaster branches: 22.2% → **100%** (+77.8pp)
+  - security-critical rollup: 82.1% → 85.1% lines, 57.4% → 63.2% branches
+  - Overall: 79.0% → 80.5% lines, 60.2% → 63.3% branches
+
+  Branches now exercised: dev-mode short-circuit (× 2), pause revert
+  - recovery + EOA-governance skip, verifying-mode happy-path
+    validationData packing, malformed-length revert (× 2), wrong-signer
+    revert, zero-sig + garbage-sig recover-error revert, allowlist
+    accept + reject + revoke, EntryPoint gate, EntryPoint-binding +
+    chainId binding in `getHash`, `_postOp` no-op, validUntil=0 and
+    validUntil=max bit-packing round-trip.
+
+  No source changes.
+
+- 549309d: R6.10b — CustodyPolicy branch-coverage push.
+
+  Closes R6.9's secondary security-critical gap: CustodyPolicy at
+  30.0% branches. Adds `test/CustodyPolicyBranchR610b.t.sol` — 32 tests
+  exercising the schedule/apply/cancel error branches, view-revert
+  InvalidTier paths, effective-tier early-return branches, the rarer
+  action dispatcher cases (RotatePaymaster/RotateSessionIssuer stubs,
+  ChangeValueCeiling, SetRecoveryApprovals), and the handler error
+  branches (ZeroAddress, TrusteeAlreadyExists, CannotDowngradeWithTrustees,
+  InvalidMode, EmptyOwnerSet, InvalidThresholdValue).
+
+  Coverage after R6.10b:
+  - CustodyPolicy lines: 70.1% → **81.4%** (+11.3pp)
+  - CustodyPolicy branches: 30.0% → **53.0%** (+23.0pp)
+  - CustodyPolicy functions: 83.3% → **92.9%** (+9.6pp)
+  - security-critical rollup branches: 57.4% → **70.1%** (+12.7pp)
+  - Overall: 79.0% → 81.1% lines · 60.2% → 67.1% branches
+
+  No source changes.
+
+- 723ff69: R6.10c — CustodyPolicy action-dispatcher happy paths + remaining
+  branch families.
+
+  Builds on R6.10b. Adds `test/CustodyPolicyDispatcherR610c.t.sol` —
+  18 tests covering the previously-untested dispatcher actions
+  (RemoveCustodian, AddPasskeyCredential, RemovePasskeyCredential,
+  RemoveTrustee, RotateAllCustodians × 4 variants, ApplySystemUpdate,
+  RotateDelegationManager), the `_verifyQuorum` `UnauthorizedTrustee`
+  branch, the recovery cancel-window in-vs-out-of-window logic, and
+  the `_applyRemoveGuardian` `RecoveryRequiresGuardians` /
+  `TrusteeDoesNotExist` paths.
+
+  Coverage after R6.10b + R6.10c combined:
+  - CustodyPolicy lines: 70.1% → **92.4%** (+22.3pp)
+  - CustodyPolicy branches: 30.0% → **68.0%** (+38.0pp)
+  - CustodyPolicy functions: 83.3% → 95.2% (+11.9pp)
+  - security-critical rollup lines: 82.1% → 90.3%
+  - security-critical rollup branches: 57.4% → **76.6%** (+19.2pp)
+  - Overall: 79.0% → 83.1% lines · 60.2% → 70.6% branches
+
+  No source changes.
+
+- 705bb39: R6.2 / CON-SUBREGISTRY-003 — `PermissionlessSubregistry` reentrancy
+  guard.
+
+  ### Why
+
+  Slither flagged `register()` for `reentrancy-no-eth`: the prior-claim
+  check (`claimedBy[msg.sender] != 0`) was followed by the external
+  call to `REGISTRY.register(...)` BEFORE the state write
+  `claimedBy[msg.sender] = childNode`. If the registry (or any resolver
+  it invokes) re-enters `register()`, the second call passes the
+  guard because the write hasn't happened yet — letting one caller
+  claim two names.
+
+  Identified by R6.1 contracts hardening recon
+  (`docs/audits/r6-contracts-recon-2026-05-31.md` § 1.1 / § 4.1).
+
+  ### Fix
+
+  `PermissionlessSubregistry` now inherits from OpenZeppelin's
+  `ReentrancyGuard`. `register()` carries the `nonReentrant` modifier.
+
+  ### Tests
+  - New `test_R6_2_reentrancyGuardBlocksNestedRegister` — uses a
+    `MaliciousRegistry` mock whose `receive()` re-enters the
+    subregistry. Reentry is blocked.
+  - New `test_R6_2_sequentialCallsFromDifferentSendersStillWork` —
+    confirms the modifier resets between calls.
+  - 13/13 PermissionlessSubregistry tests pass.
+  - 547/547 contracts suite green (+2 R6.2 tests).
+
+  ### Audit doc
+
+  `CON-SUBREGISTRY-003` marked CLOSED.
+
+  ### First implementation PR of the R6 wave
+
+  The R6.1 recon doc (`docs/audits/r6-contracts-recon-2026-05-31.md`)
+  identifies the full wave plan. R6.2 is the small Slither finding.
+  The headline R6 PR is **R6.5** — wire pause checks into
+  `AgentAccount` (currently 0 pause checks across 13 mutating
+  entrypoints).
+
+- 3797f0b: R6.3 — Slither inline suppress comments + Aderyn CI integration.
+
+  ### Why
+
+  R6.1 recon § 1.2 + § 1.4 triaged 9 Slither warnings as intentional
+  patterns / false positives:
+  - 7× `unused-return` on `ECDSA.tryRecover` (third return value
+    `sigVersion` discarded by design — the `err` discriminant + the
+    explicit `recovered == expected` comparison IS the auth)
+  - 2× `incorrect-equality` on `registeredAt == 0` /
+    `createdAt == 0` (sentinel storage-default checks; not numeric
+    precision concerns)
+
+  Each was correct behaviour but the noise made it harder to spot a
+  real future regression. R6.3 documents them inline.
+
+  ### Slither suppress comments
+
+  7 ECDSA `tryRecover` sites annotated with
+  `// slither-disable-next-line unused-return` + 1-line R6.3
+  justification:
+  - `packages/contracts/src/AgentAccount.sol` (4 sites:
+    `_verifyEcdsa` ×2, `_verifySignerEcdsa` ×2)
+  - `packages/contracts/src/UniversalSignatureValidator.sol`
+    (`_ecdsaRecover` ×2)
+  - `packages/contracts/src/SmartAgentPaymaster.sol`
+    (`_validatePaymasterUserOp` ×1)
+
+  Sentinel-equality annotations:
+  - `packages/contracts/src/naming/AgentNameRegistry.sol`
+    (`setPrimaryName`): inline `// slither-disable-next-line incorrect-equality`
+  - `packages/contracts/src/relationships/AgentRelationship.sol`
+    (7 occurrences of `e.createdAt == 0`): contract-scope
+    `slither-disable-start incorrect-equality` /
+    `slither-disable-end` wrapper with a clear comment block
+    explaining the sentinel idiom.
+
+  ### Aderyn CI integration
+
+  New `aderyn` job in `.github/workflows/security.yml` runs alongside
+  the existing `slither` job. Aderyn (Cyfrin's AI-first Solidity
+  scanner) catches a different rule pack — combining both gives
+  broader coverage of the Solidity surface.
+  - Installed from the upstream release tarball (no third-party
+    action; supply-chain surface stays small).
+  - Non-blocking by design (`continue-on-error: true`) — Aderyn's
+    detector pack is still evolving and a noisy report shouldn't
+    block PRs while the triage policy stabilises.
+  - Report uploaded as a CI artifact (`aderyn-report.md`).
+  - Once the false-positive rate is known we flip to `fail-on: high`.
+
+  ### Tests
+
+  No functional changes — comments only. 544/545 full suite green
+  (only failure: pre-existing R5.9 env-bleed in
+  `DeployAuthorityResolution.t.sol`).
+
+  ### Audit doc
+
+  Updated the "Missing — CodeQL for Solidity" CI-posture row to
+  PARTIAL CLOSED: two independent Solidity SAST scanners
+  (Slither + Aderyn) now run in CI.
+
+  ### Closes
+  - All 22 Slither alerts triaged (1 closed by R6.2 reentrancy fix; 9
+    by R6.3 suppress comments; 12 false-positive `uninitialized-local`
+    remain documented for R6.4 cleanup).
+  - CON-CI-001 (architectural intent: multiple Solidity SAST) —
+    partial.
+
+- 48dacb1: R6.6 / CON-CustodyPolicy-005 — wire system-pause checks into
+  `CustodyPolicy.sol`.
+
+  ### Why
+
+  R6.1 recon § 2.3 identified that `CustodyPolicy` had ZERO pause
+  checks across the schedule/apply/cancel surface. When governance
+  paused the system, an attacker holding quorum sigs could still
+  schedule + apply custody changes. Pause was supposed to be the
+  emergency switch — it didn't switch off the custody machinery.
+
+  Follow-up to R6.5's `AgentAccount` pause wire-up.
+
+  ### Fix
+
+  **New `whenAccountNotPaused(address account)` modifier** + new
+  `_systemPausedFor(account)` helper. Helper chains 3 staticcalls:
+  `account.factory() → factory.governance() → governance.isPaused()`.
+
+  Any non-conforming hop returns `false` for legacy / test compatibility
+  (mirrors R6.5 + `GovernanceManaged._pausedSafe()`).
+
+  ### Modifier applied to 2 mutating entrypoints
+
+  | Function                | Reasoning                       |
+  | ----------------------- | ------------------------------- |
+  | `scheduleCustodyChange` | Schedules an authority transfer |
+  | `applyCustodyChange`    | Executes the authority transfer |
+
+  ### 2 RECOVERY primitives left UNGUARDED
+
+  | Function                | Reasoning                              |
+  | ----------------------- | -------------------------------------- |
+  | `cancelScheduledChange` | Defensive cancellation = recovery      |
+  | `onUninstall`           | Removing the custody module = recovery |
+
+  `onInstall` is gated upstream by R6.5's paused `installModule` on
+  `AgentAccount` and the factory's paused `createAgentAccount` —
+  no per-call modifier needed.
+
+  ### New interfaces (local-scoped)
+  - `IAgentAccountFactoryAccessor.factory()` — read factory from account
+  - `ICustodyPolicyFactoryView.governance()` — read governance from factory
+  - `ICustodyPolicyPauseView.isPaused()` — read pause flag
+
+  ### Tests
+
+  8 new R6.6 tests in `test/CustodyPolicyPauseR66.t.sol`:
+  - 2 paused-reverts (schedule, apply)
+  - 2 unpaused-doesn't-revert-with-SystemPaused (sanity)
+  - 2 recovery-still-works-when-paused (cancel, uninstall)
+  - 2 legacy-EOA-{account,governance}-never-pauses
+
+  Uses 3 minimal mock contracts to exercise the staticcall chain
+  without setting up a full quorum-sig ceremony.
+
+  ✅ 8/8 R6.6 tests pass.
+  ✅ 552/553 full suite (only failure: pre-existing R5.9 env-bleed
+  in `DeployAuthorityResolution.t.sol`).
+
+  ### Audit doc
+
+  `CON-CustodyPolicy-005` new row, R6.6 closure.
+
+- 1e2e9b0: R6.7 / CON-ENFORCER-PAUSE-001 — Enforcer pause-invariant audit.
+
+  ### Audit conclusion
+
+  **Enforcer pause checks are unnecessary.** The R6.1 recon § 2.4
+  raised an open question: are enforcer `beforeHook` / `afterHook`
+  reachable outside paused `DelegationManager.redeemDelegation`?
+
+  R6.7 verifies the architectural invariant:
+  1. All 5 production enforcer hooks are declared `external pure` or
+     `external view`. Solidity prevents state mutation at the compiler
+     level.
+  2. Every enforcer has **zero storage variables** (manually verified
+     — the only `address prev` in `QuorumEnforcer` is a LOCAL variable
+     inside a for-loop, not storage).
+  3. `DelegationManager.redeemDelegation` checks
+     `governance.isPaused()` at the top of the function (lines
+     149-154) BEFORE the for-loops that dispatch `beforeHook` (line 287) / `afterHook` (line 308). When paused, the DM reverts
+     `SystemPaused` BEFORE any enforcer is touched.
+  4. A caller invoking an enforcer hook directly during a pause sees
+     the same revert/no-revert behaviour as any other time —
+     nothing to drain, no state to corrupt.
+
+  ### Changes
+
+  **Documentation only — no functional changes to enforcer behaviour.**
+
+  Each enforcer (`ValueEnforcer`, `AllowedTargetsEnforcer`,
+  `AllowedMethodsEnforcer`, `TimestampEnforcer`, `QuorumEnforcer`)
+  now carries an `R6.7 — Stateless validator` docstring referencing
+  the recon doc + the regression test.
+
+  ### Tests
+
+  4 new R6.7 tests in `test/EnforcerPauseInvariantR67.t.sol` lock
+  the invariant:
+  - `test_R6_7_DM_paused_revertsBeforeReachingEnforcer` — uses a
+    `SideEffectfulEnforcer` mock with a `callCount`; counter stays at
+    0 after a paused redeem call confirms the DM gate fires first.
+  - `test_R6_7_DM_unpaused_doesReachEnforcer` — sanity-checks the
+    inverse: when unpaused, the DM does NOT short-circuit with
+    `SystemPaused`.
+  - `test_R6_7_directEnforcerCall_isStatelessForValueEnforcer` —
+    proves repeated direct calls to `ValueEnforcer.beforeHook` are
+    pure-functional (identical input → identical revert/no-revert).
+  - `test_R6_7_allProductionEnforcersAreStorageless` — deploys each
+    enforcer as a checklist marker. If a future change adds storage
+    to any of them, the architectural invariant breaks and this test
+    should be replaced with per-enforcer pause checks (tracked as
+    R6.7.1 if/when it happens).
+
+  ✅ 4/4 R6.7 tests pass.
+  ✅ 549/549 full contracts suite green.
+
+  ### Audit doc
+
+  `CON-ENFORCER-PAUSE-001` new row, R6.7 closure.
+
+- bf34dbf: R6.9 — Per-contract coverage aggregator (`pnpm coverage:contracts`).
+
+  ### Why
+
+  R6.1 recon § 3.1 identified that `forge coverage --ir-minimum
+--report summary` produces a summary TABLE that **silently skips**
+  the security-critical contracts (AgentAccount, AgentAccountFactory,
+  SmartAgentPaymaster, UniversalSignatureValidator, DelegationManager,
+  CustodyPolicy, the 5 enforcers). The table renders ~10 contracts
+  when 28 exist under `src/`.
+
+  R6.9 finding: **the LCOV report (`--report lcov`) DOES include all
+  28 contracts.** Only the summary-table rendering hides them.
+
+  ### What
+
+  New `scripts/coverage-contracts.ts` + two pnpm scripts:
+  - `pnpm coverage:contracts` — runs `forge coverage --ir-minimum
+--report lcov`, parses the LCOV output, emits a per-contract
+    JSON + markdown summary.
+  - `pnpm coverage:contracts:no-run` — reuses the existing
+    `lcov.info` (skips the ~2-min forge coverage run).
+
+  Output:
+  - `packages/contracts/coverage-r6-9.json` (gitignored) — full
+    per-contract data + category rollups + overall.
+  - Markdown table on stdout — ready to paste into PRs / audit docs.
+
+  ### Current baseline (R6.9 + master)
+
+  Overall: **28 contracts · 79.0% lines · 60.2% branches · 80.4% functions.**
+
+  Per-category rollups:
+
+  | Category          | Contracts |  Lines | Branches |
+  | ----------------- | --------: | -----: | -------: |
+  | security-critical |        11 |  82.1% |    57.4% |
+  | core              |         1 | 100.0% |   100.0% |
+  | naming-ontology   |         7 |  71.2% |    61.0% |
+  | identity          |         3 |  79.6% |    50.0% |
+  | governance        |         2 |  97.8% |    66.7% |
+  | library           |         4 |  77.7% |    79.5% |
+
+  ### Highlighted findings
+  - **Below the 70% security-critical line floor:** SmartAgentPaymaster
+    at 50.9% (clear R6.10 target).
+  - DelegationManager (95.8%), AgentAccount (90.6%), AgentAccountFactory
+    (100%), UniversalSignatureValidator (94.4%) all comfortably above.
+  - CustodyPolicy 70.1% lines but **30.0% branches** — secondary
+    R6.10 target (high cyclomatic complexity).
+  - The 5 enforcers all in the 75-100% lines range.
+
+  ### Gate posture
+
+  The gate is **INFORMATIONAL today** — R6.9 does not fail CI on
+  critical-contract gaps because R6.10 hasn't run yet. The summary is
+  intended as evidence for an external auditor's review of the test
+  pack.
+
+  After R6.10 closes the named gaps, R6.9's `RATCHET_ENABLED` flag
+  flips to `true` and the security-critical floor enforces.
+
+  ### Existing tooling preserved
+
+  The existing `pnpm check:forge-coverage` ratchet (per-contract
+  accepted-debt list with hard floors) continues to run unchanged.
+  R6.9 is additive — it surfaces visibility for the security-critical
+  layer; `check:forge-coverage` continues to enforce baseline floors
+  on the contracts that DO appear in the summary table.
+
+  ### Audit doc
+
+  "Forge coverage in CI with thresholds" row marked PARTIAL CLOSED.
+
 ## 1.0.0-alpha.4
 
 ### Minor Changes

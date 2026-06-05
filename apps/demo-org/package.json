@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives-demo/org",
-  "version": "0.0.2-alpha.2",
+  "version": "0.0.2-alpha.3",
   "private": true,
   "description": "Agentic Org demo: an SSO relying site. Sign in by agent name (passkey/SIWE) to the same canonical person agent, then create a named Organization Smart Agent custodied by your credential, linked person→HAS_GOVERNANCE_OVER→org (spec 229).",
   "type": "module",

@@ -1,5 +1,16 @@
 # @agenticprimitives-demo/web-recovery
 
+## 0.0.2-alpha.3
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.5
+- @agenticprimitives/connect-auth@1.0.0-alpha.5
+- @agenticprimitives/account-custody@1.0.0-alpha.5
+- @agenticprimitives/agent-account@1.0.0-alpha.5
+- @agenticprimitives/delegation@1.0.0-alpha.5
+- @agenticprimitives/agent-naming@1.0.0-alpha.5
+
 ## 0.0.2-alpha.2
 
 ### Patch Changes

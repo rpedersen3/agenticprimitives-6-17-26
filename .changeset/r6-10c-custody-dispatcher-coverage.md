@@ -1,5 +1,5 @@
 ---
-"@agenticprimitives-demo/contracts": patch
+"@agenticprimitives/contracts": patch
 ---
 
 R6.10c — CustodyPolicy action-dispatcher happy paths + remaining
