@@ -71,6 +71,15 @@ const ALLOWED_IN: ReadonlySet<string> = new Set([
   // the SAME testnet-only demo custody path as personas.ts (D-1). Production
   // custodies via KMS-backed signers (spec 235); never imported by packages.
   'apps/demo-jp/src/lib/chain.ts',
+  // demo-gs (Global Switchboard) — sibling of demo-jp, SAME accepted testnet
+  // demo-key pattern: Pete (Global Church) + Jane (Switchboard) operators and
+  // the KC expert personas hold raw EOA keys for the demo; `chain.ts`
+  // (personaSignHash) and the substrate seed script convert them to viem signers
+  // (privateKeyToAccount). DEMO/TESTNET ONLY — production custodies org/person
+  // agents via KMS-backed signers (spec 235). App-local; never imported by packages.
+  'apps/demo-gs/src/lib/personas.ts',
+  'apps/demo-gs/src/lib/chain.ts',
+  'apps/demo-gs/scripts/seed-substrate.ts',
 ]);
 
 // Env-var names that are tolerated EVERYWHERE in apps/. Reserved for the
