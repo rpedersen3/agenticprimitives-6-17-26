@@ -72,18 +72,34 @@ async function ownerDelegationWire(o: VaultOwner): Promise<DelegationWire> {
 // — refreshing CSRF on a 403 — rather than let one transient miss storm the discovery hydrate. ADR-0013
 // permits bounded retries of the same call; this is NOT a fallback to a different mechanism.
 const VAULT_MAX_ATTEMPTS = 4;
+// A stalled relayer/RPC must NOT hang the discovery hydrate forever (records load → `recordsLoaded`).
+// Bound each attempt; a stall surfaces as a clear error the discovery screen shows + retry (ADR-0013).
+const VAULT_TIMEOUT_MS = 20_000;
 const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
 
 async function postVault(path: 'get' | 'set' | 'list', body: Record<string, unknown>): Promise<Record<string, unknown>> {
   let lastErr: Error | null = null;
   for (let attempt = 1; attempt <= VAULT_MAX_ATTEMPTS; attempt++) {
     await ensureCsrfToken();
-    const r = await fetch(`/a2a/mcp/vault/${path}`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json', ...csrfHeaders() },
-      body: JSON.stringify(body),
-    });
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), VAULT_TIMEOUT_MS);
+    let r: Response;
+    try {
+      r = await fetch(`/a2a/mcp/vault/${path}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        throw new Error(`vault ${path} timed out after ${VAULT_TIMEOUT_MS / 1000}s — the relayer or RPC is slow/unreachable. Please retry.`);
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
     const j = (await r.json().catch(() => null)) as Record<string, unknown> | null;
     if (r.ok && j && j.ok === true) return j;
 

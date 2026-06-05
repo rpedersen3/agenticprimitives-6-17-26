@@ -129,10 +129,23 @@ export async function listRelatedOrgs(name: string, idToken: string): Promise<Re
   const authOrigin = await resolveAuthOrigin(name);
   const url = new URL('/connect/related-orgs', authOrigin);
   url.searchParams.set('client_id', CLIENT_ID);
-  const r = await fetch(url.toString(), { headers: { authorization: `Bearer ${idToken}` } });
-  if (!r.ok) return [];
-  const b = (await r.json().catch(() => ({}))) as { orgs?: RelatedOrgLink[] };
-  return b.orgs ?? [];
+  // BOUND the call: this read drives the discovery timeline (`relatedOrgsLoaded`), and a stalled
+  // cross-origin fetch (the home holding the connection open) would otherwise leave the discovery
+  // screen hung forever — every step ✓ except "Loaded your organizations", and the route-to-hub guard
+  // (`if (!relatedOrgsLoaded) return`) never fires. On timeout/error we return EMPTY — an answer, not a
+  // hang (ADR-0013); the role resolver + dashboards re-read, and routing proceeds.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12_000);
+  try {
+    const r = await fetch(url.toString(), { headers: { authorization: `Bearer ${idToken}` }, signal: ctrl.signal });
+    if (!r.ok) return [];
+    const b = (await r.json().catch(() => ({}))) as { orgs?: RelatedOrgLink[] };
+    return b.orgs ?? [];
+  } catch {
+    return []; // timeout / network / CORS — never hang the discovery; empty is the answer
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ── Wire shapes ────────────────────────────────────────────────────────
