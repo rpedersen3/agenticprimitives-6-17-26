@@ -29,7 +29,7 @@ import { exchangeCode, personAddressFromIdToken, startOrgCreation } from './conn
 import { CONNECT_KEY, type ConnectStash } from './lib/connect-launch';
 import { deriveRoleCapabilities, type RoleKind } from './lib/role-capabilities';
 import { loadActiveRole, loadActiveTab, saveActiveRole, saveActiveTab } from './lib/active-role';
-import { KC_TABS, TAB_IDS, type TabId } from './lib/workspace-tabs';
+import { GCO_TABS, KC_TABS, TAB_IDS, type TabId } from './lib/workspace-tabs';
 import { personalHome } from './lib/domain';
 import { AppShellHeader, type ConnectedIdentity } from './components/AppShellHeader';
 import { Landing } from './components/Landing';
@@ -502,6 +502,12 @@ function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg }: {
   const lc = gcoLifecycle({ hasOrg: true, needs: myNeeds, agreements: allAgreements() });
   const next = gcoNextAction(lc.position);
 
+  // Active-tab state (spec 254 §4) — lifted to the workspace root, initialized from the persisted pref
+  // for this (person, role) keyed by the GCO SIGNATORY (the person; the org SA is not the person), written
+  // on change. Tab switching is user-initiated only; never automatic.
+  const [activeTab, setActiveTab] = useState<TabId>(() => loadActiveTab(signatory, 'gco'));
+  const onTab = (id: string) => { const t = id as TabId; setActiveTab(t); saveActiveTab(signatory, 'gco', t); };
+
   return (
     <>
       <IntranetHeader
@@ -512,24 +518,45 @@ function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg }: {
       />
       <LifecycleRail eyebrow="GCO lifecycle" steps={lc.steps} />
 
-      {/* Primary task (post a need) + the next-best-action right rail (stacks on mobile). */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(260px, 1fr)', gap: '1.25rem', alignItems: 'start' }}>
+      <WorkspaceTabBar tabs={GCO_TABS.map((t) => ({ ...t }))} active={activeTab} onChange={onTab} />
+
+      {/* All five panels stay MOUNTED (spec 254 §5): `hidden` toggles visibility, NOT conditional render,
+          so the GcoNeedWizard keeps half-filled form state across tab switches. */}
+
+      {/* Overview — the GCO lifecycle summary (posted-needs list, read-only with edit/withdraw) + NBA. */}
+      <TabPanel id={TAB_IDS.overview} active={activeTab}>
+        <GcoPostedNeeds needs={myNeeds} session={session} orgName={orgName} onEdit={(n) => { setEditNeed(n); onTab(TAB_IDS.need); }} />
+        <NextBestAction action={next} />
+      </TabPanel>
+
+      {/* Post a Need — the primary-task need wizard. */}
+      <TabPanel id={TAB_IDS.need} active={activeTab}>
         <GcoNeedWizard
           ownerOrg={org} signatory={org} session={session}
           eyebrow="Primary task · post a skill need"
           title="Post a skill need"
           prefill={editNeed}
-          onCreated={() => setEditNeed(null)}
+          // On post, clear the edit prefill and switch to Overview so the new need is VISIBLE in the
+          // posted-needs list (publish-feedback parity with the KC fix; the wizard awaits hydrate before
+          // firing, so `myNeeds` already includes it on the next render).
+          onCreated={() => { setEditNeed(null); onTab(TAB_IDS.overview); }}
         />
-        <NextBestAction action={next} />
-      </div>
+      </TabPanel>
 
-      <GcoPostedNeeds needs={myNeeds} session={session} orgName={orgName} onEdit={(n) => setEditNeed(n)} />
+      {/* Directory — coarsened supply (the KC offerings the GCO could connect to). */}
+      <TabPanel id={TAB_IDS.directory} active={activeTab}>
+        <DirectoryPanel entries={publicOfferingEntries()} scope="offering" eyebrow="Directory · coarsened supply" title="Browse Kingdom Consultants" sub="The public projection of expertise offerings — by skill, region, or cause. Contact is withheld; a specific match + the consultant's contact are released only when a connection is accepted by the Switchboard." />
+      </TabPanel>
 
-      <DirectoryPanel entries={publicOfferingEntries()} scope="offering" eyebrow="Directory · coarsened supply" title="Browse Kingdom Consultants" sub="The public projection of expertise offerings — by skill, region, or cause. Contact is withheld; a specific match + the consultant's contact are released only when a connection is accepted by the Switchboard." />
-      <AgreementsPanel agreements={allAgreements()} role="gco" actorPerson={org} onChanged={() => void setActiveContext({ persona: 'gco', session })} />
+      {/* Connections — the agreements backbone for the GCO's brokered connections. */}
+      <TabPanel id={TAB_IDS.connections} active={activeTab}>
+        <AgreementsPanel agreements={allAgreements()} role="gco" actorPerson={org} onChanged={() => void setActiveContext({ persona: 'gco', session })} />
+      </TabPanel>
 
-      <GcoTrustFooter orgName={orgName} onOpenHome={() => { const h = personalHome(signatory); window.open(`https://${h}`, '_blank', 'noopener'); }} />
+      {/* Data & Access — the GCO trust footer (spec-248 caveat lives here, verbatim). */}
+      <TabPanel id={TAB_IDS.dataAccess} active={activeTab}>
+        <GcoTrustFooter orgName={orgName} onOpenHome={() => { const h = personalHome(signatory); window.open(`https://${h}`, '_blank', 'noopener'); }} />
+      </TabPanel>
     </>
   );
 }

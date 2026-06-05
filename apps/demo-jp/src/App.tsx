@@ -55,7 +55,7 @@ import {
   addrFromToken, type MemberSession,
 } from './lib/session';
 import { loadActiveRole, saveActiveRole, clearActiveRole, loadActiveTab, saveActiveTab, type RoleKind } from './lib/active-role';
-import { FACILITATOR_TABS, TAB_IDS, type TabId } from './lib/workspace-tabs';
+import { ADOPTER_TABS, FACILITATOR_TABS, TAB_IDS, type TabId } from './lib/workspace-tabs';
 import { deriveRoleCapabilities } from './lib/role-capabilities';
 
 // JP-Adopt is a RELYING APP (spec 236). JP runs the program; the member's Impact Community
@@ -963,6 +963,46 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
   }
 
   return (
+    <AdopterIntranetBody
+      session={session} org={org} relatedOrgs={relatedOrgs} onCreateOrg={onCreateOrg}
+      onOpenHome={onOpenHome} onOpenWea={onOpenWea}
+      onGoEditProfile={onGoEditProfile} onGoSignWea={onGoSignWea}
+      impact={impact} record={record} steps={steps} activeStep={activeStep}
+      complete={complete} completeness={completeness} canDeclare={canDeclare}
+      lifecycle={lifecycle} nextAction={nextAction} update={update}
+      myRequests={myRequests} displayName={displayName} homeUrl={homeUrl}
+    />
+  );
+}
+
+// The AdopterIntranet body, re-homed into the spec-254 5-tab IA (mirrors `FacilitatorIntranetBody`).
+// `HeaderAlerts`, the fresh banner, the active-role pill, and the LifecycleRail stay PERSISTENT above
+// the tab bar; everything else is tab-controlled. All five panels stay mounted (`hidden`) so a half-
+// filled IntentRequest / onboarding-step form survives a tab switch. Re-home only — no section
+// component's internals changed (ADR-0021 / spec 254 §7).
+function AdopterIntranetBody({
+  session, org, relatedOrgs, onCreateOrg, onOpenHome, onOpenWea, onGoEditProfile, onGoSignWea,
+  impact, record, steps, activeStep, complete, completeness, canDeclare,
+  lifecycle, nextAction, update, myRequests, displayName, homeUrl,
+}: {
+  session: Session; org: RelatedOrgLink | null; relatedOrgs: RelatedOrgLink[];
+  onCreateOrg: (orgName: string) => void; onOpenHome: () => void; onOpenWea: () => void;
+  onGoEditProfile: (missingKeys: string[]) => void; onGoSignWea: () => void;
+  impact: ImpactProfile; record: JpAdopterRecord;
+  steps: ReturnType<typeof adopterSteps>; activeStep: ReturnType<typeof nextAdopterStep>;
+  complete: boolean; completeness: ReturnType<typeof profileCompleteness>; canDeclare: boolean;
+  lifecycle: ReturnType<typeof adopterLifecycle>; nextAction: NextAction;
+  update: (next: JpAdopterRecord) => void; myRequests: BoardIntent[];
+  displayName: string; homeUrl: string;
+}) {
+  // Active-tab state (spec 254) — initialized from the persisted pref for this (person, adopter),
+  // written on change. Tab switching is user-initiated only; never automatic.
+  const [activeTab, setActiveTab] = useState<TabId>(() => loadActiveTab(session.address, 'adopter'));
+  const onTab = (_e: SyntheticEvent, id: TabId) => { setActiveTab(id); saveActiveTab(session.address, 'adopter', id); };
+  // Connections badge: the adopter has something to act on once they have a brokered request in flight.
+  const connectionCount = myRequests.length;
+
+  return (
     <>
       <HeaderAlerts
         impact={impact}
@@ -977,8 +1017,8 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
         </div>
       )}
 
-      <section className="section wrap">
-        {/* Active-role pill (§10 header) + the lifecycle rail. */}
+      {/* Persistent ABOVE the tabs (spec 254 §2): active-role pill + lifecycle rail. */}
+      <section className="section wrap" style={{ paddingBottom: 0 }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
           <Chip label="Working as Adopter" color="primary" size="small" sx={{ fontWeight: 700 }} />
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -987,84 +1027,127 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
         </Stack>
         <LifecycleRail eyebrow="Adopter lifecycle" steps={lifecycle.steps} />
 
-        {/* Primary task (request a facilitator) + next-best-action right rail (stacks on mobile). */}
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 2fr) minmax(260px, 1fr)' },
-            gap: 2.5,
-            alignItems: 'start',
-            mt: 2,
-          }}
+        {/* Workspace secondary navigation (spec 254) — MUI Tabs, scrollable; the Connections tab carries
+            a count badge when a brokered request is in flight. */}
+        <Tabs
+          value={activeTab}
+          onChange={onTab}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+          aria-label="Workspace sections"
+          sx={{ mt: 2, borderBottom: 1, borderColor: 'divider', minHeight: 44 }}
         >
-          <Box>
-            <Typography variant="overline" sx={{ display: 'block', color: 'primary.main', fontWeight: 700, letterSpacing: '.08em', mb: 0.5 }}>
-              Primary task · request a facilitator
-            </Typography>
-            <AdopterRequestState requests={myRequests} homeUrl={homeUrl} />
-            <IntentRequest personSa={session.address} personName={session.name} orgs={relatedOrgs} />
-          </Box>
-          <NextBestAction action={nextAction} />
-        </Box>
+          {ADOPTER_TABS.map((t) => (
+            <Tab
+              key={t.id}
+              value={t.id}
+              id={`tab-${t.id}`}
+              aria-controls={`tabpanel-${t.id}`}
+              sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
+              label={
+                t.id === TAB_IDS.connections && connectionCount > 0
+                  ? <Badge color="primary" badgeContent={connectionCount} sx={{ '& .MuiBadge-badge': { right: -14, top: 2 } }}>{t.label}</Badge>
+                  : t.label
+              }
+            />
+          ))}
+        </Tabs>
       </section>
 
-      {/* Adopter-org setup card (§10 secondary card) — re-homed `MemberOrgSection`. */}
-      <MemberOrgSection kind="adopter" org={org} onCreateOrg={onCreateOrg} />
-
-      {/* Setup / declaration steps + the match/agreement section. */}
-      {complete ? (
-        <AdoptionSummary session={session} record={record} impact={impact} />
-      ) : (
-        <>
-          <section className="hero" style={{ padding: '3rem 0 2rem' }}>
-            <div className="wrap">
-              <div className="eyebrow">{JP.paths.adopter.who}</div>
-              <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>{JP.paths.adopter.title}</h1>
-              <p className="hero-sub" style={{ fontSize: '1rem' }}>
-                {JP.org} runs the program; {JP.impactName} holds the data. We’re only asking you for what JP needs that
-                isn’t already on file with your home.
-              </p>
-            </div>
-          </section>
-
-          <section className="section wrap" style={{ paddingTop: 0 }}>
-            <div className="sec-head">
-              <div className="eyebrow">Adopter onboarding</div>
-              <h2>{completeness.missing.length === 0 ? 'Just the JP-specific steps — your profile is already on file' : `${JP.org} needs a few things from your ${JP.impactName} profile`}</h2>
-            </div>
-            {completeness.missing.length > 0 && (
+      {/* ── Overview — next-best-action + the profile-completeness banner (when fields are missing). ── */}
+      <WorkspaceTabPanel id={TAB_IDS.overview} active={activeTab}>
+        <section className="section wrap" style={{ paddingTop: '2rem' }}>
+          {completeness.missing.length > 0 && (
+            <Box sx={{ mb: 2 }}>
               <ProfileCompletenessBanner
                 completeness={completeness}
                 onGoEditProfile={() => onGoEditProfile(completeness.missing.map((f) => f.key))}
               />
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '.875rem', marginTop: '1.5rem' }}>
-              {steps.map((s, i) => (
-                <StepCard
-                  key={s.step}
-                  n={i + 1}
-                  step={s.step}
-                  ownedBy={s.ownedBy}
-                  active={s.step === activeStep}
-                  satisfied={s.satisfied}
-                  impact={impact}
-                  record={record}
-                  session={session}
-                  canDeclare={canDeclare}
-                  onUpdate={update}
-                  onOpenWea={onOpenWea}
-                  onGoEditProfile={onGoEditProfile}
-                  onGoSignWea={onGoSignWea}
-                />
-              ))}
-            </div>
-          </section>
+            </Box>
+          )}
+          <NextBestAction action={nextAction} />
+        </section>
+      </WorkspaceTabPanel>
 
-          <JpProjectionPanel impact={impact} record={record} session={session} />
-        </>
-      )}
+      {/* ── Setup (primary task) — the adopter onboarding step cards + the adopter-org setup card. ── */}
+      <WorkspaceTabPanel id={TAB_IDS.setup} active={activeTab}>
+        <section className="hero" style={{ padding: '3rem 0 2rem' }}>
+          <div className="wrap">
+            <div className="eyebrow">{JP.paths.adopter.who}</div>
+            <h1 style={{ marginTop: '.5rem', fontSize: 'clamp(1.6rem, 4vw, 2.4rem)' }}>{JP.paths.adopter.title}</h1>
+            <p className="hero-sub" style={{ fontSize: '1rem' }}>
+              {JP.org} runs the program; {JP.impactName} holds the data. We’re only asking you for what JP needs that
+              isn’t already on file with your home.
+            </p>
+          </div>
+        </section>
 
-      <AdopterTrustFooter homeUrl={homeUrl} onOpenHome={onOpenHome} />
+        <section className="section wrap" style={{ paddingTop: 0 }}>
+          <div className="sec-head">
+            <div className="eyebrow">Adopter onboarding</div>
+            <h2>{completeness.missing.length === 0 ? 'Just the JP-specific steps — your profile is already on file' : `${JP.org} needs a few things from your ${JP.impactName} profile`}</h2>
+          </div>
+          {completeness.missing.length > 0 && (
+            <ProfileCompletenessBanner
+              completeness={completeness}
+              onGoEditProfile={() => onGoEditProfile(completeness.missing.map((f) => f.key))}
+            />
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '.875rem', marginTop: '1.5rem' }}>
+            {steps.map((s, i) => (
+              <StepCard
+                key={s.step}
+                n={i + 1}
+                step={s.step}
+                ownedBy={s.ownedBy}
+                active={s.step === activeStep}
+                satisfied={s.satisfied}
+                impact={impact}
+                record={record}
+                session={session}
+                canDeclare={canDeclare}
+                onUpdate={update}
+                onOpenWea={onOpenWea}
+                onGoEditProfile={onGoEditProfile}
+                onGoSignWea={onGoSignWea}
+              />
+            ))}
+          </div>
+        </section>
+
+        {/* Adopter-org setup card (§10 secondary card) — re-homed `MemberOrgSection` (carries the
+            org-level MemberTrustPanel). */}
+        <MemberOrgSection kind="adopter" org={org} onCreateOrg={onCreateOrg} />
+
+        <JpProjectionPanel impact={impact} record={record} session={session} />
+      </WorkspaceTabPanel>
+
+      {/* ── Declare (browse/primary) — request a facilitator: the request status + the IntentRequest form. ── */}
+      <WorkspaceTabPanel id={TAB_IDS.declare} active={activeTab}>
+        <section className="section wrap" style={{ paddingTop: '2rem' }}>
+          <Typography variant="overline" sx={{ display: 'block', color: 'primary.main', fontWeight: 700, letterSpacing: '.08em', mb: 0.5 }}>
+            Primary task · request a facilitator
+          </Typography>
+          <AdopterRequestState requests={myRequests} homeUrl={homeUrl} />
+          <IntentRequest personSa={session.address} personName={session.name} orgs={relatedOrgs} />
+        </section>
+      </WorkspaceTabPanel>
+
+      {/* ── Connections — the match / agreement surface (AdoptionSummary once the adoption is declared). ── */}
+      <WorkspaceTabPanel id={TAB_IDS.connections} active={activeTab}>
+        {complete ? (
+          <AdoptionSummary session={session} record={record} impact={impact} />
+        ) : (
+          <TabEmptyHint title="No matches yet" body={`Finish your setup and declare your adoption in the Setup tab. Once you request a facilitator, ${JP.org}’s matches and your agreement timeline appear here.`} />
+        )}
+      </WorkspaceTabPanel>
+
+      {/* ── Data & Access — the data/trust footer (spec-248 caveat lives here, verbatim). ── */}
+      <WorkspaceTabPanel id={TAB_IDS.dataAccess} active={activeTab}>
+        <AdopterTrustFooter homeUrl={homeUrl} onOpenHome={onOpenHome} />
+      </WorkspaceTabPanel>
+
       <IntranetFooter />
     </>
   );
