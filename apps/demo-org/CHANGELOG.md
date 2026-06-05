@@ -1,5 +1,20 @@
 # @agenticprimitives-demo/org
 
+## 0.0.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [21f2e4c]
+  - @agenticprimitives/contracts@1.0.0-alpha.6
+  - @agenticprimitives/types@1.0.0-alpha.6
+  - @agenticprimitives/connect-auth@1.0.0-alpha.6
+  - @agenticprimitives/connect@1.0.0-alpha.6
+  - @agenticprimitives/agent-account@1.0.0-alpha.6
+  - @agenticprimitives/delegation@1.0.0-alpha.6
+  - @agenticprimitives/agent-naming@1.0.0-alpha.6
+  - @agenticprimitives/agent-relationships@1.0.0-alpha.6
+  - @agenticprimitives/identity-directory-adapters@1.0.0-alpha.6
+
 ## 0.0.2-alpha.3
 
 ### Patch Changes

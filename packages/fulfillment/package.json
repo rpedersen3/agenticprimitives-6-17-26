@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/fulfillment",
-  "version": "0.0.0-alpha.1",
+  "version": "0.0.0-alpha.2",
   "private": true,
   "description": "FulfillmentCase lifecycle + Task/Message/Artifact (re-exported from mcp-runtime/a2a) + HandoffPolicy + EvidenceCredential + OutcomeCredential issuance.",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/agent-naming",
-  "version": "1.0.0-alpha.5",
+  "version": "1.0.0-alpha.6",
   "description": "Agent Naming Service SDK: hierarchical naming for Smart Agents (.agent TLD). Owns name normalization, namehash/labelhash, records schemas, and the AgentNamingClient (resolve / reverse / registry). Speaks naming-domain vocabulary only — no delegation / caveat / custody concepts.",
   "license": "MIT",
   "repository": {

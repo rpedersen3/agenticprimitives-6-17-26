@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/account-custody",
-  "version": "1.0.0-alpha.5",
+  "version": "1.0.0-alpha.6",
   "description": "Custody-layer SDK: CustodyPolicy ABI, CustodyAction enum + arg builders, EIP-712 typed-data helpers, and Custodian/Trustee/CustodyCouncil types. Speaks custody-domain vocabulary only — no delegation / steward / caveat concepts (those belong in @agenticprimitives/delegation).",
   "license": "MIT",
   "repository": {

@@ -1,5 +1,15 @@
 # @agenticprimitives/delegation
 
+## 1.0.0-alpha.6
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.6
+- @agenticprimitives/audit@1.0.0-alpha.6
+- @agenticprimitives/connect-auth@1.0.0-alpha.6
+- @agenticprimitives/key-custody@1.0.0-alpha.6
+- @agenticprimitives/agent-account@1.0.0-alpha.6
+
 ## 1.0.0-alpha.5
 
 ### Patch Changes

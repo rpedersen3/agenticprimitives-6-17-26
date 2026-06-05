@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/ontology",
-  "version": "1.0.0-alpha.5",
+  "version": "1.0.0-alpha.6",
   "description": "Monorepo-wide formal vocabulary (RDFS/OWL T-box + SHACL/SKOS C-box + A-box fixtures) for agentic primitives. Off-chain source of truth the on-chain ontology (ADR-0009) instantiates. Ships TTL/JSON-LD artifacts + typed IRI constants.",
   "license": "MIT",
   "repository": {

@@ -43,6 +43,7 @@
   },
   "changesets": [
     "r1-cross-stack-typehash-convergence",
+    "r12-forge-coverage",
     "r4-9-oidc-verification",
     "r5-10-session-iss-aud-binding",
     "r5-11-csrf-actual-origin",
