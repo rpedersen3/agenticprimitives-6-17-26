@@ -528,14 +528,25 @@ function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg }: {
   }
 
   const myNeeds = allNeeds();
-  const lc = gcoLifecycle({ hasOrg: true, needs: myNeeds, agreements: allAgreements() });
+  const gcoAgreements = allAgreements();
+  const lc = gcoLifecycle({ hasOrg: true, needs: myNeeds, agreements: gcoAgreements });
   const next = gcoNextAction(lc.position);
+  // Connections badge (spec 254 F3.1) — the GCO's brokered-connection (agreement) count, the SAME
+  // reactive source the AgreementsPanel inside the Connections tab reads. Clears to 0 reactively.
+  const agreementCount = gcoAgreements.length;
 
   // Active-tab state (spec 254 §4) — lifted to the workspace root, initialized from the persisted pref
   // for this (person, role) keyed by the GCO SIGNATORY (the person; the org SA is not the person), written
   // on change. Tab switching is user-initiated only; never automatic.
   const [activeTab, setActiveTab] = useState<TabId>(() => loadActiveTab(signatory, 'gco'));
   const onTab = (id: string) => { const t = id as TabId; setActiveTab(t); saveActiveTab(signatory, 'gco', t); };
+
+  const gcoTabs = GCO_TABS.map((t) =>
+    t.id === TAB_IDS.connections && agreementCount > 0 ? { ...t, badge: agreementCount } : { ...t },
+  );
+  // Deep-link CTA (spec 254 F3.2) — attach a tab-switch action to the next-best-action by lifecycle
+  // position; existing `next` copy is preserved, only `cta` is added.
+  const nextWithCta = gcoNextActionCta(next, lc.position, onTab);
 
   return (
     <>
@@ -547,7 +558,7 @@ function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg }: {
       />
       <LifecycleRail eyebrow="GCO lifecycle" steps={lc.steps} />
 
-      <WorkspaceTabBar tabs={GCO_TABS.map((t) => ({ ...t }))} active={activeTab} onChange={onTab} />
+      <WorkspaceTabBar tabs={gcoTabs} active={activeTab} onChange={onTab} />
 
       {/* All five panels stay MOUNTED (spec 254 §5): `hidden` toggles visibility, NOT conditional render,
           so the GcoNeedWizard keeps half-filled form state across tab switches. */}
@@ -555,7 +566,7 @@ function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg }: {
       {/* Overview — the GCO lifecycle summary (posted-needs list, read-only with edit/withdraw) + NBA. */}
       <TabPanel id={TAB_IDS.overview} active={activeTab}>
         <GcoPostedNeeds needs={myNeeds} session={session} orgName={orgName} onEdit={(n) => { setEditNeed(n); onTab(TAB_IDS.need); }} />
-        <NextBestAction action={next} />
+        <NextBestAction action={nextWithCta} />
       </TabPanel>
 
       {/* Post a Need — the primary-task need wizard. */}
@@ -603,6 +614,25 @@ function gcoNextAction(position: ReturnType<typeof gcoLifecycle>['position']): N
       return { title: 'View your agreement', body: 'A connection was accepted and Global Church issues the agreement. Track its lifecycle in the agreements card below.', tone: 'action' };
     default:
       return { title: 'Finish creating your organization', body: 'Create the org that holds the GCO role to start posting needs.', tone: 'action' };
+  }
+}
+
+// Attach a deep-link CTA to the GCO next-best-action by lifecycle position (spec 254 F3.2). Additive:
+// returns the same `action` with a `cta` that switches the workspace tab via `onTab`. No automatic tab
+// switching — only on the user clicking the CTA. The wait states (`need-posted`/`request-pending`) get
+// no CTA — the Switchboard is matching and there is nothing for the GCO to act on yet.
+function gcoNextActionCta(
+  action: NextAction,
+  position: ReturnType<typeof gcoLifecycle>['position'],
+  onTab: (id: string) => void,
+): NextAction {
+  switch (position) {
+    case 'no-need':
+      return { ...action, cta: { label: 'Post a need', onClick: () => onTab(TAB_IDS.need) } };
+    case 'agreement-issued':
+      return { ...action, cta: { label: 'View your agreement', onClick: () => onTab(TAB_IDS.connections) } };
+    default:
+      return action;
   }
 }
 
@@ -705,12 +735,21 @@ function KcView({ onHub, caps }: {
   const [activeTab, setActiveTab] = useState<TabId>(() => loadActiveTab(kc, 'kc'));
   const onTab = (id: string) => { const t = id as TabId; setActiveTab(t); saveActiveTab(kc, 'kc', t); };
 
+  // Connections badge (spec 254 F3.1) — the open-request count (the SAME reactive source the
+  // KcRequestQueue inside the Connections tab reads). Clears to 0 reactively as requests are resolved.
+  const kcTabs = KC_TABS.map((t) =>
+    t.id === TAB_IDS.connections && openRequests > 0 ? { ...t, badge: openRequests } : { ...t },
+  );
+  // Deep-link CTA (spec 254 F3.2) — attach a tab-switch action to the next-best-action by lifecycle
+  // position; existing `next` copy is preserved, only `cta` is added.
+  const nextWithCta = kcNextActionCta(next, lc.position, onTab);
+
   return (
     <>
       <IntranetHeader label={session.name} role="KC Expert" onHub={caps.canSwitch ? onHub : undefined} onSignOut={signOut} />
       <LifecycleRail eyebrow="KC lifecycle" steps={lc.steps} />
 
-      <WorkspaceTabBar tabs={KC_TABS.map((t) => ({ ...t }))} active={activeTab} onChange={onTab} />
+      <WorkspaceTabBar tabs={kcTabs} active={activeTab} onChange={onTab} />
 
       {/* All five panels stay MOUNTED (spec 254 §5): `hidden` toggles visibility, NOT conditional render,
           so the ExpertOfferingWizard keeps half-filled form state across tab switches. */}
@@ -722,7 +761,7 @@ function KcView({ onHub, caps }: {
           <KcSummaryCard label="Open requests" value={String(openRequests)} hint={openRequests > 0 ? 'Awaiting your accept/decline' : 'None right now'} tone={openRequests > 0 ? 'warn' : 'neutral'} />
           <KcSummaryCard label="Demand fit" value={hasOffering ? String(demandFit) : '—'} hint={hasOffering ? `open need${demandFit === 1 ? '' : 's'} match your skills` : 'Publish to see your fit'} tone={demandFit > 0 ? 'live' : 'neutral'} />
         </div>
-        <NextBestAction action={next} />
+        <NextBestAction action={nextWithCta} />
       </TabPanel>
 
       {/* Offering — the primary-task wizard; collapses to the compact published card once a record exists. */}
@@ -857,6 +896,28 @@ function kcNextAction(position: ReturnType<typeof kcLifecycle>['position']): Nex
       return { title: 'View your agreement', body: 'You accepted a connection and the agreement is live. Track its lifecycle in the agreements card below.', tone: 'action' };
     default:
       return { title: 'Publish your expertise offering', body: 'Publish an offering to start receiving explainable match requests.', tone: 'action' };
+  }
+}
+
+// Attach a deep-link CTA to the KC next-best-action by lifecycle position (spec 254 F3.2). Additive:
+// returns the same `action` with a `cta` that switches the workspace tab via `onTab`. No automatic tab
+// switching — only on the user clicking the CTA. The `offering-published` wait state gets no CTA
+// (the user browses the Directory at their leisure; nothing to act on).
+function kcNextActionCta(
+  action: NextAction,
+  position: ReturnType<typeof kcLifecycle>['position'],
+  onTab: (id: string) => void,
+): NextAction {
+  switch (position) {
+    case 'no-offering':
+      return { ...action, cta: { label: 'Publish your offering', onClick: () => onTab(TAB_IDS.offering) } };
+    case 'requests-pending':
+      return { ...action, cta: { label: 'Go to Connections', onClick: () => onTab(TAB_IDS.connections) } };
+    case 'accepted':
+    case 'agreement-issued':
+      return { ...action, cta: { label: 'View your agreement', onClick: () => onTab(TAB_IDS.connections) } };
+    default:
+      return action;
   }
 }
 

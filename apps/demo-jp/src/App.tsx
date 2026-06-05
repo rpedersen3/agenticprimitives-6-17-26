@@ -999,8 +999,15 @@ function AdopterIntranetBody({
   // written on change. Tab switching is user-initiated only; never automatic.
   const [activeTab, setActiveTab] = useState<TabId>(() => loadActiveTab(session.address, 'adopter'));
   const onTab = (_e: SyntheticEvent, id: TabId) => { setActiveTab(id); saveActiveTab(session.address, 'adopter', id); };
-  // Connections badge: the adopter has something to act on once they have a brokered request in flight.
+  // Programmatic tab switch (the Overview next-best-action deep-link CTA); persists like a user click.
+  const goTab = (id: TabId) => { setActiveTab(id); saveActiveTab(session.address, 'adopter', id); };
+  // Connections badge (spec 254 F3.1): the adopter has something to act on once a brokered request /
+  // match is in flight. Reuses the SAME reactive `myRequests` the Connections panel reads; clears to 0
+  // reactively when no requests are in flight.
   const connectionCount = myRequests.length;
+  // Deep-link CTA (spec 254 F3.2) — attach a tab-switch action to the next-best-action by lifecycle
+  // position; existing `nextAction` copy is preserved, only `cta` is added.
+  const nextActionWithCta = adopterNextActionCta(nextAction, lifecycle.position, goTab);
 
   return (
     <>
@@ -1066,7 +1073,7 @@ function AdopterIntranetBody({
               />
             </Box>
           )}
-          <NextBestAction action={nextAction} />
+          <NextBestAction action={nextActionWithCta} />
         </section>
       </WorkspaceTabPanel>
 
@@ -1192,6 +1199,26 @@ function adopterNextAction(
         body: `Complete the steps in the lifecycle rail — profile, ADOPT MOU, WEA where required, and your adoption declaration — to unlock requesting a facilitator from ${JP.org}.`,
         tone: 'action',
       };
+  }
+}
+
+// Attach a deep-link CTA to the adopter next-best-action by lifecycle position (spec 254 F3.2).
+// Additive: returns the same `action` with a `cta` that switches the workspace tab via `goTab`. No
+// automatic tab switching — only on the user clicking the CTA. Wait/setup positions get no CTA (their
+// resolution is the rail/Setup form, not a deep-link).
+function adopterNextActionCta(
+  action: NextAction,
+  position: AdopterLifecyclePosition,
+  goTab: (id: TabId) => void,
+): NextAction {
+  switch (position) {
+    case 'ready-to-request':
+      return { ...action, cta: { label: 'Request a facilitator', onClick: () => goTab(TAB_IDS.declare) } };
+    case 'match-ready':
+    case 'agreement':
+      return { ...action, cta: { label: 'View your match', onClick: () => goTab(TAB_IDS.connections) } };
+    default:
+      return action;
   }
 }
 
@@ -2649,7 +2676,17 @@ function FacilitatorIntranetBody({
   // written on change. Tab switching is user-initiated only; never automatic.
   const [activeTab, setActiveTab] = useState<TabId>(() => loadActiveTab(session.address, 'facilitator'));
   const onTab = (_e: SyntheticEvent, id: TabId) => { setActiveTab(id); saveActiveTab(session.address, 'facilitator', id); };
+  // Programmatic tab switch (the Overview next-best-action deep-link CTA); persists like a user click.
+  const goTab = (id: TabId) => { setActiveTab(id); saveActiveTab(session.address, 'facilitator', id); };
   const publishedCoverage = complete && coverage;
+  // Badge sources (spec 254 F3.1) — reuse the SAME reactive `matchedAdopters` the Matches/Connections
+  // panels already read. Matches = every matched adopter to review; Connections = the matched adopters
+  // an established (contact-exchanged) connection exists with — the audience of the PublishUpdatesPanel.
+  const matchCount = matchedAdopters.length;
+  const connectionCount = matchedAdopters.filter((a) => a.hasContact).length;
+  // Deep-link CTA (spec 254 F3.2) — attach a tab-switch action to the next-best-action by lifecycle
+  // position; existing `nextAction` copy is preserved, only `cta` is added.
+  const nextActionWithCta = facilitatorNextActionCta(nextAction, lifecycle.position, goTab);
 
   return (
     <>
@@ -2676,7 +2713,8 @@ function FacilitatorIntranetBody({
         <LifecycleRail eyebrow="Facilitator lifecycle" steps={lifecycle.steps} />
 
         {/* Workspace secondary navigation (spec 254) — MUI Tabs, scrollable; the Matches tab carries a
-            count badge when adopters are matched. */}
+            count badge when adopters are matched, and the Connections tab when established connections
+            (contact-exchanged) exist. Badges clear reactively when the source count hits 0 (F3.1). */}
         <Tabs
           value={activeTab}
           onChange={onTab}
@@ -2686,20 +2724,26 @@ function FacilitatorIntranetBody({
           aria-label="Workspace sections"
           sx={{ mt: 2, borderBottom: 1, borderColor: 'divider', minHeight: 44 }}
         >
-          {FACILITATOR_TABS.map((t) => (
-            <Tab
-              key={t.id}
-              value={t.id}
-              id={`tab-${t.id}`}
-              aria-controls={`tabpanel-${t.id}`}
-              sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
-              label={
-                t.id === TAB_IDS.matches && matchedAdopters.length > 0
-                  ? <Badge color="primary" badgeContent={matchedAdopters.length} sx={{ '& .MuiBadge-badge': { right: -14, top: 2 } }}>{t.label}</Badge>
-                  : t.label
-              }
-            />
-          ))}
+          {FACILITATOR_TABS.map((t) => {
+            const badge =
+              t.id === TAB_IDS.matches ? matchCount
+                : t.id === TAB_IDS.connections ? connectionCount
+                  : 0;
+            return (
+              <Tab
+                key={t.id}
+                value={t.id}
+                id={`tab-${t.id}`}
+                aria-controls={`tabpanel-${t.id}`}
+                sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
+                label={
+                  badge > 0
+                    ? <Badge color="primary" badgeContent={badge} sx={{ '& .MuiBadge-badge': { right: -14, top: 2 } }}>{t.label}</Badge>
+                    : t.label
+                }
+              />
+            );
+          })}
         </Tabs>
       </section>
 
@@ -2714,7 +2758,7 @@ function FacilitatorIntranetBody({
             openMatches={matchedAdopters.length}
           />
           <Box sx={{ mt: 2 }}>
-            <NextBestAction action={nextAction} />
+            <NextBestAction action={nextActionWithCta} />
           </Box>
         </section>
       </WorkspaceTabPanel>
@@ -2949,6 +2993,26 @@ function facilitatorNextAction(position: FacilitatorLifecyclePosition): NextActi
         body: `Complete the steps in the lifecycle rail — profile, WEA, and the ADOPT MOU — to unlock declaring your coverage & capacity for ${JP.org}.`,
         tone: 'action',
       };
+  }
+}
+
+// Attach a deep-link CTA to the facilitator next-best-action by lifecycle position (spec 254 F3.2).
+// Additive: returns the same `action` with a `cta` that switches the workspace tab via `goTab`. No
+// automatic tab switching — only on the user clicking the CTA. Wait/setup positions get no CTA (their
+// resolution is elsewhere — the rail/Coverage form, not a deep-link).
+function facilitatorNextActionCta(
+  action: NextAction,
+  position: FacilitatorLifecyclePosition,
+  goTab: (id: TabId) => void,
+): NextAction {
+  switch (position) {
+    case 'coverage-draft':
+      return { ...action, cta: { label: 'Declare coverage', onClick: () => goTab(TAB_IDS.coverage) } };
+    case 'matches-pending':
+    case 'agreement-requested':
+      return { ...action, cta: { label: 'Review matches', onClick: () => goTab(TAB_IDS.matches) } };
+    default:
+      return action;
   }
 }
 
