@@ -12,7 +12,8 @@
 // expander) that never disturb a member session. The entitlement layer (store/session/member-vault) and
 // the org-create RETURN handler + workspace BODIES are unchanged — this restructures the SHELL.
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import type { Address } from 'viem';
 import { actingAgents, type Persona } from './lib/personas';
 import { ensureSwitchboardDeployed } from './lib/onchain';
 import {
@@ -27,7 +28,8 @@ import { discoverGcoSession } from './lib/gco-discovery';
 import { exchangeCode, personAddressFromIdToken, startOrgCreation } from './connect-client';
 import { CONNECT_KEY, type ConnectStash } from './lib/connect-launch';
 import { deriveRoleCapabilities, type RoleKind } from './lib/role-capabilities';
-import { loadActiveRole, saveActiveRole } from './lib/active-role';
+import { loadActiveRole, loadActiveTab, saveActiveRole, saveActiveTab } from './lib/active-role';
+import { KC_TABS, TAB_IDS, type TabId } from './lib/workspace-tabs';
 import { personalHome } from './lib/domain';
 import { AppShellHeader, type ConnectedIdentity } from './components/AppShellHeader';
 import { Landing } from './components/Landing';
@@ -51,7 +53,7 @@ import { AccessRequestState } from './components/AccessRequestState';
 import { gcoLifecycle } from './lib/gco-lifecycle';
 import { kcLifecycle } from './lib/kc-lifecycle';
 import type { GcoNeedIntent } from './domain/gs-types';
-import { Banner, Card, Pill, SectionHead, Spinner, TextField } from './components/ui';
+import { Banner, Btn, Card, Pill, SectionHead, Spinner, TextField, WorkspaceTabBar } from './components/ui';
 import { ToastProvider } from './components/Toast';
 
 /** sessionStorage key + stash for the in-flight org-create redirect (GCO step 2). */
@@ -642,31 +644,108 @@ function KcView({ onHub, caps }: {
 
   const next = kcNextAction(lc.position);
 
+  // Active-tab state (spec 254) — lifted to the workspace root, initialized from the persisted pref for
+  // this (person, role), written on change. Tab switching is user-initiated only; never automatic.
+  const [activeTab, setActiveTab] = useState<TabId>(() => loadActiveTab(kc, 'kc'));
+  const onTab = (id: string) => { const t = id as TabId; setActiveTab(t); saveActiveTab(kc, 'kc', t); };
+
   return (
     <>
       <IntranetHeader label={session.name} role="KC Expert" onHub={caps.canSwitch ? onHub : undefined} onSignOut={signOut} />
       <LifecycleRail eyebrow="KC lifecycle" steps={lc.steps} />
 
-      {/* Command-center summary cards (§11): offering status · open requests · demand-fit hint. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-        <KcSummaryCard label="Offering" value={hasOffering ? 'Published' : 'Not yet'} hint={hasOffering ? 'Live in your own vault' : 'Publish below to get matched'} tone={hasOffering ? 'ok' : 'neutral'} />
-        <KcSummaryCard label="Open requests" value={String(openRequests)} hint={openRequests > 0 ? 'Awaiting your accept/decline' : 'None right now'} tone={openRequests > 0 ? 'warn' : 'neutral'} />
-        <KcSummaryCard label="Demand fit" value={hasOffering ? String(demandFit) : '—'} hint={hasOffering ? `open need${demandFit === 1 ? '' : 's'} match your skills` : 'Publish to see your fit'} tone={demandFit > 0 ? 'live' : 'neutral'} />
-      </div>
+      <WorkspaceTabBar tabs={KC_TABS.map((t) => ({ ...t }))} active={activeTab} onChange={onTab} />
 
-      {/* Primary task (publish/update offering) + the next-best-action right rail (stacks on mobile). */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(260px, 1fr)', gap: '1.25rem', alignItems: 'start' }}>
-        <ExpertOfferingWizard
-          owner={kc} ownerName={session.name} session={session}
-          eyebrow="Primary task · publish your offering"
-          title={hasOffering ? 'Update your offering' : 'Publish your expertise offering'}
-        />
+      {/* All five panels stay MOUNTED (spec 254 §5): `hidden` toggles visibility, NOT conditional render,
+          so the ExpertOfferingWizard keeps half-filled form state across tab switches. */}
+
+      {/* Overview — summary cards + next-best-action. */}
+      <TabPanel id={TAB_IDS.overview} active={activeTab}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+          <KcSummaryCard label="Offering" value={hasOffering ? 'Published' : 'Not yet'} hint={hasOffering ? 'Live in your own vault' : 'Publish below to get matched'} tone={hasOffering ? 'ok' : 'neutral'} />
+          <KcSummaryCard label="Open requests" value={String(openRequests)} hint={openRequests > 0 ? 'Awaiting your accept/decline' : 'None right now'} tone={openRequests > 0 ? 'warn' : 'neutral'} />
+          <KcSummaryCard label="Demand fit" value={hasOffering ? String(demandFit) : '—'} hint={hasOffering ? `open need${demandFit === 1 ? '' : 's'} match your skills` : 'Publish to see your fit'} tone={demandFit > 0 ? 'live' : 'neutral'} />
+        </div>
         <NextBestAction action={next} />
-      </div>
+      </TabPanel>
 
+      {/* Offering — the primary-task wizard; collapses to the compact published card once a record exists. */}
+      <TabPanel id={TAB_IDS.offering} active={activeTab}>
+        <KcOfferingTab
+          owner={kc} ownerName={session.name} session={session}
+          hasOffering={hasOffering} myOfferings={myOfferings}
+        />
+      </TabPanel>
+
+      {/* Directory — coarsened demand the KC could serve. */}
+      <TabPanel id={TAB_IDS.directory} active={activeTab}>
+        <DirectoryPanel entries={publicNeedEntries()} scope="need" eyebrow="Directory · coarsened demand · where the demand is" title="Where the demand is" sub="The public projection of open needs you could serve — by skill, region, or cause. Confidential GCO need details are coarsened; you never see raw confidential demand." />
+      </TabPanel>
+
+      {/* Connections — the request queue (why-this-match) + the accept/decline agreements surface. */}
+      <TabPanel id={TAB_IDS.connections} active={activeTab}>
+        <KcRequestQueue agreements={agreements} />
+        <AgreementsPanel agreements={agreements} role="kc" actorPerson={kc} onChanged={() => void setActiveContext({ persona: 'kc', session })} />
+      </TabPanel>
+
+      {/* Data & Access — the on-chain substrate badge + the data/trust footer (spec-248 caveats live here). */}
+      <TabPanel id={TAB_IDS.dataAccess} active={activeTab}>
+        <SubstrateClaimsPanel offerings={myOfferings} />
+        <KcTrustFooter onOpenHome={() => { const h = personalHome(session.name); window.open(`https://${h}`, '_blank', 'noopener'); }} />
+      </TabPanel>
+    </>
+  );
+}
+
+// A workspace tab panel (spec 254 §5). Inactive panels stay mounted with the `hidden` attribute (NOT
+// conditional unmount) so in-progress form state survives a tab switch. On activation focus moves to the
+// panel container (a11y) so keyboard users land in the newly-revealed content. Each panel is an inner
+// grid so its sections keep the workspace's vertical rhythm.
+function TabPanel({ id, active, children }: { id: TabId; active: TabId; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const isActive = active === id;
+  const wasActive = useRef(isActive);
+  useEffect(() => {
+    // Move focus to the panel only on a transition INTO active (not on first mount of the default tab).
+    if (isActive && !wasActive.current) ref.current?.focus();
+    wasActive.current = isActive;
+  }, [isActive]);
+  return (
+    <div
+      ref={ref}
+      id={`tabpanel-${id}`}
+      role="tabpanel"
+      aria-labelledby={`tab-${id}`}
+      hidden={!isActive}
+      tabIndex={-1}
+      style={{ display: isActive ? 'grid' : undefined, gap: '1.25rem', outline: 'none' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// The Offering tab body (spec 254 §3 form refinement): once an offering is published the default is the
+// COMPACT published-offering card with an "Edit offering" toggle that expands the wizard in-place. The
+// wizard stays rendered when expanded so its in-progress state is preserved; the toggle only collapses
+// the published view. Before first publish the wizard is open by default.
+function KcOfferingTab({ owner, ownerName, session, hasOffering, myOfferings }: {
+  owner: Address; ownerName: string; session: MemberSession;
+  hasOffering: boolean; myOfferings: ReturnType<typeof allOfferings>;
+}) {
+  const [editing, setEditing] = useState(!hasOffering);
+  return (
+    <>
       {hasOffering && (
         <Card>
-          <SectionHead eyebrow="KC Expert · my offering" title="Your published offering" sub="Lives in YOUR vault; the Switchboard reads it only through the grant you issued at sign-in." />
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '.6rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <SectionHead eyebrow="KC Expert · my offering" title="Your published offering" sub="Lives in YOUR vault; the Switchboard reads it only through the grant you issued at sign-in." />
+            </div>
+            <Btn variant="ghost" size="sm" onClick={() => setEditing((e) => !e)}>
+              {editing ? 'Hide editor' : 'Edit offering'}
+            </Btn>
+          </div>
           {myOfferings.map((o) => (
             <div key={o.id} style={{ display: 'flex', gap: '.5rem', alignItems: 'center', padding: '.4rem 0', borderBottom: '1px solid var(--c-g100)', fontSize: '.86rem', flexWrap: 'wrap' }}>
               <Pill tone={o.status === 'active' ? 'live' : 'neutral'}>{o.capacity?.availabilityStatus ?? o.status}</Pill>
@@ -677,14 +756,20 @@ function KcView({ onHub, caps }: {
         </Card>
       )}
 
-      {/* Request queue: the matched-skill "why this match" framing, then the accept/decline surface. */}
-      <KcRequestQueue agreements={agreements} />
-      <AgreementsPanel agreements={agreements} role="kc" actorPerson={kc} onChanged={() => void setActiveContext({ persona: 'kc', session })} />
-
-      <DirectoryPanel entries={publicNeedEntries()} scope="need" eyebrow="Directory · coarsened demand · where the demand is" title="Where the demand is" sub="The public projection of open needs you could serve — by skill, region, or cause. Confidential GCO need details are coarsened; you never see raw confidential demand." />
-      <SubstrateClaimsPanel offerings={myOfferings} />
-
-      <KcTrustFooter onOpenHome={() => { const h = personalHome(session.name); window.open(`https://${h}`, '_blank', 'noopener'); }} />
+      {/* The wizard stays MOUNTED (form-state preservation); `hidden` collapses it under the published
+          card. Before first publish (or while editing) it is visible. */}
+      <div hidden={hasOffering && !editing} style={{ display: hasOffering && !editing ? 'none' : 'grid', gap: '1.25rem' }}>
+        <ExpertOfferingWizard
+          owner={owner} ownerName={ownerName} session={session}
+          eyebrow="Primary task · publish your offering"
+          title={hasOffering ? 'Update your offering' : 'Publish your expertise offering'}
+          // On publish, collapse the wizard so the published-offering card above is the visible result
+          // (the wizard awaits hydrate before firing this, so `hasOffering` is already true → the card
+          // renders and `hidden={hasOffering && !editing}` hides the form). Fixes "pressed Publish, saw
+          // only a blank form refresh, no result."
+          onCreated={() => setEditing(false)}
+        />
+      </div>
     </>
   );
 }

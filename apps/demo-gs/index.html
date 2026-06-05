@@ -92,6 +92,30 @@
         background: var(--c-g100); border: 1px solid var(--c-g200); color: var(--c-g600);
         border-radius: var(--r-sm); padding: .45rem .65rem;
       }
+      /* Workspace secondary navigation (spec 254) — a horizontal tab strip docked below the lifecycle
+         rail. Indigo --c-primary active treatment (contrast ≥ 4.5:1 white-on-indigo), 8px grid, ≥44px
+         touch height, scrollable strip on narrow viewports with the scrollbar hidden. */
+      .workspace-tabs { border-bottom: 1px solid var(--c-g200); }
+      .workspace-tabs [role="tablist"] {
+        display: flex; gap: .25rem; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+        padding: 0 .25rem;
+      }
+      .workspace-tabs [role="tablist"]::-webkit-scrollbar { display: none; }
+      .workspace-tab {
+        flex: 0 0 auto; display: inline-flex; align-items: center; gap: .45rem;
+        min-height: 44px; padding: .6rem 1rem; border: none; background: none; cursor: pointer;
+        font-family: inherit; font-size: .88rem; font-weight: 700; color: var(--c-g600);
+        border-bottom: 2px solid transparent; white-space: nowrap;
+        transition: color .12s ease, border-color .12s ease;
+      }
+      .workspace-tab:hover { color: var(--c-primary); }
+      .workspace-tab.--active { color: var(--c-primary-active); border-bottom-color: var(--c-primary); }
+      .workspace-tab:focus-visible { outline: 2px solid var(--c-primary); outline-offset: -2px; border-radius: var(--r-sm); }
+      .workspace-tab-badge {
+        display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px;
+        padding: 0 .35rem; border-radius: 999px; background: var(--c-primary); color: #fff;
+        font-size: .68rem; font-weight: 800; line-height: 1;
+      }
       footer { border-top: 1px solid var(--c-g200); padding: 2rem 0; color: var(--c-g500); font-size: .8rem; margin-top: 3rem; }
     </style>
   </head>

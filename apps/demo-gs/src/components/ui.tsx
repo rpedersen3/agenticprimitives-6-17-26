@@ -2,7 +2,7 @@
 // --c-primary). Mirrors demo-jp's ui.tsx shape but chain-decoupled (no explorer / reverseName);
 // AddrChip resolves friendly names from the fixture directory.
 
-import type { CSSProperties, ReactNode } from 'react';
+import { useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { agentName } from '../lib/names';
 
 export function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
@@ -208,5 +208,63 @@ export function ScoreBadge({ score }: { score: number }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, height: 44, borderRadius: 12, fontWeight: 900, fontSize: '1.05rem', color: tone, background: bg, border: `1px solid ${tone}33` }}>
       {score}
     </span>
+  );
+}
+
+/** Workspace secondary navigation (spec 254) — a `role="tablist"` strip with arrow-key roving focus
+ *  (ArrowLeft/Right wrap, Home/End jump, Enter/Space activate) and an optional count badge per tab.
+ *  Styling lives in index.html (`.workspace-tabs` / `.workspace-tab` / `--active` / `.workspace-tab-badge`).
+ *  Pair each tab with a `role="tabpanel"` keyed `tabpanel-${id}` / `aria-labelledby="tab-${id}"`; inactive
+ *  panels stay MOUNTED with the `hidden` attribute (not conditional unmount) so in-progress form state survives. */
+export function WorkspaceTabBar({ tabs, active, onChange }: {
+  tabs: { id: string; label: string; badge?: number }[];
+  active: string;
+  onChange: (id: string) => void;
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const focusTab = (i: number) => {
+    const next = (i + tabs.length) % tabs.length;
+    refs.current[next]?.focus();
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
+    switch (e.key) {
+      case 'ArrowRight': e.preventDefault(); focusTab(i + 1); break;
+      case 'ArrowLeft': e.preventDefault(); focusTab(i - 1); break;
+      case 'Home': e.preventDefault(); focusTab(0); break;
+      case 'End': e.preventDefault(); focusTab(tabs.length - 1); break;
+      case 'Enter':
+      case ' ': { e.preventDefault(); const t = tabs[i]; if (t) onChange(t.id); break; }
+      default: break;
+    }
+  };
+
+  return (
+    <nav className="workspace-tabs" aria-label="Workspace sections">
+      <div role="tablist">
+        {tabs.map((t, i) => {
+          const selected = t.id === active;
+          return (
+            <button
+              key={t.id}
+              ref={(el) => { refs.current[i] = el; }}
+              id={`tab-${t.id}`}
+              role="tab"
+              type="button"
+              aria-selected={selected}
+              aria-controls={`tabpanel-${t.id}`}
+              tabIndex={selected ? 0 : -1}
+              className={`workspace-tab${selected ? ' --active' : ''}`}
+              onClick={() => onChange(t.id)}
+              onKeyDown={(e) => onKeyDown(e, i)}
+            >
+              {t.label}
+              {t.badge ? <span className="workspace-tab-badge">{t.badge}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
   );
 }

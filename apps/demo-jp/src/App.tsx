@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Card as MuiCard, CardContent, Typography, Link as MuiLink, Stack, Chip, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
+import { Box, Card as MuiCard, CardContent, Typography, Link as MuiLink, Stack, Chip, Accordion, AccordionSummary, AccordionDetails, Tabs, Tab, Badge } from '@mui/material';
 import { AgreementTimeline } from './components/AgreementTimeline';
 import type { Address, Hex } from '@agenticprimitives/types';
 import { JP } from './lib/brand';
@@ -54,7 +54,8 @@ import {
   restoreSession as restoreMemberSession, setSession as persistSession, clearSession as clearMemberSession,
   addrFromToken, type MemberSession,
 } from './lib/session';
-import { loadActiveRole, saveActiveRole, clearActiveRole, type RoleKind } from './lib/active-role';
+import { loadActiveRole, saveActiveRole, clearActiveRole, loadActiveTab, saveActiveTab, type RoleKind } from './lib/active-role';
+import { FACILITATOR_TABS, TAB_IDS, type TabId } from './lib/workspace-tabs';
 import { deriveRoleCapabilities } from './lib/role-capabilities';
 
 // JP-Adopt is a RELYING APP (spec 236). JP runs the program; the member's Impact Community
@@ -2502,6 +2503,72 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onReconnect
   }
 
   return (
+    <FacilitatorIntranetBody
+      session={session} org={org} onCreateOrg={onCreateOrg}
+      onOpenHome={onOpenHome} onOpenWea={onOpenWea}
+      onGoEditProfile={onGoEditProfile} onGoSignWea={onGoSignWea}
+      impact={impact} record={record} matchedAdopters={matchedAdopters}
+      steps={steps} activeStep={activeStep} complete={complete} completeness={completeness}
+      canDeclare={canDeclare} coverage={coverage} lifecycle={lifecycle} nextAction={nextAction}
+      update={update} displayName={displayName} homeUrl={homeUrl} orgName={orgName}
+    />
+  );
+}
+
+// A workspace tab panel (spec 254 §5). Inactive panels stay MOUNTED with the `hidden` prop (NOT
+// conditional unmount) so the FacilitatorPrimaryTaskCard keeps half-filled form state across tab
+// switches. On activation focus moves to the panel container (a11y) so keyboard users land in the
+// newly-revealed content.
+function WorkspaceTabPanel({ id, active, children }: { id: TabId; active: TabId; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const isActive = active === id;
+  const wasActive = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !wasActive.current) ref.current?.focus();
+    wasActive.current = isActive;
+  }, [isActive]);
+  return (
+    <Box
+      ref={ref}
+      id={`tabpanel-${id}`}
+      role="tabpanel"
+      aria-labelledby={`tab-${id}`}
+      hidden={!isActive}
+      tabIndex={-1}
+      sx={{ outline: 'none' }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+// The FacilitatorIntranet body, re-homed into the spec-254 5-tab IA. `AppShellHeader`, the fresh/alert
+// banners, the active-role pill, and the LifecycleRail stay PERSISTENT above the tab bar; everything else
+// is tab-controlled. All five panels stay mounted (`hidden`) so in-progress form state survives a switch.
+// Re-home only — no section component's internals changed (ADR-0021 / spec 254 §7).
+function FacilitatorIntranetBody({
+  session, org, onCreateOrg, onOpenHome, onOpenWea, onGoEditProfile, onGoSignWea,
+  impact, record, matchedAdopters, steps, activeStep, complete, completeness,
+  canDeclare, coverage, lifecycle, nextAction, update, displayName, homeUrl, orgName,
+}: {
+  session: Session; org: RelatedOrgLink | null; onCreateOrg: (orgName: string) => void;
+  onOpenHome: () => void; onOpenWea: () => void;
+  onGoEditProfile: (missingKeys: string[]) => void; onGoSignWea: () => void;
+  impact: ImpactProfile; record: JpFacilitatorRecord; matchedAdopters: MatchedAdopter[];
+  steps: ReturnType<typeof facilitatorSteps>; activeStep: ReturnType<typeof nextFacilitatorStep>;
+  complete: boolean; completeness: ReturnType<typeof profileCompleteness>;
+  canDeclare: boolean; coverage: JpFacilitatorRecord['coverage'];
+  lifecycle: ReturnType<typeof facilitatorLifecycle>; nextAction: NextAction;
+  update: (next: JpFacilitatorRecord) => void;
+  displayName: string; homeUrl: string; orgName: string | undefined;
+}) {
+  // Active-tab state (spec 254) — initialized from the persisted pref for this (person, facilitator),
+  // written on change. Tab switching is user-initiated only; never automatic.
+  const [activeTab, setActiveTab] = useState<TabId>(() => loadActiveTab(session.address, 'facilitator'));
+  const onTab = (_e: SyntheticEvent, id: TabId) => { setActiveTab(id); saveActiveTab(session.address, 'facilitator', id); };
+  const publishedCoverage = complete && coverage;
+
+  return (
     <>
       <HeaderAlerts
         impact={impact}
@@ -2515,8 +2582,8 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onReconnect
         </div>
       )}
 
-      <section className="section wrap">
-        {/* Active-role pill (§11 header) + the lifecycle rail. */}
+      {/* Persistent ABOVE the tabs (spec 254 §2): active-role pill + lifecycle rail. */}
+      <section className="section wrap" style={{ paddingBottom: 0 }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
           <Chip label="Working as Facilitator" color="primary" size="small" sx={{ fontWeight: 700 }} />
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -2525,66 +2592,120 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onReconnect
         </Stack>
         <LifecycleRail eyebrow="Facilitator lifecycle" steps={lifecycle.steps} />
 
-        {/* Command-center summary cards (§11): facilitator org · JP association · coverage · open matches. */}
-        <FacilitatorCommandCenter
-          orgName={org ? (orgName ?? org.orgName) : orgName}
-          hasOrg={!!org}
-          mouSigned={!!record.attestations.mou}
-          coverageGroups={coverage?.peopleGroupIds.length ?? 0}
-          openMatches={matchedAdopters.length}
-        />
-
-        {/* Primary task (declare coverage & capacity) + next-best-action right rail (stacks on mobile). */}
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 2fr) minmax(260px, 1fr)' },
-            gap: 2.5,
-            alignItems: 'start',
-            mt: 2,
-          }}
+        {/* Workspace secondary navigation (spec 254) — MUI Tabs, scrollable; the Matches tab carries a
+            count badge when adopters are matched. */}
+        <Tabs
+          value={activeTab}
+          onChange={onTab}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+          aria-label="Workspace sections"
+          sx={{ mt: 2, borderBottom: 1, borderColor: 'divider', minHeight: 44 }}
         >
-          <Box>
-            <Typography variant="overline" sx={{ display: 'block', color: 'primary.main', fontWeight: 700, letterSpacing: '.08em', mb: 0.5 }}>
-              Primary task · declare coverage &amp; capacity
-            </Typography>
-            {complete && coverage ? (
-              <FacilitatorCoverageSummary session={session} impact={impact} coverage={coverage} />
-            ) : (
-              <FacilitatorPrimaryTaskCard
-                steps={steps}
-                activeStep={activeStep}
-                completeness={completeness}
-                impact={impact}
-                record={record}
-                session={session}
-                canDeclare={canDeclare}
-                onUpdate={update}
-                onOpenWea={onOpenWea}
-                onGoEditProfile={onGoEditProfile}
-                onGoSignWea={onGoSignWea}
-              />
-            )}
-          </Box>
-          <NextBestAction action={nextAction} />
-        </Box>
+          {FACILITATOR_TABS.map((t) => (
+            <Tab
+              key={t.id}
+              value={t.id}
+              id={`tab-${t.id}`}
+              aria-controls={`tabpanel-${t.id}`}
+              sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
+              label={
+                t.id === TAB_IDS.matches && matchedAdopters.length > 0
+                  ? <Badge color="primary" badgeContent={matchedAdopters.length} sx={{ '& .MuiBadge-badge': { right: -14, top: 2 } }}>{t.label}</Badge>
+                  : t.label
+              }
+            />
+          ))}
+        </Tabs>
       </section>
 
-      {/* Facilitator-org setup card (§11 secondary card) — re-homed `MemberOrgSection`. */}
-      <MemberOrgSection kind="facilitator" org={org} onCreateOrg={onCreateOrg} />
+      {/* ── Overview — command-center summary cards + next-best-action. ── */}
+      <WorkspaceTabPanel id={TAB_IDS.overview} active={activeTab}>
+        <section className="section wrap" style={{ paddingTop: '2rem' }}>
+          <FacilitatorCommandCenter
+            orgName={org ? (orgName ?? org.orgName) : orgName}
+            hasOrg={!!org}
+            mouSigned={!!record.attestations.mou}
+            coverageGroups={coverage?.peopleGroupIds.length ?? 0}
+            openMatches={matchedAdopters.length}
+          />
+          <Box sx={{ mt: 2 }}>
+            <NextBestAction action={nextAction} />
+          </Box>
+        </section>
+      </WorkspaceTabPanel>
 
-      {/* Match review queue + update publisher are only meaningful once coverage is published. */}
-      {complete && coverage && (
-        <>
+      {/* ── Coverage (primary task) — declare coverage & capacity + the facilitator-org setup card +
+            the JP projection panel. ── */}
+      <WorkspaceTabPanel id={TAB_IDS.coverage} active={activeTab}>
+        <section className="section wrap" style={{ paddingTop: '2rem' }}>
+          <Typography variant="overline" sx={{ display: 'block', color: 'primary.main', fontWeight: 700, letterSpacing: '.08em', mb: 0.5 }}>
+            Primary task · declare coverage &amp; capacity
+          </Typography>
+          {complete && coverage ? (
+            <FacilitatorCoverageSummary session={session} impact={impact} coverage={coverage} />
+          ) : (
+            <FacilitatorPrimaryTaskCard
+              steps={steps}
+              activeStep={activeStep}
+              completeness={completeness}
+              impact={impact}
+              record={record}
+              session={session}
+              canDeclare={canDeclare}
+              onUpdate={update}
+              onOpenWea={onOpenWea}
+              onGoEditProfile={onGoEditProfile}
+              onGoSignWea={onGoSignWea}
+            />
+          )}
+        </section>
+        {/* Facilitator-org setup card — re-homed `MemberOrgSection`. */}
+        <MemberOrgSection kind="facilitator" org={org} onCreateOrg={onCreateOrg} />
+        <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
+      </WorkspaceTabPanel>
+
+      {/* ── Matches (browse) — the match review queue (JP-introduced adopters + contact exchange). ── */}
+      <WorkspaceTabPanel id={TAB_IDS.matches} active={activeTab}>
+        {publishedCoverage ? (
           <MatchedAdoptersPanel adopters={matchedAdopters} grant={session.grant} />
-          <PublishUpdatesPanel record={record} coverage={coverage} matchedAdopters={matchedAdopters} onUpdate={update} />
-        </>
-      )}
+        ) : (
+          <TabEmptyHint title="Publish your coverage first" body={`${JP.org} matches adopters to you once your coverage is published. Declare coverage & capacity in the Coverage tab to start receiving matches.`} />
+        )}
+      </WorkspaceTabPanel>
 
-      <FacilitatorProjectionPanel impact={impact} record={record} session={session} />
-      <FacilitatorTrustFooter homeUrl={homeUrl} onOpenHome={onOpenHome} />
+      {/* ── Connections — the relationship surface: publish updates to your matched adopters. ── */}
+      <WorkspaceTabPanel id={TAB_IDS.connections} active={activeTab}>
+        {publishedCoverage && coverage ? (
+          <PublishUpdatesPanel record={record} coverage={coverage} matchedAdopters={matchedAdopters} onUpdate={update} />
+        ) : (
+          <TabEmptyHint title="No connections yet" body="Once your coverage is published and JP matches adopters to you, you can publish ongoing updates to your connected adopters here." />
+        )}
+      </WorkspaceTabPanel>
+
+      {/* ── Data & Access — the data/trust footer (spec-248 caveats live here). ── */}
+      <WorkspaceTabPanel id={TAB_IDS.dataAccess} active={activeTab}>
+        <FacilitatorTrustFooter homeUrl={homeUrl} onOpenHome={onOpenHome} />
+      </WorkspaceTabPanel>
+
       <IntranetFooter />
     </>
+  );
+}
+
+// A neutral empty-state for a tab whose content isn't available yet (e.g. Matches/Connections before
+// coverage is published). Keeps the panel mounted + non-empty without changing any section component.
+function TabEmptyHint({ title, body }: { title: string; body: string }) {
+  return (
+    <section className="section wrap" style={{ paddingTop: '2rem' }}>
+      <MuiCard variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>{title}</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.75, lineHeight: 1.6 }}>{body}</Typography>
+        </CardContent>
+      </MuiCard>
+    </section>
   );
 }
 
