@@ -60,6 +60,7 @@ export function openCentralAuthPopup(
   expectedState: string,
   expectedOrigin: string,
   onProgress?: (msg: string) => void,
+  signal?: AbortSignal,
 ): Promise<PopupResult> {
   const popupUrl = redirectUrl + (redirectUrl.includes('?') ? '&' : '?') + 'mode=popup';
   const w = 480;
@@ -84,10 +85,18 @@ export function openCentralAuthPopup(
       if (done) return;
       done = true;
       window.removeEventListener('message', onMessage);
+      signal?.removeEventListener('abort', onAbort);
       if (relay) { relay.onmessage = null; try { relay.close(); } catch { /* ignore */ } }
       clearTimeout(abandonTimeout);
       resolve(r);
     };
+    // Parent-side Cancel: the only reliable way to abort an in-flight popup under COOP (the opener's
+    // `popup.closed` handle is severed, so we can't observe a window-close, and there's no channel a
+    // window-close can signal back on). The relying app wires a visible "Cancel" affordance to an
+    // AbortController; aborting closes the popup (best-effort) and resolves cancelled immediately.
+    const onAbort = () => { try { popup.close(); } catch { /* ignore */ } finish({ status: 'cancelled' }); };
+    if (signal?.aborted) { onAbort(); return; }
+    signal?.addEventListener('abort', onAbort, { once: true });
     if (relay) {
       relay.onmessage = (e: MessageEvent) => {
         const m = e.data as RelayMessage | null;
@@ -138,7 +147,8 @@ export function openCentralAuthPopup(
     window.addEventListener('message', onMessage);
     // Abandon safety net: with our handle severed (COOP) we can't observe the popup closing, so a
     // popup that never returns a result resolves as cancelled after this window instead of hanging
-    // the caller's button forever. A success/decline that DOES come back (relay/postMessage) clears it.
-    const abandonTimeout = window.setTimeout(() => finish({ status: 'cancelled' }), 5 * 60 * 1000);
+    // the caller's button forever. The parent-side Cancel above is the fast path; this is the backstop
+    // for an abandoned popup. A success/decline that DOES come back (relay/postMessage) clears it.
+    const abandonTimeout = window.setTimeout(() => finish({ status: 'cancelled' }), 2 * 60 * 1000);
   });
 }

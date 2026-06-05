@@ -72,6 +72,7 @@ export type ConnectPopupResult =
 export async function startConnectPopup(
   name?: string,
   onProgress?: (msg: string) => void,
+  signal?: AbortSignal,
 ): Promise<ConnectPopupResult> {
   const trimmed = (name ?? '').trim();
   if (trimmed) { try { localStorage.setItem(LAST_NAME_KEY, trimmed); } catch { /* ignore */ } }
@@ -81,7 +82,7 @@ export async function startConnectPopup(
   };
   // expectedOrigin MUST be the RESOLVED authOrigin (audit F3): messages are accepted ONLY from the exact
   // Connect origin this name/credential resolves to, never a module constant or a wildcard.
-  const res = await openCentralAuthPopup(r.url, r.state, r.authOrigin, onProgress);
+  const res = await openCentralAuthPopup(r.url, r.state, r.authOrigin, onProgress, signal);
   if (res.status === 'success') {
     return { status: 'success', authOrigin: r.authOrigin, code: res.code, codeVerifier: r.codeVerifier, stash };
   }

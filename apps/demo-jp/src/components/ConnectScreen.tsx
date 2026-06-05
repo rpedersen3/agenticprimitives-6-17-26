@@ -32,20 +32,19 @@ export function ConnectScreen({ onBack, onConnected }: {
    *  Returns true on success; on a surfaced error we return to the form. */
   onConnected: (r: ConnectPopupSuccess) => Promise<boolean>;
 }) {
-  const [name, setName] = useState<string>(() => {
-    try { return localStorage.getItem(LAST_NAME_KEY) ?? ''; } catch { return ''; }
-  });
+  // Credential-first: the primary path NEVER carries a name, so this starts EMPTY (no LAST_NAME
+  // prefill). A prefilled name would make social login silently bind to that handle. The remembered
+  // last name is read only when the user EXPLICITLY opens the named path (see the disclosure below).
+  const [name, setName] = useState<string>('');
   const [busy, setBusy] = useState(false);
   // Driven by the popup `AC_PROGRESS` messages; shown on the CTA while the popup is open. Falls back to a
   // default opener label.
   const [progress, setProgress] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // spec 258 — the "Use my Impact name instead" disclosure. Collapsed by default for a NEW (nameless)
-  // connect, but AUTO-EXPANDED when a saved Impact name exists (LAST_NAME_KEY) so a returning named
-  // member sees their handle up front and the connect is visibly a NAMED sign-in.
-  const [showNamePanel, setShowNamePanel] = useState<boolean>(() => {
-    try { return !!(localStorage.getItem(LAST_NAME_KEY) ?? '').trim(); } catch { return false; }
-  });
+  // The "Use my Impact name instead" disclosure. ALWAYS collapsed by default — the relying site leads
+  // credential-first and must NOT present name entry (or imply a named bind) up front. Opening it is a
+  // deliberate, intentional fallback for someone who knows the handle they want to open.
+  const [showNamePanel, setShowNamePanel] = useState(false);
   // spec 258 — soft "sign-in was cancelled" banner; cleared on the next cont().
   const [cancelled, setCancelled] = useState(false);
   // popups blocked → co-branded "Impact Community → JP" interstitial, then the redirect.
@@ -54,16 +53,28 @@ export function ConnectScreen({ onBack, onConnected }: {
 
   const ctaRef = useRef<HTMLButtonElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+  // The in-flight popup's AbortController — the parent-side Cancel signals it (the only reliable cancel
+  // under COOP; there is no popup.closed poll). Cleared when launch finishes/returns.
+  const abortRef = useRef<AbortController | null>(null);
+  // The name the active connect is carrying: `undefined` = nameless (the primary, credential-first
+  // path); a handle = the explicit named path. Used by BOTH the popup launch and the popup-blocked
+  // redirect fallback so they agree on whether this is a named or nameless connect.
+  const launchNameRef = useRef<string | undefined>(undefined);
 
   // Focus the primary CTA on mount (spec 258 §9 focus management).
   useEffect(() => { ctaRef.current?.focus(); }, []);
   // When the name panel expands, move focus into the field (spec 258 §9).
   useEffect(() => { if (showNamePanel) nameRef.current?.focus(); }, [showNamePanel]);
 
-  function cont() {
-    // Name is OPTIONAL (credential-first): no empty-name guard. The broker shows its W1 entry.
+  // `named=false` → the primary, credential-first connect (NO name; Impact handles Google/passkey/
+  // wallet and shows the handle after it resolves). `named=true` → the explicit named path; only then
+  // do we carry the typed handle AND remember it as the last name.
+  function cont(named: boolean) {
     setErr(null);
     setCancelled(false);
+    const n = named && trimmed ? trimmed : undefined;
+    launchNameRef.current = n;
+    if (n) { try { localStorage.setItem(LAST_NAME_KEY, n); } catch { /* ignore */ } }
     void launch();
   }
 
@@ -72,8 +83,10 @@ export function ConnectScreen({ onBack, onConnected }: {
   async function launch() {
     setBusy(true); setErr(null);
     setProgress('Opening your Impact home…'); // spec 258 — segue label until the broker posts progress
+    const ac = new AbortController();
+    abortRef.current = ac;
     try {
-      const res = await startConnectPopup(trimmed || undefined, (msg) => setProgress(msg));
+      const res = await startConnectPopup(launchNameRef.current, (msg) => setProgress(msg), ac.signal);
       if (res.status === 'success') {
         // Hand the CODE (only) to the App; it exchanges at /token + sets the session in place.
         const ok = await onConnected(res);
@@ -87,6 +100,7 @@ export function ConnectScreen({ onBack, onConnected }: {
         return;
       }
       if (res.status === 'cancelled') {
+        // Parent-side Cancel (or the 2-min abandon backstop) — soft warn banner, return to the form.
         setBusy(false); setProgress(null);
         setCancelled(true); // soft warn banner — try again below
         return;
@@ -96,7 +110,16 @@ export function ConnectScreen({ onBack, onConnected }: {
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
       setBusy(false); setProgress(null);
+    } finally {
+      abortRef.current = null;
     }
+  }
+
+  // Parent-side Cancel: abort the in-flight popup. The launcher resolves `cancelled`, which clears busy
+  // and shows the soft banner above. We also clear busy defensively so the spinner never sticks.
+  function cancelInFlight() {
+    abortRef.current?.abort();
+    setBusy(false); setProgress(null);
   }
 
   // The popup-blocked redirect fallback: the same `startConnect` ceremony, full-page (stashes PKCE +
@@ -104,7 +127,7 @@ export function ConnectScreen({ onBack, onConnected }: {
   async function redirectFallback() {
     setBusy(true); setErr(null);
     try {
-      await startConnect(trimmed || undefined);
+      await startConnect(launchNameRef.current);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -143,9 +166,9 @@ export function ConnectScreen({ onBack, onConnected }: {
           </Typography>
           <Typography variant="h5" sx={{ mt: 0.5, fontWeight: 800 }}>Connect with {JP.impactName}</Typography>
           <Typography sx={{ mt: 1, color: 'text.secondary', lineHeight: 1.6, fontSize: '.92rem' }}>
-            Use your {JP.impactName} identity to enter {JP.org}. You can adopt a people group or facilitate
-            adoptions after you connect. {JP.org} only receives the access you approve, and your contact
-            details stay private in your home until you choose to share them.
+            Sign in with Google, passkey, or wallet through your {JP.impactName} home. Your {JP.impactName}
+            name is only a public handle &mdash; you do not need it to sign in. {JP.org} only receives the
+            access you approve, and your contact details stay private in your home until you choose to share them.
           </Typography>
 
           <Box sx={{ mt: 1.5 }}>
@@ -174,60 +197,54 @@ export function ConnectScreen({ onBack, onConnected }: {
           </Box>
 
           <Stack spacing={1.25} sx={{ mt: 3 }} aria-busy={busy}>
-            {/* Primary CTA — always visible. Named when a handle is present, nameless otherwise. */}
+            {/* Primary CTA — ALWAYS credential-first / nameless. It never carries a name; Impact handles
+                Google/passkey/wallet in the popup and shows the handle after the credential resolves. */}
             <Button
               ref={ctaRef}
               variant="contained"
               color="primary"
               size="large"
               disabled={busy}
-              onClick={() => cont()}
+              onClick={() => cont(false)}
               startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <span aria-hidden>🌍</span>}
             >
               <span aria-live="polite">
-                {busy
-                  ? (progress ?? 'Opening your Impact home…')
-                  : err
-                    ? 'Try again'
-                    : trimmed
-                      ? `Continue as ${trimmed}`            /* NAMED sign-in — strong, explicit */
-                      : JP.ssoCta}                          {/* nameless / credential-first */}
+                {busy ? (progress ?? 'Opening your Impact home…') : err ? 'Try again' : JP.ssoCta}
               </span>
             </Button>
 
-            {/* Secondary disclosure — collapsed by default. */}
-            {!showNamePanel && (
-              <>
-                <Button
-                  onClick={() => setShowNamePanel(true)}
-                  disabled={busy}
-                  size="small"
-                  sx={{ alignSelf: 'flex-start', color: 'primary.main', textTransform: 'none', textDecoration: 'underline', p: 0, minWidth: 0 }}
-                >
-                  Use my Impact name instead
-                </Button>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  Your Impact name is a public handle people can use to find your agent. You do not need it
-                  to sign back in.
-                </Typography>
-              </>
+            {/* Parent-side Cancel — visible only while the popup is in flight. The only reliable way to
+                abort under COOP (no popup.closed poll). Sits directly under the busy CTA, above the dim. */}
+            {busy && (
+              <Button
+                onClick={cancelInFlight}
+                size="small"
+                sx={{ alignSelf: 'center', color: 'primary.main', textTransform: 'none' }}
+              >
+                Cancel
+              </Button>
+            )}
+
+            {/* Secondary disclosure — collapsed by default. Opening it is the ONLY moment we read the
+                remembered last name (so social login never feels like a named bind). */}
+            {!showNamePanel && !busy && (
+              <Button
+                onClick={() => { try { setName(localStorage.getItem(LAST_NAME_KEY) ?? ''); } catch { /* ignore */ } setShowNamePanel(true); }}
+                size="small"
+                sx={{ alignSelf: 'flex-start', color: 'primary.main', textTransform: 'none', textDecoration: 'underline', p: 0, minWidth: 0 }}
+              >
+                Use my Impact name instead
+              </Button>
             )}
 
             {/* Name panel — expanded inline (no new screen). */}
             {showNamePanel && (
               <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Typography component="label" htmlFor="jp-connect-name" sx={{ fontWeight: 800, fontSize: '.72rem', letterSpacing: '.08em', textTransform: 'uppercase', color: 'text.secondary' }}>
-                  Your {JP.impactName} name
+                  Use my {JP.impactName} name
                 </Typography>
-                {/* When a name is present this is a NAMED sign-in — surface it strongly so the user
-                    knows they're connecting AS that handle (not the nameless credential-first path). */}
-                {trimmed && <Box><Chip size="small" color="success" variant="outlined" label="Named sign-in" /></Box>}
-                <Typography variant="body2" sx={{ color: trimmed ? 'text.primary' : 'text.secondary' }}>
-                  {trimmed ? (
-                    <>You&rsquo;re connecting as <b>{fullName(trimmed)}</b> — your public handle. Clear it below to use Google or a passkey without a name.</>
-                  ) : (
-                    'Your public handle — people can find your agent by this name.'
-                  )}
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Only use this if you know the {JP.impactName} handle you want to open.
                 </Typography>
                 <TextField
                   id="jp-connect-name"
@@ -239,21 +256,27 @@ export function ConnectScreen({ onBack, onConnected }: {
                   size="small"
                   inputProps={{ autoCapitalize: 'none', autoComplete: 'username', spellCheck: false, style: { fontFamily: "'SF Mono','Roboto Mono',monospace" } }}
                   onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-                  onKeyDown={(e) => { if (e.key === 'Enter') cont(); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && trimmed) cont(true); }}
                 />
                 {trimmed && (
                   <Typography component="output" variant="caption" sx={{ color: 'text.secondary', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
                     {fullName(trimmed)} · home at {personalHome(trimmed)}
                   </Typography>
                 )}
-                {!trimmed && (
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    You do not need a name to sign back in — it is a public handle, not a password.
-                  </Typography>
-                )}
-                {/* Hide CLEARS the name so collapsing is a true nameless connect (not a hidden named one). */}
+                {/* The named path's OWN CTA — the only path that does a NAMED connect. The primary CTA
+                    above stays credential-first/nameless. */}
                 <Button
-                  onClick={() => { setName(''); setShowNamePanel(false); }}
+                  variant="contained"
+                  color="primary"
+                  onClick={() => cont(true)}
+                  disabled={busy || !trimmed}
+                  startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <span aria-hidden>🌍</span>}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Continue with this name
+                </Button>
+                <Button
+                  onClick={() => setShowNamePanel(false)}
                   disabled={busy}
                   size="small"
                   sx={{ alignSelf: 'flex-start', color: 'primary.main', textTransform: 'none', textDecoration: 'underline', p: 0, minWidth: 0 }}
