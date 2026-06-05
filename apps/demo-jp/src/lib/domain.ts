@@ -12,10 +12,15 @@
 export const CONNECT_DOMAIN = 'impact-agent.me';
 /** The TLD agent names live under (the `.impact` permissionless subregistry). */
 export const AGENT_NAME_PARENT = 'impact';
-/** Platform (apex) Connect origin — the bootstrap default when a name has no agent.
- *  Overridable at build time with VITE_CENTRAL_AUTH_ORIGIN. */
+/** Platform Connect origin — the bootstrap default when a name has no agent (the name-deferred
+ *  credential-first flow lands here). MUST be the canonical SERVING origin, NOT the bare apex: the
+ *  apex `impact-agent.me` 307-redirects to `www.impact-agent.me`, and a cross-origin `/token`
+ *  exchange can't follow a redirect on its CORS preflight ("Redirect is not allowed for a preflight
+ *  request"). `www` serves directly (verified CORS + `isAllowedIssuerOrigin` single-label) and is
+ *  the `iss` the broker mints there, so `verifyIdToken`'s `iss === authOrigin` holds. Overridable
+ *  at build time with VITE_CENTRAL_AUTH_ORIGIN. */
 export const PLATFORM_AUTH_ORIGIN =
-  (import.meta.env?.VITE_CENTRAL_AUTH_ORIGIN as string | undefined) ?? `https://${CONNECT_DOMAIN}`;
+  (import.meta.env?.VITE_CENTRAL_AUTH_ORIGIN as string | undefined) ?? `https://www.${CONNECT_DOMAIN}`;
 
 /** The label of a name (alice.impact → alice; alice → alice). */
 export function nameLabel(name: string): string {

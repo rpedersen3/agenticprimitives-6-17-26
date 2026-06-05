@@ -3,7 +3,7 @@ import { Box, Card as MuiCard, CardContent, Typography, Link as MuiLink, Stack, 
 import { AgreementTimeline } from './components/AgreementTimeline';
 import type { Address, Hex } from '@agenticprimitives/types';
 import { JP } from './lib/brand';
-import { startSiteEnrollment, startOrgCreation, exchangeCode, verifyIdToken, listRelatedOrgs, type RelatedOrgLink } from './connect-client';
+import { startOrgCreation, exchangeCode, verifyIdToken, listRelatedOrgs, type RelatedOrgLink } from './connect-client';
 import { orgPurpose } from './lib/member-org';
 import { predictOrgAddress } from './lib/onchain';
 import { MemberOrgSection } from './components/MemberOrgSection';
@@ -48,6 +48,7 @@ import { FPG_SEED, findPeopleGroup, formatPopulation, type PeopleGroup } from '.
 import { PeteDashboard, JillDashboard } from './components/OperatorDashboards';
 import { AppShellHeader, type ConnectedIdentity } from './components/AppShellHeader';
 import { ConnectScreen } from './components/ConnectScreen';
+import type { ConnectPopupSuccess } from './lib/connect-launch';
 import { RoleDiscovery } from './components/RoleDiscovery';
 import { RoleHub } from './components/RoleHub';
 import {
@@ -176,7 +177,6 @@ export function App() {
   const [demoPersona, setDemoPersona] = useState<'pete' | 'jill' | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
   /** Bumped whenever the Impact profile / vault is updated externally (e.g. returning from the
    *  member's /profile editor at their Impact home, or after an org-create return). Used as the `key`
    *  on the dashboards so they re-mount and reload the vault from localStorage. */
@@ -338,6 +338,29 @@ export function App() {
     setView('discovery');
   }, [registerGrant]);
 
+  // The single enrollment-completion mechanism, shared by the popup-success path (finishes IN PLACE —
+  // no reload) and the popup-blocked REDIRECT return handler. Exchanges the OIDC code at /token, verifies
+  // the id_token, then establishes the member identity (role-agnostic → discovery → hub). Returns true on
+  // success; on failure it surfaces the error and returns false so the ConnectScreen lets the user retry.
+  const finishConnect = useCallback(async (
+    authOrigin: string,
+    code: string,
+    codeVerifier: string,
+    meta: { name?: string; nonce?: string },
+  ): Promise<boolean> => {
+    try {
+      const tok = await exchangeCode(authOrigin, code, codeVerifier);
+      const claims = await verifyIdToken(authOrigin, tok.idToken, meta.nonce ?? '');
+      const name = claims.agent_name ?? meta.name ?? '';
+      // Role-agnostic: enroll the PERSON; the role is chosen in the hub afterwards (mirrors demo-gs).
+      openMember(tok.idToken, name, tok.delegation);
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'sign-in failed');
+      return false;
+    }
+  }, [openMember]);
+
   const openWorkspace = useCallback((role: Kind) => {
     setDemoPersona(null);
     setActiveRoleState(role);
@@ -352,7 +375,7 @@ export function App() {
     setView('workspace');
   }, []);
 
-  const goConnect = useCallback(() => { setError(null); setBusy(null); setView('connect'); }, []);
+  const goConnect = useCallback(() => { setError(null); setView('connect'); }, []);
   const goHub = useCallback(() => { setDemoPersona(null); setActiveRoleState(null); setView('hub'); }, []);
 
   const signOut = useCallback(() => {
@@ -447,17 +470,9 @@ export function App() {
       setError('Sign-in response was incomplete. Please try again.');
       return;
     }
-    void (async () => {
-      try {
-        const tok = await exchangeCode(stash.authOrigin!, code, stash.codeVerifier!);
-        const claims = await verifyIdToken(stash.authOrigin!, tok.idToken, stash.nonce ?? '');
-        const name = claims.agent_name ?? stash.name ?? '';
-        // Role-agnostic: enroll the PERSON; the role is chosen in the hub afterwards (mirrors demo-gs).
-        openMember(tok.idToken, name, tok.delegation);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'sign-in failed');
-      }
-    })();
+    // The popup-blocked REDIRECT fallback returns here. Delegate to the SAME `finishConnect` the
+    // popup-success path uses (exchange + verify + openMember), so there is one enrollment mechanism.
+    void finishConnect(stash.authOrigin, code, stash.codeVerifier, { name: stash.name, nonce: stash.nonce });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -586,21 +601,9 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Role-agnostic person connect (mirrors demo-gs): launches the SAME `startSiteEnrollment` ceremony,
-  // with NO role in the stash. The role is chosen later in the hub.
-  const beginConnect = useCallback(async (name: string) => {
-    setError(null);
-    try {
-      setBusy('Opening your secure home…');
-      const { url, state, authOrigin, codeVerifier, nonce } = await startSiteEnrollment(name);
-      const stash: EnrollStash = { state, name, authOrigin, codeVerifier, nonce };
-      sessionStorage.setItem(ENROLL_KEY, JSON.stringify(stash));
-      window.location.href = url;
-    } catch (e) {
-      setBusy(null);
-      setError(e instanceof Error ? e.message : "Couldn't start sign-in.");
-    }
-  }, []);
+  // The role-agnostic person connect now lives in the credential-first ConnectScreen (popup-first via
+  // `lib/connect-launch`, redirect as the popup-blocked fallback) — see the `view === 'connect'` render
+  // and the shared `finishConnect`. There is no `beginConnect` redirect-only launcher anymore.
 
   // The header identity pill (connected only; demo surfaces keep the member identity in the pill but
   // flag the demo banner in the body). In a workspace the pill shows the active role; in the hub /
@@ -696,7 +699,12 @@ export function App() {
         )}
         <Box sx={{ maxWidth: 1080, mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 3, sm: 4 } }}>
           {view === 'connect' && (
-            <ConnectScreen busy={busy} error={error} onConnect={(name) => beginConnect(name)} onBack={() => setView('landing')} />
+            <ConnectScreen
+              onBack={() => setView('landing')}
+              onConnected={(r: ConnectPopupSuccess) =>
+                finishConnect(r.authOrigin, r.code, r.codeVerifier, { name: r.stash.name, nonce: r.stash.nonce })
+              }
+            />
           )}
           {view === 'discovery' && (
             <RoleDiscovery
