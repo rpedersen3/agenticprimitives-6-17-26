@@ -23,9 +23,10 @@ export type SessionKind = 'kc' | 'gco';
 /** A connected member's login credential + the grant the app reads/writes their vault through. */
 export interface MemberSession {
   kind: SessionKind;
-  /** The member SA whose vault holds their data (KC person SA, or GCO org SA). */
+  /** The member SA whose vault holds their data (KC person SA, or GCO org SA). The CANONICAL identity. */
   sa: Address;
-  /** Display name (KC name, or the GCO signatory's name). */
+  /** Display name (KC name, or the GCO signatory's name). EMPTY for a name-deferred member (spec 257) —
+   *  they claim a public handle later; the SA, not the name, is load-bearing. */
   name: string;
   /** GCO only: the org display name + the signatory person's name. */
   orgName?: string;
@@ -35,6 +36,10 @@ export interface MemberSession {
   /** Person/KC session only: the id_token, used to query Connect related-orgs for cross-browser GCO
    *  org recognition (lib/gco-discovery.ts). Not needed for vault access. */
   idToken?: string;
+  /** The member's RESOLVED Connect home origin (spec 257). Persisted so cross-browser GCO discovery
+   *  reads the right origin WITHOUT re-deriving a subdomain from the name — which is empty for a
+   *  name-deferred member. Optional for back-compat with pre-existing sessions. */
+  authOrigin?: string;
 }
 
 /** Stored envelope: the session plus the metadata the loader validates (version + savedAt). */
@@ -82,12 +87,17 @@ function validate(kind: SessionKind, parsed: unknown): MemberSession | null {
   // Grant signed against a different DelegationManager (e.g. before a contract redeploy) → its ERC-1271
   // digest no longer matches, so the vault path would hang/fail. Treat as signed-out (fail-closed).
   if (typeof e.dm !== 'string' || e.dm.toLowerCase() !== CONTRACTS.delegationManager.toLowerCase()) return null;
-  if (e.kind !== kind || !e.sa || typeof e.sa !== 'string' || !e.name || typeof e.name !== 'string') return null;
+  // The SA is the canonical identity (REQUIRED + structurally valid). `name` may be EMPTY for a
+  // name-deferred member (spec 257) — it's a display label, not a credential — so we require the
+  // string TYPE but NOT a non-empty value (no silent acceptance of a malformed shape; an absent or
+  // wrong-typed name is still rejected).
+  if (e.kind !== kind || !e.sa || typeof e.sa !== 'string' || typeof e.name !== 'string') return null;
   if (!isValidGrant(e.grant)) return null;
   // Strip the envelope metadata; callers only ever see the MemberSession.
   return {
     kind, sa: e.sa as Address, name: e.name, orgName: e.orgName, signatory: e.signatory,
     grant: e.grant, idToken: typeof e.idToken === 'string' ? e.idToken : undefined,
+    authOrigin: typeof e.authOrigin === 'string' ? e.authOrigin : undefined,
   };
 }
 

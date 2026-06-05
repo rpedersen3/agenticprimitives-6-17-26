@@ -25,7 +25,7 @@ import {
 } from './lib/session';
 import { registerMember } from './lib/member-vault';
 import { discoverGcoSession } from './lib/gco-discovery';
-import { decodeIdToken, exchangeCode, personAddressFromIdToken, startOrgCreation } from './connect-client';
+import { decodeIdToken, exchangeCode, personAddressFromIdToken, resolveAuthOrigin, startOrgCreation } from './connect-client';
 import { CONNECT_KEY, type ConnectStash, type ConnectPopupSuccess } from './lib/connect-launch';
 import { deriveRoleCapabilities, type RoleKind } from './lib/role-capabilities';
 import { loadActiveRole, loadActiveTab, saveActiveRole, saveActiveTab } from './lib/active-role';
@@ -187,17 +187,22 @@ function AppInner() {
         if (!tok.delegation) throw new Error('your home did not return a Switchboard access grant — please retry sign-in');
         // The token `sub` binds the proven credential, not a client name (broker-enforced). When the user
         // entered a name we keep it as the display label; an empty name (credential-first) falls back to
-        // the broker's on-chain `agent_name` claim (the public handle the home assigned), never a
-        // client-supplied substitute — then to the SA as a last resort.
-        const displayName = stash.name?.trim() || decodeIdToken(tok.idToken).agent_name || person;
-        const session: MemberSession = { kind: 'kc', sa: person, name: displayName, grant: tok.delegation, idToken: tok.idToken };
+        // the broker's on-chain `agent_name` claim (the public handle the home assigned). A name-deferred
+        // member (spec 257) has NEITHER — the broker OMITS the `agent_name` claim — so the display name is
+        // EMPTY (the `?? 'you'` fallbacks render it). We NEVER substitute the raw SA address for a name:
+        // the SA is the canonical identity, not a display label, and must not leak a junk home subdomain.
+        const displayName = stash.name?.trim() || decodeIdToken(tok.idToken).agent_name || '';
+        const session: MemberSession = { kind: 'kc', sa: person, name: displayName, grant: tok.delegation, idToken: tok.idToken, authOrigin };
         setSession(session);
         saveActiveRole(person, 'kc');
         await registerMember({ kind: 'kc', sa: person, name: displayName, delegation: tok.delegation });
         // Recognize a GCO org this person ALREADY created (cross-browser) so the hub offers "Open GCO
         // workspace" instead of a duplicate "set up an organization". Best-effort recognition — absent /
         // unreachable → null, and they simply see the set-up option.
-        try { const existingGco = await discoverGcoSession(displayName, tok.idToken); if (existingGco) setSession(existingGco); } catch { /* best-effort */ }
+        // spec 257: discovery reads on the RESOLVED `authOrigin` (in scope here), NOT a name-derived
+        // subdomain — a name-deferred member has no name to derive one from. `displayName` ('' when
+        // deferred) is only the session's display label.
+        try { const existingGco = await discoverGcoSession(authOrigin, displayName, tok.idToken); if (existingGco) setSession(existingGco); } catch { /* best-effort */ }
         setActiveRoleState('kc');
         if (opts?.inPlace) {
           // POPUP success: no full-reload discovery screen — set the session (pill updates), hydrate in
@@ -251,8 +256,15 @@ function AppInner() {
     void setActiveContext({ persona: ready, session: loadSession(ready) }).catch(() => { /* loadError() */ });
     // Returning person with a saved person session but no local GCO session → re-discover an org they
     // already created (a different browser, or the gco session was cleared) so it's recognized.
+    // spec 257: read on the persisted `authOrigin` (resolved at sign-in), NOT a subdomain re-derived
+    // from the name — a name-deferred member has an EMPTY name. Older sessions without `authOrigin`
+    // fall back to deriving it from the name (those members always had a name).
     if (kc?.idToken && !gco) {
-      void discoverGcoSession(kc.name, kc.idToken).then((g) => { if (g) setSession(g); }).catch(() => { /* best-effort */ });
+      void (async () => {
+        const origin = kc.authOrigin ?? (await resolveAuthOrigin(kc.name));
+        const g = await discoverGcoSession(origin, kc.name, kc.idToken!);
+        if (g) setSession(g);
+      })().catch(() => { /* best-effort */ });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -323,16 +335,24 @@ function AppInner() {
   // keep the underlying member identity in the header but flag the demo banner in the body).
   // In a workspace the pill shows the active role; in the hub (no active workspace) it shows the name
   // + "choose a workspace" (activeRole === null).
+  // spec 257: a name-deferred member's session `name` is the EMPTY string (not null), so use `||`
+  // (not `??`) so an empty name falls through to "you" — NEVER render an address or a blank label.
   const identity: ConnectedIdentity | null = connected
     ? {
-        name: kcSession?.name ?? gcoSession?.signatory ?? gcoSession?.name ?? 'you',
+        name: kcSession?.name || gcoSession?.signatory || gcoSession?.name || 'you',
         activeRole: view === 'workspace' && !demoPersona ? activeRole : null,
       }
     : null;
 
   const onOpenHome = () => {
-    const n = kcSession?.name ?? gcoSession?.signatory ?? gcoSession?.name;
-    if (n) window.open(`https://${personalHome(n)}`, '_blank', 'noopener');
+    // A named member's home is their `<label>.impact-agent.me` subdomain; a name-deferred member has
+    // no subdomain yet, so open the platform apex (resolveAuthOrigin('')) — never personalHome('')
+    // (a junk `yourname.…` placeholder). `||` so an empty name routes to the apex.
+    const n = kcSession?.name || gcoSession?.signatory || gcoSession?.name;
+    void (async () => {
+      const origin = n ? `https://${personalHome(n)}` : await resolveAuthOrigin('');
+      window.open(origin, '_blank', 'noopener');
+    })();
   };
 
   return (

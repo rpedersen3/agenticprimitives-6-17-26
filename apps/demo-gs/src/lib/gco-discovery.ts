@@ -20,10 +20,20 @@ import type { MemberSession } from './session';
 
 const GCO_PURPOSE = 'gs-gco-org';
 
-/** Rebuild the `gco` session for an org the connected person already created, or null if none. */
-export async function discoverGcoSession(personName: string, idToken: string): Promise<MemberSession | null> {
+/** Rebuild the `gco` session for an org the connected person already created, or null if none.
+ *
+ *  `authOrigin` is the person's RESOLVED Connect home origin (spec 257): a name-deferred member
+ *  has no public name to derive a subdomain from, so the related-orgs read is keyed on the origin
+ *  the caller already resolved at sign-in — never re-derived from a name. `personName` is used
+ *  ONLY for the rebuilt session's display fields (`name`/`signatory`), and is '' for a nameless
+ *  member (the SA stays the canonical identity). */
+export async function discoverGcoSession(
+  authOrigin: string,
+  personName: string,
+  idToken: string,
+): Promise<MemberSession | null> {
   let orgs;
-  try { orgs = await listRelatedOrgs(personName, idToken); } catch { return null; }
+  try { orgs = await listRelatedOrgs(authOrigin, idToken); } catch { return null; }
   const gcoOrgs = orgs.filter((o) => o.purpose === GCO_PURPOSE);
   if (gcoOrgs.length === 0) return null;
 

@@ -95,7 +95,7 @@ state, nonce, code_challenge, code_challenge_method=S256
 Agent-native **extension params** (drive the parallel delegation issuance, §5):
 
 ```
-agent_name=rpedersen.agent       # the person to sign in as (resolves → CAIP-10 sub)
+agent_name=rpedersen.agent       # OPTIONAL — the public handle to sign in as (resolves → CAIP-10 sub)
 delegate=0x…                     # the relying site's delegate SA (delegation recipient)
 delegation_template=org-create   # which caveat template the client requests (registry-gated)
 ```
@@ -104,6 +104,20 @@ The OP runs the credential ceremony (ROOT passkey), resolves `agent_name → age
 mints (a) the `id_token` and (b) the caveated delegation `agent → delegate`, stashes
 both under a **single-use, short-TTL code**, and redirects back to `redirect_uri`
 with `?code=…&state=…`. The code, not the tokens, travels in the URL.
+
+**`agent_name` is OPTIONAL (spec 257 §11, name-deferred connect).** When `/authorize`
+omits it — and likewise the SPA's `parseEnrollReq` and the server's `/authorize-grant`
+gate treat it as optional — the OP still runs the credential ceremony and binds `sub`
+to the **proven credential** (the canonical identity), but there is no name to resolve:
+the Google path **deploys a nameless SA** (empty `initialize`, the subregistry slot left
+free) and the minted `id_token` **OMITS the `agent_name` claim**. `sub` /
+`canonical_agent_id` is the **sole load-bearing identity**; the member claims a public
+handle LATER, by choice. Every OTHER `/authorize` + `/authorize-grant` invariant is
+UNCHANGED — `client_id`, `redirect_uri`, `delegate` (registry-derived, SEC-001),
+`delegation_template` (registry-gated), the redirect-origin allowlist (SEC-005), and
+`S256` PKCE all stay mandatory. Only the **name** became optional; no delegate / redirect
+/ template / origin / alg check is weakened. (Scope: Google; passkey-new stays named —
+its label is load-bearing in the subdomain-isolated RP ID. App-flow only — no engine change.)
 
 ### 4.3 Token — `POST /token`
 
@@ -148,6 +162,12 @@ against `iss`'s `jwks_uri`.
 - `nonce` echoed verbatim (replay binding).
 - `agent_name` / `canonical_agent_id` are additive extension claims (decision
   2026-05-27: standard + agent-extension claims, no separate `/userinfo` round-trip).
+- `agent_name` is **OPTIONAL** (spec 257 §11). A **name-deferred** member (Google, no name
+  typed or assigned at connect) has a nameless SA, so the OP **OMITS** the `agent_name`
+  claim entirely (it is not emitted as an empty string — `@agenticprimitives/connect`'s
+  `mintIdToken` already drops a falsy `agentName`). Relying apps MUST treat `agent_name`
+  as absent-possible and fall back to `sub` / `canonical_agent_id` for identity, never to a
+  client-supplied substitute or the raw SA address as a display name.
 
 ## 6. Client registry
 

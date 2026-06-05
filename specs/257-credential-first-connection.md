@@ -188,6 +188,35 @@ firewall are undisturbed.
   lands in the portal with **no name typed or assigned**, the slot is free, and claiming a custom handle later
   via the card lands `register+setPrimary` with no `AlreadyClaimed`. (Replaces the earlier W4 silent-auto-name
   interim, which consumed the slot.)
+  - **Phase 1.5 (extended) — name-deferral through the RELYING-APP OIDC enroll (Google only, app-flow only):**
+    the home self-serve path above is now matched by the **relying-app `/authorize` enroll** (the popup-over-the-
+    dimmed-site connect, e.g. demo-gs Global.Church). A first-time user who connects to a relying app, picks
+    **Google**, and types **no name** gets a **nameless person SA**, the relying-app site-login delegation is
+    still granted, and an `id_token` is still issued **with no `agent_name` claim** — they claim a public handle
+    later in their portal. **Pure app-flow change, NO package / contract / demo-a2a change** (the `id_token` mint
+    already omits an empty `agent_name`; the nameless deploy reuses `POST /custody/google/bootstrap`):
+    - `agent_name` is made **OPTIONAL** through the broker enroll gates — the SPA's `parseEnrollReq`
+      (`useEnrollReq.ts`) and the server's `POST /oidc/authorize-grant` both drop `agent_name` from their
+      required-field checks and store it as `''` when absent. **Every other gate is unchanged**: `client_id`,
+      `redirect_uri`, the registry-derived `delegate` (SEC-001), `delegation_template` (registry-gated), the
+      redirect-origin allowlist (SEC-005), the exact-origin `postMessage` (audit-F3), and ES256 (SEC-002/018).
+      Only the **name** became optional — no delegate / redirect / template / origin / alg check is weakened.
+    - `GoogleEnrollResume` deploys **nameless** on the brand-new path (`secureHomeNoName({ token })` instead of
+      the named `secureHome(null, name, 'google')`), and gates the brand-new-vs-existing decision on
+      **deployment** (`useSession().agentDeployed`), not name — so a RETURNING nameless member (no `agent_name`)
+      takes the existing-home branch instead of re-securing an already-deployed SA. The "one Google account, one
+      home" mismatch screen self-skips when the requested name is empty.
+    - The relying app (demo-gs) switches its discovery reads **off the name onto the resolved `authOrigin`**: a
+      nameless person must NEVER yield a junk `<0x…>.impact-agent.me` subdomain. `listRelatedOrgs` /
+      `discoverGcoSession` take the resolved Connect origin (persisted on the session) directly rather than
+      re-deriving it from a name; the displayed name falls back to `agent_name` then to `'you'`, **never** to the
+      raw SA address; and "open my home" routes a nameless member to the platform apex, not `personalHome('')`.
+    - **Scope:** Google only (passkey-new stays named — its label is load-bearing in the subdomain RP ID); the
+      wallet-via-enroll path is reached only after a typed name, so it is untouched. The NAMED path and
+      `org-create` (template=`org-create`) are unregressed. **Done when:** a first-time demo-gs Google connect
+      with no name typed lands the member in their workspace (identity shows "you"), a nameless `id_token`
+      carries no `agent_name`, their site-login grant is present, and a returning nameless member is recognized
+      without re-securing.
 - **Phase 2 — Recovery readiness + ceremony (closes the lockout risk):** "Add trusted recovery people" + 2-of-3
   readiness badge; the three recovery sub-flows on `RecoverAccount`; plain-language copy; early amber nudge for
   Google-only members; reconnect-vs-recovery boundary enforced. **Done when:** a member who lost all personal

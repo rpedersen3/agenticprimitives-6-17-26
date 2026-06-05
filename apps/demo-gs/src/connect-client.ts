@@ -118,9 +118,13 @@ export interface RelatedOrgLink {
 }
 
 /** ADR-0025: ask Connect (the person's home) for the orgs related to THIS app — instead
- *  of reading a local person→org store. Person-session-authorized (the id_token). */
-export async function listRelatedOrgs(name: string, idToken: string): Promise<RelatedOrgLink[]> {
-  const authOrigin = await resolveAuthOrigin(name);
+ *  of reading a local person→org store. Person-session-authorized (the id_token).
+ *
+ *  Takes the RESOLVED `authOrigin` directly (NOT a name): a name-deferred member (spec 257)
+ *  has NO public name, so we must NEVER re-derive their home subdomain from a name — the
+ *  caller already resolved their Connect origin at sign-in. A named member passes the same
+ *  `personalAuthOrigin(label)` value, so behavior is identical. */
+export async function listRelatedOrgs(authOrigin: string, idToken: string): Promise<RelatedOrgLink[]> {
   const url = new URL('/connect/related-orgs', authOrigin);
   url.searchParams.set('client_id', CLIENT_ID);
   const r = await fetch(url.toString(), { headers: { authorization: `Bearer ${idToken}` } });
