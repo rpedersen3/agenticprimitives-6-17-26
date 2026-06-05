@@ -37,8 +37,12 @@ export function ConnectScreen({ onBack, onConnected }: {
   // default opener label.
   const [progress, setProgress] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // spec 258 — the secondary "Use my Impact name instead" disclosure (collapsed by default).
-  const [showNamePanel, setShowNamePanel] = useState(false);
+  // spec 258 — the "Use my Impact name instead" disclosure. Collapsed by default for a NEW
+  // (nameless) connect, but AUTO-EXPANDED when a saved Impact name exists (LAST_NAME_KEY) so a
+  // returning named member sees their handle up front and the connect is visibly a NAMED sign-in.
+  const [showNamePanel, setShowNamePanel] = useState<boolean>(() => {
+    try { return !!(localStorage.getItem(LAST_NAME_KEY) ?? '').trim(); } catch { return false; }
+  });
   // spec 258 — soft "sign-in was cancelled" banner; cleared on the next cont().
   const [cancelled, setCancelled] = useState(false);
   // popups blocked → co-branded "Global.Church → Impact" interstitial, then the redirect.
@@ -137,7 +141,13 @@ export function ConnectScreen({ onBack, onConnected }: {
           <button ref={ctaRef} className="btn-sso" onClick={() => void cont()} disabled={busy} title={GS.ssoCta}>
             <span className="btn-sso-glyph" aria-hidden="true">{busy ? <Spinner /> : '🌐'}</span>
             <span aria-live="polite">
-              {busy ? (progress ?? 'Opening your Impact home…') : (err ? 'Try again' : `Continue with ${GS.community}`)}
+              {busy
+                ? (progress ?? 'Opening your Impact home…')
+                : err
+                  ? 'Try again'
+                  : trimmed
+                    ? `Continue as ${trimmed}`           /* NAMED sign-in — strong, explicit */
+                    : `Continue with ${GS.community}`}    {/* nameless / credential-first */}
             </span>
           </button>
 
@@ -160,8 +170,15 @@ export function ConnectScreen({ onBack, onConnected }: {
               <label style={{ fontSize: '.72rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--c-g500)' }}>
                 Your Impact name
               </label>
-              <p style={{ fontSize: '.82rem', color: 'var(--c-g600)', margin: 0 }}>
-                Your public handle — people can find your agent by this name.
+              {/* When a name is present this is a NAMED sign-in — surface it strongly so the user
+                  knows they're connecting AS that handle (not the nameless credential-first path). */}
+              {trimmed && <div><Pill tone="ok">Named sign-in</Pill></div>}
+              <p style={{ fontSize: '.82rem', color: trimmed ? 'var(--c-g700)' : 'var(--c-g600)', margin: 0 }}>
+                {trimmed ? (
+                  <>You&rsquo;re connecting as <strong>{toAgentName(trimmed)}</strong> — your public handle. Clear it below to use Google or a passkey without a name.</>
+                ) : (
+                  'Your public handle — people can find your agent by this name.'
+                )}
               </p>
               <TextField
                 inputRef={nameRef}
@@ -175,10 +192,13 @@ export function ConnectScreen({ onBack, onConnected }: {
                   {toAgentName(trimmed)} · home at {personalHome(trimmed)}
                 </output>
               )}
-              <p style={{ fontSize: '.78rem', color: 'var(--c-g500)', margin: 0 }}>
-                You do not need a name to sign back in — it is a public handle, not a password.
-              </p>
-              <button onClick={() => setShowNamePanel(false)} style={linkBtn} disabled={busy}>
+              {!trimmed && (
+                <p style={{ fontSize: '.78rem', color: 'var(--c-g500)', margin: 0 }}>
+                  You do not need a name to sign back in — it is a public handle, not a password.
+                </p>
+              )}
+              {/* Hide CLEARS the name so collapsing is a true nameless connect (not a hidden named one). */}
+              <button onClick={() => { setName(''); setShowNamePanel(false); }} style={linkBtn} disabled={busy}>
                 Hide — use Google or passkey without a name
               </button>
             </div>
