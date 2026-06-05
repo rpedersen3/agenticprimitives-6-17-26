@@ -171,6 +171,23 @@ firewall are undisturbed.
   first; "We found your home" resolution; account chooser; name demoted to fallback. (FR-1..4, FR-9, FR-10 —
   mostly wiring.) **Done when:** a returning member signs in with Google → their home → into the relying app
   **without typing a name**, across ≥2 apps from one sign-in; a new member gets a home from one Google tap.
+- **Phase 1.5 — True name-deferral (no name typed OR assigned at onboarding):** a first-time **Google** member
+  is deployed **nameless** — the server bootstrap (`POST /custody/google/bootstrap`, demo-a2a) deploys their
+  C_sub-custodied SA with **empty callData**, so the `register`/`setPrimaryName` calls are dropped and the
+  member's single subregistry slot is left **free**. The public name is claimed **later, by choice**, via the
+  portal's `ClaimPublicNameCard` (greenfield `08`) using the existing `claimName` primitive, signed by the same
+  C_sub through `/custody/google/sign`. The portal gate (`(portal)/layout.tsx`) keys on **deployment**
+  (`BasicProfile.deployed`, an on-chain `isDeployed` read in `/me/profile`), **not name** — so a deployed-but-
+  nameless home falls through to the portal instead of being trapped in secure-home. **Pure flow change — no
+  Solidity, no redeploy** (`AgentAccount.initialize` takes no name; the deploy userOp already supports `'0x'`
+  callData; the custody signer already signs arbitrary userOps). **Constraints:** the subregistry is
+  one-name-per-caller, so once a member *holds* a name, *changing* it still needs a subregistry rename/release
+  (a later contract change) — the card states this honestly for already-named members (ADR-0013). **Passkey-new
+  stays named** (the RP ID is `<label>.impact-agent.me`, so the label is load-bearing in the CREATE2 rpIdHash —
+  true name-free new-passkey needs a subdomain redesign, out of scope). **Done when:** a fresh Google sign-in
+  lands in the portal with **no name typed or assigned**, the slot is free, and claiming a custom handle later
+  via the card lands `register+setPrimary` with no `AlreadyClaimed`. (Replaces the earlier W4 silent-auto-name
+  interim, which consumed the slot.)
 - **Phase 2 — Recovery readiness + ceremony (closes the lockout risk):** "Add trusted recovery people" + 2-of-3
   readiness badge; the three recovery sub-flows on `RecoverAccount`; plain-language copy; early amber nudge for
   Google-only members; reconnect-vs-recovery boundary enforced. **Done when:** a member who lost all personal
