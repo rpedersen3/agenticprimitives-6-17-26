@@ -15,6 +15,7 @@ import { GS } from '../lib/gs-brand';
 import { personalHome, toAgentName } from '../lib/domain';
 import { startConnect, LAST_NAME_KEY } from '../lib/connect-launch';
 import { Banner, Card, Pill, Spinner, TextField } from './ui';
+import { HandoffBridge } from './HandoffBridge';
 
 export function ConnectScreen({ onBack }: {
   /** Back to the landing. */
@@ -25,18 +26,35 @@ export function ConnectScreen({ onBack }: {
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Spec 255 W2 — show the method-agnostic handoff bridge BEFORE firing startConnect (its PKCE stash +
+  // redirect must not run until the user confirms on the bridge, or cancels back to the form).
+  const [showBridge, setShowBridge] = useState(false);
   const trimmed = name.trim();
 
-  async function cont() {
+  function cont() {
     if (!trimmed) { setErr(`Choose your ${GS.community} name (e.g. rich-pedersen).`); return; }
+    setErr(null);
+    setShowBridge(true);
+  }
+
+  // The bridge's "continue" actually launches the ceremony (stashes PKCE + redirects; same flow as
+  // OnboardPanel). It does NOT touch the connect-client or the App's connect-return handler.
+  async function launch() {
+    setShowBridge(false);
     setBusy(true); setErr(null);
     try {
       // Role-agnostic: everyone connects as a PERSON. The role is chosen in the hub afterwards.
-      await startConnect(trimmed); // stashes PKCE + redirects; same flow as OnboardPanel
+      await startConnect(trimmed);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
       setBusy(false);
     }
+  }
+
+  if (showBridge) {
+    // METHOD-AGNOSTIC variant: the connect entry hasn't chosen passkey vs Google yet (the method is
+    // picked at the Impact home), so the bridge carries domain reassurance only — no passkey jargon.
+    return <HandoffBridge variant="new-user" onContinue={() => void launch()} onCancel={() => setShowBridge(false)} />;
   }
 
   return (
@@ -72,8 +90,11 @@ export function ConnectScreen({ onBack }: {
         <div style={{ fontSize: '.82rem', color: 'var(--c-primary)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <button onClick={onBack} style={linkBtn}>← Back</button>
         </div>
+        {/* Spec 255 W1.3 — set the tap-count expectation. This entry can't tell new vs returning, so we
+            use the new-user copy (two confirmations: create the key, then approve the setup). */}
         <span className="soon" style={{ background: 'var(--c-g50)', borderColor: 'var(--c-g200)', color: 'var(--c-g600)' }}>
-          You&rsquo;ll confirm with your device at <b>{personalHome(trimmed || 'your-name')}</b>, then come back here.
+          At your Impact home you&rsquo;ll confirm twice — once to create your key (one time, forever), then
+          once to approve your setup. Then you&rsquo;ll come back here.
         </span>
       </div>
     </Card>

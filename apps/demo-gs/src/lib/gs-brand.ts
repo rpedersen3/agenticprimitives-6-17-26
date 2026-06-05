@@ -30,8 +30,11 @@ export const GS = {
       who: 'Mission organizations · churches · networks with a skill or capability gap',
       body: 'You have a ministry gap. Set up your organization, declare what skill or capability you need — where, and for what cause — and Global Switchboard matches you with a Kingdom Consultant who can serve.',
       cta: 'Register a GCO organization',
+      // Spec 255 W1.4 — split the combined "secure your home + register your name" step into two
+      // explicit steps, with a "done together in one tap" note so the device confirmations are expected.
       steps: [
-        'Connect via Global.Church — your identity and a private vault, set up in one step.',
+        'Create your key at your Global.Church home — a passkey on this device, one time, forever.',
+        'Approve your setup — your home starts and your name is registered (these two are done together in one tap).',
         'Set up your organization — the org that takes the GCO (Great Commission Organization) role; held in your vault, custodied by your credential.',
         'Add your organization profile + a contact released only when a connection is accepted.',
         'Post a skill Need — the skill(s) required, region, cause, languages, and commitment.',
@@ -43,8 +46,10 @@ export const GS = {
       who: 'Kingdom Consultants · individuals serving the Great Commission with a skill',
       body: 'You have a skill to offer. Publish an expertise profile and Global Switchboard matches you with Great Commission Organizations that need exactly what you can serve with.',
       cta: 'Register as a KC expert',
+      // Spec 255 W1.4 — split the combined "secure your home + register your name" step into two.
       steps: [
-        'Connect via Global.Church — your identity and a private vault.',
+        'Create your key at your Global.Church home — a passkey on this device, one time, forever.',
+        'Approve your setup — your home starts and your name is registered (these two are done together in one tap).',
         'A KC is an individual — no organization to set up; you act as your own person agent.',
         'Publish your expertise Offering — the skills you serve with, regions, causes, languages, availability, evidence.',
         'Your skills become vault-resident claim credentials pointing to the on-chain skill registry.',

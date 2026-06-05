@@ -13,10 +13,26 @@ import { Banner, Card, Pill } from './ui';
 
 interface Step { label: string; done: boolean }
 
-export function RoleDiscovery({ kind, onRetry }: { kind: RoleKind; onRetry: () => void }) {
+export function RoleDiscovery({ kind, onRetry, name, orgName }: {
+  kind: RoleKind;
+  onRetry: () => void;
+  /** The connected member's name (for the W4.2 receipt strip). */
+  name?: string;
+  /** The created org's name, for a GCO org-create return (the W4.2 receipt strip). */
+  orgName?: string;
+}) {
   useSyncExternalStore(subscribe, version, version);
   const hydrated = isHydrated();
   const err = loadError();
+
+  // Spec 255 W4.2 — a confirmation receipt for what just happened at the home, shown while the entitled
+  // view hydrates; it dismisses when hydration completes (the parent routes away then). No receipt on a
+  // vault error (the error banner below owns that case).
+  const receipt = !hydrated && !err
+    ? kind === 'gco'
+      ? `✓ ${orgName ?? 'Your organization'} is created and connected to Switchboard`
+      : `✓ Your Impact home is ready · welcome, ${name ?? 'there'}`
+    : null;
 
   // The store hydrates the whole entitled view in one pass, so we model the timeline against the two
   // observable signals: verified sign-in (we got here from a return), and the vault read completing.
@@ -42,6 +58,7 @@ export function RoleDiscovery({ kind, onRetry }: { kind: RoleKind; onRetry: () =
 
   return (
     <Card style={{ maxWidth: 560, margin: '0 auto' }}>
+      {receipt && <div style={{ marginBottom: '1rem' }}><Banner tone="ok">{receipt}</Banner></div>}
       <div className="eyebrow">Setting up your workspace</div>
       <h2 style={{ fontSize: '1.35rem', marginTop: '.35rem' }}>Connection status</h2>
 

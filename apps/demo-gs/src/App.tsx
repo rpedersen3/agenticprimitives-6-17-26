@@ -34,6 +34,7 @@ import { personalHome } from './lib/domain';
 import { AppShellHeader, type ConnectedIdentity } from './components/AppShellHeader';
 import { Landing } from './components/Landing';
 import { ConnectScreen } from './components/ConnectScreen';
+import { HandoffBridge } from './components/HandoffBridge';
 import { RoleDiscovery } from './components/RoleDiscovery';
 import { RoleHub } from './components/RoleHub';
 import { OnboardPanel } from './components/OnboardPanel';
@@ -322,7 +323,14 @@ function AppInner() {
 
           {view === 'connect' && <ConnectScreen onBack={() => setView('landing')} />}
 
-          {view === 'discovery' && <RoleDiscovery kind={discoverKind} onRetry={() => void activate(discoverKind)} />}
+          {view === 'discovery' && (
+            <RoleDiscovery
+              kind={discoverKind}
+              onRetry={() => void activate(discoverKind)}
+              name={connectedPersonName || identity?.name}
+              orgName={gcoSession?.orgName ?? gcoSession?.name}
+            />
+          )}
 
           {view === 'hub' && (
             <RoleHub
@@ -404,9 +412,19 @@ function GcoOrgCreate({ signatory, onSignOut }: { signatory: string; onSignOut: 
   const [orgName, setOrgName] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Spec 255 W2 — show the org-create handoff bridge BEFORE firing startOrgCreation (its PKCE stash +
+  // redirect must not run until the user confirms on the bridge, or cancels back to the form).
+  const [showBridge, setShowBridge] = useState(false);
 
-  async function createOrg() {
+  function createOrg() {
     if (!orgName.trim()) { setErr('Name the organization that takes the GCO role.'); return; }
+    setErr(null);
+    setShowBridge(true);
+  }
+
+  // The bridge's "continue" launches the real ceremony.
+  async function launchOrg() {
+    setShowBridge(false);
     setBusy(true); setErr(null);
     try {
       // grantOrg = Jane's REAL deployed Switchboard org SA (NOT the local predicted address) → the home
@@ -420,6 +438,17 @@ function GcoOrgCreate({ signatory, onSignOut }: { signatory: string; onSignOut: 
       setErr(e instanceof Error ? e.message : String(e));
       setBusy(false);
     }
+  }
+
+  // The org-create bridge is the PASSKEY-known path → full one-step treatment (this is the connected
+  // person's known credential at their home), with the org name woven into the one-step preview.
+  if (showBridge) {
+    return (
+      <>
+        <IntranetHeader label={`${signatory} · connected`} role="GCO Organization" onSignOut={onSignOut} />
+        <HandoffBridge variant="org-create" orgName={orgName.trim()} onContinue={() => void launchOrg()} onCancel={() => setShowBridge(false)} />
+      </>
+    );
   }
 
   return (
@@ -437,10 +466,10 @@ function GcoOrgCreate({ signatory, onSignOut }: { signatory: string; onSignOut: 
         <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '.6rem', maxWidth: 460 }}>
           <TextField
             value={orgName} placeholder="GCO organization name (e.g. Hope Church Missions Team)" disabled={busy}
-            onChange={setOrgName} onEnter={() => void createOrg()}
+            onChange={setOrgName} onEnter={createOrg}
             style={{ padding: '.7rem .9rem', fontSize: '.95rem', borderRadius: 10, border: '1.5px solid var(--c-g300)', background: '#fff' }}
           />
-          <button className="btn-sso" onClick={() => void createOrg()} disabled={!orgName.trim() || busy}>
+          <button className="btn-sso" onClick={createOrg} disabled={!orgName.trim() || busy}>
             <span className="btn-sso-glyph" aria-hidden="true">{busy ? <Spinner /> : '🏛️'}</span>
             {busy ? 'Opening your home…' : 'Create the GCO organization'}
           </button>
