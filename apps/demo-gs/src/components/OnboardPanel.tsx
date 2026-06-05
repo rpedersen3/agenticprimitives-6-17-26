@@ -1,42 +1,27 @@
-// The onboarding landing for a new member (mirrors demo-jp's OnboardPanel). Shows the flow steps,
-// takes a Global.Church name, previews <name>.impact-agent.me, and connects via the shared identity
-// (KC = individual person login; GCO = person login + create the org that holds the GCO role).
+// The session-less workspace fallback for a new/returning member (mirrors demo-jp's OnboardPanel).
+// Spec 258: credential-first + name-deferred. This panel is CONTENT-ONLY — it explains the role's
+// flow and then routes to the SAME credential-first ConnectScreen via `onConnect`. It NO LONGER
+// takes a Global.Church name or calls `startConnect` directly: a missing session must never gate the
+// user behind a name-required, redirect-only second sign-in mechanism (ADR-0013 "one mechanism";
+// product-analysis A7/A8). The name is a PUBLIC HANDLE chosen (optionally) on the connect card, not a
+// login key.
 // Wave 2 (spec 252): members come ONLY from a real Connect sign-in — there is NO sample identity. A
 // sample identity has no SA and cannot sign a delegation, so it could never write its own vault.
 // Once connected the view becomes the member intranet (driven by the session in `lib/session.ts`).
 
-import { useState } from 'react';
 import { GS, type OnboardKind } from '../lib/gs-brand';
-import { personalHome, toAgentName } from '../lib/domain';
-import { LAST_NAME_KEY, startConnect } from '../lib/connect-launch';
-import { Banner, Card, Spinner, TextField } from './ui';
+import { Card } from './ui';
 
-// Stash key + shape now live in `lib/connect-launch` (shared with ConnectScreen); re-exported here
-// for the App's connect-return handler, which still imports them from OnboardPanel.
+// Stash key + shape live in `lib/connect-launch` (shared with ConnectScreen); re-exported here for
+// any consumer that still imports them from OnboardPanel (harmless — the canonical source is
+// `lib/connect-launch`).
 export { CONNECT_KEY, type ConnectStash } from '../lib/connect-launch';
 
-// Both roles first enroll the PERSON via the shared identity (site-login). A KC then acts as that
+// Both roles first enroll the PERSON via the shared credential-first connect. A KC then acts as that
 // individual; a GCO signatory creates the org that holds the GCO role as a SECOND step from inside
 // the intranet (org-create needs an existing person — exactly demo-jp's Adopter two-step).
-export function OnboardPanel({ kind }: { kind: OnboardKind }) {
+export function OnboardPanel({ kind, onConnect }: { kind: OnboardKind; onConnect: () => void }) {
   const p = GS.paths[kind];
-  const [name, setName] = useState<string>(() => {
-    try { return localStorage.getItem(LAST_NAME_KEY) ?? ''; } catch { return ''; }
-  });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const trimmed = name.trim();
-
-  async function connect() {
-    if (!trimmed) { setErr(`Choose your ${GS.community} name (e.g. rich-pedersen).`); return; }
-    setBusy(true); setErr(null);
-    try {
-      await startConnect(trimmed); // role-agnostic person login; stashes PKCE + redirects to the home
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-      setBusy(false);
-    }
-  }
 
   return (
     <Card style={{ maxWidth: 720 }}>
@@ -55,32 +40,20 @@ export function OnboardPanel({ kind }: { kind: OnboardKind }) {
       </p>
 
       <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '.6rem', maxWidth: 460 }}>
-        <label style={{ fontSize: '.78rem', fontWeight: 800, color: 'var(--c-g700)', letterSpacing: '.02em' }}>Your {GS.community} name</label>
-        <TextField
-          value={name} placeholder="e.g. rich-pedersen" mono disabled={busy}
-          onChange={(v) => setName(v.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-          onEnter={() => void connect()}
-          style={{ padding: '.7rem .9rem', fontSize: '1rem' }}
-        />
         {kind === 'gco' && (
           <p style={{ fontSize: '.76rem', color: 'var(--c-g500)', margin: 0 }}>
             You&rsquo;ll name + create the organization that takes the GCO role right after you connect.
           </p>
         )}
-        {trimmed && (
-          <div style={{ fontSize: '.75rem', color: 'var(--c-g500)', fontFamily: "'SF Mono','Roboto Mono',monospace" }}>
-            {toAgentName(trimmed)} · home at {personalHome(trimmed)}
-          </div>
-        )}
-        <button className="btn-sso" onClick={connect} disabled={!trimmed || busy} title={GS.ssoCta}>
-          <span className="btn-sso-glyph" aria-hidden="true">{busy ? <Spinner /> : '🌐'}</span>
-          {busy ? 'Opening your home…' : GS.ssoCta}
+        <button className="btn-sso" onClick={onConnect} title={GS.ssoCta}>
+          <span className="btn-sso-glyph" aria-hidden="true">🌐</span>
+          {GS.ssoCta}
           <span style={{ flex: 1 }} />
           <span style={{ fontSize: '.72rem', fontWeight: 600, color: 'var(--c-g400)' }}>SSO + your vault</span>
         </button>
-        {err && <Banner tone="err">{err}</Banner>}
         <span className="soon" style={{ background: 'var(--c-primary-subtle)', borderColor: 'var(--c-primary-border)', color: 'var(--c-primary-active)' }}>
-          You&rsquo;ll confirm with your device at <b>{personalHome(trimmed || 'your-name')}</b>, then come back here to continue.
+          You&rsquo;ll confirm at your {GS.community} home, then come back here to continue. Your name is a
+          public handle — you don&rsquo;t need one to sign in.
         </span>
       </div>
     </Card>

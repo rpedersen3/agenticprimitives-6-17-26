@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Spec 258 — demo-gs connect UX redesign</title>
+<style>
+  body{font:14px/1.6 Inter,system-ui,sans-serif;margin:0;background:#0b1324;color:#e2e8f0;padding:28px}
+  h1{font-size:22px;margin:0 0 6px;color:#f1f5f9}
+  p{color:#94a3b8;max-width:860px;margin:0 0 24px}
+  a{color:#818cf8}
+  .grid{display:flex;flex-direction:column;gap:28px}
+  .c{display:block;text-decoration:none;color:#cbd5e1}
+  .c img{width:100%;max-width:820px;border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.45);display:block}
+  .c span{display:block;margin-top:8px;font-size:13px;font-weight:600;color:#94a3b8}
+</style>
+<h1>Spec 258 — demo-gs connect UX redesign</h1>
+<p>
+  Credential-first connect flow for Global Switchboard (demo-gs). Primary CTA = <b>Continue with Global.Church</b>.
+  The name field is hidden behind a secondary link. The <code>HandoffBridge new-user</code> variant is removed from this path —
+  the popup opens directly from the CTA with an in-page loading/dim state.
+  Variants <code>org-create</code> and <code>reconnect</code> are unchanged.
+  See <a href="../../specs/258-demo-gs-connect-ux.md">specs/258</a> (companion spec) and the
+  <a href="component-spec.md">component-level implementation spec</a> in this directory.
+</p>
+<div class="grid"><a class="c" href="01-landing-home.svg"><img src="01-landing-home.svg" loading="lazy" alt="01-landing-home"/><span>01 · Landing home — single primary CTA &quot;Continue with Global.Church&quot; in hero + header. Informational GCO/KC cards below are NOT role gates.</span></a>
+<a class="c" href="02-connect-card.svg"><img src="02-connect-card.svg" loading="lazy" alt="02-connect-card"/><span>02 · Connect card — credential-first design. Primary CTA is visible immediately. Name field is hidden behind secondary link &quot;Use my Impact name instead&quot;. Trust reassurance in-card.</span></a>
+<a class="c" href="03-popup-opening.svg"><img src="03-popup-opening.svg" loading="lazy" alt="03-popup-opening"/><span>03 · Popup opening state — button enters busy/loading state, site dims, reassurance copy replaces the bridge interstitial. NO HandoffBridge new-user variant shown.</span></a>
+<a class="c" href="04-name-handle-panel.svg"><img src="04-name-handle-panel.svg" loading="lazy" alt="04-name-handle-panel"/><span>04 · Name/handle panel — expanded when &quot;Use my Impact name instead&quot; is clicked. Shows input field + .impact / .impact-agent.me preview inline below the primary CTA.</span></a>
+<a class="c" href="05-success-role-hub.svg"><img src="05-success-role-hub.svg" loading="lazy" alt="05-success-role-hub"/><span>05 · Success → role hub — connected in place (no reload). Identity pill + toast. RoleHub: KC card (&quot;Offer your expertise&quot;) + GCO card (&quot;Set up an organization&quot;). Nameless-member note.</span></a>
+<a class="c" href="06-popup-blocked.svg"><img src="06-popup-blocked.svg" loading="lazy" alt="06-popup-blocked"/><span>06 · Popup blocked — explicit redirect fallback card. Co-brand pill is trust anchor. CTA &quot;Continue in this tab&quot;. Fine print explains impact-agent.me is the user's own home.</span></a>
+<a class="c" href="07-cancelled.svg"><img src="07-cancelled.svg" loading="lazy" alt="07-cancelled"/><span>07 · Cancelled — popup dismissed, back to connect card. Soft warn banner. Same card, same secondary link. No state lost.</span></a>
+<a class="c" href="08-reconnect.svg"><img src="08-reconnect.svg" loading="lazy" alt="08-reconnect"/><span>08 · Reconnect — returning member. Same connect card (no changes). Popup shows &quot;Welcome back&quot; with identity + role chips. One-tap flow.</span></a>
+<a class="c" href="09-error.svg"><img src="09-error.svg" loading="lazy" alt="09-error"/><span>09 · Error state — exchange failed. Explicit error banner (no silent fallback). CTA changes to &quot;Try again&quot;. Same card layout.</span></a>
+<a class="c" href="10-already-have-home.svg"><img src="10-already-have-home.svg" loading="lazy" alt="10-already-have-home"/><span>10 · Already-have-home — Google resolves to an existing home. Popup shows recognised identity + single &quot;Continue to Switchboard&quot;. No duplicate home created.</span></a></div>

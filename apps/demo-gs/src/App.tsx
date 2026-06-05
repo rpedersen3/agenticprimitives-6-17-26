@@ -423,6 +423,7 @@ function AppInner() {
               pendingGco={pendingGco}
               onClearPending={() => setPendingGco(null)}
               onHub={goHub}
+              onConnect={goConnect}
               caps={caps}
               onRecreateOrg={(signatory) => {
                 // Re-mint the org→Switchboard grant: drop the broken gco session + resume org-create.
@@ -434,7 +435,7 @@ function AppInner() {
             />
           )}
           {view === 'workspace' && !demoPersona && activeRole === 'kc' && (
-            <KcView onHub={goHub} caps={caps} />
+            <KcView onHub={goHub} onConnect={goConnect} caps={caps} />
           )}
         </div>
       </div>
@@ -562,8 +563,10 @@ function GcoOrgCreate({ signatory, onSignOut }: { signatory: string; onSignOut: 
 // grant → the org intranet, restructured into the §10 hierarchy: lifecycle rail → primary task card
 // (post a need) + a next-best-action right rail → posted needs (edit/withdraw) → coarsened supply
 // directory → agreements → a data/trust footer.
-function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg }: {
+function GcoView({ pendingGco, onClearPending, onHub, onConnect, caps, onRecreateOrg }: {
   pendingGco: { signatory: string } | null; onClearPending: () => void; onHub: () => void;
+  /** Route a session-less workspace to the credential-first ConnectScreen (spec 258). */
+  onConnect: () => void;
   caps: ReturnType<typeof deriveRoleCapabilities>;
   /** Re-mint the org→Switchboard grant (drop the session + resume org-create). */
   onRecreateOrg: (signatory: string) => void;
@@ -574,7 +577,7 @@ function GcoView({ pendingGco, onClearPending, onHub, caps, onRecreateOrg }: {
   const session = loadSession('gco');
   if (!session) {
     if (pendingGco) return <GcoOrgCreate signatory={pendingGco.signatory} onSignOut={onClearPending} />;
-    return <OnboardPanel kind="gco" />;
+    return <OnboardPanel kind="gco" onConnect={onConnect} />;
   }
   const org = session.sa;
   const orgName = session.orgName ?? session.name;
@@ -759,11 +762,14 @@ function JaneView() {
 // (publish/update your offering) + a next-best-action right rail → request queue (the AgreementsPanel
 // accept/decline surface, framed with the matched-skill "why this match") → coarsened demand directory →
 // the on-chain substrate badge → a data/trust footer.
-function KcView({ onHub, caps }: {
-  onHub: () => void; caps: ReturnType<typeof deriveRoleCapabilities>;
+function KcView({ onHub, onConnect, caps }: {
+  onHub: () => void;
+  /** Route a session-less workspace to the credential-first ConnectScreen (spec 258). */
+  onConnect: () => void;
+  caps: ReturnType<typeof deriveRoleCapabilities>;
 }) {
   const session = loadSession('kc');
-  if (!session) return <OnboardPanel kind="kc" />;
+  if (!session) return <OnboardPanel kind="kc" onConnect={onConnect} />;
   const kc = session.sa;
 
   const signOut = () => { clearSession('kc'); void setActiveContext({ persona: 'kc', session: null }); };

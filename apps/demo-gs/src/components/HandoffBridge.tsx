@@ -5,10 +5,11 @@
 // the user confirms, or cancel).
 //
 // VARIANTS:
-//  - 'new-user'   : the connect entry, where the method (passkey vs Google) is NOT yet chosen → MUST stay
-//                   METHOD-AGNOSTIC (domain reassurance only; no passkey jargon, no tap-count list).
 //  - 'org-create' : the GCO org-create launch (known passkey method) → full one-step treatment.
-//  - 'reconnect'  : a returning member signing back in (known passkey method) → one-step treatment.
+//
+// The connect-entry 'new-user' + reconnect 'reconnect' variants were removed in spec 258 — the
+// credential-first ConnectScreen launches the popup directly with no pre-ceremony bridge, so org-create
+// (the one known-passkey, deliberate-confirm step from inside the hub) is the only remaining use.
 //
 // Auto-advances to onContinue after 3s unless cancelled (no visible countdown). Esc cancels; the primary
 // CTA is focused on mount. Domain note is gated to non-localhost (only the real impact-agent.me hosts the
@@ -18,7 +19,7 @@ import { useEffect, useRef } from 'react';
 import { CONNECT_DOMAIN } from '../lib/domain';
 import { Btn, Card, Pill } from './ui';
 
-export type HandoffVariant = 'new-user' | 'org-create' | 'reconnect';
+export type HandoffVariant = 'org-create';
 
 const AUTO_ADVANCE_MS = 3000;
 
@@ -103,7 +104,7 @@ export function HandoffBridge({ variant, orgName, onContinue, onCancel }: {
 interface BridgeCopy {
   heading: string;
   body: string;
-  /** A single passkey one-step line; ABSENT for the method-agnostic new-user variant. */
+  /** A single passkey one-step line. */
   step?: string;
   domainNote: string;
   continueLabel: string;
@@ -116,24 +117,6 @@ function variantCopy(variant: HandoffVariant, orgName?: string): BridgeCopy {
         heading: 'Taking you to your Impact home to create the org',
         body: 'Your org will be created and custodied at your Impact home — not by Global Switchboard.',
         step: `Approve creating ${orgName || 'your organization'} — starts the org, claims its name, and gives Switchboard scoped read access to its posted needs.`,
-        domainNote: "The prompt will say 'impact-agent.me' — that is your home, not a new site.",
-        continueLabel: 'Continue to Impact',
-      };
-    case 'reconnect':
-      return {
-        heading: 'Taking you to your Impact home to sign back in',
-        body: 'Global Switchboard doesn’t hold passwords or keys. Your secure home at impact-agent.me holds them.',
-        step: 'Confirm it’s you — your passkey signs you back in.',
-        domainNote: "The prompt will say 'impact-agent.me' — that is your home, not a new site.",
-        continueLabel: 'Continue to Impact',
-      };
-    case 'new-user':
-    default:
-      // METHOD-AGNOSTIC — the method (passkey vs Google) isn't chosen yet, so: domain reassurance only.
-      // No passkey jargon, no tap-count list.
-      return {
-        heading: 'Taking you to your Impact home',
-        body: "Global Switchboard doesn't hold passwords or keys. Your secure home at impact-agent.me holds them. We're taking you there now so you can confirm.",
         domainNote: "The prompt will say 'impact-agent.me' — that is your home, not a new site.",
         continueLabel: 'Continue to Impact',
       };

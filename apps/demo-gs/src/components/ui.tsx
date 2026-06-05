@@ -2,7 +2,7 @@
 // --c-primary). Mirrors demo-jp's ui.tsx shape but chain-decoupled (no explorer / reverseName);
 // AddrChip resolves friendly names from the fixture directory.
 
-import { useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { useRef, type CSSProperties, type KeyboardEvent, type ReactNode, type Ref } from 'react';
 import { agentName } from '../lib/names';
 
 export function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
@@ -102,12 +102,14 @@ export const inputStyle: CSSProperties = {
 };
 
 /** A labelled text input (control kit). Wraps the `Field` label pattern + the `inputStyle` look. */
-export function TextField({ label, value, onChange, placeholder, type = 'text', disabled, mono, hint, error, autoFocus, onEnter, style }: {
+export function TextField({ label, value, onChange, placeholder, type = 'text', disabled, mono, hint, error, autoFocus, onEnter, style, inputRef }: {
   label?: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string;
   disabled?: boolean; mono?: boolean; hint?: string; error?: string; autoFocus?: boolean; onEnter?: () => void; style?: CSSProperties;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   const input = (
     <input
+      ref={inputRef}
       type={type}
       value={value}
       placeholder={placeholder}
@@ -198,7 +200,9 @@ export function Banner({ tone, children }: { tone: 'ok' | 'warn' | 'err'; childr
     warn: { background: 'var(--c-accent-subtle)', borderColor: 'var(--c-accent-border)', color: 'var(--c-accent)' },
     err: { background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' },
   };
-  return <div style={{ border: '1px solid', borderRadius: 10, padding: '.7rem .9rem', fontSize: '.85rem', ...tones[tone] }}>{children}</div>;
+  // a11y (spec 258 §13.7): errors are assertive (interrupt), warnings are polite status announcements.
+  const role = tone === 'err' ? 'alert' : tone === 'warn' ? 'status' : undefined;
+  return <div role={role} style={{ border: '1px solid', borderRadius: 10, padding: '.7rem .9rem', fontSize: '.85rem', ...tones[tone] }}>{children}</div>;
 }
 
 export function ScoreBadge({ score }: { score: number }) {
