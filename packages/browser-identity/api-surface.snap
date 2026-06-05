@@ -1,0 +1,4 @@
+function chooseSignIn<T>(opts: ChooseSignInOptions<T>): Promise<T>
+function fedcmAvailable(): boolean
+interface ChooseSignInOptions<T>
+type SignInStrategy<T> = () => Promise<T>

@@ -1,0 +1,56 @@
+{
+  "name": "@agenticprimitives/browser-identity",
+  "kind": "adapter",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/264-fedcm-idp-adapter.md",
+  "summary": "Browser sign-in adapter seam: feature-detect FedCM and choose the browser-native path vs the guaranteed spec-259 fallback. FedCM-first, not FedCM-only (ADR-0031); strategies injected by the consumer.",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [],
+  "allowedImports": [],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/connect-auth",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/mcp-runtime",
+    "@modelcontextprotocol/sdk",
+    "@a2aproject/a2a-js",
+    "langchain",
+    "@langchain/core",
+    "ai",
+    "@vercel/ai"
+  ],
+  "publicExports": [
+    "fedcmAvailable",
+    "chooseSignIn",
+    "SignInStrategy",
+    "ChooseSignInOptions"
+  ],
+  "forbiddenTerms": [
+    { "term": "@modelcontextprotocol", "reason": "Transport-agnostic. This package never imports a transport SDK (ADR-0003)." },
+    { "term": "a2a-js", "reason": "Transport-agnostic. ADR-0003." },
+    { "term": "langchain", "reason": "Transport-agnostic. ADR-0003." },
+    { "term": "@vercel/ai", "reason": "Transport-agnostic. ADR-0003." },
+    { "term": "impact-agent.me", "reason": "Concrete hostname; the consumer (app) supplies origins. ADR-0021.", "owningPackage": "apps/*" }
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1200,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

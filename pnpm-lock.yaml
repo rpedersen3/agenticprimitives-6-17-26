@@ -98,6 +98,9 @@ importers:
       '@agenticprimitives/agent-skills':
         specifier: workspace:*
         version: link:../../packages/agent-skills
+      '@agenticprimitives/browser-identity':
+        specifier: workspace:*
+        version: link:../../packages/browser-identity
       '@agenticprimitives/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -156,6 +159,9 @@ importers:
       '@agenticprimitives/attestations':
         specifier: workspace:*
         version: link:../../packages/attestations
+      '@agenticprimitives/browser-identity':
+        specifier: workspace:*
+        version: link:../../packages/browser-identity
       '@agenticprimitives/connect':
         specifier: workspace:*
         version: link:../../packages/connect
@@ -776,6 +782,15 @@ importers:
         specifier: workspace:*
         version: link:../types
     devDependencies:
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.19.19)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.19.19)(esbuild@0.28.0)(tsx@4.22.4))
+
+  packages/browser-identity:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.19.19
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.19.19)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.19.19)(esbuild@0.28.0)(tsx@4.22.4))

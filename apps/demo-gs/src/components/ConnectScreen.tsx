@@ -21,8 +21,9 @@
 // shown at the home's consent step, not here.
 
 import { useEffect, useRef, useState } from 'react';
+import { chooseSignIn } from '@agenticprimitives/browser-identity';
 import { GS } from '../lib/gs-brand';
-import { startConnect, startConnectPopup, type ConnectPopupSuccess } from '../lib/connect-launch';
+import { startConnect, startConnectPopup, type ConnectPopupSuccess, type ConnectPopupResult } from '../lib/connect-launch';
 import { Banner, Btn, Card, Pill, Spinner } from './ui';
 
 export function ConnectScreen({ onBack, onConnected }: {
@@ -66,7 +67,12 @@ export function ConnectScreen({ onBack, onConnected }: {
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      const res = await startConnectPopup(undefined, (msg) => setProgress(msg), ac.signal);
+      // spec 264 Phase 0 — the browser-integration adapter SEAM. Today only the `fallback` runs (the
+      // spec-259 home popup), so behaviour is identical; Phase 1 injects the FedCM RP path here.
+      // FedCM-first, not FedCM-only (ADR-0031).
+      const res = await chooseSignIn<ConnectPopupResult>({
+        fallback: () => startConnectPopup(undefined, (msg) => setProgress(msg), ac.signal),
+      });
       if (res.status === 'success') {
         // Hand the CODE (only) to the App; it exchanges at /token + sets the session in place.
         const ok = await onConnected(res);

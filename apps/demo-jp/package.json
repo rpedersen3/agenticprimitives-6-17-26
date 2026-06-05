@@ -17,6 +17,7 @@
     "@mui/material": "^6.1.0",
     "@agenticprimitives/agent-account": "workspace:*",
     "@agenticprimitives/agent-naming": "workspace:*",
+    "@agenticprimitives/browser-identity": "workspace:*",
     "@agenticprimitives/agent-relationships": "workspace:*",
     "@agenticprimitives/agreements": "workspace:*",
     "@agenticprimitives/attestations": "workspace:*",
