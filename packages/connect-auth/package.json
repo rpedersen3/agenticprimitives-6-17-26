@@ -31,6 +31,10 @@
     "./google": {
       "types": "./dist/methods/google.d.ts",
       "import": "./dist/methods/google.js"
+    },
+    "./youversion": {
+      "types": "./dist/methods/youversion.d.ts",
+      "import": "./dist/methods/youversion.js"
     }
   },
   "files": [

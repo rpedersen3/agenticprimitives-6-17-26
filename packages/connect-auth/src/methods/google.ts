@@ -38,6 +38,18 @@ export const GOOGLE_OIDC: OidcProviderConfig = {
   jwksUri: 'https://www.googleapis.com/oauth2/v3/certs',
 };
 
+/** YouVersion Platform OIDC endpoints (developers.youversion.com/sign-in-apis, pinned). A PUBLIC PKCE
+ *  client: the token exchange carries NO `client_secret` (pass `clientSecret: undefined` to completeLogin).
+ *  YouVersion does not document an `email_verified` claim, so the consumer sets `requireEmailVerified:
+ *  false` — the credential is keyed on (iss, sub), never on email, so this does not weaken takeover
+ *  resistance. */
+export const YOUVERSION_OIDC: OidcProviderConfig = {
+  issuers: ['https://api.youversion.com'],
+  authorizationEndpoint: 'https://api.youversion.com/auth/authorize',
+  tokenEndpoint: 'https://api.youversion.com/auth/token',
+  jwksUri: 'https://api.youversion.com/.well-known/jwks.json',
+};
+
 // ─── base64url + random helpers ───────────────────────────────────────
 
 function b64urlEncode(bytes: Uint8Array): string {
@@ -166,7 +178,12 @@ export interface CompleteLoginInput {
   /** Must match the value used in beginLogin. */
   redirectUri: string;
   clientId: string;
-  clientSecret: string;
+  /** Confidential-client secret. OMIT for a PUBLIC PKCE client (e.g. YouVersion) — the token request
+   *  then carries only `client_id` + `code_verifier`, never an (empty) `client_secret`. */
+  clientSecret?: string;
+  /** Require `email_verified === true` (default true — Google). Set false for providers that don't
+   *  assert it (YouVersion); the facet is keyed on (iss, sub), not email, so this is safe. */
+  requireEmailVerified?: boolean;
   config?: OidcProviderConfig;
   /** Injectable for tests (defaults to global fetch). */
   fetchImpl?: typeof fetch;
@@ -218,9 +235,11 @@ export async function completeLogin(input: CompleteLoginInput): Promise<Complete
       code: input.code,
       redirect_uri: input.redirectUri,
       client_id: input.clientId,
-      client_secret: input.clientSecret,
       code_verifier: input.codeVerifier,
     });
+    // Confidential clients (Google) include the secret; public PKCE clients (YouVersion) MUST NOT send
+    // one — an empty `client_secret` makes some providers reject the exchange.
+    if (input.clientSecret) body.set('client_secret', input.clientSecret);
     const res = await doFetch(config.tokenEndpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
@@ -244,10 +263,13 @@ export async function completeLogin(input: CompleteLoginInput): Promise<Complete
   });
   if (!verified.ok) return verified;
 
-  // 4. email_verified is mandatory (audit CN-3 / P0-3).
+  // 4. email_verified is mandatory by default (audit CN-3 / P0-3). Providers that don't assert the claim
+  //    (YouVersion) opt out via `requireEmailVerified: false` — safe because the facet keys on (iss, sub).
   const ev = verified.claims.email_verified;
   const emailVerified = ev === true || ev === 'true';
-  if (!emailVerified) return { ok: false, reason: 'email_verified is not true' };
+  if (input.requireEmailVerified !== false && !emailVerified) {
+    return { ok: false, reason: 'email_verified is not true' };
+  }
 
   return {
     ok: true,
@@ -255,7 +277,7 @@ export async function completeLogin(input: CompleteLoginInput): Promise<Complete
       iss: verified.claims.iss!,
       sub: verified.claims.sub!,
       email: verified.claims.email ?? null,
-      emailVerified: true,
+      emailVerified,
       name: verified.claims.name ?? null,
     },
   };
