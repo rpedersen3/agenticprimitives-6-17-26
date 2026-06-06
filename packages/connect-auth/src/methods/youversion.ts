@@ -13,10 +13,11 @@ import {
   type CompleteLoginInput,
   type CompleteLoginResult,
   type OidcPrincipal,
+  type OidcTokens,
 } from './google';
 
 export { oidcFacetId, YOUVERSION_OIDC };
-export type { BeginLoginResult, CompleteLoginResult, OidcPrincipal };
+export type { BeginLoginResult, CompleteLoginResult, OidcPrincipal, OidcTokens };
 
 /** Start the YouVersion login — forces the YouVersion provider config. */
 export function beginLogin(input: Omit<BeginLoginInput, 'config'>): BeginLoginResult {

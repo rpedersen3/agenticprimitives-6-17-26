@@ -198,8 +198,21 @@ export interface CompleteLoginInput {
   now?: () => number;
 }
 
+/** The provider OAuth tokens from the `/token` exchange. Returned so a consumer can custody the
+ *  `accessToken` (+ `refreshToken`) to later call the provider's user-data APIs (spec 265). The broker
+ *  uses ONLY the id_token for identity; these are additive and ignored unless a consumer opts to keep
+ *  them (Google identity-only flows pass through untouched). */
+export interface OidcTokens {
+  accessToken: string | null;
+  refreshToken: string | null;
+  /** Seconds until `accessToken` expires (provider `expires_in`). */
+  expiresIn: number | null;
+  /** Space-delimited granted scopes (provider `scope`). */
+  scope: string | null;
+}
+
 export type CompleteLoginResult =
-  | { ok: true; principal: OidcPrincipal }
+  | { ok: true; principal: OidcPrincipal; tokens: OidcTokens }
   | { ok: false; reason: string };
 
 interface IdTokenClaims {
@@ -236,6 +249,7 @@ export async function completeLogin(input: CompleteLoginInput): Promise<Complete
 
   // 2. Authorization-code → tokens (with PKCE code_verifier).
   let idToken: string;
+  let tokens: OidcTokens = { accessToken: null, refreshToken: null, expiresIn: null, scope: null };
   try {
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -253,9 +267,19 @@ export async function completeLogin(input: CompleteLoginInput): Promise<Complete
       body: body.toString(),
     });
     if (!res.ok) return { ok: false, reason: `token endpoint returned ${res.status}` };
-    const json = (await res.json()) as { id_token?: string };
+    const json = (await res.json()) as {
+      id_token?: string; access_token?: string; refresh_token?: string; expires_in?: number | string; scope?: string;
+    };
     if (!json.id_token) return { ok: false, reason: 'token response missing id_token' };
     idToken = json.id_token;
+    // Preserve the OAuth tokens (spec 265 — federated user-data access). Identity-only consumers ignore
+    // `tokens`; a consumer that wants to call the provider's user APIs custodies the access/refresh token.
+    tokens = {
+      accessToken: json.access_token ?? null,
+      refreshToken: json.refresh_token ?? null,
+      expiresIn: json.expires_in != null ? Number(json.expires_in) : null,
+      scope: json.scope ?? null,
+    };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? `token exchange failed: ${e.message}` : 'token exchange failed' };
   }
@@ -288,6 +312,7 @@ export async function completeLogin(input: CompleteLoginInput): Promise<Complete
       emailVerified,
       name: verified.claims.name ?? null,
     },
+    tokens,
   };
 }
 
