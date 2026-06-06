@@ -80,7 +80,13 @@ export function ConnectScreen({ onBack, onConnected }: {
               try {
                 return await startConnectFedcm((msg) => setProgress(msg));
               } catch {
-                return popup();
+                // FedCM consumed the user gesture (or the user isn't signed into their home yet), so a
+                // popup would be BLOCKED. Fall back to the full-page REDIRECT — it needs no gesture and
+                // takes the user to their home to sign in, then returns with ?code. Never a blocked-popup
+                // dead-end.
+                setProgress('Opening your Global.Church home…');
+                await startConnect(undefined);
+                return { status: 'cancelled' as const }; // navigation happens first; unreachable
               }
             }
           : undefined,
