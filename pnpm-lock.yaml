@@ -418,6 +418,9 @@ importers:
       '@agenticprimitives/delegation':
         specifier: workspace:*
         version: link:../../packages/delegation
+      '@agenticprimitives/fedcm-idp':
+        specifier: workspace:*
+        version: link:../../packages/fedcm-idp
       '@agenticprimitives/identity-directory':
         specifier: workspace:*
         version: link:../../packages/identity-directory
