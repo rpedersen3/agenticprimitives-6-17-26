@@ -30,7 +30,7 @@ import { CONNECT_KEY, type ConnectStash, type ConnectPopupSuccess, type ConnectF
 import { deriveRoleCapabilities, type RoleKind } from './lib/role-capabilities';
 import { loadActiveRole, loadActiveTab, saveActiveRole, saveActiveTab } from './lib/active-role';
 import { GCO_TABS, KC_TABS, TAB_IDS, type TabId } from './lib/workspace-tabs';
-import { personalHome } from './lib/domain';
+import { personalHome, PLATFORM_AUTH_ORIGIN } from './lib/domain';
 import { AppShellHeader, type ConnectedIdentity } from './components/AppShellHeader';
 import { Landing } from './components/Landing';
 import { ConnectScreen } from './components/ConnectScreen';
@@ -157,6 +157,11 @@ function AppInner() {
     setDemoPersona(null);
     setView('landing');
     void setActiveContext({ persona: 'jane', session: null }).catch(() => { /* ignore */ });
+    // Full SSO sign-out (user-chosen scope): after clearing the local session, hand off to the impact
+    // home's /logout, which ends the cross-subdomain SSO session + signals FedCM logged-out, then bounces
+    // back here. Top-level redirect (not an iframe) so the IdP-origin cookie clear + setStatus apply.
+    const ret = encodeURIComponent(window.location.origin + window.location.pathname);
+    window.location.href = `${PLATFORM_AUTH_ORIGIN}/logout?return=${ret}`;
   };
 
   // The SINGLE source of site-login exchange + session truth (spec 257 Phase 1 Wave 2). BOTH the
