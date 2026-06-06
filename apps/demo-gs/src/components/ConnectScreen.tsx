@@ -29,6 +29,22 @@ import {
 } from '../lib/connect-launch';
 import { Banner, Btn, Card, Pill, Spinner } from './ui';
 
+/** spec 264 — FedCM is shipped but OPT-IN while the full handshake (delegation minting + a signed-in home
+ *  session) is verified in Chrome. Default = the reliable spec-259 popup. Enable with `?fedcm=1` (sticks
+ *  via localStorage); disable with `?fedcm=0`. FedCM only completes for users already signed into their
+ *  home — so test it AFTER signing in at impact-agent.me. Flip the default here once verified end-to-end. */
+function fedcmOptedIn(): boolean {
+  try {
+    if (typeof window === 'undefined') return false;
+    const p = new URLSearchParams(window.location.search).get('fedcm');
+    if (p === '1') { try { localStorage.setItem('gs:fedcm', '1'); } catch { /* ignore */ } return true; }
+    if (p === '0') { try { localStorage.removeItem('gs:fedcm'); } catch { /* ignore */ } return false; }
+    return localStorage.getItem('gs:fedcm') === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function ConnectScreen({ onBack, onConnected }: {
   /** Back to the landing. */
   onBack: () => void;
@@ -75,7 +91,7 @@ export function ConnectScreen({ onBack, onConnected }: {
       // grant) it falls through to the GUARANTEED spec-259 popup. Non-FedCM browsers use the popup directly.
       const popup = () => startConnectPopup(undefined, (msg) => setProgress(msg), ac.signal);
       const res = await chooseSignIn<ConnectPopupResult>({
-        fedcm: fedcmAvailable()
+        fedcm: fedcmOptedIn() && fedcmAvailable()
           ? async () => {
               try {
                 return await startConnectFedcm((msg) => setProgress(msg));
