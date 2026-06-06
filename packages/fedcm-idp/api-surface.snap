@@ -1,0 +1,15 @@
+function buildAccountsResponse(accounts: FedcmAccount[]): AccountsResponse
+function buildAssertionClaims(input: AssertionInput): AssertionClaims
+function buildProviderConfig(input: ProviderConfigInput): ProviderConfig
+function buildWebIdentity(providerConfigUrls: string[]): WebIdentityManifest
+function isWebIdentityRequest(secFetchDest: string | null | undefined): boolean
+function parseAssertionRequest(form: Record<string, string | undefined>): AssertionRequest | null
+interface AccountsResponse
+interface AssertionClaims
+interface AssertionInput
+interface AssertionRequest
+interface FedcmAccount
+interface FedcmBranding
+interface ProviderConfig
+interface ProviderConfigInput
+interface WebIdentityManifest

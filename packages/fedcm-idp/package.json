@@ -1,0 +1,54 @@
+{
+  "name": "@agenticprimitives/fedcm-idp",
+  "version": "1.0.0-alpha.6",
+  "description": "FedCM IdP contract as pure builders + validators: web-identity manifest, provider config, accounts list, thin id-assertion claims, request validators. Generic; the app hosts + signs (ADR-0031).",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/fedcm-idp"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/fedcm-idp",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "vitest": "^4.1.8"
+  },
+  "keywords": [
+    "fedcm",
+    "idp",
+    "federation",
+    "identity-provider",
+    "agentic"
+  ]
+}

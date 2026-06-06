@@ -1,0 +1,67 @@
+{
+  "name": "@agenticprimitives/fedcm-idp",
+  "kind": "adapter",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/264-fedcm-idp-adapter.md",
+  "summary": "FedCM IdP contract as pure builders + validators (web-identity, provider config, accounts, thin assertion, request validators). Generic; the app hosts + signs. Not authority (ADR-0031).",
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [],
+  "allowedImports": [],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/connect-auth",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/mcp-runtime",
+    "@modelcontextprotocol/sdk",
+    "@a2aproject/a2a-js",
+    "langchain",
+    "@langchain/core",
+    "ai",
+    "@vercel/ai"
+  ],
+  "publicExports": [
+    "WebIdentityManifest",
+    "buildWebIdentity",
+    "FedcmBranding",
+    "ProviderConfig",
+    "ProviderConfigInput",
+    "buildProviderConfig",
+    "FedcmAccount",
+    "AccountsResponse",
+    "buildAccountsResponse",
+    "AssertionClaims",
+    "AssertionInput",
+    "buildAssertionClaims",
+    "isWebIdentityRequest",
+    "AssertionRequest",
+    "parseAssertionRequest"
+  ],
+  "forbiddenTerms": [
+    { "term": "@modelcontextprotocol", "reason": "Transport-agnostic. ADR-0003." },
+    { "term": "a2a-js", "reason": "Transport-agnostic. ADR-0003." },
+    { "term": "langchain", "reason": "Transport-agnostic. ADR-0003." },
+    { "term": "@vercel/ai", "reason": "Transport-agnostic. ADR-0003." },
+    { "term": "impact-agent.me", "reason": "Concrete hostname; the app supplies origins/endpoints. ADR-0021.", "owningPackage": "apps/*", "allowInPaths": ["test/**", "README.md", "spec.md", "CLAUDE.md", "AUDIT.md"] }
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
+  "contextBudget": {
+    "claudeMdMaxWords": 1200,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}
