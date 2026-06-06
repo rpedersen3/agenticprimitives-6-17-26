@@ -1,4 +1,13 @@
-# Spec 265 — Federated user-data access via VaultGrant (YouVersion highlights/notes/bookmarks/saved-verses)
+# Spec 265 — Federated user-data access via VaultGrant (YouVersion highlights)
+
+> **Scope correction (2026-06-06, SDK-confirmed).** YouVersion's Platform API exposes exactly **one**
+> personal-data resource: **highlights**, read **per Bible chapter** (`GET /v1/highlights?bible_id=&passage_id=<chapter USFM, e.g. JHN.3>`;
+> confirmed against the official Swift `Highlights.swift`/`URLBuilder.swift` + Kotlin `HighlightsEndpoints.kt`).
+> There is **no notes / bookmarks / saved-verses API or OAuth scope** (the SDK "notes" are *scripture
+> footnotes* via `include_notes` on passage content, not personal notes), and **no "list all highlights"**
+> endpoint — the caller must name a chapter. v1 is therefore **highlights-only, per-chapter**. The
+> substrate (KMS token custody, refresh, server-side read-proxy, VaultGrant data-scope) is unchanged; only
+> the data-type vocabulary collapses to `{highlights}`. The OAuth scope requested is `read_highlights`.
 
 **Status:** draft (implementation spec) · **Builds on:** [spec 264](264-fedcm-idp-adapter.md) + the YouVersion OIDC sign-in (commits 80c305d…16f2427), [ADR-0019](../docs/architecture/decisions/0019-relying-site-delegation.md) (relying-site delegation), [spec 247](247-per-agent-mcp-vault.md) (per-agent MCP vault) · **Custody:** [spec 235](235-google-kms-custody.md) (per-(iss,sub) KMS) · **Apps:** demo-sso-next (Connect/IdP), demo-a2a (token custody + bridge), demo-mcp (read tools)
 
@@ -14,13 +23,14 @@ YouVersion is the **source of truth** for that content (it lives in the user's Y
 vault). The Platform API exposes it:
 
 ```
-GET https://api.youversion.com/v1/highlights
+GET https://api.youversion.com/v1/highlights?bible_id=<int>&passage_id=<chapter USFM, e.g. JHN.3>
 X-YVP-App-Key: <YOUVERSION_CLIENT_ID>
 Authorization: Bearer <user access_token>
 ```
-(notes / bookmarks / saved-verses are sibling endpoints; the exact scope strings are confirmed in the
-YouVersion Platform Portal — provisionally `highlights notes bookmarks saved_verses`, requested additively
-to `openid profile email`).
+(Highlights are returned **one Bible chapter at a time** — there is no enumerate-all endpoint. The API is
+mid-migration `version_id`→`bible_id`, so we send both query names. The OAuth scope is `read_highlights`,
+requested additively to `openid profile email`. See the scope-correction note at the top: highlights is
+YouVersion's only personal-data resource.)
 
 We want a person to **grant a relying app/agent scoped, revocable access to specific YouVersion data
 types**, realized as our existing delegation primitive, with the federated token never leaving our

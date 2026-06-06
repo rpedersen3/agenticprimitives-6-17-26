@@ -5,16 +5,22 @@
 import { ensureCsrfToken, csrfHeaders, refreshCsrfToken } from '../csrf.js';
 import type { DelegationWire } from './delegation.js';
 
-export type YouVersionType = 'highlights' | 'notes' | 'bookmarks' | 'saved_verses';
+// YouVersion's Platform API exposes one user-data resource — highlights, read per Bible chapter.
+export type YouVersionType = 'highlights';
 
 const MAX_ATTEMPTS = 4;
 const TIMEOUT_MS = 20_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Read the member's YouVersion `type` via the person→JP grant. Resolves to the data array; throws with
- *  a recognizable `message` on `scope_not_granted` / `no_youversion_link`. */
-export async function readYouVersion(type: YouVersionType, grant: DelegationWire): Promise<Array<Record<string, unknown>>> {
-  const body = { delegation: grant, requester: grant.delegate };
+/** Read the member's YouVersion highlights for a Bible chapter via the person→JP grant. `passageId` is a
+ *  chapter USFM (e.g. "JHN.3"); `versionId` is a Bible version id (default 111 = NIV). Resolves to the data
+ *  array; throws with a recognizable `message` on `scope_not_granted` / `no_youversion_link`. */
+export async function readYouVersion(
+  type: YouVersionType,
+  grant: DelegationWire,
+  opts: { versionId?: string; passageId?: string } = {},
+): Promise<Array<Record<string, unknown>>> {
+  const body = { delegation: grant, requester: grant.delegate, versionId: opts.versionId, passageId: opts.passageId };
   let lastErr: Error | null = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     await ensureCsrfToken();
@@ -37,8 +43,8 @@ export async function readYouVersion(type: YouVersionType, grant: DelegationWire
     }
     const j = (await r.json().catch(() => null)) as { ok?: boolean; data?: unknown; error?: string } | null;
     if (r.ok && j?.ok === true) {
-      const d = j.data as { highlights?: unknown[]; notes?: unknown[]; bookmarks?: unknown[]; saved_verses?: unknown[]; data?: unknown[] } | unknown[] | null;
-      const list = (Array.isArray(d) ? d : d?.highlights ?? d?.notes ?? d?.bookmarks ?? d?.saved_verses ?? d?.data ?? []) as Array<Record<string, unknown>>;
+      const d = j.data as { highlights?: unknown[]; data?: unknown[] } | unknown[] | null;
+      const list = (Array.isArray(d) ? d : d?.highlights ?? d?.data ?? []) as Array<Record<string, unknown>>;
       return list;
     }
     lastErr = new Error(j?.error ?? `youversion ${type} failed (HTTP ${r.status})`);

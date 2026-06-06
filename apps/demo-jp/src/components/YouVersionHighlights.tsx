@@ -12,12 +12,13 @@ export function YouVersionHighlights({ grant }: { grant: DelegationWire }) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [items, setItems] = useState<Array<Record<string, unknown>>>([]);
   const [msg, setMsg] = useState('');
+  const [chapter, setChapter] = useState('JHN.3');
 
   async function load() {
     setPhase('loading');
     setMsg('');
     try {
-      setItems(await readYouVersion('highlights', grant));
+      setItems(await readYouVersion('highlights', grant, { passageId: chapter.trim() || 'JHN.3' }));
       setPhase('done');
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
@@ -37,9 +38,19 @@ export function YouVersionHighlights({ grant }: { grant: DelegationWire }) {
       <SectionHead
         eyebrow="YouVersion"
         title="Your highlights"
-        sub="Read live from YouVersion through your Impact home — JP never sees your YouVersion token, only what you grant."
+        sub="Read live from YouVersion through your Impact home — JP never sees your YouVersion token, only what you grant. YouVersion serves highlights one Bible chapter at a time."
       />
-      {phase === 'idle' && <Btn onClick={load}>Show my highlights</Btn>}
+      <label style={{ display: 'flex', gap: '.5rem', alignItems: 'center', fontSize: '.85rem', marginBottom: '.6rem' }}>
+        <span style={{ opacity: 0.7 }}>Chapter</span>
+        <input
+          value={chapter}
+          onChange={(e) => setChapter(e.target.value)}
+          placeholder="JHN.3"
+          spellCheck={false}
+          style={{ flex: 1, padding: '.4rem .55rem', border: '1px solid #d7dce5', borderRadius: 6, fontSize: '.85rem' }}
+        />
+      </label>
+      {(phase === 'idle' || phase === 'done') && <Btn onClick={load}>Show my highlights</Btn>}
       {phase === 'loading' && <Banner tone="ok">Reading from YouVersion…</Banner>}
       {phase === 'error' && (
         <>
