@@ -1,0 +1,5 @@
+function fedcmGet(opts: FedcmGetOptions): Promise<FedcmResult>
+function fedcmSupported(): boolean
+interface FedcmGetOptions
+interface FedcmProvider
+interface FedcmResult

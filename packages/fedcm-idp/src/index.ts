@@ -1,27 +1,39 @@
 // @agenticprimitives/fedcm-idp — the FedCM IdP contract as PURE builders + validators (spec 264 Phase 1;
-// ADR-0031). This package encodes the browser↔IdP wire shapes (the `.well-known/web-identity` manifest,
-// the provider config, the accounts list, the thin id-assertion claims, and the request validators) as
-// pure, dependency-free functions. It performs NO I/O, holds NO key, and signs NOTHING — the demo-sso app
-// hosts the endpoints, owns the session + the account list, and signs the assertion claims with its
-// existing OIDC key. The deep capability/delegation object is issued by the substrate AFTER the assertion
-// (ADR-0031); the assertion here is a THIN identity + intent bootstrap only.
+// ADR-0031). Encodes the browser↔IdP wire shapes as pure, dependency-free functions. NO I/O, NO key, NO
+// signing — the demo-sso app hosts the endpoints, owns the session + account list, and signs the assertion
+// claims with its existing OIDC key. The deep capability/delegation object is issued by the substrate
+// AFTER the assertion (ADR-0031); the assertion here is a THIN identity + intent bootstrap only.
 //
-// NOTE (draft): the FedCM IdP field names below follow the W3C/Chrome contract, which had breaking changes
-// across Chrome 143→145 (structured JSON, endpoint validation). Verify against the current FedCM spec +
-// a live Chrome before marking this package `stable` / publishable (spec 264 Phase 1b).
+// Field names follow the CURRENT (post Chrome 145) W3C/Chrome FedCM contract — verified against the spec +
+// Chrome/MDN docs (2026). The known 143→145 breaking changes are reflected: `nonce` arrives inside
+// `params` (not top-level); the well-known needs `accounts_endpoint`+`login_url` when a
+// `client_metadata_endpoint` is configured; the client error property is `error` (server JSON stays
+// `error.code`). Re-verify against a live Chrome before this package graduates from `private:true`.
 
-// ─── /.well-known/web-identity ──────────────────────────────────────────────
+// ─── /.well-known/web-identity (served from the IdP eTLD+1) ──────────────────
 export interface WebIdentityManifest {
-  /** Absolute URLs of this origin's FedCM provider config(s). */
-  provider_urls: string[];
+  /** The IdP's config URL — the spec limits this to EXACTLY ONE entry. */
+  provider_urls: [string];
+  /** Required (Chrome 145+) ONLY when the config declares a `client_metadata_endpoint`. */
+  accounts_endpoint?: string;
+  /** Required (Chrome 145+) ONLY when the config declares a `client_metadata_endpoint`. */
+  login_url?: string;
 }
 
-/** Build the `/.well-known/web-identity` body that declares this origin's FedCM config URL(s). */
-export function buildWebIdentity(providerConfigUrls: string[]): WebIdentityManifest {
-  return { provider_urls: providerConfigUrls };
+/** Build the `/.well-known/web-identity` body. `provider_urls` is a single-element array (spec limit).
+ *  Pass `accounts_endpoint` + `login_url` when the config also ships a `client_metadata_endpoint`
+ *  (required from Chrome 145). */
+export function buildWebIdentity(
+  providerConfigUrl: string,
+  opts: { accountsEndpoint?: string; loginUrl?: string } = {},
+): WebIdentityManifest {
+  const m: WebIdentityManifest = { provider_urls: [providerConfigUrl] };
+  if (opts.accountsEndpoint) m.accounts_endpoint = opts.accountsEndpoint;
+  if (opts.loginUrl) m.login_url = opts.loginUrl;
+  return m;
 }
 
-// ─── /fedcm/config.json ─────────────────────────────────────────────────────
+// ─── config.json ────────────────────────────────────────────────────────────
 export interface FedcmBranding {
   name?: string;
   background_color?: string;
@@ -47,8 +59,8 @@ export interface ProviderConfigInput {
   branding?: FedcmBranding;
 }
 
-/** Build the `/fedcm/config.json` body. Endpoint paths/URLs are supplied by the app (generic — no
- *  hostnames here, ADR-0021). Optional members are omitted when absent. */
+/** Build the config.json body. Required: accounts/id_assertion/login. Endpoint paths/URLs are supplied by
+ *  the app (generic — no hostnames here, ADR-0021). Optional members are omitted when absent. */
 export function buildProviderConfig(input: ProviderConfigInput): ProviderConfig {
   const cfg: ProviderConfig = {
     accounts_endpoint: input.accountsEndpoint,
@@ -61,20 +73,23 @@ export function buildProviderConfig(input: ProviderConfigInput): ProviderConfig 
   return cfg;
 }
 
-// ─── /fedcm/accounts ────────────────────────────────────────────────────────
-/** A FedCM account row the browser renders in its account chooser. For us, each row is a signed-in agent
- *  the home session resolves (Person Agent / Organization Agent). `id` MUST be the stable account key —
- *  the Smart Account address (ADR-0010) — never a name (which is a mutable facet). */
+// ─── accounts endpoint ──────────────────────────────────────────────────────
+/** A FedCM account row the browser renders in its chooser. For us each row is a signed-in agent the home
+ *  session resolves (Person / Organization Agent). `id` MUST be the stable account key — the Smart
+ *  Account address (ADR-0010) — never a name (a mutable facet). At least one of name/email/username/tel is
+ *  required by the spec; we always provide `name`. */
 export interface FedcmAccount {
   id: string;
   name: string;
   email?: string;
+  username?: string;
+  tel?: string;
   given_name?: string;
   picture?: string;
-  /** client_ids this account has already approved → the browser can skip the disclosure UI. */
+  /** client_ids this account already approved → the browser may skip the disclosure UI. */
   approved_clients?: string[];
-  /** Hints (e.g. the handle) the RP may have passed via `loginHint`. */
   login_hints?: string[];
+  domain_hints?: string[];
 }
 
 export interface AccountsResponse {
@@ -85,10 +100,10 @@ export function buildAccountsResponse(accounts: FedcmAccount[]): AccountsRespons
   return { accounts };
 }
 
-// ─── /fedcm/assertion — the THIN identity+intent assertion (spec 264) ────────
+// ─── id_assertion endpoint ──────────────────────────────────────────────────
 /** The thin assertion CLAIMS (NOT the authority model). The app signs these into the `token` with its
  *  existing OIDC key; the relying app verifies via the existing JWKS + `(iss, sub)` (ADR-0010). The deep
- *  capability/delegation object is issued by the substrate AFTER this (ADR-0031) — never as a scope here. */
+ *  capability/delegation object is issued by the substrate AFTER this (ADR-0031) — never a scope here. */
 export interface AssertionClaims {
   iss: string;
   aud: string;
@@ -117,8 +132,8 @@ export interface AssertionInput {
   iat?: number;
 }
 
-/** Build the thin assertion claims. Defaults `intent` to `signin`. Omits optional members when absent so
- *  the signed token stays minimal (a bootstrap, not an authority object). */
+/** Build the thin assertion claims. Defaults `intent` to `signin`; omits absent optionals so the signed
+ *  token stays minimal (a bootstrap, not an authority object). */
 export function buildAssertionClaims(input: AssertionInput): AssertionClaims {
   const claims: AssertionClaims = {
     iss: input.iss,
@@ -134,31 +149,70 @@ export function buildAssertionClaims(input: AssertionInput): AssertionClaims {
   return claims;
 }
 
-// ─── Request validation ─────────────────────────────────────────────────────
-/** Every FedCM credentialed request from the browser carries `Sec-Fetch-Dest: webidentity`. The IdP MUST
- *  reject requests without it (a non-FedCM caller). Pass the header value (case-insensitive). */
+/** Success body. */
+export function buildTokenResponse(token: string): { token: string } {
+  return { token };
+}
+
+/** Multi-step / interactive continuation — the browser opens `url` in a popup; the IdP page finishes with
+ *  `IdentityProvider.resolve(token)`. */
+export function buildContinueResponse(url: string): { continue_on: string } {
+  return { continue_on: url };
+}
+
+export interface FedcmErrorResponse {
+  error: { code: string; url?: string };
+}
+
+/** Error body (`{ error: { code, url? } }`). `code` is an OAuth-style string (invalid_request,
+ *  unauthorized_client, access_denied, server_error, temporarily_unavailable) or a custom string; `url`
+ *  (optional) is a same-site human-readable error page. */
+export function buildErrorResponse(code: string, url?: string): FedcmErrorResponse {
+  return url ? { error: { code, url } } : { error: { code } };
+}
+
+/** The CORS headers the IdP MUST set on the id_assertion response (credentialed → must echo the exact RP
+ *  origin, never `*`). */
+export function assertionCorsHeaders(rpOrigin: string): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': rpOrigin,
+    'Access-Control-Allow-Credentials': 'true',
+  };
+}
+
+// ─── Login status + request validation ──────────────────────────────────────
+/** The header name the IdP sets to keep the browser's per-IdP login state current. */
+export const SET_LOGIN_HEADER = 'Set-Login';
+
+/** `Set-Login: logged-in | logged-out` header value. Without this the browser never calls the accounts
+ *  endpoint. (Alternatively the IdP page calls `navigator.login.setStatus(...)`.) */
+export function loginStatusHeader(status: 'logged-in' | 'logged-out'): { name: string; value: string } {
+  return { name: SET_LOGIN_HEADER, value: status };
+}
+
+/** Every credentialed FedCM request carries `Sec-Fetch-Dest: webidentity`. The IdP MUST verify it on the
+ *  accounts + id_assertion (+ disconnect) endpoints and reject otherwise — the primary CSRF defense. */
 export function isWebIdentityRequest(secFetchDest: string | null | undefined): boolean {
   return (secFetchDest ?? '').trim().toLowerCase() === 'webidentity';
 }
 
-/** The id-assertion POST is form-encoded: `client_id`, `account_id`, `nonce`, `disclosure_text_shown`,
- *  and (optional) `params` (JSON — our custom `scope`/`intent`/`delegation_request_hash`). */
+/** The id-assertion POST is `application/x-www-form-urlencoded`. Post-145 the RP's `nonce` arrives INSIDE
+ *  the `params` JSON (top-level `nonce` is accepted as 143–144 compat). */
 export interface AssertionRequest {
   clientId: string;
   accountId: string;
   nonce: string;
   disclosureTextShown: boolean;
+  /** The RP's custom params object (our `scope` / `intent` / `delegation_request_hash` ride here). */
   params?: Record<string, unknown>;
 }
 
-/** Parse + validate the id-assertion request fields from a flat form map. Returns `null` if a required
- *  field is missing (the caller returns 400 — fail-closed). `params` is parsed leniently (ignored if not
- *  valid JSON). */
+/** Parse + validate the id-assertion request fields from a flat form map. Returns `null` (→ app returns
+ *  400, fail-closed) if a required field (client_id / account_id / nonce) is missing. `params` is parsed
+ *  leniently; `nonce` is read from `params.nonce` first (post-145), then a top-level `nonce` (compat). */
 export function parseAssertionRequest(form: Record<string, string | undefined>): AssertionRequest | null {
   const clientId = form.client_id?.trim();
   const accountId = form.account_id?.trim();
-  const nonce = form.nonce?.trim();
-  if (!clientId || !accountId || !nonce) return null;
   let params: Record<string, unknown> | undefined;
   if (form.params) {
     try {
@@ -168,6 +222,9 @@ export function parseAssertionRequest(form: Record<string, string | undefined>):
       /* lenient — ignore malformed custom params */
     }
   }
+  const nonceFromParams = typeof params?.nonce === 'string' ? params.nonce.trim() : undefined;
+  const nonce = nonceFromParams || form.nonce?.trim();
+  if (!clientId || !accountId || !nonce) return null;
   return {
     clientId,
     accountId,

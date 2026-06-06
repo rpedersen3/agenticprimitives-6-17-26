@@ -50,6 +50,30 @@ Per the FedCM IdP contract, demo-sso exposes:
 All carry the existing **CSRF / origin** posture; the assertion is signed by the same key our `id_token`
 uses, so existing verification (`(iss, sub)`, ADR-0010) is unchanged.
 
+### Verified contract notes (post Chrome 145, 2026 — encoded in `fedcm-idp`/`fedcm-rp`)
+
+These are the load-bearing details the Phase 1b endpoints MUST honor (verified against the W3C FedCM spec
++ Chrome/MDN docs; the `fedcm-idp` builders/validators already encode them):
+
+- **`/.well-known/web-identity`** is served from the IdP **eTLD+1** and carries a **single-element**
+  `provider_urls`. It MUST also carry `accounts_endpoint` + `login_url` **iff** the config ships a
+  `client_metadata_endpoint` (enforced Chrome 145).
+- **`Sec-Fetch-Dest: webidentity`** MUST be verified on `/fedcm/accounts` + `/fedcm/assertion`
+  (+`/disconnect`) — primary CSRF defense. The accounts request is **credentialed but carries no `Origin`/
+  `client_id`**; the assertion request **does** carry `Origin` → match it to the RP for `client_id`.
+- **`/fedcm/accounts`** returns `{ accounts:[{ id, … }] }` where `id` is the **SA address** (stable key,
+  ADR-0010) and at least one of `name`/`email`/`username`/`tel` is present; `401` when not signed in.
+- **`/fedcm/assertion`** is `application/x-www-form-urlencoded`; **`nonce` arrives inside `params`**
+  (post-145, not top-level). Success `{ token }` MUST set `Access-Control-Allow-Origin: <RP origin>` +
+  `Access-Control-Allow-Credentials: true`. Interactive flows return `{ continue_on }`; errors return
+  `{ error:{ code, url? } }`.
+- **Login status:** the IdP MUST emit `Set-Login: logged-in` (or `navigator.login.setStatus`) once
+  authenticated, or the browser never calls `/fedcm/accounts`.
+- **RP call:** `navigator.credentials.get({ identity:{ providers:[{ configURL, clientId, params:{ nonce, …}}], context?, mode? }, mediation? })`; multi-IdP (Person/Org Agent) in one `providers[]` (Chrome 136);
+  `mode:'active'` ⇒ a single provider. Feature-detect `'IdentityCredential' in window`.
+- **Browser scope:** Chromium-only → the spec-259 fallback (via `browser-identity.chooseSignIn`) is the
+  guaranteed path on Firefox/Safari.
+
 ## The assertion (thin bootstrap — NOT the authority model)
 
 ```jsonc

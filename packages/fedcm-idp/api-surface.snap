@@ -1,8 +1,13 @@
+function assertionCorsHeaders(rpOrigin: string): Record<string, string>
 function buildAccountsResponse(accounts: FedcmAccount[]): AccountsResponse
 function buildAssertionClaims(input: AssertionInput): AssertionClaims
+function buildContinueResponse(url: string):
+function buildErrorResponse(code: string, url?: string): FedcmErrorResponse
 function buildProviderConfig(input: ProviderConfigInput): ProviderConfig
-function buildWebIdentity(providerConfigUrls: string[]): WebIdentityManifest
+function buildTokenResponse(token: string):
+function buildWebIdentity(providerConfigUrl: string, opts?:
 function isWebIdentityRequest(secFetchDest: string | null | undefined): boolean
+function loginStatusHeader(status: 'logged-in' | 'logged-out'):
 function parseAssertionRequest(form: Record<string, string | undefined>): AssertionRequest | null
 interface AccountsResponse
 interface AssertionClaims
@@ -10,6 +15,7 @@ interface AssertionInput
 interface AssertionRequest
 interface FedcmAccount
 interface FedcmBranding
+interface FedcmErrorResponse
 interface ProviderConfig
 interface ProviderConfigInput
 interface WebIdentityManifest

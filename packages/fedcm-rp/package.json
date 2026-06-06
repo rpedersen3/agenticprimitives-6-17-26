@@ -1,0 +1,54 @@
+{
+  "name": "@agenticprimitives/fedcm-rp",
+  "version": "1.0.0-alpha.6",
+  "description": "Relying-party FedCM wrapper: navigator.credentials.get({identity}) → IdP token. The FedCM strategy injected into browser-identity's chooseSignIn. FedCM-first, not FedCM-only (ADR-0031).",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/fedcm-rp"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/fedcm-rp",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "vitest": "^4.1.8"
+  },
+  "keywords": [
+    "fedcm",
+    "relying-party",
+    "federation",
+    "sign-in",
+    "agentic"
+  ]
+}

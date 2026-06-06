@@ -1,11 +1,11 @@
 {
-  "name": "@agenticprimitives/fedcm-idp",
+  "name": "@agenticprimitives/fedcm-rp",
   "kind": "adapter",
   "stability": "experimental",
   "agentEntry": "CLAUDE.md",
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/264-fedcm-idp-adapter.md",
-  "summary": "FedCM IdP contract as pure builders + validators (web-identity, provider config, accounts, thin assertion, request validators). Generic; the app hosts + signs. Not authority (ADR-0031).",
+  "summary": "Relying-party FedCM wrapper: navigator.credentials.get({identity}) → IdP token. The FedCM strategy injected into browser-identity's chooseSignIn. Post-145; thin bootstrap, not authority (ADR-0031).",
   "owns": {
     "source": ["src/**"],
     "tests": ["test/**"]
@@ -30,35 +30,18 @@
     "@vercel/ai"
   ],
   "publicExports": [
-    "WebIdentityManifest",
-    "buildWebIdentity",
-    "FedcmBranding",
-    "ProviderConfig",
-    "ProviderConfigInput",
-    "buildProviderConfig",
-    "FedcmAccount",
-    "AccountsResponse",
-    "buildAccountsResponse",
-    "AssertionClaims",
-    "AssertionInput",
-    "buildAssertionClaims",
-    "buildTokenResponse",
-    "buildContinueResponse",
-    "FedcmErrorResponse",
-    "buildErrorResponse",
-    "assertionCorsHeaders",
-    "SET_LOGIN_HEADER",
-    "loginStatusHeader",
-    "isWebIdentityRequest",
-    "AssertionRequest",
-    "parseAssertionRequest"
+    "FedcmProvider",
+    "FedcmGetOptions",
+    "FedcmResult",
+    "fedcmSupported",
+    "fedcmGet"
   ],
   "forbiddenTerms": [
     { "term": "@modelcontextprotocol", "reason": "Transport-agnostic. ADR-0003." },
     { "term": "a2a-js", "reason": "Transport-agnostic. ADR-0003." },
     { "term": "langchain", "reason": "Transport-agnostic. ADR-0003." },
     { "term": "@vercel/ai", "reason": "Transport-agnostic. ADR-0003." },
-    { "term": "impact-agent.me", "reason": "Concrete hostname; the app supplies origins/endpoints. ADR-0021.", "owningPackage": "apps/*", "allowInPaths": ["test/**", "README.md", "spec.md", "CLAUDE.md", "AUDIT.md"] }
+    { "term": "impact-agent.me", "reason": "Concrete hostname; the consumer supplies configURL/origins. ADR-0021.", "owningPackage": "apps/*" }
   ],
   "ignoreForAgentContext": [
     "dist/**",
