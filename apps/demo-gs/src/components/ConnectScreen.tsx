@@ -23,15 +23,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { chooseSignIn } from '@agenticprimitives/browser-identity';
 import { GS } from '../lib/gs-brand';
-import { startConnect, startConnectPopup, type ConnectPopupSuccess, type ConnectPopupResult } from '../lib/connect-launch';
+import {
+  startConnect, startConnectPopup, startConnectFedcm, fedcmAvailable,
+  type ConnectPopupSuccess, type ConnectFedcmSuccess, type ConnectPopupResult,
+} from '../lib/connect-launch';
 import { Banner, Btn, Card, Pill, Spinner } from './ui';
 
 export function ConnectScreen({ onBack, onConnected }: {
   /** Back to the landing. */
   onBack: () => void;
-  /** POPUP success → finish the connect IN PLACE (the App exchanges the code, sets the session, toasts).
-   *  Returns true on success; on a surfaced error we return to the form. */
-  onConnected: (r: ConnectPopupSuccess) => Promise<boolean>;
+  /** Connect success → finish IN PLACE. Popup success carries a CODE the App exchanges at /token; FedCM
+   *  success carries the id_token + delegation directly. Returns true on success; on error → back to form. */
+  onConnected: (r: ConnectPopupSuccess | ConnectFedcmSuccess) => Promise<boolean>;
 }) {
   const [busy, setBusy] = useState(false);
   // Driven by the popup `AC_PROGRESS` messages; shown on the CTA while the popup is open. Falls back to a
@@ -67,13 +70,23 @@ export function ConnectScreen({ onBack, onConnected }: {
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      // spec 264 Phase 0 — the browser-integration adapter SEAM. Today only the `fallback` runs (the
-      // spec-259 home popup), so behaviour is identical; Phase 1 injects the FedCM RP path here.
-      // FedCM-first, not FedCM-only (ADR-0031).
+      // spec 264 — the browser-integration adapter seam. FedCM-first, not FedCM-only (ADR-0031): when the
+      // browser supports FedCM we run the FedCM RP ceremony; on ANY failure (dismissed / errored / no
+      // grant) it falls through to the GUARANTEED spec-259 popup. Non-FedCM browsers use the popup directly.
+      const popup = () => startConnectPopup(undefined, (msg) => setProgress(msg), ac.signal);
       const res = await chooseSignIn<ConnectPopupResult>({
-        fallback: () => startConnectPopup(undefined, (msg) => setProgress(msg), ac.signal),
+        fedcm: fedcmAvailable()
+          ? async () => {
+              try {
+                return await startConnectFedcm((msg) => setProgress(msg));
+              } catch {
+                return popup();
+              }
+            }
+          : undefined,
+        fallback: popup,
       });
-      if (res.status === 'success') {
+      if (res.status === 'success' || res.status === 'fedcm-success') {
         // Hand the CODE (only) to the App; it exchanges at /token + sets the session in place.
         const ok = await onConnected(res);
         if (!ok) { setBusy(false); setProgress(null); } // error surfaced by the App; let the user retry

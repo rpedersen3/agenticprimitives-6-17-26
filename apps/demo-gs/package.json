@@ -14,6 +14,7 @@
   "dependencies": {
     "@agenticprimitives/types": "workspace:*",
     "@agenticprimitives/browser-identity": "workspace:*",
+    "@agenticprimitives/fedcm-rp": "workspace:*",
     "@agenticprimitives/agent-skills": "workspace:*",
     "@agenticprimitives/geo-features": "workspace:*",
     "@agenticprimitives/contracts": "workspace:*",

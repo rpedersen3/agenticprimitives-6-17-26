@@ -107,6 +107,9 @@ importers:
       '@agenticprimitives/delegation':
         specifier: workspace:*
         version: link:../../packages/delegation
+      '@agenticprimitives/fedcm-rp':
+        specifier: workspace:*
+        version: link:../../packages/fedcm-rp
       '@agenticprimitives/geo-features':
         specifier: workspace:*
         version: link:../../packages/geo-features

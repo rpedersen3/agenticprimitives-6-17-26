@@ -26,7 +26,7 @@ import {
 import { registerMember } from './lib/member-vault';
 import { discoverGcoSession } from './lib/gco-discovery';
 import { decodeIdToken, exchangeCode, personAddressFromIdToken, resolveAuthOrigin, startOrgCreation } from './connect-client';
-import { CONNECT_KEY, type ConnectStash, type ConnectPopupSuccess } from './lib/connect-launch';
+import { CONNECT_KEY, type ConnectStash, type ConnectPopupSuccess, type ConnectFedcmSuccess } from './lib/connect-launch';
 import { deriveRoleCapabilities, type RoleKind } from './lib/role-capabilities';
 import { loadActiveRole, loadActiveTab, saveActiveRole, saveActiveTab } from './lib/active-role';
 import { GCO_TABS, KC_TABS, TAB_IDS, type TabId } from './lib/workspace-tabs';
@@ -228,6 +228,36 @@ function AppInner() {
     [toast],
   );
 
+  // spec 264 Phase 1b — FedCM success path. Unlike the popup (a CODE exchanged at /token), FedCM returns
+  // the id_token + the packed person→Switchboard delegation directly, so there is NO /token round-trip:
+  // we build the session straight from them and route to the hub IN PLACE (mirrors finishConnect's
+  // in-place branch). On any failure the ConnectScreen already fell back to the popup, so this only runs
+  // on a genuine FedCM success.
+  const finishConnectViaFedcm = useCallback(
+    async (r: ConnectFedcmSuccess): Promise<boolean> => {
+      try {
+        const person = personAddressFromIdToken(r.idToken);
+        const displayName = decodeIdToken(r.idToken).agent_name || '';
+        const session: MemberSession = { kind: 'kc', sa: person, name: displayName, grant: r.delegation, idToken: r.idToken, authOrigin: r.authOrigin };
+        setSession(session);
+        saveActiveRole(person, 'kc');
+        await registerMember({ kind: 'kc', sa: person, name: displayName, delegation: r.delegation });
+        try { const existingGco = await discoverGcoSession(r.authOrigin, displayName, r.idToken); if (existingGco) setSession(existingGco); } catch { /* best-effort */ }
+        setActiveRoleState('kc');
+        setDemoPersona(null);
+        setView('hub');
+        toast(`Connected · welcome${displayName ? `, ${displayName}` : ''}`, 'ok');
+        await setActiveContext({ persona: 'kc', session });
+        return true;
+      } catch (e) {
+        setConnectError(e instanceof Error ? e.message : String(e));
+        return false;
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [toast],
+  );
+
   // After a connect-return, the App sets pendingGco / a session + a discovery kind; once the store is
   // hydrated we route on. This effect performs that transition. It runs on every hydrate change.
   useEffect(() => {
@@ -391,8 +421,10 @@ function AppInner() {
               // session, hydrate, route to the hub + toast. Returns the success result so the screen can
               // clear its busy state. NOTE: `finishConnect` reads the authOrigin/code/codeVerifier from the
               // popup result (NOT a sessionStorage stash) so the success never touches the page.
-              onConnected={(r: ConnectPopupSuccess) =>
-                finishConnect(r.authOrigin, r.code, r.codeVerifier, { name: r.stash.name }, { inPlace: true })
+              onConnected={(r: ConnectPopupSuccess | ConnectFedcmSuccess) =>
+                r.status === 'fedcm-success'
+                  ? finishConnectViaFedcm(r)
+                  : finishConnect(r.authOrigin, r.code, r.codeVerifier, { name: r.stash.name }, { inPlace: true })
               }
             />
           )}

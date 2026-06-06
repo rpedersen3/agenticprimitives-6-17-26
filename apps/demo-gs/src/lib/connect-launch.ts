@@ -8,8 +8,10 @@
 // `tok.delegation`, the person → Switchboard grant); the role (offer expertise / set up a GCO org) is
 // chosen AFTER connecting, from inside the intranet (the RoleHub). There is no `mode:'gco'` at connect.
 
-import { startSiteEnrollment } from '../connect-client';
+import { fedcmSupported, fedcmGet } from '@agenticprimitives/fedcm-rp';
+import { startSiteEnrollment, resolveAuthOrigin } from '../connect-client';
 import { openCentralAuthPopup } from './central-auth';
+import type { DelegationWire } from './delegation';
 
 /** sessionStorage key for the in-flight site-login stash (read by App's connect-return handler). */
 export const CONNECT_KEY = 'agenticprimitives:demo-gs:connect';
@@ -55,11 +57,50 @@ export interface ConnectPopupSuccess {
  *  interstitial then falls back to `startConnect` (ADR-0013, explicit not silent); `cancelled` → return
  *  to the form; `error` → surface; `success` → the App's `finishConnect` exchanges + sets the session
  *  in place (no reload). */
+/** spec 264 Phase 1b — a FedCM success. FedCM returns the id_token directly (no code to exchange); the
+ *  home's `/fedcm/assertion` ALSO packs the scoped person→Switchboard delegation (custody is only readable
+ *  there). The App finishes via `finishConnectViaFedcm` — no /token round-trip. */
+export interface ConnectFedcmSuccess {
+  status: 'fedcm-success';
+  authOrigin: string;
+  idToken: string;
+  delegation: DelegationWire;
+}
+
 export type ConnectPopupResult =
   | ConnectPopupSuccess
+  | ConnectFedcmSuccess
   | { status: 'blocked' }
   | { status: 'cancelled' }
   | { status: 'error'; error: string };
+
+/** Is the browser's FedCM API available? (Re-exported so the ConnectScreen gates the injected strategy.) */
+export function fedcmAvailable(): boolean {
+  return fedcmSupported();
+}
+
+const randomNonce = (): string => {
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+
+/** spec 264 Phase 1b — the FedCM RP ceremony (the `fedcm` strategy injected into `chooseSignIn`). FedCM
+ *  proves identity (the thin id_token); the home's `/fedcm/assertion` packs the scoped grant alongside it.
+ *  THROWS on dismissal / error / a missing delegation — the ConnectScreen catches it and falls back to the
+ *  guaranteed spec-259 popup (FedCM-first, not FedCM-only; ADR-0031). */
+export async function startConnectFedcm(onProgress?: (msg: string) => void): Promise<ConnectFedcmSuccess> {
+  onProgress?.('Continuing with Global.Church…');
+  const home = await resolveAuthOrigin(''); // the platform home origin (PLATFORM_AUTH_ORIGIN)
+  const { token } = await fedcmGet({
+    providers: [{ configURL: `${home}/fedcm/config.json`, clientId: 'demo-gs', params: { nonce: randomNonce(), intent: 'signin' } }],
+    context: 'signin',
+  });
+  const parsed = JSON.parse(token) as { id_token?: string; delegation?: DelegationWire };
+  if (!parsed.id_token || !parsed.delegation) {
+    throw new Error('FedCM did not return a Switchboard access grant'); // → popup fallback
+  }
+  return { status: 'fedcm-success', authOrigin: home, idToken: parsed.id_token, delegation: parsed.delegation };
+}
 
 /** Begin the credential-first Global.Church connect in a POPUP over the (dimmed) site (spec 257 Phase 1
  *  Wave 2, greenfield 02→07). Builds the same `/authorize` URL as the redirect path, appends `mode=popup`,
