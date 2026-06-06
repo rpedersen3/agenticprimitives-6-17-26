@@ -23,9 +23,11 @@ export function beginLogin(input: Omit<BeginLoginInput, 'config'>): BeginLoginRe
   return beginOidcLogin({ ...input, config: YOUVERSION_OIDC });
 }
 
-/** Complete the YouVersion login: public PKCE (no `client_secret`) + no `email_verified` requirement. */
+/** Complete the YouVersion login: public PKCE (no `client_secret`), no `email_verified` requirement, and
+ *  no `nonce` requirement (YouVersion's multi-leg /authorize→/callback→/token flow doesn't round-trip the
+ *  authorize nonce into the id_token; PKCE binds the exchange instead). */
 export function completeLogin(
-  input: Omit<CompleteLoginInput, 'config' | 'clientSecret' | 'requireEmailVerified'>,
+  input: Omit<CompleteLoginInput, 'config' | 'clientSecret' | 'requireEmailVerified' | 'requireNonce'>,
 ): Promise<CompleteLoginResult> {
-  return completeOidcLogin({ ...input, config: YOUVERSION_OIDC, requireEmailVerified: false });
+  return completeOidcLogin({ ...input, config: YOUVERSION_OIDC, requireEmailVerified: false, requireNonce: false });
 }

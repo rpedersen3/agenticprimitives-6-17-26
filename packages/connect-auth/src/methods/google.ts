@@ -184,6 +184,11 @@ export interface CompleteLoginInput {
   /** Require `email_verified === true` (default true — Google). Set false for providers that don't
    *  assert it (YouVersion); the facet is keyed on (iss, sub), not email, so this is safe. */
   requireEmailVerified?: boolean;
+  /** Require the id_token `nonce` to match (default true — Google). Set false for providers whose
+   *  non-standard multi-leg flow doesn't round-trip the authorize `nonce` into the id_token
+   *  (YouVersion). PKCE (the code_verifier only we hold) already binds the code exchange, so this is
+   *  safe — replay/injection of a stolen id_token still fails without the verifier. */
+  requireNonce?: boolean;
   config?: OidcProviderConfig;
   /** Injectable for tests (defaults to global fetch). */
   fetchImpl?: typeof fetch;
@@ -258,6 +263,7 @@ export async function completeLogin(input: CompleteLoginInput): Promise<Complete
     config,
     clientId: input.clientId,
     expectedNonce: input.expectedNonce,
+    requireNonce: input.requireNonce !== false,
     nowMs,
     fetchImpl: doFetch,
   });
@@ -285,7 +291,7 @@ export async function completeLogin(input: CompleteLoginInput): Promise<Complete
 
 async function verifyIdToken(
   idToken: string,
-  ctx: { config: OidcProviderConfig; clientId: string; expectedNonce: string; nowMs: number; fetchImpl: typeof fetch },
+  ctx: { config: OidcProviderConfig; clientId: string; expectedNonce: string; requireNonce: boolean; nowMs: number; fetchImpl: typeof fetch },
 ): Promise<{ ok: true; claims: IdTokenClaims } | { ok: false; reason: string }> {
   const parts = idToken.split('.');
   if (parts.length !== 3) return { ok: false, reason: 'id_token is not a 3-part JWT' };
@@ -347,7 +353,7 @@ async function verifyIdToken(
   if (typeof claims.exp !== 'number' || claims.exp * 1000 <= ctx.nowMs) {
     return { ok: false, reason: 'id_token expired' };
   }
-  if (!claims.nonce || !constantTimeEqualStr(claims.nonce, ctx.expectedNonce)) {
+  if (ctx.requireNonce && (!claims.nonce || !constantTimeEqualStr(claims.nonce, ctx.expectedNonce))) {
     return { ok: false, reason: 'id_token nonce mismatch' };
   }
   if (!claims.sub) return { ok: false, reason: 'id_token missing sub' };
