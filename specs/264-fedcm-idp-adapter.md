@@ -1,6 +1,6 @@
 # Spec 264 — FedCM IdP adapter (browser-integration layer over the authority substrate)
 
-**Status:** draft (implementation spec) · **Decision:** [ADR-0031](../docs/architecture/decisions/0031-fedcm-and-browser-credential-apis-are-adapters.md) (FedCM is an adapter, not the substrate) · **Doctrine:** [spec 260](260-identity-architecture-doctrine.md) Part VII, [spec 259](259-relying-idp-responsibility-split.md) / [ADR-0029](../docs/architecture/decisions/0029-relying-app-vs-idp-responsibility-split.md) · **App:** demo-sso (the IdP) · **Packages (new, provisional):** `browser-identity`, `fedcm-rp`, `fedcm-idp`
+**Status:** draft (implementation spec) · **Decision:** [ADR-0031](../docs/architecture/decisions/0031-fedcm-and-browser-credential-apis-are-adapters.md) (FedCM is an adapter, not the substrate) + [ADR-0032](../docs/architecture/decisions/0032-fedcm-delegation-via-substrate-grant-endpoint.md) (the `/fedcm/grant` substrate step issues the delegation; custody-class boundary) · **Doctrine:** [spec 260](260-identity-architecture-doctrine.md) Part VII, [spec 259](259-relying-idp-responsibility-split.md) / [ADR-0029](../docs/architecture/decisions/0029-relying-app-vs-idp-responsibility-split.md) · **App:** demo-sso (the IdP) · **Packages (new, provisional):** `browser-identity`, `fedcm-rp`, `fedcm-idp`
 
 ## Abstract
 
@@ -42,7 +42,8 @@ Per the FedCM IdP contract, demo-sso exposes:
 | `GET /.well-known/web-identity` | declares the IdP config URL(s) for this origin | static (points at `/fedcm/config.json`) |
 | `GET /fedcm/config.json` | IdP config: accounts/assertion/login/disconnect/metadata URLs, branding | derived from the whitelabel config |
 | `GET /fedcm/accounts` | the signed-in agents the browser may offer (Person + Org Agents) | the home session(s) → resolved SAs + AP-1 profiles (spec 261) |
-| `POST /fedcm/assertion` | mint the **thin** identity+intent assertion for the chosen account + RP | reuses the existing OIDC signer + **JWKS** (`/jwks`) |
+| `POST /fedcm/assertion` | mint the **thin** identity+intent assertion (id_token ONLY) for the chosen account + RP | reuses the existing OIDC signer + **JWKS** (`/jwks`) |
+| `POST /fedcm/grant` | **substrate** step ([ADR-0032](../docs/architecture/decisions/0032-fedcm-delegation-via-substrate-grant-endpoint.md)): id_token → scoped `person → delegate` delegation; Google/KMS signed server-side, passkey/wallet → `needs_device_credential` (popup fallback) | id_token-authorized; bridge-authenticated demo-a2a KMS sign |
 | `GET /fedcm/login` | the URL the browser opens when the user must (re)authenticate | the spec-259 credential-first entry (passkey/Google/wallet) |
 | `POST /fedcm/disconnect` | RP-initiated disconnect for an account | clears the relying-app grant (connected-apps + revoke) |
 | `GET /fedcm/client-metadata` | RP ToS/privacy metadata | per-RP whitelabel entry |

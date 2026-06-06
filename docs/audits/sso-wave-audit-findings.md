@@ -85,3 +85,28 @@ token exfiltration (CN-1), alg-confusion forgery (CN-4), phishing the single RP
    `AgentSession`/`BrokerSession`/`SessionRow` (already added this pass).
 
 Tracked in `docs/architecture/product-readiness-audit.md`.
+
+---
+
+## FedCM-delegation wave (ADR-0032) — security-auditor, 2026-06-05
+
+**Scope:** the new server-side KMS-sign authority path for the FedCM delegation flow:
+demo-sso `/fedcm/grant` (`server/fedcm.ts onFedcmGrant`) + the reverted thin `onAssertion`;
+demo-a2a `/custody/google/sign-site-delegation` (bridge-authenticated, constrained sign);
+demo-gs `startConnectFedcm`. **Verdict: SHIP (conditional).** The two core ADR-0032 claims hold:
+(1) the `SameSite=None` CSRF-harvest is defeated by the id_token `aud`/`iss` binding + registered-Origin
+check; (2) constrained signing is real — caller input reaching the signed digest is limited to
+`delegate` + a `sender` that must equal the derived person SA, so a broker compromise cannot escalate
+beyond a scoped value-0 revocable delegation. No critical finding.
+
+| ID | Sev | Finding | Disposition |
+| --- | --- | --- | --- |
+| M-3 | med | `/fedcm/grant` emitted no audit row — the only new browser-reachable authority-issuance surface was unobservable; replays (M-2) invisible. | **FIXED** — structured `evt:fedcm.grant` decision line on every branch (subject = canonical public SA per ADR-0010), `server/fedcm.ts`. Was the ship-blocker. |
+| H-1 | high | Custody class branched on the cookie `via` (client-controlled, not bound to the verified credential). Safe TODAY: the demo-a2a bridge `verifyCustodySession` rejects any non-custody-grade session, so a forged `via:Google` on a passkey/wallet token yields no signature. | **OPEN-HW** — derive custody class from the VERIFIED session principal, not the cookie. Comment added at the branch flagging `via` as advisory. Regression test owed: "passkey session + `via:Google` → no delegation." |
+| M-1 | med | Bridge nonce store is per-isolate in-memory (`getInMemoryNonceStore`) → cross-isolate replay within the 60s freshness window not caught (also affects `/custody/google/resolve`). Blast radius bounded: replay re-mints the SAME value-0 delegation. | **OPEN-HW** — back with KV/Durable Object (TTL = 2× freshness). Matches the inline TODO. |
+| M-2 | med | id_token has no `jti`/one-time binding → `/fedcm/grant` replayable for the full 3600s TTL (re-issues an equivalent scoped delegation). | **OPEN-HW** — bind a one-time `jti` at assertion, consume-on-first-use at grant. Acceptable for testnet (ADR-0028) ONLY because M-3 now makes replays visible. |
+| L-1 | low | `assertionCorsHeaders` reflects the raw Origin with `Allow-Credentials:true` before the registered-origin check → response bodies readable by any reflected origin. Not a harvest vector (id_token is the gate). | **OPEN-HW** — reflect ACAO only for a resolved client origin. |
+| I-1 | info | `verifyHomeSession` aud-retry (`fedcm.ts`) is a `try-strong/catch-weaker` shape (ADR-0013 smell). Not exploitable — signature still verified, `isOwnConnectOrigin` gates issuer, same-subject check binds. | **OPEN-HW** — cleanup. |
+| I-2 | info | `resolveOrigin` can throw outside the try → uncaught 500 w/o CORS on a foreign Host. Vercel always sets a valid Host → not exploitable. | **OPEN-HW** — robustness. |
+
+Must-fix-before-Base-Sepolia: **M-3 (done)**. Acceptable-with-tracking on testnet: H-1, M-1, M-2, L-1, I-1, I-2.

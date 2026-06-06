@@ -57,9 +57,10 @@ export interface ConnectPopupSuccess {
  *  interstitial then falls back to `startConnect` (ADR-0013, explicit not silent); `cancelled` → return
  *  to the form; `error` → surface; `success` → the App's `finishConnect` exchanges + sets the session
  *  in place (no reload). */
-/** spec 264 Phase 1b — a FedCM success. FedCM returns the id_token directly (no code to exchange); the
- *  home's `/fedcm/assertion` ALSO packs the scoped person→Switchboard delegation (custody is only readable
- *  there). The App finishes via `finishConnectViaFedcm` — no /token round-trip. */
+/** spec 264 / ADR-0032 — a FedCM success. FedCM returns the THIN id_token (identity only); the scoped
+ *  person→Switchboard delegation is then issued by the home's SEPARATE `/fedcm/grant` substrate endpoint
+ *  (authorized by that id_token), not packed into the FedCM token. The App finishes via
+ *  `finishConnectViaFedcm` — no /token round-trip. */
 export interface ConnectFedcmSuccess {
   status: 'fedcm-success';
   authOrigin: string;
@@ -84,22 +85,45 @@ const randomNonce = (): string => {
   return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 };
 
-/** spec 264 Phase 1b — the FedCM RP ceremony (the `fedcm` strategy injected into `chooseSignIn`). FedCM
- *  proves identity (the thin id_token); the home's `/fedcm/assertion` packs the scoped grant alongside it.
- *  THROWS on dismissal / error / a missing delegation — the ConnectScreen catches it and falls back to the
- *  guaranteed spec-259 popup (FedCM-first, not FedCM-only; ADR-0031). */
+/** spec 264 / ADR-0032 — the FedCM RP ceremony (the `fedcm` strategy injected into `chooseSignIn`), a
+ *  TWO-step flow that keeps FedCM a thin identity adapter:
+ *
+ *   1. FedCM proves IDENTITY → the thin id_token.
+ *   2. POST that id_token to the home's `/fedcm/grant` substrate endpoint → the scoped person→Switchboard
+ *      delegation. A Google/KMS member is signed server-side (zero device prompt); a passkey/wallet member
+ *      returns `needs_device_credential` (the device key can't be signed for server-side).
+ *
+ *  THROWS on dismissal / error / `needs_device_credential` / a missing delegation — the ConnectScreen
+ *  catches it and falls back to the guaranteed spec-259 popup, where a device-custodied member signs the
+ *  delegation on-device (FedCM-first, not FedCM-only; ADR-0031). */
 export async function startConnectFedcm(onProgress?: (msg: string) => void): Promise<ConnectFedcmSuccess> {
   onProgress?.('Continuing with Global.Church…');
   const home = await resolveAuthOrigin(''); // the platform home origin (PLATFORM_AUTH_ORIGIN)
-  const { token } = await fedcmGet({
+  const { token: idToken } = await fedcmGet({
     providers: [{ configURL: `${home}/fedcm/config.json`, clientId: 'demo-gs', params: { nonce: randomNonce(), intent: 'signin' } }],
     context: 'signin',
   });
-  const parsed = JSON.parse(token) as { id_token?: string; delegation?: DelegationWire };
-  if (!parsed.id_token || !parsed.delegation) {
-    throw new Error('FedCM did not return a Switchboard access grant'); // → popup fallback
+  if (!idToken) throw new Error('FedCM returned no id_token'); // → popup fallback
+
+  // Step 2 — exchange the identity bootstrap for the scoped grant (ADR-0032). The `ap_sso` cookie rides
+  // (SameSite=None, credentialed) so the broker can reach custody; the id_token is the authorization.
+  onProgress?.('Authorizing Switchboard access…');
+  const res = await fetch(`${home}/fedcm/grant`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id_token: idToken, client_id: 'demo-gs' }),
+  });
+  const out = (await res.json().catch(() => ({}))) as {
+    delegation?: DelegationWire; needs_device_credential?: boolean; via?: string; error?: string;
+  };
+  if (out.needs_device_credential) {
+    throw new Error(`needs_device_credential:${out.via ?? ''}`); // → popup (device custody signs there)
   }
-  return { status: 'fedcm-success', authOrigin: home, idToken: parsed.id_token, delegation: parsed.delegation };
+  if (!res.ok || !out.delegation) {
+    throw new Error(out.error ? `fedcm_grant_failed:${out.error}` : 'FedCM grant returned no delegation'); // → popup
+  }
+  return { status: 'fedcm-success', authOrigin: home, idToken, delegation: out.delegation };
 }
 
 /** Begin the credential-first Global.Church connect in a POPUP over the (dimmed) site (spec 257 Phase 1
