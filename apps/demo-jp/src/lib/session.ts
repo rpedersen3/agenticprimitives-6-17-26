@@ -66,14 +66,17 @@ export function restoreSession(): MemberSession | null {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as StoredSession;
-    if (!s.token || !s.name) return null;
+    // A NAME is NOT required (spec 257 name-deferral): Google/YouVersion members deploy a nameless home
+    // and claim a public handle later. The canonical identity is the SA address from the token, never the
+    // name — so gate on the token only; an empty name is a valid nameless member.
+    if (!s.token) return null;
     const dec = decodeToken(s.token);
     const addr = addrFromToken(s.token);
     if (!addr || !dec?.exp || dec.exp * 1000 <= Date.now()) {
       localStorage.removeItem(SESSION_KEY);
       return null;
     }
-    return { token: s.token, name: s.name, address: addr, fresh: false, grant: s.grant };
+    return { token: s.token, name: s.name ?? '', address: addr, fresh: false, grant: s.grant };
   } catch {
     return null;
   }
