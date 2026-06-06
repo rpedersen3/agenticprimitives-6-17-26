@@ -51,6 +51,7 @@ import { ConnectScreen } from './components/ConnectScreen';
 import type { ConnectPopupSuccess } from './lib/connect-launch';
 import { RoleDiscovery } from './components/RoleDiscovery';
 import { RoleHub } from './components/RoleHub';
+import { YouVersionHighlights } from './components/YouVersionHighlights';
 import {
   restoreSession as restoreMemberSession, setSession as persistSession, clearSession as clearMemberSession,
   addrFromToken, type MemberSession,
@@ -715,14 +716,21 @@ export function App() {
             />
           )}
           {view === 'hub' && (
-            <RoleHub
-              name={identity?.displayName || ''}
-              caps={caps}
-              onOpen={(k) => openWorkspace(k)}
-              onSetup={(k) => openWorkspace(k)}
-              onReconnect={goConnect}
-              onOpenHome={onOpenHome}
-            />
+            <>
+              <RoleHub
+                name={identity?.displayName || ''}
+                caps={caps}
+                onOpen={(k) => openWorkspace(k)}
+                onSetup={(k) => openWorkspace(k)}
+                onReconnect={goConnect}
+                onOpenHome={onOpenHome}
+              />
+              {member?.grant && (
+                <Box sx={{ mt: 2.5 }}>
+                  <YouVersionHighlights grant={member.grant} />
+                </Box>
+              )}
+            </>
           )}
         </Box>
         {modal && modal.kind === 'wea' && <WeaModal onClose={() => setModal(null)} />}
