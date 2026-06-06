@@ -135,6 +135,24 @@ Read (relying app / agent)
   `youversion.<type>.list` tools (withDelegation + scope check) proxying through demo-a2a.
 - **W4 — consent UI.** the Impact delegations-area scope-picker; per-app/per-scope revoke; relying-app
   (demo-jp/demo-gs) "request YouVersion highlights" affordance.
+- **W5 — YouVersion Data Exchange consent (the actual highlights authorization).** *Correction:
+  `read_highlights` is NOT an OIDC scope — YouVersion silently drops it from `/authorize`, so sign-in is
+  identity-only (`openid profile email`).* Highlights are authorized through YouVersion's separate **Data
+  Exchange** flow, run once after sign-in:
+  1. demo-a2a `POST /custody/youversion/data-exchange-token` (bridge-authed): with the person's
+     KMS-custodied access_token (server-side), call `POST https://api.youversion.com/data-exchange/token`
+     `{permissions:['highlights']}` → a short-lived (~5 min) `data_exchange` token. That dx-token is
+     DESIGNED to ride the browser URL — it is NOT the access_token (which never leaves the Worker).
+  2. Connect `GET /connect/youversion/data-exchange` (person-session authed) mints the dx-token via the
+     bridge and returns `{ approveUrl }` = `https://api.youversion.com/data-exchange?token=…&x-yvp-app-key=…`.
+  3. The browser navigates to `approveUrl`; the user approves "highlights"; YouVersion redirects to the
+     app's **Portal-configured data-exchange callback** (`/oidc/youversion/data-exchange/callback`) with
+     `data_exchange_status=granted|cancelled`, which lands the user back at `/apps?yv_highlights=…`.
+  4. Afterwards the person's access_token is authorized for `GET /v1/highlights` (grant is server-side at
+     YouVersion, per user+app) — the existing W2/W3 read path then works unchanged.
+  **Portal prerequisite:** the app key must be enabled for Data Exchange and a data-exchange callback URL
+  registered. **No token crosses any new boundary; the VaultGrant (W3) still gates which relying app may
+  trigger reads.**
 
 ## Reference: smart-agent patterns to port
 
