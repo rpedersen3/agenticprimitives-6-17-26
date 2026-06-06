@@ -93,9 +93,19 @@ const randomNonce = (): string => {
  *      delegation. A Google/KMS member is signed server-side (zero device prompt); a passkey/wallet member
  *      returns `needs_device_credential` (the device key can't be signed for server-side).
  *
+ *  WHO ACTUALLY GETS THE FEDCM CHOOSER (by design): FedCM is the fast-path for members whose session is
+ *  established at the IdP origin (`PLATFORM_AUTH_ORIGIN` = www apex) — i.e. Google/KMS members (their OIDC
+ *  return completes on www and sets www's `navigator.login` status). A passkey/wallet member is
+ *  SUBDOMAIN-HOMED (`<handle>.impact-agent.me`, rpId-isolated): their login-status signal is set on the
+ *  subdomain, and FedCM's status is PER-ORIGIN and does NOT cross subdomains (the `ap_sso` cookie does,
+ *  but the status signal doesn't), so the www IdP reports them logged-out → no chooser → this THROWS →
+ *  ConnectScreen's spec-259 redirect fallback. That is correct, not a regression: a device-custodied
+ *  member must sign the delegation on-device anyway, so the redirect to their home is unavoidable — FedCM
+ *  would only add a dialog in front of the same redirect. (Decision: 2026-06-05; ADR-0032.)
+ *
  *  THROWS on dismissal / error / `needs_device_credential` / a missing delegation — the ConnectScreen
- *  catches it and falls back to the guaranteed spec-259 popup, where a device-custodied member signs the
- *  delegation on-device (FedCM-first, not FedCM-only; ADR-0031). */
+ *  catches it and falls back to the guaranteed spec-259 popup/redirect, where a device-custodied member
+ *  signs the delegation on-device (FedCM-first, not FedCM-only; ADR-0031). */
 export async function startConnectFedcm(onProgress?: (msg: string) => void): Promise<ConnectFedcmSuccess> {
   onProgress?.('Continuing with Global.Church…');
   const home = await resolveAuthOrigin(''); // the platform home origin (PLATFORM_AUTH_ORIGIN)

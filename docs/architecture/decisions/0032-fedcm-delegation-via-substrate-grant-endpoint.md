@@ -76,6 +76,28 @@ it only adds a constrained shape for an authority it already has.
 - The grant endpoint is the **only** new browser-reachable surface; it is fail-closed (id_token +
   same-subject + registered-Origin all required) and CORS-pinned to the exact RP origin with credentials.
 
+## Who gets the FedCM chooser — the per-origin login-status boundary (2026-06-05)
+
+FedCM's account chooser only appears for members the **IdP origin** (`www` apex) sees as logged-in, via
+the per-origin `navigator.login.setStatus` signal. This cleanly splits along custody class:
+
+- **Google/KMS** members complete their OIDC return **on www** → www's login-status is `logged-in` →
+  chooser appears → Layer-2 server-side sign → zero-prompt connect. FedCM delivers its full payoff.
+- **passkey/wallet** members are **subdomain-homed** (`<handle>.impact-agent.me`, rpId-isolated). Their
+  login-status is set **on the subdomain**, and the FedCM status signal is **per-origin and does not cross
+  subdomains** (the `ap_sso` session cookie *does* — `.impact-agent.me`, `SameSite=None` — but the status
+  signal does not). So the www IdP reports them logged-out → **no chooser** → the demo-gs FedCM strategy
+  throws → the spec-259 **redirect** fallback runs.
+
+**Decision: do NOT force the chooser for subdomain-homed members.** It is structurally a non-win: a
+device-custodied member must produce an **on-device signature** for the delegation regardless (Layer 3),
+so the redirect to their home is unavoidable — a FedCM chooser would only prepend a dialog to the same
+redirect. Making www recognize cross-subdomain sessions would require a hidden www-origin iframe calling
+`setStatus` across a cross-site boundary (Chrome-restricted, uncertain) for no real step-saving. FedCM is
+therefore the **Google/www-homed fast-path**; passkey/wallet use the (working) redirect by design. The
+default demo-gs path (no `?fedcm=1`) already uses the popup for everyone, so this surfaces only under the
+opt-in test flag.
+
 ## Reference: smart-agent patterns
 
 smart-agent has no FedCM IdP; the assertion/grant split is adopted from the W3C/Chrome FedCM contract.
