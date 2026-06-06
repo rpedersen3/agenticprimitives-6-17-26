@@ -44,7 +44,9 @@ export const GOOGLE_OIDC: OidcProviderConfig = {
  *  false` — the credential is keyed on (iss, sub), never on email, so this does not weaken takeover
  *  resistance. */
 export const YOUVERSION_OIDC: OidcProviderConfig = {
-  issuers: ['https://api.youversion.com'],
+  // YouVersion's id_token sets `iss` to the TOKEN ENDPOINT URL (observed live), not the base origin the
+  // docs state — accept both so we're robust to either.
+  issuers: ['https://api.youversion.com/auth/token', 'https://api.youversion.com'],
   authorizationEndpoint: 'https://api.youversion.com/auth/authorize',
   tokenEndpoint: 'https://api.youversion.com/auth/token',
   jwksUri: 'https://api.youversion.com/.well-known/jwks.json',
