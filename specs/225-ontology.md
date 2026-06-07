@@ -278,3 +278,18 @@ ontology root + per-package runtime SHACL validation.
 via `ShapeRegistry.defineShape(...)` per the existing
 [ADR-0009](../docs/architecture/decisions/0009-on-chain-ontology-shacl-naming.md)
 lockstep convention. The `check:ontology-lockstep` gate covers all new shapes.
+
+### 11.6 Generic substrate additions (skills/geo + verifiable-content)
+
+Later generic, vertical-agnostic substrates also live here as monorepo-wide
+formal vocabulary (NOT verticals — they carry no branding/faith terms; ADR-0021):
+
+- `tbox/skills.ttl` + `tbox/geo.ttl` (+ `cbox/skill-vocabulary.ttl` /
+  `cbox/geo-vocabulary.ttl`) — the skills + geo substrate (spec 251).
+- `tbox/content.ttl` + `cbox/content-vocabulary.ttl` — the **verifiable-content**
+  substrate (`apcnt:` — `CanonicalLocus`/`CorpusManifest`/`ContentDescriptor`/
+  `CitationAssertion`/`Entitlement`, FRBR-aligned; spec 266). Carve-out from
+  ADR-0010 per [ADR-0033](../docs/architecture/decisions/0033-content-agnostic-verifiable-content-firewall.md):
+  a content locus is scheme-anchored, NOT a Smart Agent facet. Zero vertical
+  vocabulary; `contentType` + reference scheme are app-injected. On-chain
+  lockstep applies once the Phase-3 `ContentCorpusRegistry` ships (spec 266 §6).

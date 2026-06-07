@@ -51,6 +51,11 @@ function tsFiles(dir: string): string[] {
   return out;
 }
 
+// `packages/*` is reusable substrate ONLY — no vertical vocabulary, no carve-outs.
+// A reused vertical (e.g. scripture) lives OUTSIDE packages/ in the `domains/`
+// tier (which this scan does not cover), so packages/ stays pure (ADR-0021 +
+// ADR-0033). The deployment/faith rules below apply to every packages/* file.
+
 const findings: string[] = [];
 for (const pkg of readdirSync(PACKAGES)) {
   const src = join(PACKAGES, pkg, 'src');

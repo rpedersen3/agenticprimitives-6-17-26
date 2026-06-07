@@ -1,0 +1,147 @@
+{
+  "name": "@agenticprimitives/content-primitives",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/266-verifiable-content-substrate.md",
+  "summary": "Verifiable Content Substrate: name/resolve/commit/entitlement-gate/cite off-platform rights-held content. Content-agnostic (ADR-0033) — no vertical vocabulary, no content text. Phase 1: pure SDK.",
+  "capabilities": [
+    "content-locus-addressing",
+    "merkle-corpus-commitment",
+    "content-descriptor-verification",
+    "entitlement-gating",
+    "citation-assertion"
+  ],
+  "runtime": ["browser", "node", "worker"],
+  "readFirst": ["CLAUDE.md", "README.md", "src/index.ts"],
+  "docs": {
+    "audit": "AUDIT.md"
+  },
+  "validation": [
+    "pnpm check:content-primitives",
+    "pnpm check:public-exports",
+    "pnpm check:no-domain-in-packages",
+    "pnpm check:no-licensed-content"
+  ],
+  "securityInvariants": [
+    "locus normalization + locusId must be deterministic",
+    "no rendering text in any descriptor, commitment preimage we store, or on-chain (ADR-0033 R3)",
+    "descriptor verification is fail-closed on the issuer ERC-1271 signature",
+    "entitlement gating is fail-closed for licensed/private corpora and unknown policies",
+    "no licensed/copyrighted content in source, tests, or fixtures (ADR-0033 R1)",
+    "trust flows from the issuer signature + access policy, never a platform claim (R5)"
+  ],
+  "integrationPoints": {
+    "consumes": [
+      "@agenticprimitives/types",
+      "@agenticprimitives/verifiable-credentials"
+    ],
+    "mustNotImport": [
+      "@agenticprimitives/delegation",
+      "@agenticprimitives/mcp-runtime",
+      "@agenticprimitives/agent-naming"
+    ]
+  },
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "viem"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/verifiable-credentials",
+    "viem"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/key-custody",
+    "@modelcontextprotocol/sdk"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "AccessPolicy",
+    "ProofPolicy",
+    "DescriptorStatus",
+    "RightsStatus",
+    "TrustProfile",
+    "CanonicalLocus",
+    "CanonicalLocusEnvelope",
+    "CanonicalReference",
+    "ContentCommitment",
+    "CorpusManifest",
+    "WorkMeta",
+    "IssuerIdentityRef",
+    "ContentDescriptor",
+    "BuildDescriptorInput",
+    "SignatureVerifier",
+    "Entitlement",
+    "CitationAssertion",
+    "computeCanonicalId",
+    "canonicalReference",
+    "LOCUS_ID_SCHEME",
+    "corpusRef",
+    "jcsCanonicalize",
+    "canonicalHash",
+    "hashPair",
+    "leafHash",
+    "buildCorpusTree",
+    "merkleRoot",
+    "merkleProof",
+    "verifyInclusion",
+    "CorpusTree",
+    "NORMALIZATION_V1",
+    "canonicalizeRendering",
+    "contentCommitment",
+    "verifyCommitment",
+    "assertCommitment",
+    "descriptorHash",
+    "buildContentDescriptor",
+    "verifyContentDescriptor",
+    "VerifyDescriptorOpts",
+    "VerificationResult",
+    "resolveCandidates",
+    "ResolutionConstraints",
+    "Candidate",
+    "ResolutionResult",
+    "TrustProfileConfig",
+    "evaluateEntitlement",
+    "buildCitationAssertion",
+    "EntitlementDecision",
+    "CitationInput",
+    "InvalidReferenceError",
+    "CommitmentMismatchError",
+    "buildInclusionZkProof",
+    "bindPaymentMandate"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "Delegation",
+      "reason": "Belongs in @agenticprimitives/delegation. This substrate gates via injected entitlement/policy, not delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    },
+    {
+      "term": "Caveat",
+      "reason": "Belongs in @agenticprimitives/delegation.",
+      "owningPackage": "@agenticprimitives/delegation"
+    }
+  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

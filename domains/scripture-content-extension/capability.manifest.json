@@ -1,0 +1,68 @@
+{
+  "name": "@agenticprimitives/scripture-content-extension",
+  "kind": "capability",
+  "tier": "domain",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/267-scripture-demo-vertical.md",
+  "summary": "Scripture vertical for verifiable-content: Bible canon (OSIS), versioned versification, scripture.verse selector, alias parsing to ONE scheme-independent canonical locus. No text, no translation.",
+  "capabilities": [
+    "scripture-reference-parsing",
+    "canonical-locus-construction",
+    "bible-canon"
+  ],
+  "runtime": ["browser", "node", "worker"],
+  "readFirst": ["CLAUDE.md", "README.md", "src/index.ts"],
+  "docs": { "audit": "AUDIT.md" },
+  "validation": [
+    "pnpm check:scripture-content-extension",
+    "pnpm check:public-exports",
+    "pnpm check:no-licensed-content"
+  ],
+  "securityInvariants": [
+    "all surface aliases for the same verse normalize to ONE canonical form (one canonicalId)",
+    "non-ASCII aliases are rejected (homograph/confusable defense)",
+    "translation/edition is NEVER part of the public reference name (descriptor metadata only)",
+    "no rendering text and no specific translation in this package (ADR-0033 R1/R3)"
+  ],
+  "integrationPoints": {
+    "consumes": ["@agenticprimitives/content-primitives"],
+    "mustNotImport": ["@agenticprimitives/mcp-runtime", "@agenticprimitives/delegation"]
+  },
+  "owns": { "source": ["src/**"], "tests": ["test/**"] },
+  "imports": ["@agenticprimitives/content-primitives"],
+  "allowedImports": ["@agenticprimitives/content-primitives"],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy",
+    "@modelcontextprotocol/sdk"
+  ],
+  "publicExports": [
+    "BOOKS",
+    "lookupBook",
+    "BibleBook",
+    "SCRIPTURE_VERSE_CONTENT_TYPE",
+    "CONTENT_DOMAIN",
+    "SCRIPTURE_LOCUS_PROFILE_V1",
+    "VERSIFICATION_V1",
+    "CANON_V1",
+    "ScriptureCanonicalLocusV1",
+    "ScriptureSelector",
+    "InvalidScriptureReferenceError",
+    "scriptureCanonicalLocus",
+    "scriptureEnvelope",
+    "scriptureSelector",
+    "ParsedScriptureReference",
+    "parseScriptureAlias",
+    "displayReference"
+  ],
+  "forbiddenTerms": [],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "contextBudget": { "claudeMdMaxWords": 900, "readmeMaxWords": 1800, "architectureMaxWords": 3000 }
+}

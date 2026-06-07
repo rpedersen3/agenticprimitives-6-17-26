@@ -1,0 +1,11 @@
+function displayReference(book: BibleBook, chapter: number, verse: number): string
+function parseScriptureAlias(alias: string): ParsedScriptureReference
+function scriptureCanonicalLocus(book: BibleBook, chapter: number, verse: number): ScriptureCanonicalLocusV1
+function scriptureEnvelope(locus: ScriptureCanonicalLocusV1): CanonicalLocusEnvelope
+function scriptureSelector(book: BibleBook, chapter: number, verse: number): ScriptureSelector
+interface ParsedScriptureReference
+interface ScriptureCanonicalLocusV1
+interface ScriptureSelector
+re-export BOOKS from ./canon.js
+re-export BibleBook from ./canon.js
+re-export lookupBook from ./canon.js

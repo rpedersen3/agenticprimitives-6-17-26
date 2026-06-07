@@ -1,0 +1,52 @@
+# C-box — verifiable-content codelists + shapes (spec 266). On-chain-bound where
+# noted (lockstep, ADR-0009). NEUTRAL substrate — no domain/faith vocabulary.
+
+@prefix apcnt: <https://agenticprimitives.dev/ns/content#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+# accessPolicy — gates the resolve/retrieve path.
+apcnt:accessPolicyScheme a skos:ConceptScheme ;
+    rdfs:label "accessPolicy" ;
+    rdfs:comment "Who may retrieve a rendering: public (no entitlement) < licensed (entitlement required) < private (entitlement + issuer scope)." ;
+    skos:hasTopConcept apcnt:Public, apcnt:Licensed, apcnt:Private .
+apcnt:Public   a skos:Concept ; skos:inScheme apcnt:accessPolicyScheme ; skos:prefLabel "public" ;
+    rdfs:comment "Anyone may retrieve; descriptor + text returned without an entitlement." .
+apcnt:Licensed a skos:Concept ; skos:inScheme apcnt:accessPolicyScheme ; skos:prefLabel "licensed" ;
+    rdfs:comment "Retrieval requires a valid Entitlement credential. Descriptor (pointer + commitment) may be public; text is gated." .
+apcnt:Private  a skos:Concept ; skos:inScheme apcnt:accessPolicyScheme ; skos:prefLabel "private" ;
+    rdfs:comment "Retrieval requires an issuer-scoped Entitlement." .
+
+# proofPolicy — how a descriptor's authenticity/inclusion is proven.
+apcnt:proofPolicyScheme a skos:ConceptScheme ;
+    rdfs:label "proofPolicy" ;
+    skos:hasTopConcept apcnt:Signature, apcnt:MerkleInclusion, apcnt:Zk .
+apcnt:Signature      a skos:Concept ; skos:inScheme apcnt:proofPolicyScheme ; skos:prefLabel "signature" ;
+    rdfs:comment "Issuer ERC-1271 signature over the descriptor hash." .
+apcnt:MerkleInclusion a skos:Concept ; skos:inScheme apcnt:proofPolicyScheme ; skos:prefLabel "merkle-inclusion" ;
+    rdfs:comment "Descriptor commitment is a leaf provable under the corpusRoot." .
+apcnt:Zk             a skos:Concept ; skos:inScheme apcnt:proofPolicyScheme ; skos:prefLabel "zk" ;
+    rdfs:comment "Zero-knowledge inclusion/citation proof. RESERVED (spec 266 Phase 4)." .
+
+# ContentDescriptorShape — encodes ADR-0033 R3 (no inline text) + issuer binding.
+apcnt:ContentDescriptorShape a sh:NodeShape ;
+    rdfs:label "ContentDescriptor shape" ;
+    sh:targetClass apcnt:ContentDescriptor ;
+    sh:property [
+        sh:path apcnt:commitsTo ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:message "A ContentDescriptor MUST carry exactly one commitment (keccak256 of the off-chain rendering)."
+    ] ;
+    sh:property [
+        sh:path apcnt:issuedBy ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:message "A ContentDescriptor MUST name exactly one issuer Smart Agent."
+    ] ;
+    sh:property [
+        sh:path apcnt:retrievalPointer ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:message "A ContentDescriptor MUST carry a retrievalPointer (a locator), NEVER the rendering text itself (ADR-0033 R3)."
+    ] .

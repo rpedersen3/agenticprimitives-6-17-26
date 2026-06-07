@@ -54,6 +54,9 @@ export const NS = {
   // Generic skills + geo substrate (spec 251)
   aps: 'https://agenticprimitives.dev/ns/skill#',
   apg: 'https://agenticprimitives.dev/ns/geo#',
+  // Generic verifiable-content substrate (spec 266) — content is scheme-anchored,
+  // NOT a Smart Agent facet (ADR-0033). Zero vertical/faith vocabulary.
+  apcnt: 'https://agenticprimitives.dev/ns/content#',
 } as const;
 
 /** Class IRIs (T-box). Each is `<namespace><LocalName>`. */
@@ -128,6 +131,12 @@ export const CLASS = {
   AssociationCredential: `${NS.apatt}AssociationCredential`,
   // Phase-1.5: VC envelope
   VerifiableCredential: `${NS.apvc}VerifiableCredential`,
+  // Verifiable-content substrate (spec 266; FRBR Work/Manifestation/Item)
+  CanonicalLocus: `${NS.apcnt}CanonicalLocus`,
+  CorpusManifest: `${NS.apcnt}CorpusManifest`,
+  ContentDescriptor: `${NS.apcnt}ContentDescriptor`,
+  CitationAssertion: `${NS.apcnt}CitationAssertion`,
+  Entitlement: `${NS.apcnt}Entitlement`,
 } as const;
 
 /** Predicate / property IRIs (T-box). */
@@ -227,6 +236,17 @@ export const PREDICATE = {
   citesValidation: `${NS.apatt}citesValidation`,
   validatorKind: `${NS.apatt}validatorKind`,
   offchainCredentialStatusList: `${NS.apatt}offchainCredentialStatusList`,
+  // Verifiable-content substrate (spec 266)
+  locusOf: `${NS.apcnt}locusOf`,
+  renderedBy: `${NS.apcnt}renderedBy`,
+  commitsTo: `${NS.apcnt}commitsTo`,
+  retrievalPointer: `${NS.apcnt}retrievalPointer`,
+  corpusRoot: `${NS.apcnt}corpusRoot`,
+  issuedBy: `${NS.apcnt}issuedBy`,
+  accessPolicy: `${NS.apcnt}accessPolicy`,
+  proofPolicy: `${NS.apcnt}proofPolicy`,
+  citesLocus: `${NS.apcnt}citesLocus`,
+  underEntitlement: `${NS.apcnt}underEntitlement`,
 } as const;
 
 /** SHACL shape IRIs (C-box).
@@ -240,6 +260,8 @@ export const PREDICATE = {
 export const SHAPE = {
   CanonicalAgentId: `${NS.ap}CanonicalAgentIdShape`,
   CredentialFacet: `${NS.apcr}CredentialFacetShape`,
+  // Verifiable-content substrate (spec 266) — encodes ADR-0033 R3 (no inline text).
+  ContentDescriptor: `${NS.apcnt}ContentDescriptorShape`,
 } as const;
 
 // `ARTIFACTS` + `artifactPath` (Node-only, `node:url`) live in the

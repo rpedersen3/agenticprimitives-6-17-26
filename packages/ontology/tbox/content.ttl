@@ -1,0 +1,53 @@
+# T-box — generic verifiable-content substrate (spec 266). Names, resolves, and
+# verifies CONTENT that lives off-platform and is controlled by third-party rights
+# holders. NEUTRAL substrate — NO domain/faith/vertical vocabulary (ADR-0033 R4).
+#
+# FRBR-aligned: CanonicalLocus = Work (edition-independent coordinate, scheme-
+# anchored, never an Agent); CorpusManifest = Expression/Manifestation (issuer-
+# owned, committed); ContentDescriptor = Item (the deliverable leaf — points AT
+# off-chain text, NEVER contains it; ADR-0033 R3).
+
+@prefix apcnt: <https://agenticprimitives.dev/ns/content#> .
+@prefix ap:    <https://agenticprimitives.dev/ns/core#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+
+apcnt:CanonicalLocus a rdfs:Class ;
+    rdfs:label "CanonicalLocus" ;
+    rdfs:comment "FRBR Work. An edition-independent coordinate into a structured corpus (a passage address). Identified by a deterministic locusId computed from a normalized (scheme, path) reference. SCHEME-anchored: never registered, never an Agent, has no owner (ADR-0033)." .
+
+apcnt:CorpusManifest a rdfs:Class ;
+    rdfs:label "CorpusManifest" ;
+    rdfs:comment "FRBR Expression/Manifestation. A versioned body of renderings published by an issuer Smart Agent, committed by a Merkle corpusRoot + a signed manifestHash. Public anchor; the rendering text stays off-platform." .
+
+apcnt:ContentDescriptor a rdfs:Class ;
+    rdfs:label "ContentDescriptor" ;
+    rdfs:comment "FRBR Item. The deliverable trust leaf for one (corpus, locus): commitment + retrievalPointer + issuer signature + access policy. Points AT off-chain text; NEVER contains it (ADR-0033 R3). Trust = issuer signature, not platform claim (R5)." .
+
+apcnt:CitationAssertion a rdfs:Class ;
+    rdfs:label "CitationAssertion" ;
+    rdfs:comment "A provenance credential: a party cited a locus from a corpus, the rendering commitment matched, under a given entitlement. The AI-safe citation record (W3C VC 2.0 + PROV-O)." .
+
+apcnt:Entitlement a rdfs:Class ;
+    rdfs:label "Entitlement" ;
+    rdfs:comment "A credential asserting a subject Smart Agent may access a corpus under stated terms. Gates the resolve/retrieve path for licensed/private corpora; optional for public ones." .
+
+apcnt:locusOf a rdf:Property ; rdfs:domain apcnt:ContentDescriptor ; rdfs:range apcnt:CanonicalLocus ;
+    rdfs:comment "The CanonicalLocus (by locusId) this descriptor renders." .
+apcnt:renderedBy a rdf:Property ; rdfs:domain apcnt:ContentDescriptor ; rdfs:range apcnt:CorpusManifest ;
+    rdfs:comment "The CorpusManifest (by corpusRef) this descriptor belongs to." .
+apcnt:commitsTo a rdf:Property ; rdfs:domain apcnt:ContentDescriptor ;
+    rdfs:comment "keccak256 of the canonicalized off-chain rendering text. Binds the descriptor to a specific rendering WITHOUT revealing it." .
+apcnt:retrievalPointer a rdf:Property ; rdfs:domain apcnt:ContentDescriptor ;
+    rdfs:comment "A URI/locator for the off-chain rendering text. NEVER the text itself (ADR-0033 R3)." .
+apcnt:corpusRoot a rdf:Property ; rdfs:domain apcnt:CorpusManifest ;
+    rdfs:comment "Merkle root over the per-locus descriptor commitments of the corpus." .
+apcnt:issuedBy a rdf:Property ; rdfs:domain apcnt:CorpusManifest ; rdfs:range ap:CanonicalAgentId ;
+    rdfs:comment "The issuer Smart Agent (Address) that published + signed the corpus/descriptors." .
+apcnt:accessPolicy a rdf:Property ;
+    rdfs:comment "An apcnt:accessPolicy value (C-box codelist): public | licensed | private." .
+apcnt:proofPolicy a rdf:Property ;
+    rdfs:comment "An apcnt:proofPolicy value (C-box codelist): signature | merkle-inclusion | zk." .
+apcnt:citesLocus a rdf:Property ; rdfs:domain apcnt:CitationAssertion ; rdfs:range apcnt:CanonicalLocus .
+apcnt:underEntitlement a rdf:Property ; rdfs:domain apcnt:CitationAssertion ; rdfs:range apcnt:Entitlement .
