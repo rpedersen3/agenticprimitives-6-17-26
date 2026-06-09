@@ -50,6 +50,8 @@ const PAGES_PROJECT_JP = process.env.PAGES_PROJECT_JP ?? 'agenticprimitives-demo
 const DEMO_JP_URL = process.env.DEMO_JP_URL ?? `https://${PAGES_PROJECT_JP}.pages.dev`;
 const PAGES_PROJECT_GS = process.env.PAGES_PROJECT_GS ?? 'agenticprimitives-demo-gs';
 const DEMO_GS_URL = process.env.DEMO_GS_URL ?? `https://${PAGES_PROJECT_GS}.pages.dev`;
+// Bible Explorer relying app (specs 266/267) — a Worker, not a Pages project.
+const DEMO_BIBLE_URL = process.env.DEMO_BIBLE_URL ?? 'https://demo-bible-ontology-production.richardpedersen3.workers.dev';
 
 // R5.12 moved contracts from apps/ → packages/.
 const DEPLOYMENTS_PATH = join(REPO_ROOT, 'packages', 'contracts', `deployments-${NETWORK}.json`);
@@ -257,7 +259,7 @@ const a2aVars: Record<string, string> = {
   // `*.impact-agent.io` = the A2A agent subdomains (this Worker's own route).
   // `*.impact-agent.me` = the SSO app (Vercel, spec 232) which calls this Worker
   // as a relayer (SA deploy / UserOps) cross-origin — so its origins are cleared too.
-  ALLOWED_ORIGINS: `${DEMO_WEB_URL},${DEMO_WEB_PRO_URL},${DEMO_WEB_RECOVERY_URL},${DEMO_SSO_URL},${DEMO_ORG_URL},${DEMO_JP_URL},${DEMO_GS_URL},https://impact-agent.io,https://*.impact-agent.io,https://impact-agent.me,https://*.impact-agent.me`,
+  ALLOWED_ORIGINS: `${DEMO_WEB_URL},${DEMO_WEB_PRO_URL},${DEMO_WEB_RECOVERY_URL},${DEMO_SSO_URL},${DEMO_ORG_URL},${DEMO_JP_URL},${DEMO_GS_URL},${DEMO_BIBLE_URL},https://impact-agent.io,https://*.impact-agent.io,https://impact-agent.me,https://*.impact-agent.me`,
   // Personal-subdomain → agent resolution base for the A2A endpoints (spec 231).
   A2A_PUBLIC_BASE_DOMAIN: 'impact-agent.io',
 };
