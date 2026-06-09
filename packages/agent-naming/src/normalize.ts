@@ -38,6 +38,26 @@ export function normalizeAgentName(name: string): string {
 
 const LABEL_RE = /^[a-z0-9-]+$/;
 
+/**
+ * Normalize + validate a SINGLE label (no dots) to canonical form, throwing
+ * `InvalidNameError` on any rule violation. AN-1 (audit 2026-06-09): the registration WRITE
+ * path MUST run this so a homoglyph / mixed-case / zero-width label can never be anchored as a
+ * node whose raw stored label renders indistinguishably from a real name. Two inputs that
+ * normalize identically MUST hash identically — so the write path and the read/derive path
+ * (`normalizeAgentName` → `namehash`) agree.
+ */
+export function normalizeLabel(label: string): string {
+  if (typeof label !== 'string') {
+    throw new InvalidNameError(String(label), 'must be a string');
+  }
+  const norm = label.normalize('NFC').trim().toLowerCase();
+  if (norm.includes('.')) {
+    throw new InvalidNameError(label, 'a label MUST NOT contain "." (register one label at a time)');
+  }
+  validateLabel(label, norm);
+  return norm;
+}
+
 function validateLabel(fullName: string, label: string): void {
   if (label.length === 0) {
     throw new InvalidNameError(fullName, 'empty label (consecutive dots or leading/trailing dot)');

@@ -29,7 +29,7 @@ export interface IssuedAgreement {
   /** The substrate commitment math result. */
   commitment: ReturnType<typeof buildJpAgreementCommitment>;
   /** Payload ready to hand to AgreementRegistry.register(). */
-  registryPayload: Omit<AgreementIssuancePayload, 'attestationStructHash' | 'issuerSignature'>;
+  registryPayload: Omit<AgreementIssuancePayload, 'issuerSignature'>;
 }
 
 /** Issuer (Global Church) takes a dual-signed Commitment + parties + payload,

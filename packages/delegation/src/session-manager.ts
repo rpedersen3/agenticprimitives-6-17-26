@@ -109,7 +109,9 @@ export interface SessionResolveResult {
   delegation: Delegation | null;
   signer: {
     address: Address;
-    privateKey: Hex;
+    // KC-001 (audit 2026-06-09): the raw session private key is NOT exposed. It is a token-forging
+    // secret; surfacing it alongside `signMessage` (which already encapsulates it) meant any logging
+    // or serialization of the result leaked it. Use `signMessage` — the key never leaves this closure.
     signMessage(msg: string | { raw: Hex }): Promise<Hex>;
   };
 }
@@ -267,7 +269,6 @@ export class SessionManager {
       delegation: pkg.delegation ? deserializeDelegation(pkg.delegation) : null,
       signer: {
         address,
-        privateKey: pkg.sessionPrivateKey,
         signMessage: async (msg) => {
           let digest: Uint8Array;
           if (typeof msg === 'string') {

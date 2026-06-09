@@ -258,7 +258,6 @@ export function encodeRegisterAgreement(p: AgreementIssuancePayload): Hex {
     args: [{
       schemaHash: p.schemaHash,
       issuer: p.issuer,
-      attestationStructHash: p.attestationStructHash,
       issuerSignature: p.issuerSignature,
       agreementCommitment: p.agreementCommitment,
       partySetCommitment: p.partySetCommitment,

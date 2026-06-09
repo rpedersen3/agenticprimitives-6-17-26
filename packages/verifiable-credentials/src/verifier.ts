@@ -19,6 +19,20 @@ import type {
   VerifiableCredential,
 } from './types.js';
 
+/** Parsed `eip155:<chainId>:<address>` CAIP-10 reference. */
+export interface Caip10Eip155 {
+  chainId: number;
+  address: `0x${string}`;
+}
+
+/** Parse an `eip155:<chainId>:0x…40` CAIP-10 account id, or null. Both `vc.issuer` and the
+ *  `verificationMethod` prefix use this form — the VC-2 domain-binding source of truth. */
+export function parseEip155Caip10(ref: string): Caip10Eip155 | null {
+  const m = /^eip155:(\d+):(0x[0-9a-fA-F]{40})$/.exec(ref);
+  if (!m) return null;
+  return { chainId: Number(m[1]), address: m[2] as `0x${string}` };
+}
+
 export interface VerificationResult {
   /** Structural validity (envelope shape + canonical hash agreement). */
   structural: boolean;
@@ -98,10 +112,40 @@ export function verifyCredentialStructural(vc: VerifiableCredential): Verificati
   }
 
   const bodyHash = credentialHash(vc);
-  if (proof.credentialHash && proof.credentialHash !== bodyHash) {
+  // VC-1: `credentialHash` is MANDATORY — a forger must not be able to drop it to skip the
+  // body-integrity check. Missing OR mismatched is a structural failure.
+  if (!proof.credentialHash) {
+    issues.push('proof.credentialHash is required (binds the proof to the canonical credential body)');
+  } else if (proof.credentialHash !== bodyHash) {
     issues.push(
       `proof.credentialHash (${proof.credentialHash}) does not match canonical hash of credential body (${bodyHash})`,
     );
+  }
+
+  // VC-2: the EIP-712 domain is attacker-supplied inside the proof. Bind it to the credential's
+  // declared `issuer` SA — the digest is meaningless if it can be computed against a contract /
+  // chain the attacker controls. `verifyingContract` MUST equal the issuer SA, `chainId` MUST equal
+  // the issuer's chain, and the `verificationMethod` address MUST resolve to the same SA.
+  const issuerAcct = parseEip155Caip10(vc.issuer);
+  if (!issuerAcct) {
+    issues.push(`vc.issuer is not a verifiable eip155 CAIP-10 account id: ${vc.issuer}`);
+  } else {
+    if (proof.eip712Domain.verifyingContract.toLowerCase() !== issuerAcct.address.toLowerCase()) {
+      issues.push(
+        `proof.eip712Domain.verifyingContract (${proof.eip712Domain.verifyingContract}) MUST equal the issuer SA (${issuerAcct.address})`,
+      );
+    }
+    if (proof.eip712Domain.chainId !== issuerAcct.chainId) {
+      issues.push(
+        `proof.eip712Domain.chainId (${proof.eip712Domain.chainId}) MUST equal the issuer chainId (${issuerAcct.chainId})`,
+      );
+    }
+    const vmAcct = parseEip155Caip10(proof.verificationMethod.split('#')[0] ?? '');
+    if (!vmAcct || vmAcct.address.toLowerCase() !== issuerAcct.address.toLowerCase()) {
+      issues.push(
+        `proof.verificationMethod (${proof.verificationMethod}) MUST resolve to the issuer SA (${issuerAcct.address})`,
+      );
+    }
   }
 
   const expectedDigest = eip712Digest({
@@ -134,4 +178,63 @@ function parseCaip10IssuerFromVerificationMethod(method: string): string | null 
   // Light sanity check
   if (!/^eip155:\d+:0x[0-9a-fA-F]+$/.test(ref)) return null;
   return ref;
+}
+
+/** Minimal ERC-1271 verifier seam — satisfied structurally by a viem `PublicClient`
+ *  (`client.verifyHash({ address, hash, signature })`). Kept structural so the package stays a
+ *  graph leaf and isn't pinned to a single viem version. */
+export interface Erc1271Verifier {
+  verifyHash(args: {
+    address: `0x${string}`;
+    hash: `0x${string}`;
+    signature: `0x${string}`;
+  }): Promise<boolean>;
+}
+
+export interface VerifyCredentialResult {
+  /** True ONLY when the structural checks pass AND the issuer SA's ERC-1271 path validates the
+   *  signature over the expected digest. Fail-closed: any error/anomaly → false. */
+  valid: boolean;
+  /** The structural sub-result (digest, proof value, issuer ref, issues). */
+  structuralResult: VerificationResult;
+  /** All issues — structural plus signature/verification failures. */
+  issues: string[];
+}
+
+/**
+ * Full credential verification (VC-1): structural checks PLUS the on-chain ERC-1271 round-trip
+ * against the issuer SA resolved from `vc.issuer`. This is the function consumers (content
+ * entitlements, agent-skills, geo-features, related-agents) MUST gate on — `verifyCredentialStructural`
+ * alone proves nothing about the signature.
+ *
+ * Fail-closed per ADR-0013: a structural failure, an unresolvable issuer, a verification-call error,
+ * or a non-validating signature all return `valid: false` — never a silent accept.
+ */
+export async function verifyCredential(
+  vc: VerifiableCredential,
+  client: Erc1271Verifier,
+): Promise<VerifyCredentialResult> {
+  const structuralResult = verifyCredentialStructural(vc);
+  const issues = [...structuralResult.issues];
+  if (!structuralResult.structural || !structuralResult.expectedDigest || !structuralResult.proofValue) {
+    return { valid: false, structuralResult, issues };
+  }
+  const issuerAcct = parseEip155Caip10(vc.issuer);
+  if (!issuerAcct) {
+    issues.push('cannot resolve issuer SA for ERC-1271 verification');
+    return { valid: false, structuralResult, issues };
+  }
+  let ok: boolean;
+  try {
+    ok = await client.verifyHash({
+      address: issuerAcct.address,
+      hash: structuralResult.expectedDigest,
+      signature: structuralResult.proofValue,
+    });
+  } catch (e) {
+    issues.push(`ERC-1271 verification call failed: ${e instanceof Error ? e.message : String(e)}`);
+    return { valid: false, structuralResult, issues };
+  }
+  if (!ok) issues.push('issuer ERC-1271 signature did not validate over the expected digest');
+  return { valid: ok, structuralResult, issues };
 }

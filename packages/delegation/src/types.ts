@@ -34,6 +34,15 @@ export interface DelegationTokenClaims {
   sub: Address;
   delegation: Delegation;
   sessionKeyAddress: Address;
+  /**
+   * DEL-001 (audit 2026-06-09) — the session-scoped leaf delegation that BINDS the session key to the
+   * delegation's delegate. Its `delegator` MUST equal `delegation.delegate` (the relying-site SA) and
+   * its `delegate` MUST equal `sessionKeyAddress`; it is ERC-1271-signed by that delegate SA. Without
+   * this, the full `delegation` travels in cleartext and anyone observing a token re-mints it with their
+   * own session key (permanent delegator impersonation). `principal` stays `delegation.delegator` (the
+   * person) — the leaf only proves the presenting session key was authorized by the delegate.
+   */
+  sessionDelegation?: Delegation;
   jti: string;
   iat: number;
   exp: number;
@@ -91,6 +100,14 @@ export interface VerifyOpts {
    * Off-chain JTI / session-token verify uses strict mode. Spec 202 §11.
    */
   enforceOnChain?: boolean;
+  /**
+   * DEL-001 — require the token to carry a valid `sessionDelegation` leaf binding the presenting
+   * session key to `delegation.delegate` (delegator-link + `delegate === sessionKeyAddress` +
+   * ERC-1271 by the delegate SA). The MCP verifier (demo-mcp) sets this once the minter (demo-a2a)
+   * issues the leaf, closing the token re-mint vector. Default off for backward compatibility while
+   * the minter is wired; flipping it on is the enforcement switch.
+   */
+  requireSessionDelegateBinding?: boolean;
 }
 
 /**

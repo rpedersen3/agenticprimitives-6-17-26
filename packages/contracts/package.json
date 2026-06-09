@@ -53,6 +53,8 @@
     "deploy:base-sepolia": "DEPLOY_NETWORK=base-sepolia forge script script/Deploy.s.sol --rpc-url $BASE_SEPOLIA_RPC --broadcast --private-key $PRIVATE_KEY",
     "deploy:paymaster:base-sepolia": "DEPLOY_NETWORK=base-sepolia forge script script/DeployPaymaster.s.sol --rpc-url $BASE_SEPOLIA_RPC --broadcast --private-key $PRIVATE_KEY --sig 'run()'",
     "deploy:paymaster:anvil": "DEPLOY_NETWORK=anvil forge script script/DeployPaymaster.s.sol --rpc-url http://127.0.0.1:8545 --broadcast --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig 'run()'",
+    "deploy:registries:base-sepolia": "DEPLOY_NETWORK=base-sepolia forge script script/DeployRegistries.s.sol --rpc-url $BASE_SEPOLIA_RPC --broadcast --private-key $PRIVATE_KEY --sig 'run()'",
+    "deploy:registries:merge": "node scripts/merge-registry-deploy.mjs",
     "verify:base-sepolia": "bash scripts/verify-base-sepolia.sh",
     "clean": "rm -rf out cache broadcast dist"
   },

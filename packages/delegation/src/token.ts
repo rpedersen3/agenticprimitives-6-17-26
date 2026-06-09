@@ -191,6 +191,8 @@ export async function mintDelegationToken(
     sub: claims.sub,
     delegation: claims.delegation,
     sessionKeyAddress: claims.sessionKeyAddress,
+    // DEL-001: carry the session-delegate-binding leaf when the minter produced one.
+    ...(claims.sessionDelegation ? { sessionDelegation: claims.sessionDelegation } : {}),
     jti,
     iat,
     exp,
@@ -410,6 +412,27 @@ function decodeToken(token: string): DecodedToken | null {
 }
 
 /**
+ * DEL-001 — the chain-free part of the session-delegate binding (testable without an RPC). Returns an
+ * error reason, or `null` when the leaf links correctly: `sessionDelegation` present, its delegator is
+ * the outer delegation's delegate, and its delegate is the presenting session key. The ERC-1271 proof
+ * that the delegate SA actually signed the leaf is verified separately in `verifyDelegationToken`.
+ */
+export function sessionDelegateBindingError(
+  delegation: Delegation,
+  sessionDelegation: Delegation | undefined,
+  sessionKeyAddress: Address,
+): string | null {
+  if (!sessionDelegation) return 'session-delegation required (DEL-001)';
+  if (sessionDelegation.delegator.toLowerCase() !== delegation.delegate.toLowerCase()) {
+    return 'session-delegation delegator != delegation delegate (DEL-001)';
+  }
+  if (sessionDelegation.delegate.toLowerCase() !== sessionKeyAddress.toLowerCase()) {
+    return 'session key is not the session-delegation delegate (DEL-001)';
+  }
+  return null;
+}
+
+/**
  * Full verification pipeline. Caller passes `toolName` in opts for tool-scope
  * caveat evaluation; without it the mcp-tool-scope caveat denies.
  */
@@ -537,6 +560,43 @@ export async function verifyDelegationToken(
       claims.delegation.delegator,
       eip712Hash,
     );
+  }
+
+  // 3.5. DEL-001 (audit 2026-06-09) — session-key↔delegate binding.
+  //
+  // The full signed `delegation` travels in cleartext inside every token, so a verifier that only
+  // checks "some session key signed these claims" lets anyone who OBSERVES a token re-mint it with
+  // their own session key and impersonate the delegator. We close that by requiring a `sessionDelegation`
+  // LEAF whose delegator is `delegation.delegate` (the relying-site SA) and whose delegate IS the
+  // presenting session key — ERC-1271-signed by that delegate SA. An attacker can't forge the delegate
+  // SA's signature over THEIR session key, so the re-mint fails. `principal` stays `delegation.delegator`.
+  if (opts.requireSessionDelegateBinding) {
+    // Chain-free checks: leaf present, delegator-link, delegate === presenting session key.
+    const bindErr = sessionDelegateBindingError(claims.delegation, claims.sessionDelegation, recovered);
+    if (bindErr) return rejectWith(bindErr, claims.delegation.delegator, eip712Hash);
+    const sd = claims.sessionDelegation as Delegation;
+    // ERC-1271: the delegate SA actually authorized THIS session key.
+    const sdHash = hashDelegation(sd, opts.chainId, opts.delegationManager);
+    try {
+      const sdCode = await publicClient.getCode({ address: sd.delegator });
+      if (!sdCode || sdCode === '0x' || sdCode.length <= 2) {
+        if (requireDeployed) {
+          return rejectWith('session-delegation delegate SA not deployed — cannot verify ERC-1271 (DEL-001)', claims.delegation.delegator, eip712Hash);
+        }
+      } else {
+        const magic = (await publicClient.readContract({
+          address: sd.delegator,
+          abi: ACCOUNT_ABI_ERC1271,
+          functionName: 'isValidSignature',
+          args: [sdHash, sd.signature],
+        })) as Hex;
+        if (magic.toLowerCase() !== ERC1271_MAGIC) {
+          return rejectWith('session-delegation erc1271 validation failed (DEL-001)', claims.delegation.delegator, eip712Hash);
+        }
+      }
+    } catch (e) {
+      return rejectWith(`session-delegation erc1271 call reverted: ${e instanceof Error ? e.message : e}`, claims.delegation.delegator, eip712Hash);
+    }
   }
 
   // 4. caveat evaluation

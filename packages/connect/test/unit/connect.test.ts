@@ -59,7 +59,7 @@ describe('token — mint / verify roundtrip', () => {
     const signer = await generateBrokerKeypair('EdDSA');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
     const keys = await importJwks(await publishJwks([signer]));
-    const r = await verifyAgentSession(token, { keys, expectedAud: 'rp-1', now: () => NOW });
+    const r = await verifyAgentSession(token, { keys, expectedAud: 'rp-1', expectedIss: mintArgs.iss, now: () => NOW });
     expect(r.ok).toBe(true);
   });
 
@@ -67,7 +67,7 @@ describe('token — mint / verify roundtrip', () => {
     const signer = await generateBrokerKeypair('EdDSA');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const r = await verifyAgentSession(token, { keys: [signer], now: () => NOW } as any);
+    const r = await verifyAgentSession(token, { keys: [signer], expectedIss: mintArgs.iss, now: () => NOW } as any);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toContain('expectedAud');
   });
@@ -79,7 +79,7 @@ describe('token — mint / verify roundtrip', () => {
     const payload = b64url(JSON.stringify({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', aud: 'rp-1', iss: mintArgs.iss, iat: future, exp: future + 300, jti: 'x' }));
     const sigBytes = await globalThis.crypto.subtle.sign({ name: 'Ed25519' }, signer.privateKey, new TextEncoder().encode(`${header}.${payload}`));
     const token = `${header}.${payload}.${Buffer.from(new Uint8Array(sigBytes)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
-    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', now: () => NOW });
+    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', expectedIss: mintArgs.iss, now: () => NOW });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toContain('iat');
   });
@@ -90,7 +90,7 @@ describe('token — rejections (CN-4 + ADR-0016)', () => {
     const signer = await generateBrokerKeypair('EdDSA');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
     const other = await generateBrokerKeypair('EdDSA');
-    const r = await verifyAgentSession(token, { keys: [other], expectedAud: 'rp-1', now: () => NOW });
+    const r = await verifyAgentSession(token, { keys: [other], expectedAud: 'rp-1', expectedIss: mintArgs.iss, now: () => NOW });
     expect(r.ok).toBe(false);
   });
 
@@ -98,21 +98,21 @@ describe('token — rejections (CN-4 + ADR-0016)', () => {
     const signer = await generateBrokerKeypair('ES256');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
     // present the same key but claim its alg is EdDSA
-    const r = await verifyAgentSession(token, { keys: [{ ...signer, alg: 'EdDSA' }], expectedAud: 'rp-1', now: () => NOW });
+    const r = await verifyAgentSession(token, { keys: [{ ...signer, alg: 'EdDSA' }], expectedAud: 'rp-1', expectedIss: mintArgs.iss, now: () => NOW });
     expect(r.ok).toBe(false);
   });
 
   it('rejects a tampered signature', async () => {
     const signer = await generateBrokerKeypair('EdDSA');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
-    const r = await verifyAgentSession(token.slice(0, -4) + 'AAAA', { keys: [signer], expectedAud: 'rp-1', now: () => NOW });
+    const r = await verifyAgentSession(token.slice(0, -4) + 'AAAA', { keys: [signer], expectedAud: 'rp-1', expectedIss: mintArgs.iss, now: () => NOW });
     expect(r.ok).toBe(false);
   });
 
   it('rejects an expired token', async () => {
     const signer = await generateBrokerKeypair('EdDSA');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
-    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', now: () => NOW + 10_000_000 });
+    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', expectedIss: mintArgs.iss, now: () => NOW + 10_000_000 });
     expect(r).toMatchObject({ ok: false, reason: 'expired' });
   });
 
@@ -122,7 +122,7 @@ describe('token — rejections (CN-4 + ADR-0016)', () => {
     const payload = b64url(JSON.stringify({ sub: SUB, owner: SUB, aud: 'rp-1', iss: mintArgs.iss, iat: NOW / 1000, exp: NOW / 1000 + 300, jti: 'x' }));
     const sigBytes = await globalThis.crypto.subtle.sign({ name: 'Ed25519' }, signer.privateKey, new TextEncoder().encode(`${header}.${payload}`));
     const token = `${header}.${payload}.${Buffer.from(new Uint8Array(sigBytes)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
-    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', now: () => NOW });
+    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', expectedIss: mintArgs.iss, now: () => NOW });
     expect(r).toMatchObject({ ok: false });
     if (!r.ok) expect(r.reason).toContain('owner');
   });
@@ -130,8 +130,34 @@ describe('token — rejections (CN-4 + ADR-0016)', () => {
   it('rejects an aud mismatch', async () => {
     const signer = await generateBrokerKeypair('EdDSA');
     const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
-    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'other-rp', now: () => NOW });
+    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'other-rp', expectedIss: mintArgs.iss, now: () => NOW });
     expect(r.ok).toBe(false);
+  });
+
+  it('CN-1: rejects when expectedIss is missing', async () => {
+    const signer = await generateBrokerKeypair('EdDSA');
+    const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', now: () => NOW } as any);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain('expectedIss');
+  });
+
+  it('CN-1: rejects an iss mismatch (wrong issuer)', async () => {
+    const signer = await generateBrokerKeypair('EdDSA');
+    const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
+    const r = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', expectedIss: 'https://evil.example', now: () => NOW });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain('iss');
+  });
+
+  it('CN-1: accepts an issuer allowlist / predicate', async () => {
+    const signer = await generateBrokerKeypair('EdDSA');
+    const token = await mintAgentSession({ sub: SUB, principal: PRINCIPAL, assurance: 'onchain-confirmed', ...mintArgs }, signer);
+    const viaArray = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', expectedIss: ['https://other', mintArgs.iss], now: () => NOW });
+    expect(viaArray.ok).toBe(true);
+    const viaPred = await verifyAgentSession(token, { keys: [signer], expectedAud: 'rp-1', expectedIss: (i) => i === mintArgs.iss, now: () => NOW });
+    expect(viaPred.ok).toBe(true);
   });
 });
 
@@ -177,7 +203,7 @@ describe('broker — issueForResolution', () => {
     const out = await issueForResolution({ resolution: res(agent(SUB, 'onchain-confirmed')), principal: PRINCIPAL, signer, ...mintArgs });
     expect(out.status).toBe('issued');
     if (out.status === 'issued') {
-      const v = await verifyAgentSession(out.token, { keys: [signer], expectedAud: 'rp-1', now: () => NOW });
+      const v = await verifyAgentSession(out.token, { keys: [signer], expectedAud: 'rp-1', expectedIss: mintArgs.iss, now: () => NOW });
       expect(v.ok).toBe(true);
     }
   });

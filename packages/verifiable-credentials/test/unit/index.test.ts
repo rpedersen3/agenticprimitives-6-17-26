@@ -17,6 +17,8 @@ import {
   VC_DOMAIN_VERSION,
   VC_EIP712_TYPES,
   verifyCredentialStructural,
+  verifyCredential,
+  parseEip155Caip10,
   type UnsignedCredential,
   type VerifiableCredential,
 } from '../../src/index.js';
@@ -193,34 +195,64 @@ describe('verifyCredentialStructural', () => {
     expect(result.issues).toContain('missing proof');
   });
 
-  it('returns the expected digest for a well-formed proof', () => {
-    const verifyingContract = '0x2222222222222222222222222222222222222222' as const;
-    const vc: VerifiableCredential = {
+  // Secure fixture (VC-1/VC-2): issuer SA == verifyingContract == verificationMethod address,
+  // chainId matches, and a correct `credentialHash` is present.
+  const ISSUER_SA = '0x1111111111111111111111111111111111111111' as const;
+  function secureVc(over: Partial<{ subject: Record<string, unknown> }> = {}): VerifiableCredential {
+    const body: UnsignedCredential = {
       '@context': [VC_CONTEXT_V2],
       type: ['VerifiableCredential', 'AssociationCredential'],
-      issuer: 'eip155:8453:0x1111111111111111111111111111111111111111',
+      issuer: `eip155:8453:${ISSUER_SA}`,
       validFrom: '2026-06-02T00:00:00Z',
-      credentialSubject: { id: '0xholder', membershipClass: 'member' },
+      credentialSubject: over.subject ?? { id: '0xholder', membershipClass: 'member' },
+    };
+    const bodyHash = credentialHash(body);
+    return {
+      ...body,
       proof: {
         type: 'Eip712Signature2026',
         created: '2026-06-02T00:00:00Z',
-        verificationMethod: `eip155:8453:${verifyingContract}#assertion-key-1`,
+        verificationMethod: `eip155:8453:${ISSUER_SA}#assertion-key-1`,
         proofPurpose: 'assertionMethod',
         proofValue: '0xdeadbeef',
-        eip712Domain: {
-          name: VC_DOMAIN_NAME,
-          version: VC_DOMAIN_VERSION,
-          chainId: 8453,
-          verifyingContract,
-        },
+        credentialHash: bodyHash,
+        eip712Domain: { name: VC_DOMAIN_NAME, version: VC_DOMAIN_VERSION, chainId: 8453, verifyingContract: ISSUER_SA },
       },
     };
-    const r = verifyCredentialStructural(vc);
+  }
+
+  it('accepts a well-formed proof bound to the issuer SA', () => {
+    const r = verifyCredentialStructural(secureVc());
+    expect(r.issues).toEqual([]);
     expect(r.structural).toBe(true);
     expect(r.expectedDigest).toMatch(/^0x[0-9a-f]{64}$/);
     expect(r.proofValue).toBe('0xdeadbeef');
-    expect(r.issuerCaip10).toBe(`eip155:8453:${verifyingContract}`);
-    expect(r.issues).toEqual([]);
+    expect(r.issuerCaip10).toBe(`eip155:8453:${ISSUER_SA}`);
+  });
+
+  it('VC-1: rejects a proof with no credentialHash (forger drops it)', () => {
+    const vc = secureVc();
+    delete (vc.proof as { credentialHash?: unknown }).credentialHash;
+    const r = verifyCredentialStructural(vc);
+    expect(r.structural).toBe(false);
+    expect(r.issues.join(' ')).toMatch(/credentialHash is required/);
+  });
+
+  it('VC-2: rejects verifyingContract that is not the issuer SA', () => {
+    const vc = secureVc();
+    (vc.proof as { eip712Domain: { verifyingContract: string } }).eip712Domain.verifyingContract =
+      '0x2222222222222222222222222222222222222222';
+    const r = verifyCredentialStructural(vc);
+    expect(r.structural).toBe(false);
+    expect(r.issues.join(' ')).toMatch(/verifyingContract.*MUST equal the issuer SA/);
+  });
+
+  it('VC-2: rejects a chainId that is not the issuer chain', () => {
+    const vc = secureVc();
+    (vc.proof as { eip712Domain: { chainId: number } }).eip712Domain.chainId = 1;
+    const r = verifyCredentialStructural(vc);
+    expect(r.structural).toBe(false);
+    expect(r.issues.join(' ')).toMatch(/chainId.*MUST equal the issuer chainId/);
   });
 
   it('flags a credentialHash mismatch (tampered body)', () => {
@@ -250,5 +282,77 @@ describe('verifyCredentialStructural', () => {
     const r = verifyCredentialStructural(vc);
     expect(r.structural).toBe(false);
     expect(r.issues.join(' ')).toMatch(/credentialHash/);
+  });
+});
+
+describe('parseEip155Caip10', () => {
+  it('parses a valid eip155 account id', () => {
+    expect(parseEip155Caip10('eip155:8453:0x1111111111111111111111111111111111111111')).toEqual({
+      chainId: 8453,
+      address: '0x1111111111111111111111111111111111111111',
+    });
+  });
+  it('rejects a short/non-conforming address', () => {
+    expect(parseEip155Caip10('eip155:8453:0xabc')).toBeNull();
+    expect(parseEip155Caip10('did:web:example.com')).toBeNull();
+  });
+});
+
+describe('verifyCredential (VC-1 ERC-1271 round-trip)', () => {
+  const ISSUER_SA = '0x1111111111111111111111111111111111111111' as const;
+  function secureVc(): VerifiableCredential {
+    const body: UnsignedCredential = {
+      '@context': [VC_CONTEXT_V2],
+      type: ['VerifiableCredential', 'AssociationCredential'],
+      issuer: `eip155:8453:${ISSUER_SA}`,
+      validFrom: '2026-06-02T00:00:00Z',
+      credentialSubject: { id: '0xholder' },
+    };
+    return {
+      ...body,
+      proof: {
+        type: 'Eip712Signature2026',
+        created: '2026-06-02T00:00:00Z',
+        verificationMethod: `eip155:8453:${ISSUER_SA}#assertion-key-1`,
+        proofPurpose: 'assertionMethod',
+        proofValue: '0xdeadbeef',
+        credentialHash: credentialHash(body),
+        eip712Domain: { name: VC_DOMAIN_NAME, version: VC_DOMAIN_VERSION, chainId: 8453, verifyingContract: ISSUER_SA },
+      },
+    };
+  }
+
+  it('valid: issuer ERC-1271 validates the digest → valid', async () => {
+    let askedAddr = '';
+    const client = { verifyHash: async (a: { address: string }) => { askedAddr = a.address; return true; } };
+    const r = await verifyCredential(secureVc(), client);
+    expect(r.valid).toBe(true);
+    expect(r.issues).toEqual([]);
+    expect(askedAddr.toLowerCase()).toBe(ISSUER_SA);
+  });
+
+  it('invalid: issuer signature does not validate → fail-closed', async () => {
+    const client = { verifyHash: async () => false };
+    const r = await verifyCredential(secureVc(), client);
+    expect(r.valid).toBe(false);
+    expect(r.issues.join(' ')).toMatch(/did not validate/);
+  });
+
+  it('fail-closed: a structural failure short-circuits the ERC-1271 call', async () => {
+    const vc = secureVc();
+    (vc.proof as { eip712Domain: { verifyingContract: string } }).eip712Domain.verifyingContract =
+      '0x2222222222222222222222222222222222222222';
+    let called = false;
+    const client = { verifyHash: async () => { called = true; return true; } };
+    const r = await verifyCredential(vc, client);
+    expect(r.valid).toBe(false);
+    expect(called).toBe(false);
+  });
+
+  it('fail-closed: a verification-call error never accepts', async () => {
+    const client = { verifyHash: async () => { throw new Error('rpc down'); } };
+    const r = await verifyCredential(secureVc(), client);
+    expect(r.valid).toBe(false);
+    expect(r.issues.join(' ')).toMatch(/verification call failed/);
   });
 });

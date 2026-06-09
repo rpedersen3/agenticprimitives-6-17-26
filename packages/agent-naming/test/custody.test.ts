@@ -59,6 +59,23 @@ describe('buildRegisterSubnameCall', () => {
     const { args } = decodeFunctionData({ abi: agentNameRegistryAbi, data: call.data });
     expect(args).toEqual([ROOT, 'bob', OWNER, '0x0000000000000000000000000000000000000000', 0n]);
   });
+
+  // AN-1 (audit 2026-06-09): the write path MUST normalize + reject so a homoglyph / mixed-case /
+  // zero-width label can't be anchored as a node that renders like a real name.
+  it('AN-1: lowercases a mixed-case label on the write path', () => {
+    const call = buildRegisterSubnameCall({ registry: REGISTRY, parentNode: ROOT, label: 'Admin', newOwner: OWNER });
+    const { args } = decodeFunctionData({ abi: agentNameRegistryAbi, data: call.data });
+    expect((args as unknown[])[1]).toBe('admin');
+  });
+
+  it('AN-1: rejects a Cyrillic-homoglyph label', () => {
+    // "аdmin" — leading Cyrillic а (U+0430)
+    expect(() => buildRegisterSubnameCall({ registry: REGISTRY, parentNode: ROOT, label: 'аdmin', newOwner: OWNER })).toThrow();
+  });
+
+  it('AN-1: rejects a zero-width-character label', () => {
+    expect(() => buildRegisterSubnameCall({ registry: REGISTRY, parentNode: ROOT, label: 'admin​', newOwner: OWNER })).toThrow();
+  });
 });
 
 describe('buildRotateNameOwnerCall', () => {

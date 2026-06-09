@@ -52,6 +52,14 @@ contract AttestationRegistry {
         "JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash)"
     );
 
+    /// @dev SC-2 (audit 2026-06-09): the issuer attestation digest binds the SUBJECT (and schema /
+    ///      credential type / chain / this contract) — not just `credentialHash`. Previously the issuer
+    ///      signed only the credentialHash, so anyone who learned that public hash could anchor it on
+    ///      chain against a DIFFERENT subject. Recomputed on-chain; the TS side derives the same constant.
+    bytes32 internal constant ASSOCIATION_ATTESTATION_TYPEHASH = keccak256(
+        "AssociationAttestation(address subject,address issuer,bytes32 schemaId,bytes32 credentialType,bytes32 credentialHash,uint256 chainId,address verifyingContract)"
+    );
+
     // ─── Storage ────────────────────────────────────────────────────────
 
     /// @notice The canonical attestation row. EAS-aligned shape.
@@ -138,8 +146,22 @@ contract AttestationRegistry {
     function assertAssociation(AssociationAttestationRequest calldata req) external returns (bytes32) {
         if (req.credentialHash == bytes32(0)) revert EmptyCredentialHash();
 
-        // AR-02: verify issuer signature over credentialHash
-        if (!_isValidSignatureBool(req.issuer, req.credentialHash, req.issuerSignature)) {
+        // SC-2: RECOMPUTE the issuer-attestation digest binding the SUBJECT (+ schema / type / chain /
+        // this contract) and verify the issuer signed THAT. A known credentialHash can no longer be
+        // anchored against an attacker-chosen subject.
+        bytes32 issuerDigest = keccak256(
+            abi.encode(
+                ASSOCIATION_ATTESTATION_TYPEHASH,
+                req.subject,
+                req.issuer,
+                req.schemaId,
+                req.credentialType,
+                req.credentialHash,
+                block.chainid,
+                address(this)
+            )
+        );
+        if (!_isValidSignatureBool(req.issuer, issuerDigest, req.issuerSignature)) {
             revert InvalidIssuerSignature();
         }
 

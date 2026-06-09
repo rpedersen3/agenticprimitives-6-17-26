@@ -99,7 +99,7 @@ describe('siwe verify', () => {
       issuedAt: new Date().toISOString(),
     });
     const sig = signEip191(msg);
-    const res = verify(msg, sig);
+    const res = verify(msg, sig, { expectedNonce: 'n1' });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.address.toLowerCase()).toBe(ADDRESS);
   });
@@ -114,7 +114,7 @@ describe('siwe verify', () => {
       issuedAt: new Date().toISOString(),
     });
     const sig = signEip191(msg);
-    const res = verify(msg, sig);
+    const res = verify(msg, sig, { expectedNonce: 'n1' });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.reason).toContain('recovered signer');
   });
@@ -130,7 +130,7 @@ describe('siwe verify', () => {
       expirationTime: '2026-01-02T00:00:00.000Z',
     });
     const sig = signEip191(msg);
-    const res = verify(msg, sig, { now: () => Date.parse('2026-03-01T00:00:00.000Z') });
+    const res = verify(msg, sig, { expectedNonce: 'n1', now: () => Date.parse('2026-03-01T00:00:00.000Z') });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.reason).toContain('expired');
   });
@@ -145,7 +145,7 @@ describe('siwe verify', () => {
       issuedAt: new Date().toISOString(),
     });
     const sig = signEip191(msg);
-    const res = verify(msg, sig, { allowedDomains: ['demo.local'] });
+    const res = verify(msg, sig, { expectedNonce: 'n1', allowedDomains: ['demo.local'] });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.reason).toContain('not allowed');
   });
@@ -165,6 +165,18 @@ describe('siwe verify', () => {
     if (!res.ok) expect(res.reason).toContain('nonce');
   });
 
+  it('CA-001: rejects when no nonce is supplied (replay guard is mandatory)', () => {
+    const msg = buildMessage({
+      domain: 'demo.local', address: ADDRESS, uri: 'http://demo.local',
+      chainId: 31337, nonce: 'n1', issuedAt: new Date().toISOString(),
+    });
+    const sig = signEip191(msg);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = verify(msg, sig, {} as any);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toContain('expectedNonce is required');
+  });
+
   it('rejects malformed signatures', () => {
     const msg = buildMessage({
       domain: 'demo.local',
@@ -174,7 +186,7 @@ describe('siwe verify', () => {
       nonce: 'n1',
       issuedAt: new Date().toISOString(),
     });
-    const res = verify(msg, '0xshort' as Hex);
+    const res = verify(msg, '0xshort' as Hex, { expectedNonce: 'n1' });
     expect(res.ok).toBe(false);
   });
 });

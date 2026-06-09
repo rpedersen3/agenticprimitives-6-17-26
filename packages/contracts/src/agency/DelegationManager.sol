@@ -288,8 +288,12 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
     ///         stateful enforcer attempting a write under staticcall) yields `false` — so `true`
     ///         is a genuine authorization guarantee for this exact call, and `false` means "use
     ///         live redemption" (which evaluates stateful caveats properly). The caveat
-    ///         evaluation mirrors `_runBeforeHooks` exactly (same args, same `sender`-as-redeemer),
-    ///         so an unknown/no-code enforcer is a no-op here just as it is in redemption. Pure
+    ///         evaluation mirrors `_runBeforeHooks` exactly (same args, same `sender`-as-redeemer).
+    ///         SC-3 (audit 2026-06-09): a no-code enforcer is rejected here with `false`. A raw
+    ///         `staticcall` to an empty address SUCCEEDS, which would otherwise make a delegation
+    ///         whose caveat enforcer is a typo / undeployed pass as "constraint-checked" — fail-OPEN.
+    ///         Live redemption fails CLOSED on the same case (solc's extcodesize check on the
+    ///         high-level void-returning hook call reverts), so this restores symmetry. Pure
     ///         addition — `redeemDelegation` is untouched.
     /// @param delegations Chain (leaf first; root authority last)
     /// @param sender The address that would be the redeemer
@@ -312,6 +316,10 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
             Delegation calldata d = delegations[i];
             bytes32 dHash = hashDelegation(d);
             for (uint256 j = 0; j < d.caveats.length; j++) {
+                // SC-3: a no-code enforcer constrains NOTHING — a raw staticcall to an empty address
+                // returns success, which would fail-open. Reject explicitly so `true` is a genuine
+                // guarantee (live redemption fails closed here too via extcodesize on the high-level call).
+                if (d.caveats[j].enforcer.code.length == 0) return (false, "no-code-enforcer");
                 // staticcall the same hook redemption would call; success == satisfied read-only.
                 // Gas-bounded: a stateful enforcer (which would revert on its SSTORE under
                 // staticcall) is capped so an on-chain caller (e.g. RW1-1) sees a cheap, predictable

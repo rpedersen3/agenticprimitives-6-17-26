@@ -380,8 +380,9 @@ contract Deploy is Script {
         //        right next to `.agent` so it can never drift out of sync with
         //        the apps (AGENT_NAME_PARENT='impact'). Multi-root registry, so
         //        this is just another root + its own permissionless subregistry.
-        //        Root owner = deployer so the same-tx setSubregistry succeeds
-        //        (matches the demo.agent ownership shape). This is the canonical
+        //        Root owner = deployer ONLY as a one-shot bootstrap handle so the
+        //        same-tx setSubregistry below succeeds; SC-4 hands the root to the
+        //        naming authority afterward. This is the canonical
         //        `permissionlessSubregistry` the apps consume.
         bytes32 impactRoot = nameRegistry.initializeRoot(
             "impact",
@@ -398,6 +399,18 @@ contract Deploy is Script {
         console2.log("PermissionlessSubregistry (.impact):    %s", address(impactSubregistry));
         nameRegistry.setSubregistry(impactRoot, address(impactSubregistry));
         console2.log("  subregistry granted under .impact");
+        // SC-4 (audit 2026-06-09): hand the .impact root to the resolved naming authority — parity with
+        // .agent (R5.9 NAMING_ROOT_OWNER). The deployer-EOA owner above is a one-shot bootstrap handle;
+        // control now moves to the governance-owned role. On testnet that role defaults to the deployer
+        // (no-op); on production it is the governance multisig, off the hot deployer key.
+        if (roles.namingRootOwner != deployer) {
+            nameRegistry.setOwner(impactRoot, roles.namingRootOwner);
+        }
+        require(
+            nameRegistry.owner(impactRoot) == roles.namingRootOwner,
+            "SC-4: .impact root owner must be the naming authority"
+        );
+        console2.log("  .impact root owner -> naming authority: %s", roles.namingRootOwner);
 
         // 6.8. Agent Relationships (RL Phase 3, spec 216) — trust-fabric
         //      edge store + governance-gated type semantics registry.

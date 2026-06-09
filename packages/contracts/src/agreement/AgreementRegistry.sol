@@ -49,6 +49,15 @@ contract AgreementRegistry {
     bytes32 internal constant TRANSITION_TYPEHASH =
         keccak256("AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier)");
 
+    /// @dev SC-1 (audit 2026-06-09): the issuer attestation digest is RECOMPUTED on-chain from the
+    ///      agreement's contents + chain + this contract — it is NOT a caller-supplied free-form hash.
+    ///      Binds (agreementCommitment, schemaHash, issuer, chainId, verifyingContract) so a signature
+    ///      lifted from any other context cannot back an attacker-chosen commitment. The TS side derives
+    ///      the same constant (cross-stack typehash-equality gate).
+    bytes32 internal constant AGREEMENT_ISSUER_TYPEHASH = keccak256(
+        "AgreementIssuerAttestation(bytes32 agreementCommitment,bytes32 schemaHash,address issuer,uint256 chainId,address verifyingContract)"
+    );
+
     // ─── Errors ─────────────────────────────────────────────────────────
 
     error AlreadyRegistered();
@@ -85,9 +94,8 @@ contract AgreementRegistry {
     struct AgreementIssuancePayload {
         bytes32 schemaHash;
         address issuer;
-        /// @dev EIP-712 attestation hash by the issuer (over agreementCommitment + schemaHash).
-        bytes32 attestationStructHash;
-        /// @dev issuer's signature over `attestationStructHash`.
+        /// @dev issuer's signature over the RECOMPUTED issuer-attestation digest (SC-1). The contract
+        ///      derives the digest from the payload contents — no caller-supplied attestation hash.
         bytes issuerSignature;
         /// @dev The asserted canonical commitment hash; we verify recomputation.
         bytes32 agreementCommitment;
@@ -153,8 +161,20 @@ contract AgreementRegistry {
             revert AlreadyRegistered();
         }
 
-        // AR-02 — verify issuer signature over the attestation hash
-        if (!_isValidSignatureBool(p.issuer, p.attestationStructHash, p.issuerSignature)) {
+        // AR-02 / SC-1 — RECOMPUTE the issuer-attestation digest from the agreement contents (+ chain +
+        // this contract) and verify the issuer signed THAT. A signature over an arbitrary digest from
+        // any other context can no longer back an attacker-chosen commitment.
+        bytes32 issuerDigest = keccak256(
+            abi.encode(
+                AGREEMENT_ISSUER_TYPEHASH,
+                p.agreementCommitment,
+                p.schemaHash,
+                p.issuer,
+                block.chainid,
+                address(this)
+            )
+        );
+        if (!_isValidSignatureBool(p.issuer, issuerDigest, p.issuerSignature)) {
             revert InvalidIssuerSignature();
         }
 

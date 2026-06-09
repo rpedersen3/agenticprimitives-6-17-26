@@ -1,11 +1,13 @@
 # Security & Architecture Audit Index
 
-**Last refreshed:** 2026-06-03 (added public self-audit/open-review packet for the June 2026 community review path.)
+**Last refreshed:** 2026-06-09 (added independent all-package security + architecture audit.)
 
 ## Auditor packet (the third-party-audit-ready dossier)
 
 | Doc | Owner | Purpose |
 | --- | --- | --- |
+| [`2026-06-09-independent-package-audit.md`](./2026-06-09-independent-package-audit.md) | security + architect (2026-06-09) | **CURRENT — independent audit of all 31 packages** (security + architecture). Headline: DEL-001 (Critical) delegation token verify lacks session-key↔delegate binding; VC-1/VC-2/AN-1 High. Prioritized P0–P2 backlog. Contract layer covered by the companion doc below. |
+| [`2026-06-09-independent-contracts-audit.md`](./2026-06-09-independent-contracts-audit.md) | security (2026-06-09) | **CURRENT — independent audit of all Solidity contracts** (`packages/contracts/src` + deploy scripts). Headline: SC-1 (Critical) AgreementRegistry issuer signature unbound to contents; SC-2 (High) attestation subject spoofing; SC-3/4/5 Medium. On-chain delegate binding confirmed correct (off-chain DEL-001 not mirrored on-chain). |
 | [`self-audit-2026-06.md`](./self-audit-2026-06.md) | security + architect (2026-06-03) | **PUBLIC PACKET — start here for open review.** Executive summary, scope, evidence map, known blockers, manual checklist, residual risks. |
 | [`open-review-2026-06.md`](./open-review-2026-06.md) | security + architect (2026-06-03) | How to review, reproduce evidence, report findings, and run the open-review triage process. |
 | [`bug-bounty-2026-06.md`](./bug-bounty-2026-06.md) | security + architect (2026-06-03) | Low-cost community bounty terms, severity guide, eligibility, exclusions, and report template. |

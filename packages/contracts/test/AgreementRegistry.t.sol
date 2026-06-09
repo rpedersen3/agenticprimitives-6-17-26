@@ -25,6 +25,17 @@ contract AgreementRegistryTest is Test {
     bytes32 internal constant TRANSITION_TYPEHASH =
         keccak256("AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier)");
 
+    /// @dev Mirrors AgreementRegistry.AGREEMENT_ISSUER_TYPEHASH (SC-1).
+    bytes32 internal constant AGREEMENT_ISSUER_TYPEHASH = keccak256(
+        "AgreementIssuerAttestation(bytes32 agreementCommitment,bytes32 schemaHash,address issuer,uint256 chainId,address verifyingContract)"
+    );
+
+    function _issuerDigest(bytes32 commitment, bytes32 schemaHash) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(AGREEMENT_ISSUER_TYPEHASH, commitment, schemaHash, issuer, block.chainid, address(reg))
+        );
+    }
+
     function _sign(bytes32 digest, uint256 pk) internal pure returns (bytes memory) {
         bytes32 ethHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, ethHash);
@@ -51,12 +62,10 @@ contract AgreementRegistryTest is Test {
         bytes32 commitment = keccak256(
             abi.encode(partySetCommitment, issuerCommitment, termsCommitment, scheduleCommitment, salt)
         );
-        bytes32 attestationHash = keccak256(abi.encodePacked(commitment, schemaHash));
         p = AgreementRegistry.AgreementIssuancePayload({
             schemaHash: schemaHash,
             issuer: issuer,
-            attestationStructHash: attestationHash,
-            issuerSignature: _sign(attestationHash, ISSUER_PK),
+            issuerSignature: _sign(_issuerDigest(commitment, schemaHash), ISSUER_PK),
             agreementCommitment: commitment,
             partySetCommitment: partySetCommitment,
             issuerCommitment: issuerCommitment,
@@ -94,7 +103,19 @@ contract AgreementRegistryTest is Test {
 
     function test_register_badIssuerSigReverts() public {
         AgreementRegistry.AgreementIssuancePayload memory p = _buildPayload(keccak256("schema-v1"), 2);
-        p.issuerSignature = _sign(p.attestationStructHash, P1_PK); // wrong signer
+        p.issuerSignature = _sign(_issuerDigest(p.agreementCommitment, p.schemaHash), P1_PK); // wrong signer
+        vm.expectRevert(AgreementRegistry.InvalidIssuerSignature.selector);
+        reg.register(p);
+    }
+
+    /// @dev SC-1: a valid issuer signature lifted from ANOTHER context (an arbitrary digest, e.g. a
+    ///      different agreement or a foreign contract) cannot back this commitment — the digest is
+    ///      recomputed on-chain from the actual contents, so the foreign signature fails to verify.
+    function test_register_foreignIssuerSigReverts() public {
+        AgreementRegistry.AgreementIssuancePayload memory p = _buildPayload(keccak256("schema-v1"), 3);
+        // issuer DID sign something — but over an attacker-chosen digest X, not the recomputed one.
+        bytes32 foreignDigest = keccak256("some-other-context");
+        p.issuerSignature = _sign(foreignDigest, ISSUER_PK);
         vm.expectRevert(AgreementRegistry.InvalidIssuerSignature.selector);
         reg.register(p);
     }

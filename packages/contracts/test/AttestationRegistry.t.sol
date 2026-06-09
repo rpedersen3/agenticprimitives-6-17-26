@@ -43,6 +43,30 @@ contract AttestationRegistryTest is Test {
         return keccak256(abi.encode(JOINT_CONSENT_TYPEHASH, p1, p2, refUID, credHash));
     }
 
+    /// @dev Mirrors AttestationRegistry.ASSOCIATION_ATTESTATION_TYPEHASH (SC-2).
+    bytes32 internal constant ASSOCIATION_ATTESTATION_TYPEHASH = keccak256(
+        "AssociationAttestation(address subject,address issuer,bytes32 schemaId,bytes32 credentialType,bytes32 credentialHash,uint256 chainId,address verifyingContract)"
+    );
+
+    function _associationDigest(AttestationRegistry.AssociationAttestationRequest memory req)
+        internal
+        view
+        returns (bytes32)
+    {
+        return keccak256(
+            abi.encode(
+                ASSOCIATION_ATTESTATION_TYPEHASH,
+                req.subject,
+                req.issuer,
+                req.schemaId,
+                req.credentialType,
+                req.credentialHash,
+                block.chainid,
+                address(reg)
+            )
+        );
+    }
+
     function _associationReq(
         bytes32 credentialHash,
         uint256 salt
@@ -53,7 +77,7 @@ contract AttestationRegistryTest is Test {
         req.offchainCredentialStatusList = bytes32(0);
         req.subject = subject;
         req.issuer = issuer;
-        req.issuerSignature = _sign(credentialHash, ISSUER_PK);
+        req.issuerSignature = _sign(_associationDigest(req), ISSUER_PK);
         req.salt = salt;
     }
 
@@ -86,8 +110,19 @@ contract AttestationRegistryTest is Test {
     function test_assertAssociation_invalidIssuerSigReverts() public {
         bytes32 ch = keccak256("bad-sig");
         AttestationRegistry.AssociationAttestationRequest memory req = _associationReq(ch, 0);
-        // Tamper signature
-        req.issuerSignature = _sign(ch, SUBJECT_PK); // signed by wrong key
+        // Tamper signature: correct digest, WRONG signer.
+        req.issuerSignature = _sign(_associationDigest(req), SUBJECT_PK);
+        vm.expectRevert(AttestationRegistry.InvalidIssuerSignature.selector);
+        reg.assertAssociation(req);
+    }
+
+    /// @dev SC-2: an issuer signature legitimately produced for one subject cannot be re-anchored
+    ///      against a DIFFERENT subject — the on-chain digest binds the subject, so the swap fails.
+    function test_assertAssociation_subjectSpoofReverts() public {
+        bytes32 ch = keccak256("recognized-cred");
+        AttestationRegistry.AssociationAttestationRequest memory req = _associationReq(ch, 0);
+        // attacker swaps in a different subject but keeps the issuer's (now-foreign) signature
+        req.subject = address(0xBEEF);
         vm.expectRevert(AttestationRegistry.InvalidIssuerSignature.selector);
         reg.assertAssociation(req);
     }

@@ -92,6 +92,45 @@ export function jointConsentDigest(args: {
   return hex as Hex32;
 }
 
+/**
+ * SC-2 (audit 2026-06-09) — canonical issuer-attestation typehash for a unilateral association.
+ * MUST byte-equal `AttestationRegistry.ASSOCIATION_ATTESTATION_TYPEHASH`; locked by the cross-stack
+ * typehash-equality gate.
+ */
+export const ASSOCIATION_ATTESTATION_TYPEHASH: Hex32 = hashName(
+  'AssociationAttestation(address subject,address issuer,bytes32 schemaId,bytes32 credentialType,bytes32 credentialHash,uint256 chainId,address verifyingContract)',
+);
+
+/**
+ * Recompute the digest the issuer signs for a unilateral association (SC-2). Equals the contract's
+ * `keccak256(abi.encode(ASSOCIATION_ATTESTATION_TYPEHASH, subject, issuer, schemaId, credentialType,
+ * credentialHash, chainId, verifyingContract))`. `assertAssociation` recomputes the same digest on
+ * chain — binding the SUBJECT so a known credentialHash can't be anchored against a different subject.
+ */
+export function associationAttestationDigest(args: {
+  subject: Address;
+  issuer: Address;
+  schemaId: Hex32;
+  credentialType: Hex32;
+  credentialHash: Hex32;
+  chainId: bigint;
+  verifyingContract: Address;
+}): Hex32 {
+  const buf = new Uint8Array(8 * 32);
+  writeHex32(buf, 0, ASSOCIATION_ATTESTATION_TYPEHASH);
+  writeAddress(buf, 32, args.subject);
+  writeAddress(buf, 64, args.issuer);
+  writeHex32(buf, 96, args.schemaId);
+  writeHex32(buf, 128, args.credentialType);
+  writeHex32(buf, 160, args.credentialHash);
+  writeUint256(buf, 192, args.chainId);
+  writeAddress(buf, 224, args.verifyingContract);
+  const digest = keccak_256(buf);
+  let hex = '0x';
+  for (const v of digest) hex += v.toString(16).padStart(2, '0');
+  return hex as Hex32;
+}
+
 function writeAddress(buf: Uint8Array, offset: number, addr: Address): void {
   const clean = addr.toLowerCase().replace(/^0x/, '');
   if (clean.length !== 40) throw new Error(`bad address length: ${addr}`);

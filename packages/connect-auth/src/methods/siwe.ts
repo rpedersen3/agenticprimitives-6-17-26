@@ -151,8 +151,14 @@ export interface SiweVerifyError {
  */
 export function parseAndValidate(
   message: string,
-  opts?: { now?: () => number; allowedDomains?: string[]; expectedNonce?: string },
+  opts: { now?: () => number; allowedDomains?: string[]; expectedNonce: string },
 ): { ok: true; parsed: SiweParsed; digest: Uint8Array } | SiweVerifyError {
+  // CA-001 (audit 2026-06-09): the nonce is REQUIRED. Replay protection is void without it — a
+  // captured signature would replay for the message's whole validity window. The caller issues a
+  // one-shot nonce and consumes it from its own store (this package is stateless by design).
+  if (typeof opts?.expectedNonce !== 'string' || opts.expectedNonce.length === 0) {
+    return { ok: false, reason: 'expectedNonce is required (CA-001)' };
+  }
   let parsed: SiweParsed;
   try {
     parsed = parseMessage(message);
@@ -161,10 +167,10 @@ export function parseAndValidate(
   }
   if (parsed.version !== '1') return { ok: false, reason: 'SIWE version not 1' };
 
-  if (opts?.allowedDomains && !opts.allowedDomains.includes(parsed.domain)) {
+  if (opts.allowedDomains && !opts.allowedDomains.includes(parsed.domain)) {
     return { ok: false, reason: `domain "${parsed.domain}" not allowed` };
   }
-  if (opts?.expectedNonce && opts.expectedNonce !== parsed.nonce) {
+  if (opts.expectedNonce !== parsed.nonce) {
     return { ok: false, reason: 'nonce mismatch' };
   }
 
@@ -201,7 +207,8 @@ export async function verifyOnchain(
     hash: Hex;
     signature: Hex;
   }) => Promise<boolean>,
-  opts?: { now?: () => number; allowedDomains?: string[]; expectedNonce?: string },
+  // CA-001: `expectedNonce` is required (single-use, caller-consumed).
+  opts: { now?: () => number; allowedDomains?: string[]; expectedNonce: string },
 ): Promise<SiweVerifyResult | SiweVerifyError> {
   const pre = parseAndValidate(message, opts);
   if (!pre.ok) return pre;
@@ -238,7 +245,8 @@ export async function verifyOnchain(
 export function verify(
   message: string,
   signature: Hex,
-  opts?: { now?: () => number; allowedDomains?: string[]; expectedNonce?: string },
+  // CA-001: `expectedNonce` is required (single-use, caller-consumed).
+  opts: { now?: () => number; allowedDomains?: string[]; expectedNonce: string },
 ): SiweVerifyResult | SiweVerifyError {
   const pre = parseAndValidate(message, opts);
   if (!pre.ok) return pre;

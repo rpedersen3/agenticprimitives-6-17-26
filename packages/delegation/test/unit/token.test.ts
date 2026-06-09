@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { createMemoryAuditSink } from '@agenticprimitives/audit';
-import { mintDelegationToken } from '../../src/token';
+import { mintDelegationToken, sessionDelegateBindingError } from '../../src/token';
 import { ROOT_AUTHORITY } from '../../src/types';
 import { buildCaveat, encodeTimestampTerms } from '../../src/caveats';
 import type { Delegation } from '../../src/types';
@@ -169,5 +169,51 @@ describe('mintDelegationToken', () => {
         { auditSink: throwingSink },
       ),
     ).rejects.toThrow(/fail-hard|sink down/);
+  });
+});
+
+describe('DEL-001 — sessionDelegateBindingError (chain-free session-key↔delegate binding)', () => {
+  // outer person→appSA delegation; the session leaf is appSA→sessionKey.
+  const APP_SA = DELEGATE; // the relying-site delegate SA
+  const outer: Delegation = { ...fixtureDelegation, delegate: APP_SA };
+  const goodLeaf: Delegation = {
+    delegator: APP_SA,
+    delegate: SESSION_ADDR as `0x${string}`,
+    authority: ROOT_AUTHORITY,
+    caveats: [],
+    salt: 7n,
+    signature: '0xabcd',
+  };
+
+  it('accepts a leaf whose delegator is the outer delegate and delegate is the session key', () => {
+    expect(sessionDelegateBindingError(outer, goodLeaf, SESSION_ADDR as `0x${string}`)).toBeNull();
+  });
+
+  it('rejects a missing session delegation', () => {
+    expect(sessionDelegateBindingError(outer, undefined, SESSION_ADDR as `0x${string}`)).toMatch(/required/);
+  });
+
+  it('rejects a leaf not issued by the outer delegate (broken chain link)', () => {
+    const badLink: Delegation = { ...goodLeaf, delegator: SMART_ACCOUNT };
+    expect(sessionDelegateBindingError(outer, badLink, SESSION_ADDR as `0x${string}`)).toMatch(/delegator != delegation delegate/);
+  });
+
+  it('rejects when the presenting session key is not the leaf delegate (the re-mint attack)', () => {
+    const attackerKey = '0x000000000000000000000000000000000000beef' as const;
+    expect(sessionDelegateBindingError(outer, goodLeaf, attackerKey)).toMatch(/not the session-delegation delegate/);
+  });
+
+  it('mint embeds sessionDelegation when supplied', async () => {
+    const { token } = await mintDelegationToken(
+      {
+        iss: 'a2a', aud: 'urn:mcp:server:person', sub: SMART_ACCOUNT,
+        delegation: outer, sessionDelegation: goodLeaf,
+        ttlSeconds: 300, sessionKeyAddress: SESSION_ADDR as `0x${string}`,
+      },
+      eip191Sign,
+    );
+    const [b64] = token.split('.');
+    const claims = JSON.parse(Buffer.from(b64!, 'base64url').toString());
+    expect(claims.sessionDelegation?.delegate?.toLowerCase()).toBe((SESSION_ADDR as string).toLowerCase());
   });
 });

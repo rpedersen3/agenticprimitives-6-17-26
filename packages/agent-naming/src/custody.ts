@@ -18,6 +18,7 @@
 
 import { encodeFunctionData } from 'viem';
 import type { Address, Hex } from '@agenticprimitives/types';
+import { normalizeLabel } from './normalize';
 import {
   agentNameAttributeResolverAbi,
   agentNameRegistryAbi,
@@ -48,6 +49,8 @@ export function buildRegisterSubnameCall(args: {
   resolver?: Address;
   expiry?: bigint;
 }): ContractCall {
+  // AN-1: normalize + reject on the WRITE path (homoglyph/case/zero-width squat defense).
+  const label = normalizeLabel(args.label);
   return {
     to: args.registry,
     value: 0n,
@@ -56,7 +59,7 @@ export function buildRegisterSubnameCall(args: {
       functionName: 'register',
       args: [
         args.parentNode,
-        args.label,
+        label,
         args.newOwner,
         args.resolver ?? ('0x0000000000000000000000000000000000000000' as Address),
         args.expiry ?? 0n,
@@ -274,13 +277,15 @@ export function buildSubregistryRegisterCall(args: {
   label: string;
   newOwner: Address;
 }): ContractCall {
+  // AN-1: normalize + reject on the WRITE path (homoglyph/case/zero-width squat defense).
+  const label = normalizeLabel(args.label);
   return {
     to: args.subregistry,
     value: 0n,
     data: encodeFunctionData({
       abi: permissionlessSubregistryAbi,
       functionName: 'register',
-      args: [args.label, args.newOwner],
+      args: [label, args.newOwner],
     }),
   };
 }

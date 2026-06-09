@@ -124,7 +124,7 @@ describe('SIWE → JWT session integration', () => {
       issuedAt: new Date().toISOString(),
     });
     const sig = signEip191(message);
-    const res = siweVerify(message, sig);
+    const res = siweVerify(message, sig, { expectedNonce: 'n' });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 

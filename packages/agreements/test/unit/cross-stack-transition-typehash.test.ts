@@ -15,7 +15,13 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { keccak256, stringToBytes, encodeAbiParameters } from 'viem';
-import { TRANSITION_TYPEHASH, transitionDigest, STATUS } from '../../src/index.js';
+import {
+  TRANSITION_TYPEHASH,
+  transitionDigest,
+  STATUS,
+  AGREEMENT_ISSUER_TYPEHASH,
+  issuerAttestationDigest,
+} from '../../src/index.js';
 
 const AR_SOL = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -45,6 +51,34 @@ describe('RW1-3 — AgreementRegistry transition typehash convergence', () => {
 
   it('locks the converged typehash byte value (regression-guard, both sides)', () => {
     expect(TRANSITION_TYPEHASH).toBe(keccak256(stringToBytes(CANONICAL_TRANSITION_TYPE_STRING)));
+  });
+});
+
+const CANONICAL_ISSUER_TYPE_STRING =
+  'AgreementIssuerAttestation(bytes32 agreementCommitment,bytes32 schemaHash,address issuer,uint256 chainId,address verifyingContract)';
+
+describe('SC-1 — AgreementRegistry issuer-attestation typehash convergence', () => {
+  it('the LIVE Solidity AGREEMENT_ISSUER_TYPEHASH type string is the canonical form', () => {
+    expect(solTypeString('AGREEMENT_ISSUER_TYPEHASH')).toBe(CANONICAL_ISSUER_TYPE_STRING);
+  });
+
+  it('TS AGREEMENT_ISSUER_TYPEHASH byte-matches keccak256 of the live Solidity type string', () => {
+    expect(AGREEMENT_ISSUER_TYPEHASH).toBe(keccak256(stringToBytes(solTypeString('AGREEMENT_ISSUER_TYPEHASH'))));
+  });
+
+  it('issuerAttestationDigest byte-matches keccak256(abi.encode(TYPEHASH, commitment, schemaHash, issuer, chainId, verifyingContract))', () => {
+    const agreementCommitment = `0x${'ab'.repeat(32)}` as const;
+    const schemaHash = `0x${'ef'.repeat(32)}` as const;
+    const issuer = '0x1111111111111111111111111111111111111111' as const;
+    const verifyingContract = '0x2222222222222222222222222222222222222222' as const;
+    const chainId = 84532n;
+    const expected = keccak256(
+      encodeAbiParameters(
+        [{ type: 'bytes32' }, { type: 'bytes32' }, { type: 'bytes32' }, { type: 'address' }, { type: 'uint256' }, { type: 'address' }],
+        [AGREEMENT_ISSUER_TYPEHASH, agreementCommitment, schemaHash, issuer, chainId, verifyingContract],
+      ),
+    );
+    expect(issuerAttestationDigest({ agreementCommitment, schemaHash, issuer, chainId, verifyingContract })).toBe(expected);
   });
 });
 

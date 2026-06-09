@@ -129,6 +129,17 @@ contract DelegationManagerVerifyAuthForCallTest is Test {
         assertTrue(ok, reason);
     }
 
+    /// @dev SC-3 (audit 2026-06-09): a caveat whose enforcer address has NO code constrains nothing —
+    ///      a raw staticcall to an empty address "succeeds", which would make the delegation pass as
+    ///      constraint-checked (fail-open). The view verifier must reject it.
+    function test_noCodeEnforcer_failsClosed_SC3() public view {
+        IDelegationManager.Caveat[] memory cav = _one(_caveat(address(0xDEAD), ""));
+        IDelegationManager.Delegation memory d = _signedView(99, cav);
+        (bool ok, string memory reason) = _verify(d, TARGET_A, 0);
+        assertFalse(ok, "no-code enforcer must fail closed");
+        assertEq(reason, "no-code-enforcer");
+    }
+
     // ─── negative: a caveat denies the EXACT call ───────────────────────
 
     function test_wrongTarget_caveatFails() public view {

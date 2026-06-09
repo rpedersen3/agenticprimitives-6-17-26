@@ -20,13 +20,14 @@ import {
 import {
   CREDENTIAL_TYPE,
   computeAttestationUid,
+  associationAttestationDigest,
   type AssociationAttestationRequest,
   type Hex32,
 } from '@agenticprimitives/attestations';
 import type { Address, Hex } from '@agenticprimitives/types';
 
 import { JP_SHAPES } from './jp-shapes.js';
-import { verifyErc1271 } from './chain.js';
+import { verifyErc1271, CONTRACTS, CHAIN_ID } from './chain.js';
 
 export type AssociationKind = 'facilitator' | 'adopter';
 
@@ -108,11 +109,23 @@ export async function verifyRecognitionCredential(
 ): Promise<{ subjectOrg: Address; associationKind: AssociationKind; fpgIds: string[] } | null> {
   try {
     const ch = credentialHash(credential);
-    if (!(await verifyErc1271(issuerSa, ch, issuerSignature))) return null;
     const situation = credential.credentialSubject;
     const subjectOrg = situation?.roles?.subject as Address | undefined;
     const body = situation?.body?.payload;
     if (!subjectOrg || !/^0x[0-9a-fA-F]{40}$/.test(subjectOrg) || !body?.associationKind || !Array.isArray(body.fpgIds)) return null;
+    // SC-2: verify over the SUBJECT-bound digest, using the SIGNED subject from the credential body.
+    // A copied issuer signature over a known credentialHash can't recognize a different subject.
+    const schemaId = body.associationKind === 'facilitator' ? JP_SHAPES.facilitator.hash : JP_SHAPES.adopter.hash;
+    const digest = associationAttestationDigest({
+      subject: subjectOrg,
+      issuer: issuerSa,
+      schemaId,
+      credentialType: CREDENTIAL_TYPE.Association,
+      credentialHash: ch,
+      chainId: BigInt(CHAIN_ID),
+      verifyingContract: CONTRACTS.attestationRegistry,
+    });
+    if (!(await verifyErc1271(issuerSa, digest, issuerSignature))) return null;
     return { subjectOrg, associationKind: body.associationKind, fpgIds: body.fpgIds };
   } catch {
     return null;

@@ -24,6 +24,7 @@ import type {
   SetSubregistryInput,
 } from './types';
 import { namehash, ZERO_NODE } from './namehash';
+import { normalizeLabel } from './normalize';
 
 /**
  * Optional per-call submission context. When provided, the write
@@ -215,11 +216,14 @@ export class AgentNamingClient {
    * AgentAccount.execute / CustodyPolicy ceremony instead.
    */
   async registerSubname(input: RegisterSubnameInput, ctx: WriteContext): Promise<Hex> {
+    // AN-1: normalize + reject at the client boundary so the on-chain label, the derived child
+    // node, and any record writes all reference the same canonical label.
+    const label = normalizeLabel(input.label);
     const parentNode = namehash(input.parent);
     const call = buildRegisterSubnameCall({
       registry: this.opts.registry,
       parentNode,
-      label: input.label,
+      label,
       newOwner: input.owner,
       resolver: input.resolver,
     });
@@ -227,7 +231,7 @@ export class AgentNamingClient {
     if (input.initialRecords) {
       // Compute the new child node off-chain so we don't have to
       // re-read against a possibly-lagging RPC.
-      const childNode = namehash(`${input.label}.${input.parent}`);
+      const childNode = namehash(`${label}.${input.parent}`);
       const resolver = input.resolver ?? this.opts.universalResolver; // best-effort default
       const calls = buildRecordCalls({ resolver, node: childNode, records: input.initialRecords });
       for (const c of calls) await this._submit(ctx, c);

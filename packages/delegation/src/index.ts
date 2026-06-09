@@ -38,7 +38,7 @@ export type { VerifyAuthorizationResult } from './verify-authorization';
 // EXT-024 closure). The stub unconditionally returned a "not implemented"
 // error string — a public symbol that lies about runtime capability. When the
 // work resumes it lands behind `./experimental` per spec 100 §6.
-export { mintDelegationToken, verifyDelegationToken } from './token';
+export { mintDelegationToken, verifyDelegationToken, sessionDelegateBindingError } from './token';
 export { isRevoked, revokeDelegation } from './onchain';
 
 export type {

@@ -11,11 +11,12 @@
 //   - The issuer signs the RAW credentialHash / attestationStructHash with its
 //     custodian EOA (chain.ts personaSignHash); the SA's _verifyEcdsa validates.
 
-import { keccak256, encodePacked } from 'viem';
 import type { Address, Hex } from '@agenticprimitives/types';
+import { issuerAttestationDigest } from '@agenticprimitives/agreements';
 
 import {
   CONTRACTS,
+  CHAIN_ID,
   deployOrgSa,
   deriveOrgSaAddress,
   executeViaSa,
@@ -33,7 +34,7 @@ import { issueAgreement } from './agreement-flow.js';
 import type { JpAgreementPayload } from './agreement-payload.js';
 import { issueAssociation, type JpAssociationBody } from './issuance-flow.js';
 import { JP_SHAPES } from './jp-shapes.js';
-import { CREDENTIAL_TYPE, jointConsentDigest, type Hex32 } from '@agenticprimitives/attestations';
+import { CREDENTIAL_TYPE, jointConsentDigest, associationAttestationDigest, type Hex32 } from '@agenticprimitives/attestations';
 import { credentialHash } from '@agenticprimitives/verifiable-credentials';
 
 const ZERO32 = ('0x' + '00'.repeat(32)) as Hex32;
@@ -204,7 +205,18 @@ export async function issueAssociationCredential(args: {
     validUntil: args.validUntil,
     salt: args.salt,
   });
-  const issuerSignature = await personaSignHash(persona.custodian)(issued.credentialHash);
+  // SC-2: the issuer signs the digest the contract recomputes (binds the subject) — not the raw hash.
+  const issuerSignature = await personaSignHash(persona.custodian)(
+    associationAttestationDigest({
+      subject: issued.request.subject,
+      issuer: jp.saAddress,
+      schemaId: issued.request.schemaId,
+      credentialType: issued.request.credentialType,
+      credentialHash: issued.request.credentialHash,
+      chainId: BigInt(CHAIN_ID),
+      verifyingContract: CONTRACTS.attestationRegistry,
+    }),
+  );
   return { credential: issued.credential, credentialHash: issued.credentialHash as Hex, issuerSignature, issuer: jp.saAddress };
 }
 
@@ -225,14 +237,18 @@ export async function registerAgreementOnChain(args: {
     payload: args.payload,
     salt: args.salt,
   });
-  // attestationStructHash = keccak256(abi.encodePacked(agreementCommitment, schemaHash))
-  const attestationStructHash = keccak256(
-    encodePacked(['bytes32', 'bytes32'], [issued.registryPayload.agreementCommitment, issued.registryPayload.schemaHash]),
-  ) as Hex32;
-  const issuerSignature = await personaSignHash(persona.custodian)(attestationStructHash);
+  // SC-1: the issuer signs the digest the contract RECOMPUTES from the agreement contents (+ chain +
+  // registry) — not a free-form packed hash. A lifted signature can't back an attacker-chosen commitment.
+  const issuerDigest = issuerAttestationDigest({
+    agreementCommitment: issued.registryPayload.agreementCommitment,
+    schemaHash: issued.registryPayload.schemaHash,
+    issuer: gc.saAddress,
+    chainId: BigInt(CHAIN_ID),
+    verifyingContract: CONTRACTS.agreementRegistry,
+  });
+  const issuerSignature = await personaSignHash(persona.custodian)(issuerDigest);
   const data = encodeRegisterAgreement({
     ...issued.registryPayload,
-    attestationStructHash,
     issuerSignature,
   });
   const res = await executeViaSa({

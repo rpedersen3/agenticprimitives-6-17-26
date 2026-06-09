@@ -5,7 +5,7 @@
 // shape mismatch — the only thing the offline test can't do is pay gas).
 
 import { describe, expect, it } from 'vitest';
-import { decodeFunctionData, keccak256, encodePacked, hashMessage } from 'viem';
+import { decodeFunctionData, hashMessage } from 'viem';
 
 import { mintPersona } from '../personas.js';
 import { getGlobalChurch, getJP } from '../org-personas.js';
@@ -92,10 +92,7 @@ describe('demo-jp full lifecycle (IA §4) + on-chain payload shapes', () => {
       payload: { agreementKind: 'facilitator-adopter', fpgId: 'NAJDI', termsText: 't', capabilityList: ['c'], validFrom: '2026-07-01T00:00:00Z' },
       salt: 9n,
     });
-    const attestationStructHash = keccak256(
-      encodePacked(['bytes32', 'bytes32'], [issued.registryPayload.agreementCommitment, issued.registryPayload.schemaHash]),
-    ) as Hex32;
-    const calldata = encodeRegisterAgreement({ ...issued.registryPayload, attestationStructHash, issuerSignature: '0x1234' });
+    const calldata = encodeRegisterAgreement({ ...issued.registryPayload, issuerSignature: '0x1234' });
 
     const decoded = decodeFunctionData({ abi: AGREEMENT_REGISTRY_ABI, data: calldata });
     expect(decoded.functionName).toBe('register');

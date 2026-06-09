@@ -44,6 +44,17 @@ contract DeployPaymaster is Script {
             deployer = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // anvil[0]
         }
         address governance = vm.envOr("GOVERNANCE", deployer);
+        address owner = vm.envOr("PAYMASTER_OWNER", deployer);
+
+        // SC-5 (audit 2026-06-09): on a PRODUCTION (non-testnet) chain, paymaster owner + governance MUST
+        // be explicit non-deployer addresses (governance ideally a multisig/timelock contract) — never the
+        // silent hot deployer key, which would leave setDevMode / allowlist / deposit on one EOA. Testnet
+        // keeps the demo posture (deployer-as-everything, an accepted hole). Fail hard on misconfig.
+        if (!_isTestnetChain(block.chainid)) {
+            require(governance != deployer, "SC-5: set GOVERNANCE to a non-deployer address on production");
+            require(owner != deployer, "SC-5: set PAYMASTER_OWNER to a non-deployer address on production");
+            require(governance.code.length > 0, "SC-5: production GOVERNANCE must be a contract (multisig/timelock)");
+        }
 
         uint256 stake = vm.envOr("PAYMASTER_STAKE_WEI", uint256(0.0005 ether));
         uint256 deposit = vm.envOr("PAYMASTER_DEPOSIT_WEI", uint256(0.001 ether));
@@ -64,10 +75,11 @@ contract DeployPaymaster is Script {
             console2.log("verifyingSigner: <unset> (allowlist mode, fail-closed until setAccepted)");
         }
 
+        console2.log("owner:          %s", owner);
         vm.startBroadcast();
         SmartAgentPaymaster paymaster = new SmartAgentPaymaster(
             IEntryPoint(entryPoint),
-            deployer,
+            owner,
             governance,
             devMode,
             verifyingSigner
@@ -88,5 +100,17 @@ contract DeployPaymaster is Script {
         string memory path = string.concat("deployments-paymaster-", network, ".json");
         vm.writeFile(path, out);
         console2.log("wrote %s", path);
+    }
+
+    /// @dev SC-5: testnets where the demo's deployer-as-everything posture is accepted. Base Sepolia
+    ///      (84532), Ethereum Sepolia (11155111), Arbitrum Sepolia (421614), OP Sepolia (11155420),
+    ///      and local anvil (31337). Anything else is treated as production and must split authority.
+    function _isTestnetChain(uint256 chainId) internal pure returns (bool) {
+        return
+            chainId == 84532 ||
+            chainId == 11155111 ||
+            chainId == 421614 ||
+            chainId == 11155420 ||
+            chainId == 31337;
     }
 }

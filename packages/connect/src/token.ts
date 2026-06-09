@@ -119,7 +119,12 @@ export interface VerifyOpts {
    * audience-B. Aligns with `verifyIdToken` which already required this.
    */
   expectedAud: string;
-  expectedIss?: string;
+  /**
+   * Expected issuer(s) — **required** (CN-1, audit 2026-06-09). A relying site that omitted this
+   * could accept an AgentSession minted by a different issuer (kid is random + not issuer-bound).
+   * A single origin, an exact-match allowlist, or a predicate (for wildcard multi-origin homes).
+   */
+  expectedIss: string | readonly string[] | ((iss: string) => boolean);
   now?: () => number;
   /**
    * H7-B.4: explicit `iat` clock-skew tolerance in seconds. Default 30.
@@ -127,6 +132,13 @@ export interface VerifyOpts {
    * rejected (closes PKG-CONNECT-002 — future-dated tokens were accepted).
    */
   clockSkewSec?: number;
+}
+
+/** CN-1: does `iss` satisfy the expected issuer (single origin, exact-match allowlist, or predicate). */
+function issAllowed(expected: string | readonly string[] | ((iss: string) => boolean), iss: string): boolean {
+  if (typeof expected === 'function') return expected(iss);
+  if (Array.isArray(expected)) return expected.includes(iss);
+  return expected === iss;
 }
 
 /** Verify an AgentSession. Alg is PINNED to the key (by kid), never the token's header. */
@@ -149,7 +161,13 @@ export async function verifyAgentSession(token: string, opts: VerifyOpts): Promi
   // Pin alg to the key — rejects alg-confusion + alg:none.
   if (header.alg !== key.alg) return { ok: false, reason: `alg "${header.alg}" does not match key alg "${key.alg}"` };
   // iss-first (so an HS BrokerSession token can never enter this verifier).
-  if (opts.expectedIss && payload.iss !== opts.expectedIss) return { ok: false, reason: 'iss mismatch' };
+  // CN-1: expectedIss is REQUIRED — fail closed if a caller forgot it.
+  if (opts.expectedIss === undefined || opts.expectedIss === null) {
+    return { ok: false, reason: 'expectedIss is required (CN-1)' };
+  }
+  if (typeof payload.iss !== 'string' || !issAllowed(opts.expectedIss, payload.iss)) {
+    return { ok: false, reason: 'iss mismatch' };
+  }
 
   const valid = await globalThis.crypto.subtle.verify(
     sigParams(key.alg) as AlgorithmIdentifier,

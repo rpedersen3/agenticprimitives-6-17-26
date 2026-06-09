@@ -56,6 +56,41 @@ export function transitionDigest(args: {
   return toHex32(keccak_256(buf));
 }
 
+/**
+ * SC-1 (audit 2026-06-09) — canonical issuer-attestation typehash. MUST byte-equal
+ * `AgreementRegistry.AGREEMENT_ISSUER_TYPEHASH`; locked by the cross-stack typehash-equality gate.
+ */
+export const AGREEMENT_ISSUER_TYPEHASH: Hex32 = toHex32(
+  keccak_256(
+    utf8ToBytes(
+      'AgreementIssuerAttestation(bytes32 agreementCommitment,bytes32 schemaHash,address issuer,uint256 chainId,address verifyingContract)',
+    ),
+  ),
+);
+
+/**
+ * Recompute the digest the issuer signs (SC-1). Equals the contract's
+ * `keccak256(abi.encode(AGREEMENT_ISSUER_TYPEHASH, agreementCommitment, schemaHash, issuer, chainId,
+ * verifyingContract))` — `register` recomputes the same digest and verifies the issuer signature
+ * against it (no caller-supplied attestation hash). Bind `chainId` + the registry address.
+ */
+export function issuerAttestationDigest(args: {
+  agreementCommitment: Hex32;
+  schemaHash: Hex32;
+  issuer: Address;
+  chainId: bigint;
+  verifyingContract: Address;
+}): Hex32 {
+  const buf = new Uint8Array(6 * 32);
+  writeHex32(buf, 0, AGREEMENT_ISSUER_TYPEHASH);
+  writeHex32(buf, 32, args.agreementCommitment);
+  writeHex32(buf, 64, args.schemaHash);
+  writeAddressLeftPadded(buf, 96, args.issuer);
+  writeUint256(buf, 128, args.chainId);
+  writeAddressLeftPadded(buf, 160, args.verifyingContract);
+  return toHex32(keccak_256(buf));
+}
+
 /** Recompute the commitment per spec 241 §3 (AR-01). */
 export function computeAgreementCommitment(args: {
   partySetCommitment: Hex32;
@@ -111,7 +146,6 @@ export function nullifierFor(args: {
 export interface AgreementIssuancePayload {
   schemaHash: Hex32;
   issuer: Address;
-  attestationStructHash: Hex32;
   issuerSignature: Hex;
   agreementCommitment: Hex32;
   partySetCommitment: Hex32;

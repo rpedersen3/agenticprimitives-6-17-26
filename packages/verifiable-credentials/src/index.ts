@@ -55,8 +55,13 @@ export {
 export type { CredentialSigner } from './proof.js';
 
 // Verifier
-export { verifyCredentialStructural } from './verifier.js';
-export type { VerificationResult } from './verifier.js';
+export { verifyCredential, verifyCredentialStructural, parseEip155Caip10 } from './verifier.js';
+export type {
+  VerificationResult,
+  VerifyCredentialResult,
+  Erc1271Verifier,
+  Caip10Eip155,
+} from './verifier.js';
 
 // Schema registration
 export { SHAPE_DID_PREFIX, buildShapeUri, parseShapeUri, shapeHash } from './schema.js';
