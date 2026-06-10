@@ -45,5 +45,6 @@ re-export hashDelegation from ./hash
 re-export isRevoked from ./onchain
 re-export mintDelegationToken from ./token
 re-export revokeDelegation from ./onchain
+re-export sessionDelegateBindingError from ./token
 re-export verifyAuthorization from ./verify-authorization
 re-export verifyDelegationToken from ./token

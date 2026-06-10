@@ -35,8 +35,8 @@ re-export buildCitationAssertion from ./entitlement.js
 re-export buildContentDescriptor from ./descriptor.js
 re-export buildCorpusTree from ./merkle.js
 re-export buildInclusionZkProof from ./reserved.js
+re-export canonicalHash from @agenticprimitives/verifiable-credentials
 re-export canonicalReference from ./reference.js
-re-export canonicalize from ./jcs.js
 re-export canonicalizeRendering from ./descriptor.js
 re-export computeCanonicalId from ./reference.js
 re-export contentCommitment from ./descriptor.js
@@ -44,7 +44,7 @@ re-export corpusRef from ./reference.js
 re-export descriptorHash from ./descriptor.js
 re-export evaluateEntitlement from ./entitlement.js
 re-export hashPair from ./merkle.js
-re-export jcsString from ./jcs.js
+re-export jcsCanonicalize from @agenticprimitives/verifiable-credentials
 re-export leafHash from ./merkle.js
 re-export merkleProof from ./merkle.js
 re-export merkleRoot from ./merkle.js

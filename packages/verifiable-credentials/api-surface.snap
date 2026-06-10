@@ -1,10 +1,12 @@
 const PACKAGE_STATUS: "w1-foundational"
+re-export Caip10Eip155 from ./verifier.js
 re-export CredentialSigner from ./proof.js
 re-export CredentialStatus2021 from ./types.js
 re-export DescriptionRef from ./situation.js
 re-export DisclosurePolicy from ./types.js
 re-export EIP712_SIG_2026_CONTEXT from ./types.js
 re-export Eip712Signature2026Proof from ./types.js
+re-export Erc1271Verifier from ./verifier.js
 re-export Hex32 from ./types.js
 re-export ISODate from ./types.js
 re-export JcsError from ./canonical.js
@@ -20,6 +22,7 @@ re-export VC_DOMAIN_VERSION from ./types.js
 re-export VC_EIP712_TYPES from ./types.js
 re-export VerifiableCredential from ./types.js
 re-export VerificationResult from ./verifier.js
+re-export VerifyCredentialResult from ./verifier.js
 re-export VisibilityTier from ./types.js
 re-export assertSituationRolesPresent from ./situation.js
 re-export buildShapeUri from ./schema.js
@@ -29,8 +32,10 @@ re-export credentialHash from ./proof.js
 re-export eip712Digest from ./proof.js
 re-export isoToSeconds from ./proof.js
 re-export jcsCanonicalize from ./canonical.js
+re-export parseEip155Caip10 from ./verifier.js
 re-export parseShapeUri from ./schema.js
 re-export shapeHash from ./schema.js
 re-export signCredential from ./proof.js
+re-export verifyCredential from ./verifier.js
 re-export verifyCredentialStructural from ./verifier.js
 re-export viemSignerFromWallet from ./proof.js

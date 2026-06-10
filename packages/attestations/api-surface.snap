@@ -1,6 +1,8 @@
+const ASSOCIATION_ATTESTATION_TYPEHASH: Hex32
 const CREDENTIAL_TYPE: { readonly Association: `0x${string}`
 const JOINT_CONSENT_TYPEHASH: Hex32
 const PACKAGE_STATUS: "w1-foundational"
+function associationAttestationDigest(args:
 function computeAttestationUid(args:
 function jointConsentDigest(args:
 interface AssociationAttestationRequest
