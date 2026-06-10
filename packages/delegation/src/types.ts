@@ -106,10 +106,21 @@ export interface VerifyOpts {
    * session key to the DELEGATOR (`leaf.delegator === delegation.delegator` + `leaf.delegate ===
    * sessionKeyAddress` + the delegator SA's signature, validated via the UniversalSignatureValidator).
    * The MCP verifier (demo-mcp) sets this once the minter (demo-a2a) issues the leaf, closing the token
-   * re-mint vector. Default off for backward compatibility while the minter is wired; flipping it on is
-   * the enforcement switch.
+   * re-mint vector. Default off for backward compatibility (legacy / non-client-minted tokens), per
+   * SOURCE: a client-minted token MUST be verified with this on; a legacy/persona path that mints
+   * unbound tokens verifies with it off. See {@link strictSessionBinding} to make the choice fail-closed.
    */
   requireSessionDelegateBinding?: boolean;
+  /**
+   * DEL-001 fail-closed guard (P0-2, external audit 2026-06-10). When an integrator KNOWS a verifier is
+   * on a production / client-minted path, set this `true`: `verifyDelegationToken` then THROWS (a
+   * configuration error, not a soft reject) unless {@link requireSessionDelegateBinding} is also `true`.
+   * This makes "I declared this path strict but forgot to enforce the binding" impossible — the silent
+   * default-off footgun the audit flagged. Deliberately NOT keyed on `NODE_ENV` (unreliable on Workers /
+   * SES — see the revocation-fail-mode note); the APP declares strictness explicitly. Additive: unset =
+   * no change. (Flipping the GLOBAL default to fail-closed is a separate ADR.)
+   */
+  strictSessionBinding?: boolean;
   /**
    * spec 270 v4 — the deployed `UniversalSignatureValidator` address. When set, the delegation AND the
    * `sessionDelegation` leaf signatures are validated through it (ERC-1271 deployed / ERC-6492

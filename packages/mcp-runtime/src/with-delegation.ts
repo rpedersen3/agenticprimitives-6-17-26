@@ -363,6 +363,7 @@ export function withDelegation<A extends Record<string, unknown>>(
       // DEL-001 (spec 270 v4) — per-call session-key↔delegator binding + the connection-agnostic
       // UniversalSignatureValidator surface.
       requireSessionDelegateBinding: config.requireSessionDelegateBinding,
+      strictSessionBinding: config.strictSessionBinding,
       universalSignatureValidator: config.universalSignatureValidator,
       // Thread the audit sink + correlation id down so delegation
       // emits `delegation.verify.{accept,reject}` events through the
@@ -590,6 +591,7 @@ export async function verifyDelegationForResource(
     requireDeployed: config.requireDeployed,
     // DEL-001 (spec 270 v4) — per-call binding + connection-agnostic validator surface.
     requireSessionDelegateBinding: config.requireSessionDelegateBinding,
+    strictSessionBinding: config.strictSessionBinding,
     universalSignatureValidator: config.universalSignatureValidator,
     auditSink: opts?.auditSink,
     correlationId,

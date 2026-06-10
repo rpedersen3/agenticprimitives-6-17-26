@@ -10,6 +10,11 @@
  *   2. a `closed` finding's `anchor` string must appear in at least one of its
  *      `concerns` files  → "closed" cannot be claimed without the fix being in source
  *   3. each finding has the required fields, with severity/status from the vocab
+ *   4. (P0-2) every closed critical/high finding declares `enforcement:` from the ordered vocab
+ *      (code-present < test-covered < production-enforced < deployed) — so "closed" can't conflate
+ *      "a code hook exists" with "mandatory on the production path". Any below `production-enforced`
+ *      is surfaced as ENFORCEMENT-PENDING (visible, non-fatal — the fix is in source but not yet
+ *      universally in force).
  *
  * Intentionally dependency-free: a small block parser reads the controlled
  * findings.yaml schema (no YAML lib). Run: `pnpm check:audit-freshness`.
@@ -24,6 +29,15 @@ const SEVERITIES = new Set(['critical', 'high', 'medium', 'low']);
 const STATUSES = new Set(['closed', 'open', 'accepted-risk', 'deferred']);
 const REQUIRED = ['id', 'severity', 'title', 'status', 'concerns', 'origin'] as const;
 
+// P0-2 (external audit 2026-06-10): `status` answers "is the fix in source" (proven by `anchor`).
+// `enforcement` answers the SEPARATE, harder question "how strongly is it actually in force" — so a
+// `closed` row can't conflate "a code hook exists" with "mandatory on the production path." Ordered
+// weakest → strongest; the gate below REQUIRES it on every closed critical/high finding and surfaces
+// any that are below `production-enforced` as enforcement-pending (visible, not hidden under "closed").
+const ENFORCEMENT_ORDER = ['code-present', 'test-covered', 'production-enforced', 'deployed'] as const;
+const ENFORCEMENT = new Set<string>(ENFORCEMENT_ORDER);
+const enforcementRank = (e?: string): number => ENFORCEMENT_ORDER.indexOf(e as (typeof ENFORCEMENT_ORDER)[number]);
+
 interface Finding {
   id?: string;
   severity?: string;
@@ -32,6 +46,7 @@ interface Finding {
   concerns?: string[];
   anchor?: string;
   tests?: string[];
+  enforcement?: string;
   origin?: string;
   _line: number;
 }
@@ -146,6 +161,17 @@ function main(): void {
         }
       }
     }
+
+    // P0-2: enforcement vocab + the "closed critical/high MUST declare how strongly it's enforced" rule.
+    if (f.enforcement !== undefined && !ENFORCEMENT.has(f.enforcement)) {
+      errors.push(`${where}: bad enforcement "${f.enforcement}" (one of: ${ENFORCEMENT_ORDER.join(', ')})`);
+    }
+    if (f.status === 'closed' && (f.severity === 'critical' || f.severity === 'high') && !f.enforcement) {
+      errors.push(
+        `${where}: a closed ${f.severity} finding MUST declare "enforcement" ` +
+          `(${ENFORCEMENT_ORDER.join(' < ')}) — "closed" alone can't tell code-present from production-enforced`,
+      );
+    }
   }
 
   if (errors.length) {
@@ -160,6 +186,22 @@ function main(): void {
       `${byStatus('closed')} closed, ${byStatus('open')} open, ` +
       `${byStatus('accepted-risk')} accepted-risk, ${byStatus('deferred')} deferred — all anchors resolve).`,
   );
+
+  // P0-2: make enforcement visible. A closed critical/high below `production-enforced` is NOT a drift
+  // error (the fix IS in source), but it must NOT read as fully done — surface it as enforcement-pending.
+  const pending = findings.filter(
+    (f) =>
+      f.status === 'closed' &&
+      (f.severity === 'critical' || f.severity === 'high') &&
+      enforcementRank(f.enforcement) < enforcementRank('production-enforced'),
+  );
+  if (pending.length) {
+    console.log(
+      `\n  ⚠ ${pending.length} closed critical/high finding(s) are ENFORCEMENT-PENDING ` +
+        `(< production-enforced — code is in source but not yet mandatory everywhere):`,
+    );
+    for (const f of pending) console.log(`    • ${f.id} [${f.enforcement}] — ${f.title}`);
+  }
 }
 
 main();

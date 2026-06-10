@@ -62,6 +62,13 @@ export interface McpResourceVerifyConfig {
    */
   requireSessionDelegateBinding?: boolean;
   /**
+   * DEL-001 fail-closed guard (P0-2). Threaded into `verifyDelegationToken`'s `strictSessionBinding`:
+   * when `true`, the verify THROWS unless `requireSessionDelegateBinding` is also `true`. Set it on a
+   * client-minted / production resource so a regression that drops the binding flag fails LOUD instead
+   * of silently re-opening the re-mint vector. App-declared (not NODE_ENV); additive.
+   */
+  strictSessionBinding?: boolean;
+  /**
    * DEL-001 (spec 270 v4) — the deployed `UniversalSignatureValidator` address. When set, the
    * delegation AND the `sessionDelegation` leaf signatures are validated through it (ERC-1271 deployed /
    * ERC-6492 counterfactual / ECDSA EOA), making verification connection-agnostic. Threaded into

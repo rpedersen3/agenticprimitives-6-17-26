@@ -148,6 +148,33 @@ describe('verifyDelegationToken — requireDeployed branch', () => {
     expect(result).toMatchObject({ error: expect.stringContaining('not deployed') });
   });
 
+  // DEL-001 fail-closed guard (P0-2): a path that declares itself strict MUST enforce the binding.
+  it('THROWS a config error when strictSessionBinding=true but requireSessionDelegateBinding is not set', async () => {
+    const token = await mintFixtureToken();
+    await expect(
+      verifyDelegationToken(token, {
+        ...baseOpts,
+        jtiStore: memoryJti(),
+        strictSessionBinding: true,
+        // requireSessionDelegateBinding intentionally omitted — the footgun the guard closes.
+      }),
+    ).rejects.toThrow(/strictSessionBinding requires requireSessionDelegateBinding/);
+  });
+
+  it('does NOT throw the strict config error when both strict + binding are set (proceeds to verify)', async () => {
+    publicClient.getCode.mockResolvedValue('0x');
+    const token = await mintFixtureToken();
+    // With both set, the guard passes; verification proceeds (and rejects on the missing leaf as a
+    // VerifyError object — NOT a thrown config error). We only assert it didn't throw the guard.
+    const result = await verifyDelegationToken(token, {
+      ...baseOpts,
+      jtiStore: memoryJti(),
+      strictSessionBinding: true,
+      requireSessionDelegateBinding: true,
+    });
+    expect(result).toBeDefined();
+  });
+
   it('tolerates undeployed delegator when requireDeployed=false (explicit opt-in)', async () => {
     publicClient.getCode.mockResolvedValue('0x'); // not deployed
     const token = await mintFixtureToken();

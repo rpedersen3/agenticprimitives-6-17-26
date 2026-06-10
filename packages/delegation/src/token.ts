@@ -491,6 +491,16 @@ export async function verifyDelegationToken(
   token: string,
   opts: VerifyOptsExt,
 ): Promise<{ principal: Address; grants?: DataScopeGrant[] } | VerifyError> {
+  // DEL-001 fail-closed guard (P0-2): a path that declares itself strict MUST enforce the binding.
+  // This is a configuration error (integrator mistake), so we THROW rather than soft-reject — it can't
+  // be silently swallowed as "just another invalid token." Closes the audit's "critical control is a
+  // per-call soft option that a route can forget" concern for any verifier that opts into strict.
+  if (opts.strictSessionBinding && !opts.requireSessionDelegateBinding) {
+    throw new Error(
+      'DEL-001: strictSessionBinding requires requireSessionDelegateBinding=true — a strict/production ' +
+        'verify path must enforce the session-delegate binding, not leave it optional.',
+    );
+  }
   // Audit emit helper (audit C3 pass 3b). Fail-soft: an emit failure
   // never breaks the verify flow.
   const emit = async (

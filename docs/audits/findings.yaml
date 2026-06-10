@@ -10,10 +10,18 @@
 #   - a `closed` finding's `anchor` string is present in at least one `concerns` file
 #     (so "closed" can't drift from source — the fix must actually be there)
 #   - required fields present; severity/status from the controlled vocab
+#   - every closed critical/high finding declares `enforcement:` (below) — and any below
+#     `production-enforced` is reported as ENFORCEMENT-PENDING so "closed" can't overclaim.
+#
+# `status` = is the fix in source (proven by `anchor`). `enforcement` = how strongly it is actually
+# IN FORCE — a separate, harder question. A code hook that exists but is opt-in / default-off is
+# `closed` + `test-covered`, NOT `production-enforced`. Keep them honest and distinct.
 #
 # Update rule: when a finding's status changes, edit it HERE in the same PR.
-# Severity:  critical | high | medium | low
-# Status:    closed | open | accepted-risk | deferred
+# Severity:     critical | high | medium | low
+# Status:       closed | open | accepted-risk | deferred
+# Enforcement:  code-present | test-covered | production-enforced | deployed   (weakest → strongest;
+#               required on every closed critical/high finding)
 # ─────────────────────────────────────────────────────────────────────────────
 
 meta:
@@ -39,12 +47,19 @@ findings:
     anchor: sessionDelegateBindingError
     tests:
       - packages/delegation/test/unit/verify-universal-validator.test.ts
+    enforcement: test-covered
     origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
     note: >
-      v4 binds the session-delegation leaf to the DELEGATOR (the principal SA) and
-      validates via the UniversalSignatureValidator (connection-agnostic). Activated
-      live: demo-jp client-mints the leaf-bound token, demo-a2a forwards with
-      enforceBinding, demo-mcp sets requireSessionDelegateBinding. spec 270 v4.
+      v4 binds the session-delegation leaf to the DELEGATOR (the principal SA) and validates via the
+      UniversalSignatureValidator (connection-agnostic). PER-SOURCE enforcement is live: demo-jp
+      client-mints the leaf-bound token, demo-a2a forwards with enforceBinding, demo-mcp sets
+      requireSessionDelegateBinding, and the production deploy preflight (#272) refuses to ship if that
+      chain is removed. ENFORCEMENT-PENDING (not yet production-enforced) because the LIBRARY default is
+      still opt-in (requireSessionDelegateBinding default-off for legacy/non-client-minted tokens) — a
+      verifier that forgets the flag silently allows the observe-and-re-mint class. mcp-runtime now
+      exposes a fail-closed `strictSessionBinding` construction guard (throws if strict declared without
+      binding), but flipping the GLOBAL library default to fail-closed is a separate ADR (every mint
+      path must migrate). Until that lands, enforcement is per-source, NOT universal. spec 270 v4.
 
   - id: SC-1
     severity: critical
@@ -53,6 +68,7 @@ findings:
     concerns:
       - packages/contracts/src/agreement/AgreementRegistry.sol
     anchor: AGREEMENT_ISSUER_TYPEHASH
+    enforcement: production-enforced
     origin: archive/2026-06-09/2026-06-09-independent-contracts-audit.md
     note: digest recomputed on-chain over agreementCommitment, schemaHash, issuer, chainId, address(this).
 
@@ -63,6 +79,7 @@ findings:
     concerns:
       - packages/delegation/src/evaluator.ts
     anchor: context-required
+    enforcement: production-enforced
     origin: archive/2026-05/2026-05-packages-contracts-production-readiness.md
     note: strict fail-closed default (H7-B.2); off-chain path denies unless enforceOnChain.
 
@@ -74,6 +91,7 @@ findings:
     concerns:
       - packages/verifiable-credentials/src/verifier.ts
     anchor: verifyCredential
+    enforcement: production-enforced
     origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
     note: real verifyCredential() with ERC-1271 round-trip; credentialHash mandatory.
 
@@ -84,6 +102,7 @@ findings:
     concerns:
       - packages/verifiable-credentials/src/verifier.ts
     anchor: verifyingContract
+    enforcement: production-enforced
     origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
     note: verifyingContract pinned to the issuer SA; chainId bound.
 
@@ -94,6 +113,7 @@ findings:
     concerns:
       - packages/agent-naming/src/custody.ts
     anchor: normalizeLabel
+    enforcement: production-enforced
     origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
 
   - id: SC-2
@@ -103,6 +123,7 @@ findings:
     concerns:
       - packages/contracts/src/attestation/AttestationRegistry.sol
     anchor: ASSOCIATION_ATTESTATION_TYPEHASH
+    enforcement: production-enforced
     origin: archive/2026-06-09/2026-06-09-independent-contracts-audit.md
     note: digest binds subject, issuer, schemaId, credentialType, credentialHash, chainId, address(this).
 
@@ -114,6 +135,7 @@ findings:
       - packages/delegation/src/index.ts
       - packages/mcp-runtime/src/index.ts
     anchor: verifyDelegationToken
+    enforcement: production-enforced
     origin: archive/2026-05/2026-05-packages-contracts-production-readiness.md
     note: removed from public surface (H7-B.8); resurfaces under ./experimental per spec 100 §6.
 
@@ -125,6 +147,7 @@ findings:
       - scripts/check-audit-stub-drift.ts
       - packages/verifiable-credentials/AUDIT.md
     anchor: STUB
+    enforcement: production-enforced
     tests:
       - scripts/check-audit-stub-drift.ts
     origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
@@ -133,6 +156,22 @@ findings:
       (check:audit-stub-drift) that fails when an AUDIT.md says STUB over a
       non-trivial src/. The `anchor: STUB` resolves in the guard script itself.
 
+  - id: LEDGER-1
+    severity: high
+    title: finding ledger conflated anchor-presence with production-enforcement (closure overclaim)
+    status: closed
+    concerns:
+      - scripts/check-audit-freshness.ts
+      - docs/audits/findings.yaml
+    anchor: ENFORCEMENT_ORDER
+    enforcement: production-enforced
+    origin: 2026-06-10-external-production-readiness-audit.md
+    note: >
+      P0-2: a finding could be marked `closed` (anchor string present in source) while production
+      enforcement was weaker than the invariant (e.g. DEL-001's binding default-off). Added an orthogonal
+      `enforcement` dimension (code-present < test-covered < production-enforced < deployed); the freshness
+      gate now REQUIRES it on every closed critical/high finding and surfaces any below production-enforced
+      as ENFORCEMENT-PENDING. DEL-001 is reclassified test-covered (enforcement-pending) accordingly.
   - id: CON-FACTORY-001
     severity: high
     title: factory + paymaster governance held by the disclosed testnet deployer EOA
