@@ -8,7 +8,8 @@
 | Read | For |
 | --- | --- |
 | [`findings.yaml`](./findings.yaml) | Current status of every first-class finding (id, severity, status, source-linked). |
-| [`2026-06-10-contract-by-contract-audit.md`](./2026-06-10-contract-by-contract-audit.md) | Active contract-layer tracker — independent per-contract deep dive of all 42 `.sol` files (corrected severities + the P0/P1/P2 remediation roadmap). |
+| [`2026-06-10-production-readiness-audit.md`](./2026-06-10-production-readiness-audit.md) | **Latest full pass (post-remediation)** — all 29 packages + all 42 contracts re-audited after the 2026-06-10 remediation wave; verifies CA-F1 / AN-1-ONCHAIN / ATT-1 closures in source; current production-blocker list. |
+| [`2026-06-10-contract-by-contract-audit.md`](./2026-06-10-contract-by-contract-audit.md) | Contract-layer deep dive — independent per-contract review of all 42 `.sol` files (corrected severities + remediation roadmap). Closure deltas tracked in the production-readiness audit + ledger. |
 | [`../architecture/product-readiness-audit.md`](../architecture/product-readiness-audit.md) | Living system-level readiness verdict + backlog. |
 | [`audit-evidence-index.md`](./audit-evidence-index.md) | "What proves what" — the artifact/evidence map. |
 

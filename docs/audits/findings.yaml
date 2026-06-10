@@ -553,3 +553,81 @@ findings:
       Re-rated Medium → Info/by-design: AttributeStorage is abstract with all-internal setters that
       explicitly delegate auth to subclasses; it cannot be deployed and exposes no external write.
       Re-scope (open action): verify each concrete subclass gates its external write surface.
+
+  # ── 2026-06-10 production-readiness audit (post-remediation full pass) ─────
+  - id: NEW-MCP-1
+    severity: high
+    title: memory JTI store NODE_ENV inference falls open on Workers (contradicts its own H7-B.9 fix comment)
+    status: open
+    concerns: [packages/mcp-runtime/src/jti-stores.ts]
+    origin: 2026-06-10-production-readiness-audit.md
+    note: >
+      createMemoryJtiStore still infers environment from NODE_ENV when opts.environment is omitted
+      (:50); on Workers/SES process.env is absent so it resolves to 'development' and skips the
+      production throw — non-durable replay protection ships silently. Fix: require environment
+      explicitly or throw when it cannot be determined. Lead-verified at source.
+  - id: NEW-AP-1
+    severity: medium
+    title: agent-profile fetchProfile skips integrity check on zero on-chain anchor (fail-open)
+    status: open
+    concerns: [packages/agent-profile/src/client.ts]
+    origin: 2026-06-10-production-readiness-audit.md
+  - id: NEW-AP-2
+    severity: medium
+    title: agent-profile fetchProfile SSRF — fetches attacker-controlled on-chain URI with no scheme/size/redirect policy
+    status: open
+    concerns: [packages/agent-profile/src/client.ts]
+    origin: 2026-06-10-production-readiness-audit.md
+  - id: NEW-A2A-1
+    severity: medium
+    title: a2a unauthorized RPC responses leak raw authorization reason strings (auth oracle)
+    status: open
+    concerns: [packages/a2a/src/agent.ts]
+    origin: 2026-06-10-production-readiness-audit.md
+  - id: NEW-VC-1
+    severity: medium
+    title: verifyCredential does not enforce credentialStatus — revoked credentials verify valid
+    status: open
+    concerns: [packages/verifiable-credentials/src/verifier.ts]
+    origin: 2026-06-10-production-readiness-audit.md
+  - id: NEW-SKILL-1
+    severity: medium
+    title: skillEndorsementDigest omits chainId + verifyingContract (cross-deployment endorsement replay)
+    status: open
+    concerns: [packages/agent-skills/src/index.ts]
+    origin: 2026-06-10-production-readiness-audit.md
+  - id: NEW-GEO-1
+    severity: medium
+    title: geoEndorsementDigest omits chainId + verifyingContract (cross-deployment endorsement replay)
+    status: open
+    concerns: [packages/geo-features/src/index.ts]
+    origin: 2026-06-10-production-readiness-audit.md
+  - id: NEW-CONNECT-AUTH-1
+    severity: medium
+    title: SIWE allowedDomains caller-optional — omission accepts messages signed for any domain
+    status: open
+    concerns: [packages/connect-auth/src/methods/siwe.ts]
+    origin: 2026-06-10-production-readiness-audit.md
+  - id: NEW-AUD-1
+    severity: medium
+    title: findings-ledger enforcement field is self-attested (production-enforced requires no evidence)
+    status: open
+    concerns: [scripts/check-audit-freshness.ts]
+    origin: 2026-06-10-production-readiness-audit.md
+    note: >
+      Also NEW-AUD-2 (anchor check is bare includes() over any concerns file) and NEW-AUD-3
+      (parser breaks at first column-0 line). Require tests evidence for >= production-enforced;
+      assert parsed-finding count equals raw '- id:' count.
+  - id: NEW-PMT-1
+    severity: medium
+    title: payments AUDIT.md claims shipped EIP-712 mandate builder/rails that do not exist in src (inverse ARCH-1)
+    status: open
+    concerns: [packages/payments/AUDIT.md]
+    origin: 2026-06-10-production-readiness-audit.md
+    note: same class in intent-marketplace (NEW-IM-1) + intent-resolver (NEW-IR-1); add a charter-vs-exports gate.
+  - id: NEW-FLF-1
+    severity: medium
+    title: fulfillment isHandoffAllowed ignores requiresUserApproval/preservePrivacyTier/allowedScopes/maxHopCount
+    status: open
+    concerns: [packages/fulfillment/src/index.ts]
+    origin: 2026-06-10-production-readiness-audit.md
