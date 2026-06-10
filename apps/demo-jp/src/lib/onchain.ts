@@ -299,6 +299,10 @@ export function consentDigestFor(args: {
     party2: args.facilitatorParty,
     agreementCommitment: args.agreementCommitment,
     credentialHash: credentialHash(args.credential) as Hex32,
+    // ATT-3 (audit 2026-06-10): the consent digest now binds chainId + the registry; must match what
+    // AttestationRegistry.assertJointAgreement recomputes (block.chainid + address(this)).
+    chainId: BigInt(CHAIN_ID),
+    verifyingContract: CONTRACTS.attestationRegistry,
   }) as Hex32;
 }
 
