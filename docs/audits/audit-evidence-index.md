@@ -4,7 +4,7 @@
 |---|---|
 | **Last refreshed** | 2026-06-03 |
 | **Purpose** | Single-page index pointing at every artifact a third-party auditor or open-review participant needs. **Read this first.** Each row gives artifact, location, generator workflow, and last-green-run timestamp guidance. |
-| **Reading order for auditors** | (1) [Public self-audit packet](./self-audit-2026-06.md) → (2) this doc → (3) [R10 readiness assessment](./2026-06-01-r10-internal-readiness-assessment.md) → (4) [`packages/contracts/AUDIT.md`](../../packages/contracts/AUDIT.md) → (5) per-package `AUDIT.md` files. Findings + ground truth pointers in each. |
+| **Reading order for auditors** | (1) [Public self-audit packet](./archive/2026-06-03/self-audit-2026-06.md) → (2) this doc → (3) [R10 readiness assessment](./archive/2026-06-01/2026-06-01-r10-internal-readiness-assessment.md) → (4) [`packages/contracts/AUDIT.md`](../../packages/contracts/AUDIT.md) → (5) per-package `AUDIT.md` files. Findings + ground truth pointers in each. |
 
 This is the **manual minimum-viable** version of the
 [spec 237 § 4.1](../../specs/237-audit-evidence-layer.md) Audit Evidence
@@ -31,17 +31,16 @@ this doc will be auto-generated.
 
 | Artifact | Path | Last refreshed |
 |---|---|---|
-| **Public self-audit packet** | [`self-audit-2026-06.md`](./self-audit-2026-06.md) | 2026-06-03 |
-| Open review instructions | [`open-review-2026-06.md`](./open-review-2026-06.md) | 2026-06-03 |
-| Bug bounty terms | [`bug-bounty-2026-06.md`](./bug-bounty-2026-06.md) | 2026-06-03 |
-| Validation results ledger | [`validation-results-2026-06.md`](./validation-results-2026-06.md) | 2026-06-03 |
-| Open review announcement copy | [`open-review-announcement-2026-06.md`](./open-review-announcement-2026-06.md) | 2026-06-03 |
-| **R10 internal readiness assessment** (prioritized P0/P1/P2/P3) | [`2026-06-01-r10-internal-readiness-assessment.md`](./2026-06-01-r10-internal-readiness-assessment.md) | 2026-06-01 |
+| **Public self-audit packet** | [`self-audit-2026-06.md`](./archive/2026-06-03/self-audit-2026-06.md) | 2026-06-03 |
+| Open review instructions | [`open-review-2026-06.md`](./archive/2026-06-03/open-review-2026-06.md) | 2026-06-03 |
+| Bug bounty terms | [`bug-bounty-2026-06.md`](./archive/2026-06-03/bug-bounty-2026-06.md) | 2026-06-03 |
+| Validation results ledger | [`validation-results-2026-06.md`](./archive/2026-06-03/validation-results-2026-06.md) | 2026-06-03 |
+| **R10 internal readiness assessment** (prioritized P0/P1/P2/P3) | [`2026-06-01-r10-internal-readiness-assessment.md`](./archive/2026-06-01/2026-06-01-r10-internal-readiness-assessment.md) | 2026-06-01 |
 | Product readiness audit (system-level) | [`docs/architecture/product-readiness-audit.md`](../architecture/product-readiness-audit.md) | 2026-06-01 (R9 wave) |
 | Contracts AUDIT.md (dossier) | [`packages/contracts/AUDIT.md`](../../packages/contracts/AUDIT.md) | 2026-06-01 (R9 wave) |
 | Per-package AUDIT.md files | [`packages/<name>/AUDIT.md`](../../packages/) | 2026-05-23 (R6 wave); R10 P0.2 refresh follow-up |
 | R9 static-analysis triage (Slither + Aderyn) | [`r9-static-analysis-triage.md`](./r9-static-analysis-triage.md) | 2026-06-01 |
-| R6 contracts recon (pre-R9 wave) | [`r6-contracts-recon-2026-05-31.md`](./r6-contracts-recon-2026-05-31.md) | 2026-05-31 |
+| R6 contracts recon (pre-R9 wave) | [`r6-contracts-recon-2026-05-31.md`](./archive/2026-05/r6-contracts-recon-2026-05-31.md) | 2026-05-31 |
 | Threat model | [`threat-model.md`](./threat-model.md) | Stale (ARCH-005 refresh queued) |
 | Architecture diagram | [`architecture-diagram.md`](./architecture-diagram.md) | Stale (ARCH-005) |
 | Evidence checklist (per-control) | [`evidence-checklist.md`](./evidence-checklist.md) | Stale (ARCH-005) |
@@ -169,4 +168,4 @@ Items the third-party assessment / R10 doc surfaced that are TRACKED but not yet
 - **`audit.FAIL_HARD_ACTIONS` enumeration** (P1.4 / NEW-2) — fail-hard contract is now enforced at the wrapper level (R11.1), but the action-name enumeration is not yet machine-checkable.
 - **Kontrol + Certora formal proofs** (P2.2 / P2.3) — Halmos covers narrow proofs; deferred to post-audit.
 
-All open items + ETA in [`docs/audits/2026-06-01-r10-internal-readiness-assessment.md`](./2026-06-01-r10-internal-readiness-assessment.md) § "Prioritized hardening backlog."
+All open items + ETA in [`docs/audits/2026-06-01-r10-internal-readiness-assessment.md`](./archive/2026-06-01/2026-06-01-r10-internal-readiness-assessment.md) § "Prioritized hardening backlog."

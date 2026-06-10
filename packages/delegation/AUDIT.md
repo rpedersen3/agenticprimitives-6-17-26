@@ -97,11 +97,14 @@ What this package does NOT own (per its `CLAUDE.md`):
 | Cross-delegation forgery                   | N/A                     | High when shipped                                  | Currently stub; **H5** open                          | **Not implemented**                       |
 
 
-## 5. Findings (open)
+## 5. Findings
 
+> Canonical cross-cutting finding status lives in [`docs/audits/findings.yaml`](../../docs/audits/findings.yaml)
+> (CI-enforced via `check:audit-freshness`). The table below is the package-local view.
 
 | ID              | Severity | Finding                                                                          | Status     | Notes                                                                                                                             |
 | --------------- | -------- | -------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **DEL-001**     | Critical | Token verifier didn't bind the presenting session key to the delegated authority — observe-and-re-mint = delegator impersonation. | **CLOSED 2026-06-10** | `sessionDelegateBindingError` requires `sessionDelegation.delegator === delegation.delegator` + `delegate === sessionKeyAddress`, validated via the `UniversalSignatureValidator` (`requireSessionDelegateBinding` opt). Activated live (demo-jp client-mints, demo-a2a forwards, demo-mcp enforces). Tests: `test/unit/verify-universal-validator.test.ts`. spec 270 v4. |
 | **H3** (system) | P1       | Revocation check tolerates RPC failure.                                          | **CLOSED 2026-05-20** | New `revocationFailMode: 'closed' \| 'open'` opt; defaults by `NODE_ENV`. Production hard-fails on RPC outage. |
 | **C3** (system) | P0       | No audit events from delegation verify.                                          | **MOSTLY CLOSED 2026-05-20** (passes 3b + 5b) | `verifyDelegationToken` emits `delegation.verify.{accept,reject}` per call (pass 3b). `mintDelegationToken` emits `delegation.mint` (pass 5b — `subject: { type: 'jti', id: jti }`, `audience` populated, fail-soft on sink errors, tests in `token.test.ts`). `revokeDelegation` emission remains as a follow-up but is lower-priority since revocation is a one-time admin op. |
 | **H5** (system) | P1       | Cross-delegation is not implemented.                                             | Open       | `verifyCrossDelegation` returns not-implemented; `withCrossDelegation` (in mcp-runtime) similarly stub.                           |

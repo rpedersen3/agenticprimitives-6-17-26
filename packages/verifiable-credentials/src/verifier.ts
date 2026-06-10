@@ -1,14 +1,16 @@
 /**
- * Verifier — checks that a VC's proof is valid.
+ * Verifier — checks that a VC's proof is valid (findings VC-1 / VC-2, closed).
  *
- * For W1 the verifier is structural + signature-shape only; the ERC-1271
- * round-trip against the issuer SA on chain is delegated to consumers (who
- * already hold a viem public client). The verifier returns enough information
- * for the consumer to perform the on-chain check itself.
+ * `verifyCredential(vc, publicClient)` performs the ERC-1271 round-trip against
+ * the issuer SA on chain and FAILS CLOSED — `credentialHash` is mandatory, and
+ * the EIP-712 digest pins `verifyingContract` to the issuer SA + binds `chainId`,
+ * so an attacker can't substitute a different verifying domain. The structural
+ * helpers remain for callers that only need shape validation, but the authority
+ * check is `verifyCredential`; there is no fallback path (ADR-0013).
  *
- * Status-list resolution (StatusList2021) is likewise structural in W1 — we
- * record whether a status entry was present + which list to fetch. Per
- * ADR-0013 (no silent fallbacks) the consumer fetches the status list itself.
+ * Status-list resolution (StatusList2021): the verifier records whether a status
+ * entry was present + which list to fetch; the consumer fetches it (no silent
+ * fallback, ADR-0013).
  */
 
 import { credentialHash, eip712Digest, isoToSeconds } from './proof.js';

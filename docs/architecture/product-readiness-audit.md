@@ -8,7 +8,7 @@
 **Scope:** all `@agenticprimitives/*` packages (including `audit`, `custody`), demo apps (web, web-pro, web-recovery, a2a, mcp), contracts, deploy path, CI, architecture docs, live testnet deployment
 **Verdict:** **external-audit-ready alpha.** Testnet-deployed end-to-end with **680 Foundry tests + 7 Halmos symbolic proofs + 4 Echidna properties + 4 Medusa properties** across 37 .sol files. Substrate is sound: package boundaries, contract hardening, fail-closed defaults, symbolic + invariant + fuzz coverage, supply-chain gates. Remaining production blockers concentrate in OPERATIONAL readiness (clean production governance keys, third-party contracts audit, fail-hard audit at the mcp-runtime call site, AWS / per-tool isolation finalization, doc-dossier refresh to reference R9) — NOT in architecture or implementation gaps.
 
-**Active prioritized hardening backlog:** see [**R10 internal readiness assessment**](../audits/2026-06-01-r10-internal-readiness-assessment.md) — categorizes every remaining item into P0 (audit-blocking, ~1 day) / P1 (production-blocking, ~1 week) / P2 (post-audit) / P3 (polish). All P0 items are doc-refreshes + 2 small code fixes; the substrate work is done.
+**Active prioritized hardening backlog:** see [**R10 internal readiness assessment**](../audits/archive/2026-06-01/2026-06-01-r10-internal-readiness-assessment.md) — categorizes every remaining item into P0 (audit-blocking, ~1 day) / P1 (production-blocking, ~1 week) / P2 (post-audit) / P3 (polish). All P0 items are doc-refreshes + 2 small code fixes; the substrate work is done.
 
 ## Audit Reader's Guide (added 2026-06-01)
 

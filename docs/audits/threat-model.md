@@ -4,6 +4,10 @@
 **Refresh cadence:** every hardening wave; date-stamp each section
 on touch.
 **Last refresh:** 2026-05-23 (post security-auditor H5 audit — CT-8/9/10/11/12 landed).
+**Coverage:** hand-maintained and **partial** — this STRIDE map lags the newest waves (the W1 spine
+packages, the demo-jp/demo-sso connect + client-mint flows, spec 270 DEL-001). For authoritative,
+CI-checked **finding status**, see [`findings.yaml`](./findings.yaml); a full boundary re-map is the
+generator tracked in `specs/214-production-audit-dossier.md`.
 **Method:** STRIDE per trust boundary, mapped to package owners.
 **Companion docs:** [`architecture-diagram.md`](./architecture-diagram.md) ·
 [`evidence-checklist.md`](./evidence-checklist.md) ·

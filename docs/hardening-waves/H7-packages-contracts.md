@@ -5,7 +5,7 @@
 | **Opened** | 2026-05-30 |
 | **Owner** | this conversation; executor = next coding session |
 | **Scope** | `packages/*` ONLY (which, since A.2, includes the previously-app-housed `apps/contracts` extracted to `packages/contracts`). Demo apps + app-integration specs out of scope. |
-| **Driver doc** | [`docs/audits/2026-05-packages-contracts-production-readiness.md`](../audits/2026-05-packages-contracts-production-readiness.md) — the audit tracker this wave closes against. |
+| **Driver doc** | [`docs/audits/archive/2026-05/2026-05-packages-contracts-production-readiness.md`](../audits/archive/2026-05/2026-05-packages-contracts-production-readiness.md) — the audit tracker this wave closes against. |
 | **Gate at end** | One external Solidity firm + targeted TS-crypto scope; library + contracts shippable as a `0.1.0-alpha` line. |
 | **Estimated total** | ~4 weeks 1-dev (A→F + one coordinated redeploy R1). |
 

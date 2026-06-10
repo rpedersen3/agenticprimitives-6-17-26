@@ -14,8 +14,9 @@ generator that derives them from `capability.manifest.json` data.
 > `verifiable-credentials`, `related-agents`, `intent-marketplace`, `intent-resolver`,
 > `fulfillment`, `payments`, `contracts`); §5 deployed addresses predate the R8.2/R9/R10
 > redeploys. For authoritative current state use the `packages/*/capability.manifest.json`
-> set (package graph) and `packages/contracts/deployments-base-sepolia.json` (live
-> addresses). Full redraw is tracked doc debt (product-readiness-audit.md F3).
+> set (package graph), `packages/contracts/deployments-base-sepolia.json` (live addresses),
+> and [`findings.yaml`](./findings.yaml) (CI-checked finding status). Full redraw is tracked
+> doc debt (product-readiness-audit.md F3).
 
 Companion docs: [`threat-model.md`](./threat-model.md) ·
 [`evidence-checklist.md`](./evidence-checklist.md) ·

@@ -1,6 +1,6 @@
 # @agenticprimitives/verifiable-credentials — Claude guide
 
-> **Status:** STUB (Wave 0.5). Full implementation in Wave 2 per [w1-implementation-wave-plan.md](../../docs/architecture/w1-implementation-wave-plan.md).
+> **Status:** Implemented — security-load-bearing (verifier does the ERC-1271 round-trip; findings VC-1/VC-2 closed). See [AUDIT.md](./AUDIT.md).
 
 ## What this package owns
 

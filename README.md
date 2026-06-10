@@ -155,7 +155,7 @@ Live deploy targets are Cloudflare Pages / Workers plus Base Sepolia contracts.
 
 **Alpha track — testnet-only.** Specs and APIs are stabilizing; package boundaries are enforced by CI; contract and TypeScript checks cover the core custody, naming, delegation, profile, paymaster, and MCP paths. Demo apps exercise the full chain (Google/passkey/SIWE auth → smart-account deploy → custody policy + multi-sig → off-chain delegations + MCP vault/tool calls) end to end on Base Sepolia.
 
-**Public self-audit:** the June 2026 open-review packet starts at [`docs/audits/self-audit-2026-06.md`](./docs/audits/self-audit-2026-06.md), with reproducible evidence linked from [`docs/audits/audit-evidence-index.md`](./docs/audits/audit-evidence-index.md).
+**Public self-audit:** the June 2026 open-review packet starts at [`docs/audits/archive/2026-06-03/self-audit-2026-06.md`](./docs/audits/archive/2026-06-03/self-audit-2026-06.md), with reproducible evidence linked from [`docs/audits/audit-evidence-index.md`](./docs/audits/audit-evidence-index.md).
 
 **Do not deploy to production yet.** Production launches are deferred pending operational steps independent of the architecture:
 

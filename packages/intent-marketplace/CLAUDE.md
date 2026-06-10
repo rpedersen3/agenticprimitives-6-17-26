@@ -1,6 +1,6 @@
 # @agenticprimitives/intent-marketplace — Claude guide
 
-> **Status:** STUB (Wave 0.5). Full implementation in Wave 5 per [w1-implementation-wave-plan.md](../../docs/architecture/w1-implementation-wave-plan.md).
+> **Status:** Foundational (W1) — code shipped; not production enforcement. See [AUDIT.md](./AUDIT.md).
 
 ## What this package owns
 

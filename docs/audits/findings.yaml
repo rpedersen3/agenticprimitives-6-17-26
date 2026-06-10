@@ -1,0 +1,251 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SINGLE SOURCE OF TRUTH for security findings (audit ledger).
+#
+# This file — not prose docs — is the authoritative status of every first-class
+# security finding. Dated audit reports under docs/audits/archive/ are immutable
+# historical snapshots; their findings are reconciled HERE.
+#
+# CI gate: `pnpm check:audit-freshness` validates every entry:
+#   - all `concerns` paths exist
+#   - a `closed` finding's `anchor` string is present in at least one `concerns` file
+#     (so "closed" can't drift from source — the fix must actually be there)
+#   - required fields present; severity/status from the controlled vocab
+#
+# Update rule: when a finding's status changes, edit it HERE in the same PR.
+# Severity:  critical | high | medium | low
+# Status:    closed | open | accepted-risk | deferred
+# ─────────────────────────────────────────────────────────────────────────────
+
+meta:
+  updated: '2026-06-10'
+  scope: monorepo (packages/* + apps/* + contracts)
+  verified_against: master @ 2026-06-10
+  note: >
+    Reconciled from the 2026-06-09 independent package + contracts audits, the
+    remediation-status log, and the per-package AUDIT.md set. Low/informational
+    backlog lives in the per-package AUDIT.md files; this ledger tracks the
+    first-class (critical/high/medium) + accepted-risk findings.
+
+findings:
+  # ── Critical ──────────────────────────────────────────────────────────────
+  - id: DEL-001
+    severity: critical
+    title: delegation session key not bound to the delegated authority (observe-and-re-mint)
+    status: closed
+    concerns:
+      - packages/delegation/src/token.ts
+      - apps/demo-mcp/src/index.ts
+      - apps/demo-a2a/src/index.ts
+    anchor: sessionDelegateBindingError
+    tests:
+      - packages/delegation/test/unit/verify-universal-validator.test.ts
+    origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
+    note: >
+      v4 binds the session-delegation leaf to the DELEGATOR (the principal SA) and
+      validates via the UniversalSignatureValidator (connection-agnostic). Activated
+      live: demo-jp client-mints the leaf-bound token, demo-a2a forwards with
+      enforceBinding, demo-mcp sets requireSessionDelegateBinding. spec 270 v4.
+
+  - id: SC-1
+    severity: critical
+    title: agreement issuer signature not bound to agreement contents
+    status: closed
+    concerns:
+      - packages/contracts/src/agreement/AgreementRegistry.sol
+    anchor: AGREEMENT_ISSUER_TYPEHASH
+    origin: archive/2026-06-09/2026-06-09-independent-contracts-audit.md
+    note: digest recomputed on-chain over agreementCommitment, schemaHash, issuer, chainId, address(this).
+
+  - id: PKG-DELEGATION-001
+    severity: critical
+    title: off-chain caveat evaluator default-accepts unknown enforcers
+    status: closed
+    concerns:
+      - packages/delegation/src/evaluator.ts
+    anchor: context-required
+    origin: archive/2026-05/2026-05-packages-contracts-production-readiness.md
+    note: strict fail-closed default (H7-B.2); off-chain path denies unless enforceOnChain.
+
+  # ── High ──────────────────────────────────────────────────────────────────
+  - id: VC-1
+    severity: high
+    title: verifiable-credentials verifier fail-open, no issuer-signature check
+    status: closed
+    concerns:
+      - packages/verifiable-credentials/src/verifier.ts
+    anchor: verifyCredential
+    origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
+    note: real verifyCredential() with ERC-1271 round-trip; credentialHash mandatory.
+
+  - id: VC-2
+    severity: high
+    title: credential digest trusts attacker-supplied verifyingContract/chainId
+    status: closed
+    concerns:
+      - packages/verifiable-credentials/src/verifier.ts
+    anchor: verifyingContract
+    origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
+    note: verifyingContract pinned to the issuer SA; chainId bound.
+
+  - id: AN-1
+    severity: high
+    title: un-normalized registration labels enable homoglyph squatting
+    status: closed
+    concerns:
+      - packages/agent-naming/src/custody.ts
+    anchor: normalizeLabel
+    origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
+
+  - id: SC-2
+    severity: high
+    title: attestation subject spoofing (no on-chain digest binding)
+    status: closed
+    concerns:
+      - packages/contracts/src/attestation/AttestationRegistry.sol
+    anchor: ASSOCIATION_ATTESTATION_TYPEHASH
+    origin: archive/2026-06-09/2026-06-09-independent-contracts-audit.md
+    note: digest binds subject, issuer, schemaId, credentialType, credentialHash, chainId, address(this).
+
+  - id: XPKG-002
+    severity: high
+    title: verifyCrossDelegation public stub on two package surfaces
+    status: closed
+    concerns:
+      - packages/delegation/src/index.ts
+      - packages/mcp-runtime/src/index.ts
+    anchor: verifyDelegationToken
+    origin: archive/2026-05/2026-05-packages-contracts-production-readiness.md
+    note: removed from public surface (H7-B.8); resurfaces under ./experimental per spec 100 §6.
+
+  - id: ARCH-1
+    severity: high
+    title: per-package AUDIT.md files claim "STUB. No code yet" over shipped code
+    status: closed
+    concerns:
+      - scripts/check-audit-stub-drift.ts
+      - packages/verifiable-credentials/AUDIT.md
+    anchor: STUB
+    tests:
+      - scripts/check-audit-stub-drift.ts
+    origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
+    note: >
+      Rewrote the 7 false-STUB AUDIT.md against the template + added a CI guard
+      (check:audit-stub-drift) that fails when an AUDIT.md says STUB over a
+      non-trivial src/. The `anchor: STUB` resolves in the guard script itself.
+
+  - id: CON-FACTORY-001
+    severity: high
+    title: factory + paymaster governance held by the disclosed testnet deployer EOA
+    status: open
+    concerns:
+      - packages/contracts/script/Deploy.s.sol
+    anchor: GOVERNANCE_MULTISIG
+    origin: archive/2026-06-03/self-audit-2026-06.md
+    note: >
+      PRODUCTION BLOCKER (N1). The production gate (require GOVERNANCE_MULTISIG)
+      exists in Deploy.s.sol, but Base Sepolia intentionally keeps the disclosed
+      deployer. Closes only with a clean governance multisig/timelock on a
+      production deploy.
+
+  # ── Medium ──────────────────────────────────────────────────────────────────
+  - id: SC-3
+    severity: medium
+    title: DelegationManager view verifier fails open on a no-code enforcer
+    status: closed
+    concerns:
+      - packages/contracts/src/agency/DelegationManager.sol
+    anchor: no-code-enforcer
+    origin: archive/2026-06-09/2026-06-09-independent-contracts-audit.md
+
+  - id: SC-4
+    severity: medium
+    title: .impact TLD root owned by the deployer at deploy time
+    status: closed
+    concerns:
+      - packages/contracts/script/Deploy.s.sol
+    anchor: namingRootOwner
+    origin: archive/2026-06-09/2026-06-09-independent-contracts-audit.md
+
+  - id: SC-5
+    severity: medium
+    title: paymaster deploy defaults governance/owner to the deployer
+    status: closed
+    concerns:
+      - packages/contracts/script/DeployPaymaster.s.sol
+    anchor: governance
+    origin: archive/2026-06-09/2026-06-09-independent-contracts-audit.md
+
+  - id: KC-001
+    severity: medium
+    title: raw session privateKey exposed on SessionResolveResult
+    status: closed
+    concerns:
+      - packages/delegation/src/session-manager.ts
+    anchor: signMessage
+    origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
+    note: privateKey removed; only a signMessage closure is exposed.
+
+  - id: CN-1
+    severity: medium
+    title: expectedIss optional in verifyAgentSession (issuer not enforced)
+    status: closed
+    concerns:
+      - packages/connect/src/token.ts
+    anchor: expectedIss
+    origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
+
+  - id: CA-001
+    severity: medium
+    title: SIWE nonce caller-optional (replay surface)
+    status: closed
+    concerns:
+      - packages/connect-auth/src/methods/siwe.ts
+    anchor: expectedNonce
+    origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
+
+  - id: H-6
+    severity: medium
+    title: uint8(nSigners) truncation + no initial-custodian cap in the factory
+    status: closed
+    concerns:
+      - packages/contracts/src/AgentAccountFactory.sol
+    anchor: MAX_INITIAL_CUSTODIANS
+    origin: r9-static-analysis-triage.md
+
+  - id: CA-003
+    severity: medium
+    title: WebAuthn authenticatorData minimum-length gate
+    status: closed
+    concerns:
+      - packages/contracts/src/libraries/WebAuthnLib.sol
+    anchor: authData.length
+    origin: archive/2026-06-03/self-audit-2026-06.md
+    note: WebAuthnLib rejects authData < 37 bytes. (self-audit packet listed it open; it is closed.)
+
+  # ── Accepted-risk (intentional testnet/demo holes — do NOT "fix") ───────────
+  - id: C-1
+    severity: critical
+    title: globally-shared deterministic Pete/Jill operator keys (demo)
+    status: accepted-risk
+    concerns:
+      - apps/demo-jp/src/lib/personas.ts
+      - scripts/check-no-app-private-keys.ts
+    anchor: personas.ts
+    origin: demo-jp/AUDIT.md
+    note: >
+      Accepted testnet hole (spec 248). Deterministic operator keys so the demo
+      survives a cleared browser; allowlisted in check-no-app-private-keys.
+      Production custodies operator agents via KMS (spec 235). Do NOT remove.
+
+  - id: C-2
+    severity: critical
+    title: full-vault delegations (no per-record data-scope caveat) in demo-jp
+    status: accepted-risk
+    concerns:
+      - apps/demo-jp/src/lib/vault-client.ts
+    anchor: ROOT_AUTHORITY
+    origin: demo-jp/AUDIT.md
+    note: >
+      Accepted testnet hole (spec 248). Member→JP grant uses ROOT_AUTHORITY +
+      timestamp/value caveats only (no data-scope caveat). Record-level scope is
+      the intended production model (spec 248).

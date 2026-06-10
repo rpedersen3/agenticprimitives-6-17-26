@@ -1,95 +1,44 @@
-# Security & Architecture Audit Index
+# Security & audit — index
 
-**Last refreshed:** 2026-06-09 (added independent all-package security + architecture audit.)
+> **Source of truth for finding status:** [`findings.yaml`](./findings.yaml). Prose docs describe; the
+> ledger decides. CI (`check:audit-freshness`) fails if a finding marked closed isn't actually in source.
 
-## Auditor packet (the third-party-audit-ready dossier)
+## Start here
 
-| Doc | Owner | Purpose |
-| --- | --- | --- |
-| [`2026-06-09-independent-package-audit.md`](./2026-06-09-independent-package-audit.md) | security + architect (2026-06-09) | **CURRENT — independent audit of all 31 packages** (security + architecture). Headline: DEL-001 (Critical) delegation token verify lacks session-key↔delegate binding; VC-1/VC-2/AN-1 High. Prioritized P0–P2 backlog. Contract layer covered by the companion doc below. |
-| [`2026-06-09-independent-contracts-audit.md`](./2026-06-09-independent-contracts-audit.md) | security (2026-06-09) | **CURRENT — independent audit of all Solidity contracts** (`packages/contracts/src` + deploy scripts). Headline: SC-1 (Critical) AgreementRegistry issuer signature unbound to contents; SC-2 (High) attestation subject spoofing; SC-3/4/5 Medium. On-chain delegate binding confirmed correct (off-chain DEL-001 not mirrored on-chain). |
-| [`self-audit-2026-06.md`](./self-audit-2026-06.md) | security + architect (2026-06-03) | **PUBLIC PACKET — start here for open review.** Executive summary, scope, evidence map, known blockers, manual checklist, residual risks. |
-| [`open-review-2026-06.md`](./open-review-2026-06.md) | security + architect (2026-06-03) | How to review, reproduce evidence, report findings, and run the open-review triage process. |
-| [`bug-bounty-2026-06.md`](./bug-bounty-2026-06.md) | security + architect (2026-06-03) | Low-cost community bounty terms, severity guide, eligibility, exclusions, and report template. |
-| [`validation-results-2026-06.md`](./validation-results-2026-06.md) | security + architect (2026-06-03) | Command-result ledger for the public self-audit packet. |
-| [`open-review-announcement-2026-06.md`](./open-review-announcement-2026-06.md) | security + architect (2026-06-03) | Ready-to-post launch copy and channel checklist for the open review. |
-| [`specs/214-production-audit-dossier.md`](../../specs/214-production-audit-dossier.md) | security + architect | **The master spec.** Closure gates + control list + continuous-update protocol. |
-| [`threat-model.md`](./threat-model.md) | security-auditor | STRIDE per trust boundary, mapped to packages. (Stale — does not yet cover `demo-jp`, `demo-sso-next`, or specs 232/234/235/236; refresh queued — see ARCH-005 in the pre-production audit below.) |
-| [`architecture-diagram.md`](./architecture-diagram.md) | technical-architect-auditor | System map, dependency graph, deployment topology, trust boundaries. (Same staleness — ARCH-005.) |
-| [`evidence-checklist.md`](./evidence-checklist.md) | security + architect | Every security control → source + test + audit event + closure status. (Same staleness — ARCH-005.) |
-| [`2026-06-01-r10-internal-readiness-assessment.md`](./2026-06-01-r10-internal-readiness-assessment.md) | security + architect (2026-06-01) | **CURRENT — post-R9 internal readiness assessment.** Verifies the third-party assessment against current repo state; surfaces additional gaps; prioritized P0 (audit-blocking, ~1 day) / P1 (production-blocking, ~1 week) / P2 (post-audit) / P3 (polish) backlog. **This is the doc a third-party reviewer of the production library suite reads first.** Supersedes the 2026-05-30 predecessor below as the active tracker. |
-| [`2026-05-packages-contracts-production-readiness.md`](./2026-05-packages-contracts-production-readiness.md) | security + architect (2026-05-30) | Predecessor of the R10 doc above. Captured the package + contract findings before the R9 wave; cross-referenced rows folded into the R10 doc with status updates. Kept for historical context. |
-| [`2026-05-pre-production-readiness.md`](./2026-05-pre-production-readiness.md) | security + architect (2026-05-29) | App-focused pre-launch audit of `demo-jp` + `demo-sso-next` + consumed packages. 23 SEC + 22 ARCH + 18 D + 37 EXT rows. **The package-/contract-layer subset is now re-cast in the new doc above**; this one remains the tracker for demo-app + deploy-substrate findings (OIDC flows, app handoffs, app vocabulary drift). |
-
-## Auditor agents (Claude Code subagents)
-
-| Agent | Spec | Subagent definition |
-| --- | --- | --- |
-| security-auditor | [`docs/agents/security-auditor.md`](../agents/security-auditor.md) | [`.claude/agents/security-auditor.md`](../../.claude/agents/security-auditor.md) |
-| technical-architect-auditor | [`docs/agents/technical-architect-auditor.md`](../agents/technical-architect-auditor.md) | [`.claude/agents/technical-architect-auditor.md`](../../.claude/agents/technical-architect-auditor.md) |
-
-
-
-The agenticprimitives audit lives in two layers:
-
-1. **System-level audit** — cross-cutting risks, app-level findings, and the
-   priority backlog. One document:
-   [`../architecture/product-readiness-audit.md`](../architecture/product-readiness-audit.md).
-2. **Per-package audits** — each `@agenticprimitives/*` package ships its
-   own `AUDIT.md` so the package can stand alone as an audit target. An
-   external reviewer asked to evaluate ONE package should be able to do
-   so by reading just that package's source + its AUDIT.md, with
-   cross-references to the system audit for shared concerns.
-
-## Per-package audit docs
-
-| Package | Risk | Audit | Spec |
-| --- | --- | --- | --- |
-| `@agenticprimitives/types` | low | [packages/types/AUDIT.md](../../packages/types/AUDIT.md) | — |
-| `@agenticprimitives/audit` | medium (cross-cutting forensics) | [packages/audit/AUDIT.md](../../packages/audit/AUDIT.md) | [specs/206-audit.md](../../specs/206-audit.md) (TODO) |
-| `@agenticprimitives/connect-auth` | high | [packages/connect-auth/AUDIT.md](../../packages/connect-auth/AUDIT.md) | [specs/200-connect-auth.md](../../specs/200-connect-auth.md) |
-| `@agenticprimitives/agent-account` | high | [packages/agent-account/AUDIT.md](../../packages/agent-account/AUDIT.md) | [specs/201-agent-account.md](../../specs/201-agent-account.md) |
-| `@agenticprimitives/delegation` | **critical** (keystone) | [packages/delegation/AUDIT.md](../../packages/delegation/AUDIT.md) | [specs/202-delegation.md](../../specs/202-delegation.md) |
-| `@agenticprimitives/key-custody` | **critical** (KMS surface) | [packages/key-custody/AUDIT.md](../../packages/key-custody/AUDIT.md) | [specs/203-key-custody.md](../../specs/203-key-custody.md) |
-| `@agenticprimitives/tool-policy` | medium | [packages/tool-policy/AUDIT.md](../../packages/tool-policy/AUDIT.md) | [specs/204-tool-policy.md](../../specs/204-tool-policy.md) |
-| `@agenticprimitives/mcp-runtime` | high | [packages/mcp-runtime/AUDIT.md](../../packages/mcp-runtime/AUDIT.md) | [specs/205-mcp-runtime.md](../../specs/205-mcp-runtime.md) |
-| `@agenticprimitives/account-custody` | high (custody policy ABI + arg builders) | [packages/account-custody/AUDIT.md](../../packages/account-custody/AUDIT.md) | [specs/213-custody-layer-carve-out.md](../../specs/213-custody-layer-carve-out.md) |
-| `@agenticprimitives/agent-naming` | medium (Phase 1 — pure SDK + spec; on-chain authority + writes land in Phase 3+) | [packages/agent-naming/AUDIT.md](../../packages/agent-naming/AUDIT.md) | [specs/215-agent-naming.md](../../specs/215-agent-naming.md) |
-| `@agenticprimitives/agent-profile` | medium (Phase 1 — HCS-11 typed profile + HCS-14 CAIP-10 alignment + endpoint verification methods; client wires in Phase 2+) | [packages/agent-profile/AUDIT.md](../../packages/agent-profile/AUDIT.md) | [specs/217-agent-profile.md](../../specs/217-agent-profile.md) |
-| `@agenticprimitives/agent-relationships` | medium (Phase 1 — trust-fabric edge primitive + role taxonomy; contracts + writes land Phase 3+) | [packages/agent-relationships/AUDIT.md](../../packages/agent-relationships/AUDIT.md) | [specs/216-agent-relationships.md](../../specs/216-agent-relationships.md) |
-
-## Cross-cutting audits
-
-| Topic | Doc |
+| Read | For |
 | --- | --- |
-| Supply chain (M7) | [supply-chain.md](./supply-chain.md) — CodeQL SAST + `pnpm audit` + gitleaks + SBOM; CI workflow + local mirror |
+| [`findings.yaml`](./findings.yaml) | Current status of every first-class finding (id, severity, status, source-linked). |
+| [`../architecture/product-readiness-audit.md`](../architecture/product-readiness-audit.md) | Living system-level readiness verdict + backlog. |
+| [`audit-evidence-index.md`](./audit-evidence-index.md) | "What proves what" — the artifact/evidence map. |
 
-## Template + process
+## CI gates (the dossier can't lie)
 
-- [`_template.md`](./_template.md) — the canonical structure every package audit follows.
-- New PR rule (TODO: enforce in `scripts/check-all.ts`): any PR touching `packages/<name>/src/index.ts` must also update `packages/<name>/AUDIT.md`'s "Last refreshed" date and findings table.
+- `check:audit-freshness` — every `findings.yaml` entry's `concerns` path exists; a `closed`/`accepted-risk`
+  finding's `anchor` must appear in source. Status can't drift from code.
+- `check:audit-stub-drift` — an `AUDIT.md` may not say "STUB" over a non-trivial `src/` (closes ARCH-1).
+- Both run in `check:all` + `check:all-publish`. Plus the SAST/supply-chain workflow (CodeQL, Slither,
+  Solhint, Halmos, `pnpm audit`, gitleaks, SBOM) and the EIP-712 typehash-equality + storage-layout gates.
 
-## Audit refresh cadence
+## Living reference docs
 
-- **Per-PR**: update the affected package's `AUDIT.md` when public API, security invariants, or test posture changes.
-- **Per-phase**: refresh the system audit at the end of each named hardening phase (e.g. "Phase 5 refresh" landed 2026-05-20).
-- **Quarterly**: full pass across all per-package audits + system audit. Re-prioritize findings.
-- **Pre-release**: every public release (alpha/beta/rc/ga) gets a dedicated audit refresh.
+| Doc | Scope |
+| --- | --- |
+| [`threat-model.md`](./threat-model.md) | STRIDE per trust boundary. |
+| [`architecture-diagram.md`](./architecture-diagram.md) | System / trust-boundary map. |
+| [`evidence-checklist.md`](./evidence-checklist.md) | Per-control closure checklist. |
+| [`r9-static-analysis-triage.md`](./r9-static-analysis-triage.md) | Slither / Aderyn triage on master. |
+| [`supply-chain.md`](./supply-chain.md) | Supply-chain workflow + accepted-CVE register. |
+| [`../architecture/dtk-alignment-audit.md`](../architecture/dtk-alignment-audit.md) | DTK / ERC-7710 parity. |
+| [`_template.md`](./_template.md) | Canonical per-package `AUDIT.md` shape. |
 
-## What lives where
+## Per-package audit notes
 
-| Concern | System audit | Per-package audit |
-| --- | --- | --- |
-| Cross-package risk (e.g. C1 service-auth gap) | ✓ (the master list) | ✓ (cross-reference by ID, in the package(s) that own implementation) |
-| Package-local finding too narrow for system view | — | ✓ (use `<PKG>-N` ID, e.g. `DEL-1`) |
-| App-level finding (e.g. demo-mcp `/_dev/seed`) | ✓ | — (the package wouldn't carry this) |
-| Roadmap / priority ranking | ✓ (top-5 + checklist) | — (refer to system) |
-| Charter / scope exclusions | — (refer to package) | ✓ |
-| Test posture per package | — (summary only) | ✓ (detailed) |
-| External audit readiness checklist | — | ✓ (per package) |
+Every package under `packages/*` and the relying apps under `apps/*` carry an `AUDIT.md` (per-package
+charter, invariants, findings, test posture, accepted limitations). They are the second living layer;
+`check:audit-stub-drift` keeps them from going stale-as-stub over shipped code.
 
-## Findings ID space
+## Archive
 
-- **System IDs**: `C1`–`Cn` (critical), `H1`–`Hn` (high), `M1`–`Mn` (medium), `L1`–`Ln` (low), `N1`–`Nn` (new, raised after the initial draft). Managed in the system audit.
-- **Per-package IDs**: `<PKG>-N` (e.g. `DEL-1`, `KC-1`, `AA-1`, `IA-1`, `MR-1`, `TP-1`, `TYP-1`, `AN-1` agent-naming, `AI-1` agent-identity, `AR-1` agent-relationships). Managed in the package audit.
-- Cross-references: system findings appear in the relevant package(s) by ID; package-local findings stay local unless they escalate.
+Historical, immutable audit snapshots live under [`archive/`](./archive/) (the 2026-06-09 independent
+audits, the frozen 2026-06-03 public-review packet, the R10 readiness assessment, the pre-R9 ledgers).
+Anything there that conflicts with current source is superseded by `findings.yaml`.

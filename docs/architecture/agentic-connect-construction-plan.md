@@ -131,7 +131,7 @@ consult.
 - **Phase 0 (this wave): specs + ADRs + ontology skeleton + roster + audits.**
   ✅ landed (ADRs 0014–0018; specs 223–226; spec 100 §4; this doc; HCS advisor +
   crosswalk; architect + security audits with findings folded back in — see
-  [`docs/audits/sso-wave-audit-findings.md`](../audits/sso-wave-audit-findings.md)).
+  [`docs/audits/archive/2026-05/sso-wave-audit-findings.md`](../audits/archive/2026-05/sso-wave-audit-findings.md)).
 - **Phase 1:** `types` shapes ✅ + `ontology` (`context.jsonld` + `tbox/core`+`identity`
   + `CanonicalAgentIdShape` + controlled vocabularies + IRI constants) ✅ +
   `connect-auth` real Google OIDC (PKCE/state/nonce + RS256/JWKS via Web Crypto +
@@ -162,4 +162,4 @@ consult.
 5. **Ontology scope bound** — phase-1 = identity/credential/custody/delegation/
    audit/naming **+ org** (org added per audit P2-3). spec 225 §11.
 
-Full finding-by-finding disposition: [`docs/audits/sso-wave-audit-findings.md`](../audits/sso-wave-audit-findings.md).
+Full finding-by-finding disposition: [`docs/audits/archive/2026-05/sso-wave-audit-findings.md`](../audits/archive/2026-05/sso-wave-audit-findings.md).

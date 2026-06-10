@@ -239,7 +239,16 @@ The `dist/deployments/` subpath (R7.3) exposes per-network contract addresses to
 
 ## 7. Known findings (cross-reference)
 
-See [`docs/audits/2026-05-packages-contracts-production-readiness.md`](../../docs/audits/2026-05-packages-contracts-production-readiness.md) § 3 (Per-contract findings) + § 4 (Cross-cutting).
+Canonical cross-cutting status: [`docs/audits/findings.yaml`](../../docs/audits/findings.yaml) (CI-enforced).
+Historical detail: [`docs/audits/archive/2026-05/2026-05-packages-contracts-production-readiness.md`](../../docs/audits/archive/2026-05/2026-05-packages-contracts-production-readiness.md) § 3–4.
+
+**Closed (2026-06-09 independent contracts audit — SC-1..SC-5):**
+
+- **SC-1** (critical) — agreement issuer signature now bound to contents: `AgreementRegistry.register()` recomputes the digest over `agreementCommitment, schemaHash, issuer, chainId, address(this)` (`AGREEMENT_ISSUER_TYPEHASH`).
+- **SC-2** (high) — attestation subject-spoofing closed: `assertAssociation()` binds `subject, issuer, schemaId, credentialType, credentialHash, chainId, address(this)` (`ASSOCIATION_ATTESTATION_TYPEHASH`); joint path requires both party co-signatures.
+- **SC-3** (medium) — `DelegationManager.verifyAuthorizationForCall()` returns `(false,"no-code-enforcer")` instead of failing open on a no-code enforcer.
+- **SC-4** (medium) — `.impact` TLD root handed to `roles.namingRootOwner` (governance) at deploy, with a post-deploy assertion.
+- **SC-5** (medium) — paymaster deploy `require`-rejects deployer-as-governance/owner in production mode.
 
 **Open at 2026-06-01:**
 
