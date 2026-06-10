@@ -153,17 +153,15 @@ Live deploy targets are Cloudflare Pages / Workers plus Base Sepolia contracts.
 
 ## Status
 
-**Alpha track — testnet-only.** Specs and APIs are stabilizing; package boundaries are enforced by CI; contract and TypeScript checks cover the core custody, naming, delegation, profile, paymaster, and MCP paths. Demo apps exercise the full chain (Google/passkey/SIWE auth → smart-account deploy → custody policy + multi-sig → off-chain delegations + MCP vault/tool calls) end to end on Base Sepolia.
+**Ready for test and pre-production environments — not yet full production.** This is a comprehensive, vertically-integrated set of trust primitives — smart-account custody, multi-sig and credential recovery, agent-to-agent delegation with on-chain caveat enforcement, naming, verifiable credentials, attestation and agreement registries, and MCP/A2A authority — implemented **natively** rather than assembled from third-party components. Package boundaries are enforced by CI; cross-stack EIP-712 typehash, ABI-sync, storage-layout, and finding-ledger gates keep the contract and TypeScript layers in lockstep; the demo apps exercise the full chain (Google/passkey/SIWE auth → smart-account deploy → custody policy + multi-sig → off-chain delegations + MCP vault/tool calls) end to end on Base Sepolia. Use it today for **test, staging, and pre-production work**: integration prototyping, technical pilots that bind testnet value, security review, and audit preparation.
 
-**Public self-audit:** the June 2026 open-review packet starts at [`docs/audits/archive/2026-06-03/self-audit-2026-06.md`](./docs/audits/archive/2026-06-03/self-audit-2026-06.md), with reproducible evidence linked from [`docs/audits/audit-evidence-index.md`](./docs/audits/audit-evidence-index.md).
+**A comprehensive set of native primitives warrants a comprehensive audit — which we are actively undertaking.** Because we implement the trust substrate ourselves (no third-party multi-sig, no borrowed delegation framework), the security surface is correspondingly broad, and we hold it to a correspondingly broad bar rather than inheriting someone else's. A continuously-maintained finding ledger — [`docs/audits/findings.yaml`](./docs/audits/findings.yaml) — is the single source of truth for every security finding's status, gated in CI so a "closed" finding cannot drift from source. The active contract-layer tracker is [`docs/audits/2026-06-10-contract-by-contract-audit.md`](./docs/audits/2026-06-10-contract-by-contract-audit.md) (independent per-contract deep dive of all 42 `.sol` files), and the public self-audit packet starts at [`docs/audits/archive/2026-06-03/self-audit-2026-06.md`](./docs/audits/archive/2026-06-03/self-audit-2026-06.md).
 
-**Do not deploy to production yet.** Production launches are deferred pending operational steps independent of the architecture:
+**Full production launch additionally requires** a small set of operational steps, independent of the architecture:
 
-1. **External contracts audit** (Cyfrin / CodeHawks contest planned).
-2. **Clean production governance keys** — the current testnet deployer is intentionally public so the demo stack is reproducible; production deploys MUST rotate to a fresh KMS-backed key per the [`packages/contracts/AUDIT.md`](./packages/contracts/AUDIT.md) runbook.
-3. **Closure of the residual P1 items** tracked in [`docs/architecture/product-readiness-audit.md`](./docs/architecture/product-readiness-audit.md).
-
-Suitable today for controlled internal demos, architecture review, and integration prototyping. The R6 contracts hardening wave + the SmartAgentPaymaster verifying-paymaster path + the production-strict `withDelegation` default mean the codebase is "production-pattern-correct" — the gating items are key custody + audit dossier, not implementation gaps.
+1. **External contracts audit** (Cyfrin / CodeHawks contest planned) — the independent third-party complement to our in-house program above.
+2. **Clean production governance keys** — the current testnet deployer is intentionally public so the demo stack is reproducible from a clean clone; production deploys MUST rotate to a fresh KMS-backed key per the [`packages/contracts/AUDIT.md`](./packages/contracts/AUDIT.md) runbook.
+3. **Closure of the residual production-readiness items** tracked in [`docs/architecture/product-readiness-audit.md`](./docs/architecture/product-readiness-audit.md).
 
 ## Provenance
 

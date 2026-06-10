@@ -47,4 +47,4 @@ Prefer the narrowest script before broad checks:
 
 ## Status
 
-Pre-alpha. Specs remain the source of truth; package `CLAUDE.md` files are the fastest entry point for implementation work.
+Ready for test and pre-production environments — not yet full production (a comprehensive native primitive set under a comprehensive, actively-running audit; full-production gates are operational — external audit + clean governance keys + residual readiness items). Specs remain the source of truth; package `CLAUDE.md` files are the fastest entry point for implementation work.
