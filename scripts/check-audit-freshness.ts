@@ -76,8 +76,14 @@ function parseFindings(src: string): Finding[] {
       const val = scalar[2] ?? '';
       inBlockScalar = false;
       if (key === 'concerns' || key === 'tests') {
-        cur[key] = [] as string[];
-        listKey = key;
+        if (val.startsWith('[') && val.endsWith(']')) {
+          // inline flow list: `concerns: [a, b]`
+          cur[key] = val.slice(1, -1).split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+          listKey = null;
+        } else {
+          cur[key] = [] as string[]; // block list: `concerns:` then `- item` lines
+          listKey = key;
+        }
       } else if (val === '>' || val === '|') {
         inBlockScalar = true; // multi-line note — we don't need its text
         listKey = null;

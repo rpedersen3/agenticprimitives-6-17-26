@@ -249,3 +249,176 @@ findings:
       Accepted testnet hole (spec 248). Member→JP grant uses ROOT_AUTHORITY +
       timestamp/value caveats only (no data-scope caveat). Record-level scope is
       the intended production model (spec 248).
+
+  # ── Contract deep audit 2026-06-10 (OPEN — mainnet blockers; see the dated report) ──────────
+  - id: CA-F1
+    severity: high
+    title: factory counterfactual address omits mode/trustees/timelocks → pre-deploy custody hijack
+    status: open
+    concerns: [packages/contracts/src/AgentAccountFactory.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+    note: >
+      The CREATE2 salt commits only to custodians/passkey/salt, not mode/trustees/timelockOverrides
+      (applied post-deploy). An attacker who knows a victim's public salt+custodians front-runs
+      deployment at the canonical address with attacker-chosen recovery trustees, then drives a
+      CustodyPolicy recovery to seize the identity. Fix: fold config into salt/initialize + assert
+      config-match on the occupied branch. MAINNET BLOCKER.
+  - id: CP-1
+    severity: high
+    title: custody tier thresholds default to 1-of-n (unconfigured quorum collapses to single signer)
+    status: open
+    concerns: [packages/contracts/src/custody/CustodyPolicy.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+    note: >
+      onInstall only writes a tier when thresholds[t] > 0; _approvalsValue returns 1 for 0; the
+      _defaultApprovals matrix is never invoked. A zeroed/partial threshold array lets one custodian key
+      rotate the whole custodian set (T4) or upgrade the implementation (T5). Fix: populate defaults at
+      install + hard-revert unconfigured T4–T6. MAINNET BLOCKER.
+  - id: AN-1-ONCHAIN
+    severity: high
+    title: on-chain name registry enforces no label normalization (SDK fix bypassable by direct callers)
+    status: open
+    concerns: [packages/contracts/src/naming/AgentNameRegistry.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+    note: >
+      register/initializeRoot only check EmptyLabel then hash raw bytes; the TS normalizeLabel (AN-1)
+      is bypassable by any direct caller → homoglyph/mixed-case/zero-width/embedded-dot squatting of
+      .agent names is live on-chain. Fix: enforce [a-z0-9-] charset on-chain.
+  - id: SUB-1
+    severity: high
+    title: permissionless subregistry name front-running (no commit-reveal)
+    status: open
+    concerns: [packages/contracts/src/naming/PermissionlessSubregistry.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: SUB-2
+    severity: high
+    title: subregistry sybil/homoglyph mass-squatting (no rate/cost barrier + AN-1-ONCHAIN gap)
+    status: open
+    concerns: [packages/contracts/src/naming/PermissionlessSubregistry.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: ATT-1
+    severity: high
+    title: assertJointAgreement issuer signature over bare credentialHash (SC-2 class, issuer side)
+    status: open
+    concerns: [packages/contracts/src/attestation/AttestationRegistry.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+    note: >
+      The issuer signature is verified over a bare req.credentialHash with no typehash/parties/schema/
+      chain/contract binding, so a known issuer signature can anchor a spoofed joint attestation. (The
+      bilateral-consent half is correctly bound via JOINT_CONSENT_TYPEHASH.) Fix: an ISSUER typehash
+      digest binding parties/schema/credentialType/credentialHash/chainId/address(this), mirroring SC-2.
+  - id: AGR-1
+    severity: medium
+    title: agreement status-transition digest lacks chain/contract binding (cross-chain replay)
+    status: open
+    concerns: [packages/contracts/src/agreement/AgreementRegistry.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+    note: TRANSITION_TYPEHASH digest binds agreementCommitment/toStatus/nullifier but not chainId/address(this).
+  - id: ATT-2
+    severity: medium
+    title: attestation revocation is cosmetic (salt-replay re-anchors under a new UID)
+    status: open
+    concerns: [packages/contracts/src/attestation/AttestationRegistry.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: CA-1
+    severity: medium
+    title: AgentAccount upgrade timelock is dead code (set but never enforced)
+    status: open
+    concerns: [packages/contracts/src/AgentAccount.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: CA-2
+    severity: medium
+    title: ERC-1271 ECDSA/WebAuthn paths lack address(this)/chainid binding (cross-account sig reuse)
+    status: open
+    concerns: [packages/contracts/src/AgentAccount.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: CP-2
+    severity: medium
+    title: CustodyPolicy recoveryApprovals unvalidated at install (can brick the T6 recovery lifeline)
+    status: open
+    concerns: [packages/contracts/src/custody/CustodyPolicy.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: DM-1
+    severity: medium
+    title: delegation caveat caps are per-call, not cumulative (N-time redemption of a value cap)
+    status: open
+    concerns: [packages/contracts/src/agency/DelegationManager.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: DM-2
+    severity: medium
+    title: quorum/approved-hash signatures have no nonce (identical-call replay)
+    status: open
+    concerns: [packages/contracts/src/agency/DelegationManager.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: EN-11
+    severity: medium
+    title: QuorumEnforcer threshold==0 passes with zero signatures (fail-open)
+    status: open
+    concerns: [packages/contracts/src/enforcers/QuorumEnforcer.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: EN-13
+    severity: medium
+    title: QuorumEnforcer QUORUM_ACTION_TYPEHASH has no nonce/expiry (identical-call replay)
+    status: open
+    concerns: [packages/contracts/src/enforcers/QuorumEnforcer.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: EN-22
+    severity: medium
+    title: ValueEnforcer cap is per-call not cumulative (same root as DM-1)
+    status: open
+    concerns: [packages/contracts/src/enforcers/ValueEnforcer.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: PM-1
+    severity: medium
+    title: paymaster validation reads governance storage (ERC-7562 violation → bundlers drop sponsored ops)
+    status: open
+    concerns: [packages/contracts/src/SmartAgentPaymaster.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: PM-2
+    severity: medium
+    title: paymaster EntryPoint deposit drainable by the Ownable owner (no timelock, decoupled from governance)
+    status: open
+    concerns: [packages/contracts/src/SmartAgentPaymaster.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: GOV-1
+    severity: medium
+    title: immutable guardian can perpetually re-pause (permanent DoS, redeploy-only fix)
+    status: open
+    concerns: [packages/contracts/src/governance/AgenticGovernance.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: WA-1
+    severity: medium
+    title: WebAuthn/P256 verification lacks low-s enforcement (P-256 signature malleability)
+    status: open
+    concerns: [packages/contracts/src/libraries/WebAuthnLib.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: WA-2
+    severity: medium
+    title: WebAuthn UV enforced only on opt-in; the live custody caller passes requireUv=false
+    status: open
+    concerns: [packages/contracts/src/libraries/WebAuthnLib.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: AN-2
+    severity: medium
+    title: name registration expiry is decorative (never set/enforced; expired names not reclaimable)
+    status: open
+    concerns: [packages/contracts/src/naming/AgentNameRegistry.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: RES-1
+    severity: medium
+    title: resolveName can return an unverified owner-asserted address (no reverse round-trip)
+    status: open
+    concerns: [packages/contracts/src/naming/AgentNameUniversalResolver.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: ONT-4
+    severity: medium
+    title: ShapeRegistry trusts a caller-supplied store address
+    status: open
+    concerns: [packages/contracts/src/ontology/ShapeRegistry.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md
+  - id: ONT-7
+    severity: medium
+    title: AttributeStorage base has no subject-ownership gate
+    status: open
+    concerns: [packages/contracts/src/ontology/AttributeStorage.sol]
+    origin: 2026-06-10-contract-by-contract-audit.md

@@ -250,6 +250,17 @@ Historical detail: [`docs/audits/archive/2026-05/2026-05-packages-contracts-prod
 - **SC-4** (medium) — `.impact` TLD root handed to `roles.namingRootOwner` (governance) at deploy, with a post-deploy assertion.
 - **SC-5** (medium) — paymaster deploy `require`-rejects deployer-as-governance/owner in production mode.
 
+**Open — contract deep audit 2026-06-10** (full detail: [`docs/audits/2026-06-10-contract-by-contract-audit.md`](../../docs/audits/2026-06-10-contract-by-contract-audit.md); status in `findings.yaml`):
+
+| Finding | Severity | One-line |
+|---|---|---|
+| **CA-F1** | High | Factory counterfactual address omits mode/trustees/timelocks → pre-deploy custody hijack of the canonical identity. **Mainnet blocker.** |
+| **CP-1** | High | Custody tier thresholds default to 1-of-n → one custodian key can rotate the set / upgrade impl. **Mainnet blocker.** |
+| **AN-1-ONCHAIN** | High | On-chain name registry enforces no label normalization (the SDK fix is bypassable by direct callers). |
+| **SUB-1 / SUB-2** | High | Subregistry name front-running (no commit-reveal) + sybil/homoglyph mass-squatting. |
+| **ATT-1** | High | `assertJointAgreement` issuer signature over a bare `credentialHash` (the SC-2 bug class, issuer side). |
+| **AGR-1, ATT-2, CA-1, CA-2, CP-2, DM-1/2, EN-11/13/22, PM-1/2, GOV-1, WA-1/2, AN-2, RES-1, ONT-4/7** | Medium | See the report + `findings.yaml`. |
+
 **Open at 2026-06-01:**
 
 | Finding | Severity | Notes |
