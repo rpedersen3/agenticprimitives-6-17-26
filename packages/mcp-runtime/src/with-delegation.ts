@@ -360,6 +360,10 @@ export function withDelegation<A extends Record<string, unknown>>(
       toolName: opts?.toolName,
       requireDeployed: config.requireDeployed,
       enforceOnChain: config.enforceOnChain === true,
+      // DEL-001 (spec 270 v4) — per-call session-key↔delegator binding + the connection-agnostic
+      // UniversalSignatureValidator surface.
+      requireSessionDelegateBinding: config.requireSessionDelegateBinding,
+      universalSignatureValidator: config.universalSignatureValidator,
       // Thread the audit sink + correlation id down so delegation
       // emits `delegation.verify.{accept,reject}` events through the
       // same sink as `mcp-runtime.with-delegation.*`. Pass 3b.
@@ -584,6 +588,9 @@ export async function verifyDelegationForResource(
     jtiStore: config.jtiStore,
     toolName: opts?.toolName,
     requireDeployed: config.requireDeployed,
+    // DEL-001 (spec 270 v4) — per-call binding + connection-agnostic validator surface.
+    requireSessionDelegateBinding: config.requireSessionDelegateBinding,
+    universalSignatureValidator: config.universalSignatureValidator,
     auditSink: opts?.auditSink,
     correlationId,
     requireQuorumCaveat,

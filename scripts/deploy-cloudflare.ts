@@ -229,6 +229,10 @@ if (d.agentNameUniversalResolver) contractVars.AGENT_NAME_UNIVERSAL_RESOLVER = d
 if (d.permissionlessSubregistry)  contractVars.PERMISSIONLESS_SUBREGISTRY     = d.permissionlessSubregistry;
 // spec 256 — Google-KMS org-create grants scope to AgentRelationship.
 if (d.agentRelationship)          contractVars.AGENT_RELATIONSHIP             = d.agentRelationship;
+// spec 270 v4 — the UniversalSignatureValidator (shared by both Workers): demo-a2a uses it for
+// /auth/siwe-verify (signer-agnostic SIWE + ERC-6492); demo-mcp threads it into the DEL-001 binding
+// verifier for client-minted vault tokens (connection-agnostic ERC-1271 / ERC-6492 / ECDSA).
+if (d.universalSignatureValidator) contractVars.UNIVERSAL_SIGNATURE_VALIDATOR  = d.universalSignatureValidator;
 
 // 3. Deploy demo-mcp Worker (no external deps — deploy first so we can pass
 //    its URL into demo-a2a as MCP_URL)
@@ -303,12 +307,7 @@ if (pmVerifyingSigner) {
   a2aVars.PAYMASTER_VERIFYING_SIGNER = pmVerifyingSigner;
   console.log(`  using PAYMASTER_VERIFYING_SIGNER ${pmVerifyingSigner}`);
 }
-// Propagate the universal validator address so /auth/siwe-verify
-// switches to the signer-agnostic path (passkey + ERC-6492 support).
-if (d.universalSignatureValidator) {
-  a2aVars.UNIVERSAL_SIGNATURE_VALIDATOR = d.universalSignatureValidator;
-  console.log(`  using UNIVERSAL_SIGNATURE_VALIDATOR ${d.universalSignatureValidator}`);
-}
+// (UNIVERSAL_SIGNATURE_VALIDATOR is set in the shared contractVars above — both Workers receive it.)
 // Google × KMS custody (spec 235): the gate verifies broker-minted sessions against the
 // broker JWKS, pinned to the Connect origin (the Personal-Home apex) + the demo-sso aud.
 // A2A_CUSTODY_BRIDGE_SECRET is a SECRET (wrangler secret put), not a --var.

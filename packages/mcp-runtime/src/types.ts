@@ -53,6 +53,21 @@ export interface McpResourceVerifyConfig {
    * conceptually inert for off-chain read operations.
    */
   enforceOnChain?: boolean;
+  /**
+   * DEL-001 (spec 270 v4) — require the token to carry a valid `sessionDelegation` leaf binding the
+   * presenting session key to the DELEGATOR (the principal's canonical SA). Threaded into
+   * `verifyDelegationToken`'s `requireSessionDelegateBinding`. The consumer sets this per-call for
+   * client-minted tokens (where the relying app, not the trusted relayer, signed the token), closing
+   * the observe-and-re-mint vector. Default off (non-client-minted / legacy tokens are unaffected).
+   */
+  requireSessionDelegateBinding?: boolean;
+  /**
+   * DEL-001 (spec 270 v4) — the deployed `UniversalSignatureValidator` address. When set, the
+   * delegation AND the `sessionDelegation` leaf signatures are validated through it (ERC-1271 deployed /
+   * ERC-6492 counterfactual / ECDSA EOA), making verification connection-agnostic. Threaded into
+   * `verifyDelegationToken`'s `universalSignatureValidator`. Omit ⇒ legacy deployed-ERC-1271 path.
+   */
+  universalSignatureValidator?: Address;
 }
 
 export interface ResourceDefinition {
