@@ -251,6 +251,50 @@ contract WebAuthnLibTest is Test {
         assertFalse(ok, "wrong challenge must reject even when crypto succeeds");
     }
 
+    // ─── WA-1 — low-s malleability bound ────────────────────────────
+
+    /// A high-s signature (s > n/2) is rejected EVEN when RIP-7212 would accept
+    /// it — the malleable half of every P-256 signature is closed at the library.
+    function test_WA1_rejects_high_s_even_when_RIP7212_success() public {
+        bytes32 rp = keccak256("rp.example");
+        bytes memory authData = _buildAuthData(rp, 0x01);
+        string memory cdj = '"type":"webauthn.get""challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"';
+        // s = n/2 + 1 → the high half. RIP-7212 (mocked success) would accept it.
+        uint256 highS = 0x7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a8 + 1;
+        WebAuthnLib.Assertion memory a = WebAuthnLib.Assertion({
+            authenticatorData: authData,
+            clientDataJSON: cdj,
+            challengeIndex: 21,
+            typeIndex: 0,
+            r: 1,
+            s: highS,
+            credentialIdDigest: bytes32(0)
+        });
+        vm.etch(address(0x100), type(SuccessReturnMock).runtimeCode);
+        bool ok = lib.verify(a, bytes32(0), 1, 1, rp, false);
+        assertFalse(ok, "high-s signature must reject (WA-1 malleability bound)");
+    }
+
+    /// The exact boundary s == n/2 is the canonical (low) half and is accepted.
+    function test_WA1_accepts_s_at_half_order_boundary() public {
+        bytes32 rp = keccak256("rp.example");
+        bytes memory authData = _buildAuthData(rp, 0x01);
+        string memory cdj = '"type":"webauthn.get""challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"';
+        uint256 halfOrder = 0x7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a8;
+        WebAuthnLib.Assertion memory a = WebAuthnLib.Assertion({
+            authenticatorData: authData,
+            clientDataJSON: cdj,
+            challengeIndex: 21,
+            typeIndex: 0,
+            r: 1,
+            s: halfOrder,
+            credentialIdDigest: bytes32(0)
+        });
+        vm.etch(address(0x100), type(SuccessReturnMock).runtimeCode);
+        bool ok = lib.verify(a, bytes32(0), 1, 1, rp, false);
+        assertTrue(ok, "s == n/2 (canonical low half) must be accepted");
+    }
+
     function _unused_to_silence_compiler() internal pure {
         // Empty; keeps existing tail clean.
         // Library returns false because clientDataJSON is "{}" not a valid

@@ -36,6 +36,13 @@ import "./P256Verifier.sol";
  *   PasskeyValidator (for external 1271-style verification).
  */
 library WebAuthnLib {
+    /// @dev secp256r1 (P-256) curve order n ÷ 2 — the low-s malleability bound (WA-1).
+    ///      RIP-7212 accepts BOTH (r, s) and (r, n−s) for the same message, so without
+    ///      this bound a second valid signature always exists. Any path that treats a
+    ///      signature as unique (quorum slot recovery, dedup) would be malleable.
+    uint256 internal constant P256_N_DIV_2 =
+        0x7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a8;
+
     /// @notice A WebAuthn-wrapped P-256 signature bundle.
     struct Assertion {
         bytes   authenticatorData;
@@ -72,6 +79,12 @@ library WebAuthnLib {
             return false;
         }
         if (!_checkClientData(assertion.clientDataJSON, assertion.typeIndex, assertion.challengeIndex, expectedChallengeHash)) {
+            return false;
+        }
+        // WA-1: enforce low-s. RIP-7212 verifies both (r, s) and (r, n−s); rejecting
+        // the high-s half makes the assertion signature canonical, closing P-256
+        // malleability for every caller (native ERC-1271 + custody-quorum slot recovery).
+        if (assertion.s > P256_N_DIV_2) {
             return false;
         }
         bytes32 cdjHash = sha256(bytes(assertion.clientDataJSON));

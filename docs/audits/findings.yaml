@@ -555,15 +555,40 @@ findings:
   - id: WA-1
     severity: medium
     title: WebAuthn/P256 verification lacks low-s enforcement (P-256 signature malleability)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/libraries/WebAuthnLib.sol]
+    anchor: P256_N_DIV_2
+    enforcement: test-covered
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/libraries/WebAuthnLib.t.sol
+    note: >
+      Fixed: WebAuthnLib.verify rejects high-s signatures (s > n/2, the P256_N_DIV_2 bound) before the
+      RIP-7212 call. RIP-7212 accepts both (r,s) and (r,n−s), so without this a second valid signature
+      always existed over the same message — malleable for any path treating a signature as unique. The
+      bound sits at the single library chokepoint, covering both the native ERC-1271 passkey path and the
+      custody-quorum slot recovery. 2 regression tests (high-s rejected even with RIP-7212 mocked success;
+      s == n/2 boundary accepted). enforcement: test-covered (awaits the next Base Sepolia redeploy).
   - id: WA-2
     severity: medium
     title: WebAuthn UV enforced only on opt-in; the live custody caller passes requireUv=false
-    status: open
-    concerns: [packages/contracts/src/libraries/WebAuthnLib.sol]
+    status: closed
+    concerns:
+      - packages/contracts/src/libraries/WebAuthnLib.sol
+      - packages/contracts/src/libraries/SignatureSlotRecovery.sol
+    anchor: requireUv
+    enforcement: test-covered
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/libraries/SignatureSlotBounds.t.sol
+    note: >
+      The native ERC-1271 path (AgentAccount._verifyWebAuthn) already required UV (R8.2). The remaining
+      gap was SignatureSlotRecovery — the custody-COUNCIL quorum path (CustodyPolicy trustees/custodians
+      authorizing a recovery or admin change) — which passed requireUv=false, accepting UP-only
+      assertions on the highest-assurance signatures in the system. Flipped to requireUv=true, consistent
+      with the native path: a UP-only custody assertion is now rejected; custody signers' browser
+      ceremonies MUST use userVerification:'required'. 1 slot-level regression test (UP-only custody
+      assertion reverts PasskeySigInvalid). enforcement: test-covered (awaits the next Base Sepolia redeploy).
   - id: AN-2
     severity: medium
     title: name registration expiry is decorative (never set/enforced; expired names not reclaimable)

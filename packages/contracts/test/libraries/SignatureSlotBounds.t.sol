@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import "forge-std/Test.sol";
 import {SignatureSlotRecovery} from "../../src/libraries/SignatureSlotRecovery.sol";
+import {WebAuthnLib} from "../../src/libraries/WebAuthnLib.sol";
 
 /**
  * H7-C.3 / CON-SIG-SLOT-001/-002 regression tests.
@@ -93,6 +94,38 @@ contract SignatureSlotBoundsTest is Test {
             uint8(2), uint256(10_000), uint256(0), slot.length
         ));
         h.recover(bytes32(uint256(1)), slot, 0, address(0));
+    }
+
+    // ─── WA-2 — custody-quorum passkey slot requires UV ─────────────
+
+    /// A custody-council passkey assertion with only the User-Present bit set
+    /// (no User-Verified) is rejected at the slot path. WA-2 flipped the slot
+    /// verify to `requireUv=true`; the UV check fires inside _checkAuthData
+    /// before any P-256 work, so no precompile mock is needed.
+    function test_WA2_slot_rejects_UP_only_custody_assertion() public {
+        uint256 pubX = 0x1111;
+        uint256 pubY = 0x2222;
+        address derived = address(uint160(uint256(keccak256(abi.encode(pubX, pubY)))));
+        bytes32 rpIdHash = keccak256("custody-rp.example");
+        bytes memory authData = new bytes(37);
+        for (uint256 i; i < 32; i++) authData[i] = rpIdHash[i];
+        authData[32] = bytes1(uint8(0x01)); // UP set, UV NOT set
+        WebAuthnLib.Assertion memory a = WebAuthnLib.Assertion({
+            authenticatorData: authData,
+            clientDataJSON: "{}",
+            challengeIndex: 0,
+            typeIndex: 0,
+            r: 1,
+            s: 1,
+            credentialIdDigest: bytes32(0)
+        });
+        bytes memory blob = abi.encode(pubX, pubY, rpIdHash, a);
+        // v=2 passkey slot: r = claimed signer (the PIA), s = sigOffset to the tail.
+        bytes memory slot = _slot(bytes32(uint256(uint160(derived))), bytes32(uint256(65)), 2);
+        bytes memory packed = bytes.concat(slot, abi.encode(blob.length), blob);
+
+        vm.expectRevert(abi.encodeWithSelector(SignatureSlotRecovery.PasskeySigInvalid.selector, derived));
+        h.recover(bytes32(0), packed, 0, address(0));
     }
 
     // ─── H7-D.7 — per-v-byte coverage matrix ────────────────────────

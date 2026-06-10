@@ -173,9 +173,14 @@ library SignatureSlotRecovery {
                 abi.decode(dyn, (uint256, uint256, bytes32, WebAuthnLib.Assertion));
             address derived = address(uint160(uint256(keccak256(abi.encode(pubX, pubY)))));
             if (derived != signer) revert PasskeyPubKeyMismatch(signer, derived);
-            // requireUv=false at the slot level; account policy can layer UV
-            // requirement via a future policy module.
-            if (!WebAuthnLib.verify(assertion, payloadHash, pubX, pubY, rpIdHash, false)) {
+            // WA-2: require UV at the slot level. This path verifies custody-COUNCIL
+            // passkey signatures (CustodyPolicy quorum: trustees/custodians authorizing
+            // a recovery or admin change) — the highest-assurance signatures in the
+            // system. Consistent with the native ERC-1271 path (AgentAccount, R8.2):
+            // a UP-only assertion is rejected; browser ceremonies for custody signers
+            // MUST use `userVerification: 'required'`. A lower-assurance flow that needs
+            // UP-only must install a separate validator module that relaxes this.
+            if (!WebAuthnLib.verify(assertion, payloadHash, pubX, pubY, rpIdHash, true)) {
                 revert PasskeySigInvalid(signer);
             }
         } else if (v == 27 || v == 28) {
