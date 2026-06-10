@@ -22,6 +22,9 @@ export {
 export type { QuorumCaveatOpts } from './caveats';
 
 export { hashDelegation, hashCaveats, DELEGATION_EIP712_TYPES, delegationDomain } from './hash';
+// DEL-001 session-delegation leaf builder (spec 270 v4 W2) — every connect flow uses this.
+export { buildSessionDelegation } from './session-delegation';
+export type { SessionDelegationParams } from './session-delegation';
 export { evaluateCaveats } from './evaluator';
 export { DelegationClient } from './client';
 export { SessionManager, createMemorySessionStore } from './session-manager';

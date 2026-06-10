@@ -56,6 +56,8 @@
     "DELEGATE_BINDING_ENFORCER",
     "QuorumCaveatOpts",
     "hashDelegation",
+    "SessionDelegationParams",
+    "buildSessionDelegation",
     "hashCaveats",
     "DELEGATION_EIP712_TYPES",
     "delegationDomain",

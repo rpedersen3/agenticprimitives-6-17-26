@@ -17,6 +17,7 @@ re-export JtiStore from ./types
 re-export MCP_TOOL_SCOPE_ENFORCER from ./caveats
 re-export QuorumCaveatOpts from ./caveats
 re-export ROOT_AUTHORITY from ./types
+re-export SessionDelegationParams from ./session-delegation
 re-export SessionManager from ./session-manager
 re-export SessionMeta from ./types
 re-export SessionPackage from ./types
@@ -32,6 +33,7 @@ re-export buildDataScopeCaveat from ./caveats
 re-export buildDelegateBindingCaveat from ./caveats
 re-export buildMcpToolScopeCaveat from ./caveats
 re-export buildQuorumCaveat from ./caveats
+re-export buildSessionDelegation from ./session-delegation
 re-export createMemorySessionStore from ./session-manager
 re-export delegationDomain from ./hash
 re-export encodeAllowedMethodsTerms from ./caveats
