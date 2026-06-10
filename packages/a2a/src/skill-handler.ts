@@ -6,10 +6,13 @@ import type { Address, Hex } from '@agenticprimitives/types';
 import type { Delegation } from '@agenticprimitives/delegation';
 import type { VaultRef } from './types.js';
 
-/** Minimal vault seam — the consumer wires demo-mcp vault read/write over a delegation (W4). */
+/** Minimal vault seam — the consumer wires demo-mcp vault read/write over a delegation. FR-3.4: a handler
+ *  delivers a result into ANOTHER principal's vault by passing a `delegation` THAT principal granted
+ *  (delegator == the record owner); the consumer routes it through `callMcpToolViaDelegation` so demo-mcp
+ *  keys the record by that principal. Omit `delegation` to read/write the agent's own (assignee) store. */
 export interface VaultClient {
-  read(ref: VaultRef): Promise<unknown>;
-  write(args: { owner: Address; recordType: string; data: unknown }): Promise<VaultRef>;
+  read(ref: VaultRef, opts?: { delegation?: Delegation }): Promise<unknown>;
+  write(args: { owner: Address; recordType: string; data: unknown; delegation?: Delegation }): Promise<VaultRef>;
 }
 
 /** Minimal MCP seam — call a tool via the delegation token (reuses the a2a→mcp leg, W4). */
@@ -23,6 +26,28 @@ export class AuthRequired extends Error {
   constructor(public readonly authReason: string) {
     super(`auth-required: ${authReason}`);
     this.name = 'AuthRequired';
+  }
+}
+
+/** The reassignment a handler requests via `requestHandoff` (FR-3.6). The target agent re-verifies the
+ *  (possibly re-scoped) delegation when it receives the handed-off task. */
+export interface HandoffRequest {
+  /** The agent SA to reassign to. */
+  target: Address;
+  /** The target's agent class (checked against `HandoffPolicy.allowedAgentClasses`). */
+  targetClass?: string;
+  /** The skill the target should run (defaults to the current task's skill). */
+  skill?: string;
+  reason?: string;
+}
+
+/** Thrown by `requestHandoff` to reassign a task to another agent (FR-3.6). The dispatcher gates it on
+ *  `isHandoffAllowed(handoffPolicy, …)` + the hop budget, then records the handoff for the transport to
+ *  deliver. A disallowed handoff `rejects` the task — fail-closed (FLF-INV-09). */
+export class HandoffRequested extends Error {
+  constructor(public readonly request: HandoffRequest) {
+    super(`handoff-requested: ${request.target}`);
+    this.name = 'HandoffRequested';
   }
 }
 
@@ -49,6 +74,9 @@ export interface SkillContext {
   }): Promise<Hex>;
   /** Suspend pending a fresh grant — throws `AuthRequired`. */
   requestAuth(reason: string): never;
+  /** Reassign the task to another agent (FR-3.6) — throws `HandoffRequested`. The dispatcher gates it on
+   *  the agent's `HandoffPolicy`; a disallowed target rejects the task. */
+  requestHandoff(req: HandoffRequest): never;
 }
 
 export interface SkillResult {

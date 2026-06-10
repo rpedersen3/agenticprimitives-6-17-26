@@ -3,12 +3,12 @@
 // task to its skill handler — mapping the handler result (or AuthRequired / unknown-skill / throw) onto
 // the next state. Storage + delivery are the caller's job (the TaskStore port + the JSON-RPC layer); this
 // module never blocks on I/O beyond the handler it's given, and emits the events the stream/push paths use.
-import { canTaskTransition } from '@agenticprimitives/fulfillment';
+import { canTaskTransition, isHandoffAllowed, type HandoffPolicy } from '@agenticprimitives/fulfillment';
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { Delegation } from '@agenticprimitives/delegation';
 import type { TaskRecord, TaskState, TaskEvent, A2aMessage } from './types.js';
 import { isTerminal } from './types.js';
-import { AuthRequired, type SkillContext, type SkillHandler, type SkillResult } from './skill-handler.js';
+import { AuthRequired, HandoffRequested, type SkillContext, type SkillHandler, type SkillResult } from './skill-handler.js';
 
 /** Build a fresh `submitted` task record from a verified inbound message + grant. */
 export function newTaskRecord(args: {
@@ -84,8 +84,9 @@ export function applyTransition(
 export async function dispatchTask(
   record: TaskRecord,
   registry: Map<string, SkillHandler>,
-  makeContext: (record: TaskRecord) => Omit<SkillContext, 'requestAuth' | 'principal' | 'sender' | 'taskId' | 'skill'> & { input: unknown; delegation: Delegation },
+  makeContext: (record: TaskRecord) => Omit<SkillContext, 'requestAuth' | 'requestHandoff' | 'principal' | 'sender' | 'taskId' | 'skill'> & { input: unknown; delegation: Delegation },
   now: number,
+  opts?: { handoffPolicy?: HandoffPolicy },
 ): Promise<{ record: TaskRecord; events: TaskEvent[] }> {
   const events: TaskEvent[] = [];
   if (record.task.state !== 'submitted') {
@@ -116,6 +117,9 @@ export async function dispatchTask(
     requestAuth: (reason: string): never => {
       throw new AuthRequired(reason);
     },
+    requestHandoff: (req): never => {
+      throw new HandoffRequested(req);
+    },
   };
 
   let result: SkillResult;
@@ -125,6 +129,28 @@ export async function dispatchTask(
     if (e instanceof AuthRequired) {
       const auth = applyTransition(cur, 'auth-required', { now });
       if (auth.ok) { events.push(auth.event); return { record: auth.record, events }; }
+      return { record: cur, events };
+    }
+    if (e instanceof HandoffRequested) {
+      // FR-3.6 / FLF-INV-09 — gate the reassignment on the agent's HandoffPolicy + the hop budget;
+      // fail-closed: no policy, a disallowed target, or an exhausted hop budget rejects the task.
+      const req = e.request;
+      const hops = (cur.hopCount ?? 0) + 1;
+      const ok = opts?.handoffPolicy
+        && isHandoffAllowed(opts.handoffPolicy, req.target, req.targetClass)
+        && hops <= opts.handoffPolicy.maxHopCount;
+      if (!ok) {
+        // The handler is mid-processing (`working`), so the illegal handoff fails the task (working→failed;
+        // working→rejected is not a legal transition). Fail-closed.
+        const reason = `handoff not permitted: ${req.target}${req.targetClass ? ` (${req.targetClass})` : ''}`;
+        const fail = applyTransition(cur, 'failed', { now, error: reason });
+        if (fail.ok) { events.push(fail.event); return { record: { ...fail.record, error: reason }, events }; }
+        return { record: cur, events };
+      }
+      // The local agent's part is done; record the handoff for the transport to deliver to the target,
+      // which re-verifies the (possibly re-scoped) delegation on receipt.
+      const done = applyTransition(cur, 'completed', { now });
+      if (done.ok) { events.push(done.event); return { record: { ...done.record, handoff: req, hopCount: hops }, events }; }
       return { record: cur, events };
     }
     const failed = applyTransition(cur, 'failed', { now, error: e instanceof Error ? e.message : String(e) });

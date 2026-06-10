@@ -4,6 +4,7 @@
 // transport-agnostic. message/send NEVER runs the skill inline (FR-2.3) — it persists + returns submitted;
 // processDue does the work.
 import { hashDelegation } from '@agenticprimitives/delegation';
+import type { HandoffPolicy } from '@agenticprimitives/fulfillment';
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { Delegation } from '@agenticprimitives/delegation';
 import type { Task, TaskRecord, TaskEvent, A2aMessage, A2aArtifact, VaultRef, PushConfig } from './types.js';
@@ -37,6 +38,9 @@ export interface A2aAgentConfig {
    *  be a KMS/session signer for the assignee SA (SR-8). */
   signTerminal?: TerminalSigner;
   pushSender?: PushSender;
+  /** FR-3.6 — the policy gating skill-handler hand-offs (`requestHandoff`). Omit ⇒ hand-offs are
+   *  rejected (fail-closed). */
+  handoffPolicy?: HandoffPolicy;
 }
 
 export type RpcOk<T> = { ok: true; result: T };
@@ -237,6 +241,7 @@ export function createA2aAgent(config: A2aAgentConfig): A2aAgent {
         const ctxBase = makeContext(rec);
         const { record: processed, events: evs } = await dispatchTask(
           rec, registry, () => ({ ...ctxBase, input }), now(),
+          config.handoffPolicy ? { handoffPolicy: config.handoffPolicy } : undefined,
         );
         const merged: TaskRecord = { ...processed, artifacts: [...processed.artifacts, ...captured] };
         await config.taskStore.put(merged);

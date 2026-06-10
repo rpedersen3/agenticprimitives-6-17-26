@@ -4,6 +4,7 @@
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { Delegation } from '@agenticprimitives/delegation';
 import type { Task, TaskState, Artifact } from '@agenticprimitives/fulfillment';
+import type { HandoffRequest } from './skill-handler.js';
 
 export type { Task, TaskState, Artifact };
 
@@ -52,6 +53,11 @@ export interface TaskRecord {
   artifacts: A2aArtifact[];
   /** Webhook registered via tasks/pushNotificationConfig/set; signed push fires here on terminal state. */
   pushConfig?: PushConfig;
+  /** FR-3.6 — set when a handler reassigned this task (policy-gated). The transport delivers a
+   *  message/send to `handoff.target`, which re-verifies the delegation. */
+  handoff?: HandoffRequest;
+  /** Number of hand-offs this task has been through — checked against `HandoffPolicy.maxHopCount`. */
+  hopCount?: number;
   /** Last error on a `failed` transition, surfaced to tasks/get. */
   error?: string;
   /** Monotonic version, bumped on every mutation — drives stream/idempotency. */

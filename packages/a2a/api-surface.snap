@@ -4,13 +4,18 @@ re-export A2aAgent from ./agent.js
 re-export A2aAgentConfig from ./agent.js
 re-export A2aArtifact from ./types.js
 re-export A2aEnforcers from ./grant.js
+re-export A2aFetch from ./discovery.js
 re-export A2aMessage from ./types.js
+re-export A2aTarget from ./discovery.js
 re-export A2aTransport from ./client.js
 re-export A2aWireAdapter from ./client.js
 re-export AgentCard from ./agent.js
+re-export AgentEndpointFor from ./discovery.js
 re-export Artifact from ./types.js
 re-export AuthRequired from ./skill-handler.js
 re-export AuthorizeResult from ./auth.js
+re-export HandoffRequest from ./skill-handler.js
+re-export HandoffRequested from ./skill-handler.js
 re-export JsonRpcRequest from ./jsonrpc.js
 re-export JsonRpcResponse from ./jsonrpc.js
 re-export McpClient from ./skill-handler.js
@@ -21,6 +26,7 @@ re-export PushConfig from ./types.js
 re-export PushEnvelope from ./push.js
 re-export PushPayload from ./push.js
 re-export PushSender from ./push.js
+re-export ResolveAgentName from ./discovery.js
 re-export ResubmitParams from ./agent.js
 re-export RpcErr from ./agent.js
 re-export RpcOk from ./agent.js
@@ -51,6 +57,7 @@ re-export decodeTimestampTerms from ./auth.js
 re-export deliverPush from ./push.js
 re-export dispatchA2aRpc from ./jsonrpc.js
 re-export dispatchTask from ./runtime.js
+re-export fetchAgentCard from ./discovery.js
 re-export formatSseComment from ./sse.js
 re-export formatSseEvent from ./sse.js
 re-export handleA2aRpcBody from ./jsonrpc.js
@@ -59,5 +66,6 @@ re-export hashPushPayload from ./push.js
 re-export isStreamEnd from ./sse.js
 re-export isTerminal from ./types.js
 re-export newTaskRecord from ./runtime.js
+re-export resolveA2aTarget from ./discovery.js
 re-export skillSelector from ./grant.js
 re-export verifyPushEnvelope from ./push.js

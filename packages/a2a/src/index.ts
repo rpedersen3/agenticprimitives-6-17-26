@@ -25,8 +25,8 @@ export type { TaskStore } from './task-store.js';
 export { createInMemoryTaskStore } from './task-store.js';
 
 // SkillHandler contract + dispatch
-export type { SkillHandler, SkillContext, SkillResult, VaultClient, McpClient } from './skill-handler.js';
-export { AuthRequired, buildSkillRegistry } from './skill-handler.js';
+export type { SkillHandler, SkillContext, SkillResult, VaultClient, McpClient, HandoffRequest } from './skill-handler.js';
+export { AuthRequired, HandoffRequested, buildSkillRegistry } from './skill-handler.js';
 
 // Runtime
 export { newTaskRecord, applyTransition, dispatchTask } from './runtime.js';
@@ -53,6 +53,10 @@ export { dispatchA2aRpc, handleA2aRpcBody } from './jsonrpc.js';
 export type { JsonRpcRequest, JsonRpcResponse } from './jsonrpc.js';
 export { A2aWireAdapter } from './client.js';
 export type { A2aTransport } from './client.js';
+
+// Agent discovery (§8) — name → SA → endpoint + agent-card fetch (injected resolvers, ADR-0021)
+export { resolveA2aTarget, fetchAgentCard } from './discovery.js';
+export type { A2aTarget, ResolveAgentName, AgentEndpointFor, A2aFetch } from './discovery.js';
 
 // Delivery — signed push + SSE (W4)
 export { hashPushPayload, deliverPush, verifyPushEnvelope } from './push.js';

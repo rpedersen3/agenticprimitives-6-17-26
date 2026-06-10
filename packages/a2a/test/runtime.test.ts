@@ -111,6 +111,38 @@ describe('dispatchTask', () => {
     expect(record.task.state).toBe('failed');
     expect(record.error).toBe('boom');
   });
+
+  // FR-3.6 — hand-off, policy-gated (FLF-INV-09).
+  const TARGET = ADDR('e');
+  const policy = (over = {}) => ({ allowedTargetAgents: [TARGET], allowedAgentClasses: [], requiresUserApproval: false, preservePrivacyTier: false, allowedScopes: [], maxHopCount: 3, ...over });
+
+  it('requestHandoff to an allowed target -> completed + records the handoff', async () => {
+    const reg = buildSkillRegistry([{ skill: 'echo', handle: async (ctx) => ctx.requestHandoff({ target: TARGET, reason: 'specialist' }) }]);
+    const { record } = await dispatchTask(freshRecord(), reg, makeCtx({}), 3000, { handoffPolicy: policy() });
+    expect(record.task.state).toBe('completed');
+    expect(record.handoff?.target).toBe(TARGET);
+    expect(record.hopCount).toBe(1);
+  });
+
+  it('requestHandoff with NO policy -> rejected (fail-closed)', async () => {
+    const reg = buildSkillRegistry([{ skill: 'echo', handle: async (ctx) => ctx.requestHandoff({ target: TARGET }) }]);
+    const { record } = await dispatchTask(freshRecord(), reg, makeCtx({}), 3000);
+    expect(record.task.state).toBe('failed');
+    expect(record.error).toMatch(/handoff not permitted/);
+  });
+
+  it('requestHandoff to a disallowed target -> rejected', async () => {
+    const reg = buildSkillRegistry([{ skill: 'echo', handle: async (ctx) => ctx.requestHandoff({ target: ADDR('9') }) }]);
+    const { record } = await dispatchTask(freshRecord(), reg, makeCtx({}), 3000, { handoffPolicy: policy() });
+    expect(record.task.state).toBe('failed');
+  });
+
+  it('requestHandoff over the hop budget -> rejected', async () => {
+    const reg = buildSkillRegistry([{ skill: 'echo', handle: async (ctx) => ctx.requestHandoff({ target: TARGET }) }]);
+    const rec = { ...freshRecord(), hopCount: 3 };
+    const { record } = await dispatchTask(rec, reg, makeCtx({}), 3000, { handoffPolicy: policy({ maxHopCount: 3 }) });
+    expect(record.task.state).toBe('failed');
+  });
 });
 
 describe('buildSkillRegistry', () => {
