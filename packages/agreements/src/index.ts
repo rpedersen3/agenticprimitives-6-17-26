@@ -32,27 +32,35 @@ export type AgreementStatus = (typeof STATUS)[keyof typeof STATUS];
  */
 export const TRANSITION_TYPEHASH: Hex32 = toHex32(
   keccak_256(
-    utf8ToBytes('AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier)'),
+    // AGR-1 (audit 2026-06-10): bind chainId + verifyingContract so a transition signature can't be
+    // replayed cross-chain or on a redeployed registry.
+    utf8ToBytes(
+      'AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier,uint256 chainId,address verifyingContract)',
+    ),
   ),
 );
 
 /**
- * Recompute the transition digest the parties sign (RW1-3). Equals the
- * contract's `keccak256(abi.encode(TRANSITION_TYPEHASH, agreementCommitment,
- * toStatus, nullifier))` — the on-chain `updateStatus` recomputes the same
- * digest and verifies the party signatures against it.
+ * Recompute the transition digest the parties sign (RW1-3). Equals the contract's
+ * `keccak256(abi.encode(TRANSITION_TYPEHASH, agreementCommitment, toStatus, nullifier, chainId,
+ * verifyingContract))` — the on-chain `updateStatus` recomputes the same digest and verifies the party
+ * signatures against it. AGR-1: `chainId` + the registry address are bound (anti cross-chain/replay).
  */
 export function transitionDigest(args: {
   agreementCommitment: Hex32;
   toStatus: AgreementStatus;
   nullifier: Hex32;
+  chainId: bigint;
+  verifyingContract: Address;
 }): Hex32 {
-  const buf = new Uint8Array(4 * 32);
+  const buf = new Uint8Array(6 * 32);
   writeHex32(buf, 0, TRANSITION_TYPEHASH);
   writeHex32(buf, 32, args.agreementCommitment);
   // uint8 toStatus, abi-encoded as a left-padded 32-byte word.
   buf[95] = args.toStatus & 0xff;
   writeHex32(buf, 96, args.nullifier);
+  writeUint256(buf, 128, args.chainId);
+  writeAddressLeftPadded(buf, 160, args.verifyingContract);
   return toHex32(keccak_256(buf));
 }
 

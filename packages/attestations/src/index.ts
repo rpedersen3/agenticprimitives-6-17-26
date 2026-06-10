@@ -93,6 +93,52 @@ export function jointConsentDigest(args: {
 }
 
 /**
+ * ATT-1 (audit 2026-06-10) — canonical issuer typehash for a JOINT-agreement attestation. MUST
+ * byte-equal `AttestationRegistry.JOINT_ISSUER_TYPEHASH`; locked by the cross-stack typehash-equality
+ * gate. The issuer no longer signs a bare `credentialHash` (the SC-2 bug class, which survived on the
+ * joint path) — it binds the parties, schema, credential type/hash, the agreement commitment, chain,
+ * and the registry address.
+ */
+export const JOINT_ISSUER_TYPEHASH: Hex32 = hashName(
+  'JointAgreementIssuerAttestation(address party1,address party2,address issuer,bytes32 schemaId,bytes32 credentialType,bytes32 credentialHash,bytes32 agreementCommitment,uint256 chainId,address verifyingContract)',
+);
+
+/**
+ * Recompute the digest the issuer signs for a joint-agreement attestation (ATT-1). Equals the
+ * contract's `keccak256(abi.encode(JOINT_ISSUER_TYPEHASH, party1, party2, issuer, schemaId,
+ * credentialType, credentialHash, agreementCommitment, chainId, verifyingContract))`.
+ * `assertJointAgreement` recomputes the same digest on chain — so a leaked issuer signature can't be
+ * replayed against different parties/schema/chain. `agreementCommitment` is the request's `refUID`.
+ */
+export function jointIssuerDigest(args: {
+  party1: Address;
+  party2: Address;
+  issuer: Address;
+  schemaId: Hex32;
+  credentialType: Hex32;
+  credentialHash: Hex32;
+  agreementCommitment: Hex32;
+  chainId: bigint;
+  verifyingContract: Address;
+}): Hex32 {
+  const buf = new Uint8Array(10 * 32);
+  writeHex32(buf, 0, JOINT_ISSUER_TYPEHASH);
+  writeAddress(buf, 32, args.party1);
+  writeAddress(buf, 64, args.party2);
+  writeAddress(buf, 96, args.issuer);
+  writeHex32(buf, 128, args.schemaId);
+  writeHex32(buf, 160, args.credentialType);
+  writeHex32(buf, 192, args.credentialHash);
+  writeHex32(buf, 224, args.agreementCommitment);
+  writeUint256(buf, 256, args.chainId);
+  writeAddress(buf, 288, args.verifyingContract);
+  const digest = keccak_256(buf);
+  let hex = '0x';
+  for (const v of digest) hex += v.toString(16).padStart(2, '0');
+  return hex as Hex32;
+}
+
+/**
  * SC-2 (audit 2026-06-09) — canonical issuer-attestation typehash for a unilateral association.
  * MUST byte-equal `AttestationRegistry.ASSOCIATION_ATTESTATION_TYPEHASH`; locked by the cross-stack
  * typehash-equality gate.

@@ -52,6 +52,14 @@ contract AttestationRegistry {
         "JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash)"
     );
 
+    /// @dev ATT-1 (audit 2026-06-10): the SC-2 bug class lived on in the JOINT issuer signature — it was
+    ///      verified over a bare `credentialHash`, so a known issuer signature could be reused to anchor a
+    ///      spoofed issuer-backed joint attestation with different parties/schema. The issuer now signs a
+    ///      digest binding parties + schema + credential type + commitment + chain + this contract.
+    bytes32 internal constant JOINT_ISSUER_TYPEHASH = keccak256(
+        "JointAgreementIssuerAttestation(address party1,address party2,address issuer,bytes32 schemaId,bytes32 credentialType,bytes32 credentialHash,bytes32 agreementCommitment,uint256 chainId,address verifyingContract)"
+    );
+
     /// @dev SC-2 (audit 2026-06-09): the issuer attestation digest binds the SUBJECT (and schema /
     ///      credential type / chain / this contract) — not just `credentialHash`. Previously the issuer
     ///      signed only the credentialHash, so anyone who learned that public hash could anchor it on
@@ -214,7 +222,25 @@ contract AttestationRegistry {
         if (req.party1 == address(0) || req.party2 == address(0)) revert InvalidParties();
         if (req.party1 == req.party2) revert InvalidParties();
 
-        if (!_isValidSignatureBool(req.issuer, req.credentialHash, req.issuerSignature)) {
+        // ATT-1 (audit 2026-06-10): the issuer signs a FULL typed digest binding the parties, schema,
+        // credential type/hash, the agreement commitment (refUID), chain, and this registry — not a bare
+        // `credentialHash`. A leaked/observed issuer signature can no longer be replayed to anchor an
+        // issuer-backed joint attestation for different parties/schema/chain.
+        bytes32 issuerDigest = keccak256(
+            abi.encode(
+                JOINT_ISSUER_TYPEHASH,
+                req.party1,
+                req.party2,
+                req.issuer,
+                req.schemaId,
+                req.credentialType,
+                req.credentialHash,
+                req.refUID,
+                block.chainid,
+                address(this)
+            )
+        );
+        if (!_isValidSignatureBool(req.issuer, issuerDigest, req.issuerSignature)) {
             revert InvalidIssuerSignature();
         }
 

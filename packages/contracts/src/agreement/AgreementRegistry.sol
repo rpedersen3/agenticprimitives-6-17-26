@@ -46,8 +46,11 @@ contract AgreementRegistry {
     ///      digest model; the TS side derives the same constant (cross-stack
     ///      typehash-equality gate). Plain struct hash (no domain separator),
     ///      matching the attestation registry's JOINT_CONSENT_TYPEHASH.
-    bytes32 internal constant TRANSITION_TYPEHASH =
-        keccak256("AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier)");
+    ///      AGR-1 (audit 2026-06-10): also bind chainId + this contract so a transition signature
+    ///      cannot be replayed on another chain or a redeployed registry.
+    bytes32 internal constant TRANSITION_TYPEHASH = keccak256(
+        "AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier,uint256 chainId,address verifyingContract)"
+    );
 
     /// @dev SC-1 (audit 2026-06-09): the issuer attestation digest is RECOMPUTED on-chain from the
     ///      agreement's contents + chain + this contract — it is NOT a caller-supplied free-form hash.
@@ -242,7 +245,7 @@ contract AgreementRegistry {
         // caller-supplied hash. The signed payload is canonically bound to (commitment, toStatus,
         // nullifier) here, on chain.
         bytes32 transitionDigest = keccak256(
-            abi.encode(TRANSITION_TYPEHASH, p.agreementCommitment, p.toStatus, p.nullifier)
+            abi.encode(TRANSITION_TYPEHASH, p.agreementCommitment, p.toStatus, p.nullifier, block.chainid, address(this))
         );
 
         bool bilateralRequired = (p.toStatus != STATUS_DISPUTED);

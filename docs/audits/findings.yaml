@@ -299,21 +299,32 @@ findings:
   - id: ATT-1
     severity: high
     title: assertJointAgreement issuer signature over bare credentialHash (SC-2 class, issuer side)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/attestation/AttestationRegistry.sol]
+    anchor: JOINT_ISSUER_TYPEHASH
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/attestations/test/unit/cross-stack-consent-typehash.test.ts
+      - packages/contracts/test/AttestationRegistry.t.sol
     note: >
-      The issuer signature is verified over a bare req.credentialHash with no typehash/parties/schema/
-      chain/contract binding, so a known issuer signature can anchor a spoofed joint attestation. (The
-      bilateral-consent half is correctly bound via JOINT_CONSENT_TYPEHASH.) Fix: an ISSUER typehash
-      digest binding parties/schema/credentialType/credentialHash/chainId/address(this), mirroring SC-2.
+      The issuer now signs a JOINT_ISSUER_TYPEHASH digest binding party1/party2/issuer/schemaId/
+      credentialType/credentialHash/agreementCommitment(refUID)/chainId/address(this), recomputed on
+      chain — a leaked issuer signature can no longer anchor a spoofed joint attestation. Cross-stack
+      typehash equality locked (check:eip712-typehash-equality); 17 Foundry + 15 TS tests green.
   - id: AGR-1
     severity: medium
     title: agreement status-transition digest lacks chain/contract binding (cross-chain replay)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/agreement/AgreementRegistry.sol]
+    anchor: TRANSITION_TYPEHASH
     origin: 2026-06-10-contract-by-contract-audit.md
-    note: TRANSITION_TYPEHASH digest binds agreementCommitment/toStatus/nullifier but not chainId/address(this).
+    tests:
+      - packages/agreements/test/unit/cross-stack-transition-typehash.test.ts
+      - packages/contracts/test/AgreementRegistry.t.sol
+    note: >
+      TRANSITION_TYPEHASH digest now binds chainId + address(this) in addition to agreementCommitment/
+      toStatus/nullifier; updateStatus recomputes it on chain. Anti cross-chain / redeployed-registry
+      replay. Cross-stack typehash equality locked; AgreementRegistry Foundry suite green.
   - id: ATT-2
     severity: medium
     title: attestation revocation is cosmetic (salt-replay re-anchors under a new UID)

@@ -37,7 +37,7 @@ function solTypeString(constant: string): string {
 }
 
 const CANONICAL_TRANSITION_TYPE_STRING =
-  'AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier)';
+  'AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier,uint256 chainId,address verifyingContract)';
 
 describe('RW1-3 — AgreementRegistry transition typehash convergence', () => {
   it('the LIVE Solidity TRANSITION_TYPEHASH type string is the canonical form', () => {
@@ -82,26 +82,40 @@ describe('SC-1 — AgreementRegistry issuer-attestation typehash convergence', (
   });
 });
 
-describe('RW1-3 — transitionDigest byte-matches the contract recompute', () => {
-  it('equals keccak256(abi.encode(TYPEHASH, commitment, uint8 toStatus, nullifier))', () => {
+describe('RW1-3 / AGR-1 — transitionDigest byte-matches the contract recompute', () => {
+  const verifyingContract = '0x3333333333333333333333333333333333333333' as const;
+  const chainId = 84532n;
+
+  it('equals keccak256(abi.encode(TYPEHASH, commitment, uint8 toStatus, nullifier, chainId, verifyingContract))', () => {
     const agreementCommitment = `0x${'ab'.repeat(32)}` as const;
     const nullifier = `0x${'cd'.repeat(32)}` as const;
     const toStatus = STATUS.COMPLETED; // 2
 
     const expected = keccak256(
       encodeAbiParameters(
-        [{ type: 'bytes32' }, { type: 'bytes32' }, { type: 'uint8' }, { type: 'bytes32' }],
-        [TRANSITION_TYPEHASH, agreementCommitment, toStatus, nullifier],
+        [{ type: 'bytes32' }, { type: 'bytes32' }, { type: 'uint8' }, { type: 'bytes32' }, { type: 'uint256' }, { type: 'address' }],
+        [TRANSITION_TYPEHASH, agreementCommitment, toStatus, nullifier, chainId, verifyingContract],
       ),
     );
-    expect(transitionDigest({ agreementCommitment, toStatus, nullifier })).toBe(expected);
+    expect(transitionDigest({ agreementCommitment, toStatus, nullifier, chainId, verifyingContract })).toBe(expected);
+  });
+
+  it('AGR-1: is sensitive to chainId + verifyingContract (anti cross-chain/contract replay)', () => {
+    const agreementCommitment = `0x${'ab'.repeat(32)}` as const;
+    const nullifier = `0x${'cd'.repeat(32)}` as const;
+    const toStatus = STATUS.COMPLETED;
+    const base = transitionDigest({ agreementCommitment, toStatus, nullifier, chainId, verifyingContract });
+    const otherChain = transitionDigest({ agreementCommitment, toStatus, nullifier, chainId: 1n, verifyingContract });
+    const otherContract = transitionDigest({ agreementCommitment, toStatus, nullifier, chainId, verifyingContract: '0x4444444444444444444444444444444444444444' });
+    expect(base).not.toBe(otherChain);
+    expect(base).not.toBe(otherContract);
   });
 
   it('is sensitive to toStatus (no padding bleed)', () => {
     const agreementCommitment = `0x${'11'.repeat(32)}` as const;
     const nullifier = `0x${'22'.repeat(32)}` as const;
-    const a = transitionDigest({ agreementCommitment, toStatus: STATUS.COMPLETED, nullifier });
-    const b = transitionDigest({ agreementCommitment, toStatus: STATUS.REVOKED, nullifier });
+    const a = transitionDigest({ agreementCommitment, toStatus: STATUS.COMPLETED, nullifier, chainId, verifyingContract });
+    const b = transitionDigest({ agreementCommitment, toStatus: STATUS.REVOKED, nullifier, chainId, verifyingContract });
     expect(a).not.toBe(b);
   });
 });

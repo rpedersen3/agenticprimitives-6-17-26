@@ -43,6 +43,32 @@ contract AttestationRegistryTest is Test {
         return keccak256(abi.encode(JOINT_CONSENT_TYPEHASH, p1, p2, refUID, credHash));
     }
 
+    /// @dev Mirrors AttestationRegistry.JOINT_ISSUER_TYPEHASH (ATT-1).
+    bytes32 internal constant JOINT_ISSUER_TYPEHASH = keccak256(
+        "JointAgreementIssuerAttestation(address party1,address party2,address issuer,bytes32 schemaId,bytes32 credentialType,bytes32 credentialHash,bytes32 agreementCommitment,uint256 chainId,address verifyingContract)"
+    );
+
+    function _jointIssuerDigest(AttestationRegistry.JointAgreementAttestationRequest memory req)
+        internal
+        view
+        returns (bytes32)
+    {
+        return keccak256(
+            abi.encode(
+                JOINT_ISSUER_TYPEHASH,
+                req.party1,
+                req.party2,
+                req.issuer,
+                req.schemaId,
+                req.credentialType,
+                req.credentialHash,
+                req.refUID,
+                block.chainid,
+                address(reg)
+            )
+        );
+    }
+
     /// @dev Mirrors AttestationRegistry.ASSOCIATION_ATTESTATION_TYPEHASH (SC-2).
     bytes32 internal constant ASSOCIATION_ATTESTATION_TYPEHASH = keccak256(
         "AssociationAttestation(address subject,address issuer,bytes32 schemaId,bytes32 credentialType,bytes32 credentialHash,uint256 chainId,address verifyingContract)"
@@ -188,7 +214,7 @@ contract AttestationRegistryTest is Test {
         req.party1 = subject;
         req.party2 = party2;
         req.issuer = issuer;
-        req.issuerSignature = _sign(ch, ISSUER_PK);
+        req.issuerSignature = _sign(_jointIssuerDigest(req), ISSUER_PK);
         // RW1-1: both parties sign the recomputed consent digest.
         bytes32 cd = _consentDigest(subject, party2, req.refUID, ch);
         req.party1Signature = _sign(cd, SUBJECT_PK);
@@ -210,7 +236,7 @@ contract AttestationRegistryTest is Test {
         req.party1 = subject;
         req.party2 = party2;
         req.issuer = issuer;
-        req.issuerSignature = _sign(ch, ISSUER_PK);
+        req.issuerSignature = _sign(_jointIssuerDigest(req), ISSUER_PK);
         // party1Signature / party2Signature left empty → consent verification fails closed.
         vm.expectRevert(AttestationRegistry.InvalidPartyConsent.selector);
         reg.assertJointAgreement(req);
@@ -224,7 +250,7 @@ contract AttestationRegistryTest is Test {
         req.party1 = subject;
         req.party2 = party2;
         req.issuer = issuer;
-        req.issuerSignature = _sign(ch, ISSUER_PK);
+        req.issuerSignature = _sign(_jointIssuerDigest(req), ISSUER_PK);
         bytes32 cd = _consentDigest(subject, party2, req.refUID, ch);
         req.party1Signature = _sign(cd, SUBJECT_PK); // valid
         req.party2Signature = _sign(cd, ISSUER_PK); // WRONG signer (issuer, not party2)
@@ -239,7 +265,7 @@ contract AttestationRegistryTest is Test {
         req.party1 = address(0);
         req.party2 = party2;
         req.issuer = issuer;
-        req.issuerSignature = _sign(ch, ISSUER_PK);
+        req.issuerSignature = _sign(_jointIssuerDigest(req), ISSUER_PK);
         req.bilateralConsentRef = keccak256("consent");
         vm.expectRevert(AttestationRegistry.InvalidParties.selector);
         reg.assertJointAgreement(req);
@@ -252,7 +278,7 @@ contract AttestationRegistryTest is Test {
         req.party1 = subject;
         req.party2 = subject;
         req.issuer = issuer;
-        req.issuerSignature = _sign(ch, ISSUER_PK);
+        req.issuerSignature = _sign(_jointIssuerDigest(req), ISSUER_PK);
         req.bilateralConsentRef = keccak256("consent");
         vm.expectRevert(AttestationRegistry.InvalidParties.selector);
         reg.assertJointAgreement(req);
@@ -265,7 +291,8 @@ contract AttestationRegistryTest is Test {
         req.party1 = subject;
         req.party2 = party2;
         req.issuer = issuer;
-        req.issuerSignature = _sign(ch, SUBJECT_PK);
+        // correct digest, WRONG signer key → must revert InvalidIssuerSignature (ATT-1).
+        req.issuerSignature = _sign(_jointIssuerDigest(req), SUBJECT_PK);
         req.bilateralConsentRef = keccak256("consent");
         vm.expectRevert(AttestationRegistry.InvalidIssuerSignature.selector);
         reg.assertJointAgreement(req);
@@ -278,8 +305,8 @@ contract AttestationRegistryTest is Test {
         req.party1 = subject;
         req.party2 = party2;
         req.issuer = issuer;
-        req.issuerSignature = _sign(ch, ISSUER_PK);
         req.refUID = keccak256("ag-cmt");
+        req.issuerSignature = _sign(_jointIssuerDigest(req), ISSUER_PK);
         bytes32 cd = _consentDigest(subject, party2, req.refUID, ch);
         req.party1Signature = _sign(cd, SUBJECT_PK);
         req.party2Signature = _sign(cd, PARTY2_PK);

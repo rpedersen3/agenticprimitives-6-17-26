@@ -21,9 +21,10 @@ contract AgreementRegistryTest is Test {
         p2 = vm.addr(P2_PK);
     }
 
-    /// @dev Mirrors AgreementRegistry.TRANSITION_TYPEHASH (RW1-3).
-    bytes32 internal constant TRANSITION_TYPEHASH =
-        keccak256("AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier)");
+    /// @dev Mirrors AgreementRegistry.TRANSITION_TYPEHASH (RW1-3 / AGR-1).
+    bytes32 internal constant TRANSITION_TYPEHASH = keccak256(
+        "AgreementTransition(bytes32 agreementCommitment,uint8 toStatus,bytes32 nullifier,uint256 chainId,address verifyingContract)"
+    );
 
     /// @dev Mirrors AgreementRegistry.AGREEMENT_ISSUER_TYPEHASH (SC-1).
     bytes32 internal constant AGREEMENT_ISSUER_TYPEHASH = keccak256(
@@ -42,13 +43,13 @@ contract AgreementRegistryTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    /// @dev The canonical transition digest the contract recomputes (RW1-3).
+    /// @dev The canonical transition digest the contract recomputes (RW1-3 / AGR-1: chain + contract bound).
     function _transitionDigest(
         bytes32 commitment,
         uint8 toStatus,
         bytes32 nullifier
-    ) internal pure returns (bytes32) {
-        return keccak256(abi.encode(TRANSITION_TYPEHASH, commitment, toStatus, nullifier));
+    ) internal view returns (bytes32) {
+        return keccak256(abi.encode(TRANSITION_TYPEHASH, commitment, toStatus, nullifier, block.chainid, address(reg)));
     }
 
     function _buildPayload(
