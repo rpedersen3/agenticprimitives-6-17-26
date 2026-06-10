@@ -1,6 +1,8 @@
 # 12 — Agent registry, discovery & intents
 
 **Focus area:** how agents are registered, found, verified, and how work is expressed as intents and matched to agents. The fastest-moving category in the analysis — most entrants shipped 2025–2026.
+
+> **Strategic frame ([ADR-0038](../architecture/decisions/0038-many-registries-hypothesis-registry-building-primitives.md), 2026-06-10):** this document's per-product verdicts ("conform + register", "bridge") are **tactics**, not the strategy. We reject the assumption that ERC-8004, ANS, or HCS becomes "the" registry; the operating hypothesis is **hundreds of registry implementations, mostly vertical** (healthcare, travel, commerce, …), many with their own contracts. The substrate's strategic answer is a Ring 0 **registry kit** (FG-REG-10/11: generic SA-anchored registry contracts, discovery/registry SDK, published card + binding-proof standards) that those registries are *built from* — drawing concepts from ERC-8004/HCS as design inputs. The products below remain interop targets (via external layers, ADR-0037) and pattern sources.
 **AP packages in scope:** `agent-naming` (`.agent` protocol), `agent-profile`, `identity-directory` + adapters, `attestations` (verification), `agent-relationships`; intent-marketplace lineage from smart-agent branch `003-intent-marketplace-proposal`.
 **AP capability today:** canonical SA address as the identity anchor with names/profiles/ERC-8004 entries/ANS handles as *facets* (ADR-0010, spec 220); on-chain name registry + resolvers; directory adapters; relationship graph. **No ERC-8004 registration flow, no DNS-based discovery publication, no intent marketplace implementation yet.**
 

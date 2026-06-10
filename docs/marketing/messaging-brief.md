@@ -43,6 +43,25 @@ AI agents are getting wallets, names, registries, and payment rails **this year*
 - **Concrete over abstract.** "An agent can spend 50 USDC/day from the org treasury, revocable instantly" beats "flexible policy controls".
 - **Short sentences carry the punch.** Lead with the differentiated claim, then earn it.
 
+## The primitives-pure rule (ADR-0037 — architecture AND marketing)
+
+This repo is **Ring 0** of a three-ring ecosystem: pure primitives here; composable **integration layers** (ERC-8004 sync, ANS/DNS bridges, HCS publishers, indexers, discovery APIs) and **product/UX layers** (explorers, consoles, white-label sites) live in external repos that import `@agenticprimitives/*`, never the reverse.
+
+Marketing consequences:
+
+- **Never market integration breadth as this repo's feature.** Our claim is coherence-of-primitives; breadth is the ecosystem's story.
+- **Never name the sibling-lab repos in marketing copy or READMEs.** They are internal reference points (idea sources, pattern lineage) cited in ADRs and architecture/feature-analysis docs only — not proof points, not a public ecosystem catalog.
+- Standards (ERC-8004, ANS, HCS, OASF, MCP Registry) are named as **interop targets the primitives are designed to be projected into** — never as in-repo bridges, never as "coming soon" integrations.
+- The differentiation framing: competitors ship integrations without primitives; we ship primitives that make every integration a thin, replaceable layer.
+
+## The many-registries rule (ADR-0038 — strategy AND marketing)
+
+We do not believe ERC-8004, ANS, or HCS will be "the" registry. The hypothesis: **hundreds of registry implementations, mostly vertical** (healthcare, travel, commerce, professional, jurisdictional), each with its own membership rules and schemas. So the claim is never "we're listed in the winning registry" — it is:
+
+> **agenticprimitives is what agent registries are built from.** A vertical registry is ~20% registry-specific policy and ~80% trust plumbing — identity, custody, signed claims, reputation, revocation, audit — and that 80% is this substrate. One agent, one Smart Agent address, *n* registry facets.
+
+Marketing consequences: position the registry kit (contracts + discovery SDK + published card/binding standards) as the category answer; name ERC-8004/HCS as *concept sources* the kit draws from, never as the platforms we ride; registry proliferation is framed as our tailwind, not fragmentation risk.
+
 ## Hard constraints (non-negotiable)
 
 - **ADR-0021:** `packages/*` stay generic — no vertical vocabulary, no white-label/product names, no hostnames, no deployment specifics. Package READMEs may be compelling, but the positioning is "generic trust building block", never branded vertical copy. (CI: `check:no-domain-in-packages`, `check:forbidden-terms`.)

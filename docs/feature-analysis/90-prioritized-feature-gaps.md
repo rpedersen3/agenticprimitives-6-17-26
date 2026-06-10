@@ -1,6 +1,10 @@
 # 90 — Prioritized feature gaps: substrate roadmap
 
 > Consolidated from docs 01–12. Organized **by layer**: `[Contracts]` and `[SDK]` are active and prioritized for execution; `[UX]` gaps are **recorded but parked** (deliberately not a current focus). Priorities: **P0** = production blocker, **P1** = strategic (this/next quarter), **P2** = important (on trigger or after P1), **P3** = watch.
+>
+> **Execution venue ([ADR-0037](../architecture/decisions/0037-primitives-pure-repo-external-integration-and-ux-layers.md)):** this repo ships primitives only; integration layers (protocol bridges, registry sync, indexers, discovery APIs) and product/UX layers are built in **external repos** (`agentic-trust`, `agent-indexer`, `agent-explorer`, `oasf`, …). Gaps below marked **⤴ external** stay on this roadmap as ecosystem priorities, but their code lands outside this repo — what lands *here* is only their Ring 0 prerequisites (expressive schemas, SA-signed payloads, complete events, stable read interfaces). All `[UX]` gaps are external by definition.
+>
+> **⤴ external (Ring 1):** FG-REG-1 (8004 sync — `agentic-trust`), FG-REG-2's publication half (card *signing* stays here), FG-REG-3 (ANS bridge), FG-REG-6 (DNS-AID), FG-REG-8 (HCS/UAID), FG-DIR-1/FG-DIR-2 (discovery surfaces), FG-AUD-1 (indexer — `agent-indexer`), FG-ONT-3's OASF mapping (`oasf`), FG-VC-4's Veramo half, FG-MCP-1's MCP Registry publication, FG-ENT-1/FG-ENT-2 (enterprise connectors), FG-SDK-5 (onramps), FG-PM-3's bundler-service half.
 
 ## Executive summary — the ten moves that matter most
 
@@ -9,10 +13,10 @@
 | 1 | Close the four **P0 contract** items (label normalization, ERC-7562 paymaster validation, paymaster ownership, ATT-1 issuer binding) | `[Contracts]` | Mainnet blockers per the [contract audit](../audits/2026-06-10-contract-by-contract-audit.md) |
 | 2 | Close the three **P0 SDK** custody items (KMS/HSM signing, custody evidence, mandatory session-delegation binding) | `[SDK]` | Production custody is the substrate's credibility |
 | 3 | **AP CLI + agent-skills packs** (`npx skills add agenticprimitives/agent-skills`) | `[SDK]` | MetaMask Agent Wallet just proved the distribution channel (doc 02/08); near-zero-cost adoption by every skills-capable framework |
-| 4 | **ERC-8004 registration flow** — every Smart Agent gets an 8004 identity owned by its SA; port sibling-lab agentic-trust's `erc8004-sdk` + Veramo work instead of rebuilding | `[SDK]` | Standard went live on mainnet 2026-01-29; the registry layer is being settled *now* (doc 12) |
-| 5 | **Signed agent-card bundle** (one SA-attested card serving A2A + 8004 `agentURI` + ANS) | `[SDK]` | Convergence point of registry/discovery; nobody ships verifiable cards (doc 12) |
-| 6 | **GoDaddy ANS bridge** (DNS/X.509 identity ↔ SA cross-proof) | `[SDK]` | ANS is winning enterprise discovery (MuleSoft); dual-rooted identity is a unique position (doc 12) |
-| 7 | **AP indexer** (Ponder/subgraph) for all registries | `[SDK]` | Closes ADR-0012's open half; prerequisite for explorers, timelines, reputation (doc 10) |
+| 4 | **ERC-8004 registration flow** ⤴ external (`agentic-trust`) — every Smart Agent gets an 8004 identity owned by its SA; this repo's part is the attestation/card primitives 8004 projects from | `[SDK]` | Standard went live on mainnet 2026-01-29; the registry layer is being settled *now* (doc 12) |
+| 5 | **Signed agent-card bundle** — SA-attested (ERC-1271) card *primitive* here; A2A/8004 `agentURI`/ANS publication ⤴ external | `[SDK]` | Convergence point of registry/discovery; nobody ships verifiable cards (doc 12) |
+| 6 | **GoDaddy ANS bridge** ⤴ external — cross-proof *attestation schema* here; DNS/X.509 plumbing outside | `[SDK]` | ANS is winning enterprise discovery (MuleSoft); dual-rooted identity is a unique position (doc 12) |
+| 7 | **AP indexer** ⤴ external (`agent-indexer`) — this repo ships event completeness (FG-AUD-4) + ABIs | `[SDK]` | Closes ADR-0012's open half; prerequisite for explorers, timelines, reputation (doc 10) |
 | 8 | **Cumulative budget enforcer** + quorum nonces | `[Contracts]` | Per-call-vs-cumulative is the delegation model's biggest semantic hole (DM-1/DM-2/EN-22); prerequisite for agent payments (docs 04/09) |
 | 9 | **MCP Authorization conformance + delegated-authority MCP profile** | `[SDK]` | Conform on OAuth table stakes, then publish the spec that makes AP the delegation layer for MCP (doc 08) |
 | 10 | **x402 integration** under spend caveats | `[SDK]` | Delegation-scoped machine payments is a combination no one ships (doc 09) |
@@ -34,6 +38,7 @@
 
 | ID | Gap | Source doc | Evidence |
 | --- | --- | --- | --- |
+| FG-REG-10 | **Registry kit (contracts + standards)** — generic SA-anchored registry base: entry owner IS a Smart Agent, pluggable membership/validation hooks, typed claim slots over `attestations`, lifecycle (expiry/renew/revoke), complete events; + published card-schema/binding-proof specs | 12, [ADR-0038](../architecture/decisions/0038-many-registries-hypothesis-registry-building-primitives.md) | Many-registries hypothesis; ERC-8004 + HCS as design inputs |
 | FG-DELEG-1 | Stateful **cumulative/periodic budget enforcer** (caps across redemptions) | 04, 09 | audit DM-1/EN-22; AP2 mandates; MetaMask Guard Mode |
 | FG-SEC-9 | Nonce/expiry in quorum + approved-hash signatures | 04 | audit DM-2/EN-13 |
 | FG-CON-STD-1 | ERC-7715/7710-compatible permission + delegation encoding | 02, 04 | MetaMask Delegation Framework |
@@ -80,8 +85,9 @@
 
 | ID | Gap | Source doc | Evidence |
 | --- | --- | --- | --- |
+| FG-REG-11 | **Registry kit (SDK)** — discovery + registry client/server kit working against *any* kit-built registry: register/resolve/query interfaces, signed-card production/verification, domain-bound claim verification, skill-term matching | 12, ADR-0038 | Pairs with FG-REG-10; generalizes FG-REG-2's signing half |
 | FG-SDK-1 | **AP CLI (structured JSON) + agent-skills packs** for Claude Code/Cursor/Codex/OpenClaw | 02, 08 | MetaMask `mm` CLI + agent-skills; skills.sh |
-| FG-REG-1 | **ERC-8004 registration/sync** (SA-owned identity token, agentURI lifecycle, reputation/validation adapters) — port agentic-trust `erc8004-sdk` | 12 | ERC-8004 mainnet, 8004scan, agentic-trust |
+| FG-REG-1 | **ERC-8004 registration/sync** (SA-owned identity token, agentURI lifecycle, reputation/validation adapters) ⤴ external — becomes a reference consumer of the registry kit | 12 | ERC-8004 mainnet, 8004scan |
 | FG-REG-2 | **Signed agent-card bundle** (A2A + 8004 + ANS from one SA-attested card) | 12 | A2A, ERC-8004, GoDaddy ANS |
 | FG-REG-3 | **GoDaddy ANS bridge** (X.509 ↔ SA cross-proof, DNS publication) | 12 | ANS + MuleSoft Agent Fabric |
 | FG-AUD-1 | **AP indexer** (Ponder/subgraph) for all registries — closes ADR-0012 | 10 | The Graph, Ponder |

@@ -103,9 +103,17 @@ agenticprimitives/
 └── scripts/          # CI guardrails + dev orchestration
 ```
 
+## Pure primitives by design — integrations live above, on purpose
+
+This repo is deliberately **only the primitive layer** ([ADR-0037](docs/architecture/decisions/0037-primitives-pure-repo-external-integration-and-ux-layers.md)). Composable integration layers — ERC-8004 registration/sync, ANS/DNS bridges, HCS publishers, indexers, discovery APIs — and product/UX layers are built in **external repos that import these packages**, never the reverse.
+
+That's the strategy, not a limitation: competitors ship integrations without primitives; we ship primitives that make every integration a thin, replaceable layer. The repo's job is to make the primitives **expressive enough to be projected into any registry, naming system, or discovery surface** — SA-signed cards, typed attestations, complete indexable events — so the layers above stay thin.
+
+The same logic sets our registry strategy ([ADR-0038](docs/architecture/decisions/0038-many-registries-hypothesis-registry-building-primitives.md)): we don't bet on any single agent registry winning. We expect **hundreds of registries — most of them vertical** (healthcare, travel, commerce, professional) — and a registry is ~20% membership policy and ~80% trust plumbing: identity, custody, signed claims, reputation, revocation, audit. That 80% is this substrate. The goal is to be **what agent registries are built from**: one agent, one Smart Agent address, *n* registry facets.
+
 ## Standards as facets, not integrations
 
-Standards are implemented at the primitive boundary as facets of the Smart Agent anchor — not as one-off app integrations:
+Standards are implemented at the primitive boundary as facets of the Smart Agent anchor — designed to be projected into each surface by the layer above, not bridged one-off from inside:
 
 **CAIP-10** identifiers · **ERC-4337** accounts · **ERC-7579** modules · **ERC-1271** signatures · **EIP-712** typed commitments · **ERC-7710-style** caveated delegation · **ERC-8004** agent registries (interop target — registry records map onto the SA anchor) · **HCS-11/HCS-14** + Hashgraph Online (profile/UAID interop) · **MCP + A2A** (tool and agent endpoints consume the same delegation substrate) · **SKOS/SHACL** semantic vocabularies.
 
@@ -122,4 +130,4 @@ Because we build the trust substrate natively — our own multi-sig, our own del
 
 ## Provenance
 
-Capabilities are extracted from [`smart-agent`](https://github.com/agentictrustlabs/smart-agent) and re-shaped as standalone, dependency-minimal packages. Boundaries and features are validated against the landscape they compete in — MetaMask DTK + Agent Wallet, Safe, ZeroDev, Alchemy, Pimlico, Turnkey, Privy, Lit, ERC-8004 tooling, GoDaddy ANS, Hashgraph Online, MCP + A2A SDKs — documented per focus area in [`docs/feature-analysis/`](docs/feature-analysis/index.md). Fewer glued products. More coherent primitives.
+Capabilities are extracted from earlier in-lab prototype work and re-shaped as standalone, dependency-minimal packages. Boundaries and features are validated against the landscape they compete in — MetaMask DTK + Agent Wallet, Safe, ZeroDev, Alchemy, Pimlico, Turnkey, Privy, Lit, ERC-8004 tooling, GoDaddy ANS, Hashgraph Online, MCP + A2A SDKs — documented per focus area in [`docs/feature-analysis/`](docs/feature-analysis/index.md). Fewer glued products. More coherent primitives.

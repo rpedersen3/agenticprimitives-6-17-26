@@ -21,6 +21,7 @@
 | 11 | [Ontology, skills, semantics & entitlements](11-ontology-skills-entitlements.md) | Vocabularies, skill taxonomies, SHACL validation, entitlements | `ontology`, `agent-skills`, `geo-features`, `tool-policy` |
 | 12 | [**Agent registry, discovery & intents**](12-agent-registry-discovery-intents.md) | ERC-8004, GoDaddy ANS, DNS-AID, agent cards, intent protocols | `agent-naming`, `agent-profile`, `identity-directory`, `attestations` |
 | 90 | [**Prioritized feature gaps — substrate roadmap**](90-prioritized-feature-gaps.md) | Consolidated, prioritized gap list across all focus areas | all |
+| 91 | [**Next push: discovery → intent → outcome**](91-next-push-discovery-to-outcomes.md) | The recommended next feature wave (signed cards, skills, intents, budget enforcers) under ADR-0037 venue rules | `agent-profile`, `agent-skills`, `intent-*`, `fulfillment`, `delegation`, `contracts` |
 
 ## Feature taxonomy (used in every document)
 
@@ -63,6 +64,8 @@
 | **UX/product** | `[UX]` | Hosted components, consoles, dashboards, onboarding flows, admin UIs, explorers | **DEFERRED — parked, not current focus** |
 
 Each focus-area document ends with a **per-layer rollup** (Contracts gaps, SDK/package gaps, then UX gaps in a clearly-separated deferred section). The [prioritized roadmap (90)](90-prioritized-feature-gaps.md) is organized the same way: Contracts and SDK gaps are prioritized for execution; UX gaps are recorded but parked.
+
+**Execution venue ([ADR-0037](../architecture/decisions/0037-primitives-pure-repo-external-integration-and-ux-layers.md)):** a gap being on this roadmap does not mean its code lands in this repo. Protocol bridges, registry sync, indexers, discovery APIs, and all UX surfaces are built in external repos (`agentic-trust`, `agent-indexer`, `agent-explorer`, `oasf`, …) that compose `@agenticprimitives/*`; this repo only grows the primitive surface they project from. Doc 90 marks these **⤴ external**.
 
 ## Verdict legend
 
