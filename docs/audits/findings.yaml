@@ -296,6 +296,7 @@ findings:
     status: closed
     concerns: [packages/contracts/src/AgentAccountFactory.sol]
     anchor: _effectiveSalt
+    enforcement: production-enforced
     origin: 2026-06-10-contract-by-contract-audit.md
     tests:
       - packages/contracts/test/AgentAccountFactoryMode.t.sol
@@ -328,6 +329,7 @@ findings:
     status: closed
     concerns: [packages/contracts/src/naming/AgentNameRegistry.sol]
     anchor: _validateLabel
+    enforcement: production-enforced
     origin: 2026-06-10-contract-by-contract-audit.md
     tests:
       - packages/contracts/test/naming/AgentNameRegistry.t.sol
@@ -363,6 +365,7 @@ findings:
     status: closed
     concerns: [packages/contracts/src/attestation/AttestationRegistry.sol]
     anchor: JOINT_ISSUER_TYPEHASH
+    enforcement: production-enforced
     origin: 2026-06-10-contract-by-contract-audit.md
     tests:
       - packages/attestations/test/unit/cross-stack-consent-typehash.test.ts
