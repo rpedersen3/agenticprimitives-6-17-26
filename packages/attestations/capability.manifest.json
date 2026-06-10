@@ -78,6 +78,8 @@
     "computeAttestationUid",
     "JOINT_CONSENT_TYPEHASH",
     "jointConsentDigest",
+    "JOINT_ISSUER_TYPEHASH",
+    "jointIssuerDigest",
     "AssociationAttestationRequest",
     "JointAgreementAttestationRequest",
     "ASSOCIATION_ATTESTATION_TYPEHASH",
