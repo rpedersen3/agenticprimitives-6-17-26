@@ -3,8 +3,8 @@
  *
  * Threat: an attacker OBSERVES a delegation token in flight, extracts the embedded `delegation`
  * (delegator = the victim's SA), and tries to re-mint a token signed with the ATTACKER's own session
- * key — impersonating the delegator. With `requireSessionDelegateBinding` on, every such attempt must
- * fail, because the token must carry a `sessionDelegation` leaf that (a) binds to the victim SA as
+ * key — impersonating the delegator. With binding enforced by default (ADR-0036), every such attempt
+ * must fail, because the token must carry a `sessionDelegation` leaf that (a) binds to the victim SA as
  * delegator, (b) names the PRESENTING session key as delegate, and (c) is signed by the victim SA
  * (validated via the UniversalSignatureValidator). The attacker controls none of those.
  *
@@ -130,7 +130,8 @@ const opts = () => ({
   toolName: 'get_profile',
   jtiStore: memoryJti(),
   universalSignatureValidator: USV,
-  requireSessionDelegateBinding: true,
+  // DEL-001 (ADR-0036): binding is enforced BY DEFAULT now — no opt-in flag. This suite proves the
+  // observe-and-re-mint attack fails with the default config (the whole point of the flip).
 });
 
 describe('DEL-001 — observe-and-re-mint attack is rejected', () => {

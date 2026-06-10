@@ -3,7 +3,8 @@
  *
  * Covers the UniversalSignatureValidator branch (one `isValidSig` surface for ERC-1271 /
  * ERC-6492 / ECDSA, so the verifier never branches on how the user connected) and the
- * DEL-001 session-delegate binding when it is enforced (`requireSessionDelegateBinding`).
+ * DEL-001 session-delegate binding, now enforced fail-closed BY DEFAULT (ADR-0036 — the
+ * `allowUnboundSessionToken: true` opt-out is the only way to accept an unbound token).
  * The leaf binds to the DELEGATOR (v4): `leaf.delegator === delegation.delegator` and
  * `leaf.delegate === sessionKeyAddress`, validated through the USV.
  *
@@ -142,6 +143,9 @@ describe('verifyDelegationToken — spec 270 v4 UniversalSignatureValidator', ()
       ...baseOpts,
       jtiStore: memoryJti(),
       universalSignatureValidator: USV,
+      // This test exercises DELEGATION validation via the USV (a leafless token), not the binding —
+      // binding is enforced by default now (ADR-0036), so opt out here. The next test covers binding.
+      allowUnboundSessionToken: true,
     });
     expect(result).toMatchObject({ principal: SMART_ACCOUNT });
     // The connection-agnostic surface is used; the legacy deployed-ERC-1271 path is NOT.
@@ -178,7 +182,6 @@ describe('verifyDelegationToken — spec 270 v4 UniversalSignatureValidator', ()
       ...baseOpts,
       jtiStore: memoryJti(),
       universalSignatureValidator: USV,
-      requireSessionDelegateBinding: true,
     });
     expect(result).toMatchObject({ principal: SMART_ACCOUNT });
     const usvCalls = publicClient.readContract.mock.calls.filter(
@@ -198,7 +201,6 @@ describe('verifyDelegationToken — spec 270 v4 UniversalSignatureValidator', ()
       ...baseOpts,
       jtiStore: memoryJti(),
       universalSignatureValidator: USV,
-      requireSessionDelegateBinding: true,
     });
     expect(result).toMatchObject({ error: expect.stringContaining('session-delegation required') });
   });
@@ -215,7 +217,6 @@ describe('verifyDelegationToken — spec 270 v4 UniversalSignatureValidator', ()
       ...baseOpts,
       jtiStore: memoryJti(),
       universalSignatureValidator: USV,
-      requireSessionDelegateBinding: true,
     });
     expect(result).toMatchObject({ error: expect.stringContaining('not the session-delegation delegate') });
   });
@@ -233,7 +234,6 @@ describe('verifyDelegationToken — spec 270 v4 UniversalSignatureValidator', ()
       ...baseOpts,
       jtiStore: memoryJti(),
       universalSignatureValidator: USV,
-      requireSessionDelegateBinding: true,
     });
     expect(result).toMatchObject({ error: expect.stringContaining('session-delegation signature validation failed') });
   });

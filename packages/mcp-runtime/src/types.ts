@@ -54,20 +54,14 @@ export interface McpResourceVerifyConfig {
    */
   enforceOnChain?: boolean;
   /**
-   * DEL-001 (spec 270 v4) — require the token to carry a valid `sessionDelegation` leaf binding the
-   * presenting session key to the DELEGATOR (the principal's canonical SA). Threaded into
-   * `verifyDelegationToken`'s `requireSessionDelegateBinding`. The consumer sets this per-call for
-   * client-minted tokens (where the relying app, not the trusted relayer, signed the token), closing
-   * the observe-and-re-mint vector. Default off (non-client-minted / legacy tokens are unaffected).
+   * DEL-001 (ADR-0036) — explicit opt-OUT of the session-key↔delegator binding, threaded into
+   * `verifyDelegationToken`'s `allowUnboundSessionToken`. Binding is ENFORCED BY DEFAULT (fail-closed):
+   * a tool whose resource verify config sets nothing rejects any token lacking a valid `sessionDelegation`
+   * leaf, closing the observe-and-re-mint vector even if a route forgets to configure it. Set `true` ONLY
+   * for an explicit legacy / non-client-minted (trusted-relayer / persona) resource that accepts unbound
+   * tokens. The greppable escape hatch.
    */
-  requireSessionDelegateBinding?: boolean;
-  /**
-   * DEL-001 fail-closed guard (P0-2). Threaded into `verifyDelegationToken`'s `strictSessionBinding`:
-   * when `true`, the verify THROWS unless `requireSessionDelegateBinding` is also `true`. Set it on a
-   * client-minted / production resource so a regression that drops the binding flag fails LOUD instead
-   * of silently re-opening the re-mint vector. App-declared (not NODE_ENV); additive.
-   */
-  strictSessionBinding?: boolean;
+  allowUnboundSessionToken?: boolean;
   /**
    * DEL-001 (spec 270 v4) — the deployed `UniversalSignatureValidator` address. When set, the
    * delegation AND the `sessionDelegation` leaf signatures are validated through it (ERC-1271 deployed /

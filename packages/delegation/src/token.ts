@@ -491,16 +491,6 @@ export async function verifyDelegationToken(
   token: string,
   opts: VerifyOptsExt,
 ): Promise<{ principal: Address; grants?: DataScopeGrant[] } | VerifyError> {
-  // DEL-001 fail-closed guard (P0-2): a path that declares itself strict MUST enforce the binding.
-  // This is a configuration error (integrator mistake), so we THROW rather than soft-reject — it can't
-  // be silently swallowed as "just another invalid token." Closes the audit's "critical control is a
-  // per-call soft option that a route can forget" concern for any verifier that opts into strict.
-  if (opts.strictSessionBinding && !opts.requireSessionDelegateBinding) {
-    throw new Error(
-      'DEL-001: strictSessionBinding requires requireSessionDelegateBinding=true — a strict/production ' +
-        'verify path must enforce the session-delegate binding, not leave it optional.',
-    );
-  }
   // Audit emit helper (audit C3 pass 3b). Fail-soft: an emit failure
   // never breaks the verify flow.
   const emit = async (
@@ -655,7 +645,9 @@ export async function verifyDelegationToken(
   // delegate IS the presenting session key, signed by that SA. The signature is validated through the
   // UniversalSignatureValidator (ERC-1271 / ERC-6492 / ECDSA), so it works for ANY connection strategy and
   // an attacker can't forge the SA's authorization of THEIR key. `principal` stays `delegation.delegator`.
-  if (opts.requireSessionDelegateBinding) {
+  // DEL-001 (ADR-0036): binding is ENFORCED BY DEFAULT — fail-closed. Only an explicit
+  // `allowUnboundSessionToken: true` (legacy / non-client-minted path) skips it.
+  if (!opts.allowUnboundSessionToken) {
     // Chain-free checks: leaf present, delegator-link, delegate === presenting session key.
     const bindErr = sessionDelegateBindingError(claims.delegation, claims.sessionDelegation, recovered);
     if (bindErr) return rejectWith(bindErr, claims.delegation.delegator, eip712Hash);

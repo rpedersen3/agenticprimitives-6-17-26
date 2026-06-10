@@ -112,6 +112,9 @@ const baseOpts = {
     allowedMethods: '0x0000000000000000000000000000000000000003' as Address,
   },
   toolName: 'get_profile',
+  // DEL-001 (ADR-0036): binding is enforced by default now; these legacy fixtures have no
+  // sessionDelegation leaf, so this suite (which exercises the requireDeployed branch) opts out.
+  allowUnboundSessionToken: true as boolean,
 };
 
 describe('verifyDelegationToken — requireDeployed branch', () => {
@@ -148,31 +151,16 @@ describe('verifyDelegationToken — requireDeployed branch', () => {
     expect(result).toMatchObject({ error: expect.stringContaining('not deployed') });
   });
 
-  // DEL-001 fail-closed guard (P0-2): a path that declares itself strict MUST enforce the binding.
-  it('THROWS a config error when strictSessionBinding=true but requireSessionDelegateBinding is not set', async () => {
+  // DEL-001 (ADR-0036): binding is enforced by DEFAULT; the canonical "rejects when no leaf" case lives
+  // in verify-universal-validator.test.ts. Here we just prove the explicit legacy opt-out path works.
+  it('SKIPS the binding check when allowUnboundSessionToken=true (explicit legacy opt-out)', async () => {
+    publicClient.getCode.mockResolvedValue('0x1234');
     const token = await mintFixtureToken();
-    await expect(
-      verifyDelegationToken(token, {
-        ...baseOpts,
-        jtiStore: memoryJti(),
-        strictSessionBinding: true,
-        // requireSessionDelegateBinding intentionally omitted — the footgun the guard closes.
-      }),
-    ).rejects.toThrow(/strictSessionBinding requires requireSessionDelegateBinding/);
-  });
-
-  it('does NOT throw the strict config error when both strict + binding are set (proceeds to verify)', async () => {
-    publicClient.getCode.mockResolvedValue('0x');
-    const token = await mintFixtureToken();
-    // With both set, the guard passes; verification proceeds (and rejects on the missing leaf as a
-    // VerifyError object — NOT a thrown config error). We only assert it didn't throw the guard.
-    const result = await verifyDelegationToken(token, {
-      ...baseOpts,
-      jtiStore: memoryJti(),
-      strictSessionBinding: true,
-      requireSessionDelegateBinding: true,
-    });
-    expect(result).toBeDefined();
+    // baseOpts already sets allowUnboundSessionToken: true → verification proceeds past binding
+    // (it may still reject later for other fixture reasons, but NOT on the missing leaf).
+    const result = await verifyDelegationToken(token, { ...baseOpts, jtiStore: memoryJti() });
+    const err = (result as { error?: string }).error;
+    expect(err === undefined || !/session-delegation/i.test(err)).toBe(true);
   });
 
   it('tolerates undeployed delegator when requireDeployed=false (explicit opt-in)', async () => {

@@ -47,19 +47,19 @@ findings:
     anchor: sessionDelegateBindingError
     tests:
       - packages/delegation/test/unit/verify-universal-validator.test.ts
-    enforcement: test-covered
+      - packages/delegation/test/unit/remint-attack.test.ts
+    enforcement: production-enforced
     origin: archive/2026-06-09/2026-06-09-independent-package-audit.md
     note: >
       v4 binds the session-delegation leaf to the DELEGATOR (the principal SA) and validates via the
-      UniversalSignatureValidator (connection-agnostic). PER-SOURCE enforcement is live: demo-jp
-      client-mints the leaf-bound token, demo-a2a forwards with enforceBinding, demo-mcp sets
-      requireSessionDelegateBinding, and the production deploy preflight (#272) refuses to ship if that
-      chain is removed. ENFORCEMENT-PENDING (not yet production-enforced) because the LIBRARY default is
-      still opt-in (requireSessionDelegateBinding default-off for legacy/non-client-minted tokens) — a
-      verifier that forgets the flag silently allows the observe-and-re-mint class. mcp-runtime now
-      exposes a fail-closed `strictSessionBinding` construction guard (throws if strict declared without
-      binding), but flipping the GLOBAL library default to fail-closed is a separate ADR (every mint
-      path must migrate). Until that lands, enforcement is per-source, NOT universal. spec 270 v4.
+      UniversalSignatureValidator (connection-agnostic). The LIBRARY default is now fail-closed
+      (ADR-0036): verifyDelegationToken rejects any token lacking a valid sessionDelegation leaf unless
+      the caller passes the explicit, greppable opt-out `allowUnboundSessionToken: true`. The prior
+      opt-in flags (requireSessionDelegateBinding / strictSessionBinding) are removed — a verifier that
+      configures nothing is now SAFE by default, closing the observe-and-re-mint class universally
+      instead of per-source. mcp-runtime threads the same opt-out through McpResourceVerifyConfig;
+      demo-mcp leaves it default (binding enforced) for the vault server and sets it true ONLY on the
+      documented persona/C-1 legacy hole. spec 270 v4.
 
   - id: SC-1
     severity: critical
@@ -171,7 +171,8 @@ findings:
       enforcement was weaker than the invariant (e.g. DEL-001's binding default-off). Added an orthogonal
       `enforcement` dimension (code-present < test-covered < production-enforced < deployed); the freshness
       gate now REQUIRES it on every closed critical/high finding and surfaces any below production-enforced
-      as ENFORCEMENT-PENDING. DEL-001 is reclassified test-covered (enforcement-pending) accordingly.
+      as ENFORCEMENT-PENDING. (DEL-001 was reclassified test-covered under this gate; ADR-0036 then flipped
+      the library default to fail-closed, promoting it to production-enforced.)
   - id: CON-FACTORY-001
     severity: high
     title: factory + paymaster governance held by the disclosed testnet deployer EOA

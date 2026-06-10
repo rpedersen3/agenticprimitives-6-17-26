@@ -24,9 +24,14 @@ addresses move because **every contract was redeployed** — the new factory is
 - **AN-1-ONCHAIN** — on-chain canonical label charset in `AgentNameRegistry`.
 - **SIG-1** — registries use malleability-safe OZ `ECDSA.tryRecover` (low-s).
 - **DM danger** — `verifyAuthorization` marked ⚠️ chain-only in NatSpec + the SDK.
-- **DEL-001 (P0-1)** — `@agenticprimitives/delegation` + `@agenticprimitives/mcp-runtime`
-  gain a fail-closed `strictSessionBinding` guard (throws if a strict path is
-  configured without the session-delegate binding).
+- **DEL-001 (P0-1, Critical)** — the session-key↔delegator binding in
+  `@agenticprimitives/delegation` is now **fail-closed by default** (ADR-0036):
+  `verifyDelegationToken` rejects any token lacking a valid `sessionDelegation` leaf
+  unless the caller passes the explicit, greppable `allowUnboundSessionToken: true`
+  opt-out. `@agenticprimitives/mcp-runtime` threads the same opt-out through
+  `McpResourceVerifyConfig`. **Breaking:** the prior opt-in flags
+  (`requireSessionDelegateBinding`, `strictSessionBinding`) are removed — callers that
+  minted unbound tokens must set `allowUnboundSessionToken: true` or they fail closed.
 
 `@agenticprimitives/verifiable-credentials` + the first publish of
 `@agenticprimitives/a2a` (async delegation-authorized task transport) are bumped to

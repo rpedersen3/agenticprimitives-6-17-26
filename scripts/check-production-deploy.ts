@@ -142,11 +142,12 @@ function fail(audit: string, check: string, message: string) {
 
 // ─── C4.7: DEL-001 session-delegate binding MUST be enforced for client-mint ─
 //
-// The audit's #1 P0: binding must be MANDATORY in production, not an optional flag. We refuse the
-// production deploy if the enforcement chain is missing — the relying app (demo-a2a) must flag every
-// client-minted vault call (`enforceBinding: true`), demo-mcp must enforce the binding
-// (`requireSessionDelegateBinding`) AND fail closed if asked to enforce without a UniversalSignatureValidator.
-// Removing any of these markers makes the deploy fail here, so the binding can't silently be disabled.
+// The audit's #1 P0: binding must be MANDATORY in production. Since ADR-0036 the delegation library
+// enforces binding BY DEFAULT (fail-closed) — the explicit `allowUnboundSessionToken: true` opt-out is
+// the only way to accept an unbound token. We refuse the production deploy if the client-mint vault path
+// is found opting OUT, or if the fail-closed-without-validator guard or the relying-app flag is missing.
+// The vault config must keep binding on (`allowUnboundSessionToken: false`, overriding the persona path's
+// documented opt-out) AND fail closed if asked to enforce without a UniversalSignatureValidator.
 
 (function checkDel001BindingEnforced() {
   const mcp = join(REPO_ROOT, 'apps', 'demo-mcp', 'src', 'index.ts');
@@ -155,9 +156,12 @@ function fail(audit: string, check: string, message: string) {
   const mcpText = readFileSync(mcp, 'utf8');
   const a2aText = readFileSync(a2a, 'utf8');
 
-  if (!/requireSessionDelegateBinding:\s*true/.test(mcpText)) {
+  // The client-mint vault path must explicitly KEEP binding on (allowUnboundSessionToken: false),
+  // overriding the persona/base config's documented C-1 opt-out. Its absence means the vault path would
+  // inherit the persona opt-out and verify client-minted tokens WITHOUT the DEL-001 binding.
+  if (!/allowUnboundSessionToken:\s*false/.test(mcpText)) {
     fail('C4', 'del001-binding-not-enforced',
-      'apps/demo-mcp/src/index.ts no longer sets requireSessionDelegateBinding: true — client-minted vault tokens would not be bound to the delegator (DEL-001 reopens).');
+      'apps/demo-mcp/src/index.ts vault config no longer sets allowUnboundSessionToken: false — client-minted vault tokens would inherit the persona opt-out and not be bound to the delegator (DEL-001 reopens).');
   }
   // demo-mcp must FAIL CLOSED if asked to enforce binding without a validator (not silently skip).
   if (!/UNIVERSAL_SIGNATURE_VALIDATOR[\s\S]{0,400}throw|binding enforcement requested but UNIVERSAL_SIGNATURE_VALIDATOR/.test(mcpText)) {
