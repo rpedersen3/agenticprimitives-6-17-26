@@ -26,25 +26,51 @@ import { evaluateCaveats } from './evaluator';
 import { buildEvent, type AuditSink } from '@agenticprimitives/audit';
 
 // ─── base64url + canonical JSON helpers ──────────────────────────────────
+//
+// ISOMORPHIC base64 — `btoa`/`atob` + `TextEncoder/Decoder` are available in every target runtime
+// (browser, Cloudflare Workers, Node ≥16). Node's `Buffer` is NOT defined in the browser, and demo-jp
+// now mints tokens CLIENT-SIDE (spec 270 v4 client-mint), so a `Buffer.from(...)` here threw
+// `ReferenceError: Buffer is not defined` before any network call. The byte output is identical to the
+// old Buffer path (standard base64), so existing signatures still verify — byte-stability is a SECURITY
+// invariant (see `canonicalJSON`), and standard base64 is the same across all runtimes.
+
+function bytesToBase64url(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64urlToBytes(s: string): Uint8Array {
+  let padded = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (padded.length % 4) padded += '=';
+  const bin = atob(padded);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
 
 function base64urlEncode(s: string): string {
-  return Buffer.from(s, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return bytesToBase64url(new TextEncoder().encode(s));
 }
 
 function base64urlDecodeStr(s: string): string {
-  let padded = s.replace(/-/g, '+').replace(/_/g, '/');
-  while (padded.length % 4) padded += '=';
-  return Buffer.from(padded, 'base64').toString('utf8');
+  return new TextDecoder().decode(base64urlToBytes(s));
 }
 
 function base64urlEncodeBytes(b: Uint8Array): string {
-  return Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return bytesToBase64url(b);
 }
 
 function base64urlDecodeBytes(s: string): Uint8Array {
-  let padded = s.replace(/-/g, '+').replace(/_/g, '/');
-  while (padded.length % 4) padded += '=';
-  return new Uint8Array(Buffer.from(padded, 'base64'));
+  return base64urlToBytes(s);
+}
+
+/** Isomorphic hex → bytes (replaces `Buffer.from(hex, 'hex')`, which is Node-only). */
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const out = new Uint8Array(clean.length >> 1);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16);
+  return out;
 }
 
 /** Sorted-key JSON; BigInt → numeric string. Both sides must produce the
@@ -201,7 +227,7 @@ export async function mintDelegationToken(
   const canonical = canonicalJSON(full);
   const sig = await signMessage(canonical);
   const sigHex = sig.startsWith('0x') ? sig.slice(2) : sig;
-  const sigBytes = new Uint8Array(Buffer.from(sigHex, 'hex'));
+  const sigBytes = hexToBytes(sigHex);
   const token = `${base64urlEncode(canonical)}.${base64urlEncodeBytes(sigBytes)}`;
   // Audit emit (C3 pass 3c). R11.1 / N16: NO try/catch around the sink
   // write — the sink composition (`composeSinks` fail-soft vs

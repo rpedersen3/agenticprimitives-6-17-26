@@ -235,7 +235,10 @@ export function App() {
         ]);
         if (cancelled) return;
         setImpact(i); setAdopterRecord(a); setFacilitatorRecord(f);
-      } catch {
+      } catch (e) {
+        // Surface the failure to the console — the UI shows "vault read failed" but JP never falls back
+        // (ADR-0013), so an operator/dev needs the actual error to diagnose.
+        console.error('[demo-jp member-vault hydrate failed]', e);
         if (!cancelled) setRecordsLoadFailed(true);
       } finally {
         if (!cancelled) setRecordsLoaded(true);
