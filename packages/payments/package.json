@@ -31,7 +31,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "test:unit": "vitest run test/unit --passWithNoTests",
     "test:watch": "vitest",
     "clean": "rm -rf dist"

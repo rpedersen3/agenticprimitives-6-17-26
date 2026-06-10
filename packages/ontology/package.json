@@ -38,7 +38,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run test/unit",
+    "test:unit": "vitest run test/unit --passWithNoTests",
     "test:integration": "vitest run test/integration --passWithNoTests",
     "test:watch": "vitest",
     "clean": "rm -rf dist"

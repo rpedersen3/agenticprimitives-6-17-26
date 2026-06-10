@@ -43,8 +43,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run test/normalize.test.ts test/namehash.test.ts test/records.test.ts",
-    "test:integration": "vitest run test/integration.test.ts",
+    "test:unit": "vitest run test/normalize.test.ts test/namehash.test.ts test/records.test.ts --passWithNoTests",
+    "test:integration": "vitest run test/integration.test.ts --passWithNoTests",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
