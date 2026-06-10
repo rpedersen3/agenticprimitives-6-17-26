@@ -492,9 +492,18 @@ findings:
   - id: EN-11
     severity: medium
     title: QuorumEnforcer threshold==0 passes with zero signatures (fail-open)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/enforcers/QuorumEnforcer.sol]
+    anchor: InvalidThreshold
+    enforcement: test-covered
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/QuorumEnforcer.t.sol
+    note: >
+      Fixed: beforeHook reverts InvalidThreshold when threshold==0 (which skipped the verify loop AND
+      made the `signatures.length < threshold*65` guard unreachable → passed with zero signatures) or
+      when threshold > signerSet.length (unsatisfiable). Fail-closed up front. 2 regression tests.
+      enforcement: test-covered (awaits the next Base Sepolia redeploy).
   - id: EN-13
     severity: medium
     title: QuorumEnforcer QUORUM_ACTION_TYPEHASH has no nonce/expiry (identical-call replay)

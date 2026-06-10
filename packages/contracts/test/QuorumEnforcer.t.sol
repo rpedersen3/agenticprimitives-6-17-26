@@ -455,4 +455,22 @@ contract QuorumEnforcerTest is Test {
         );
         enf.beforeHook(terms, args, bytes32(0), address(0), address(0), address(0), 0, "");
     }
+
+    // ─── EN-11 — degenerate quorum fails closed ─────────────────────
+
+    /// threshold == 0 previously skipped the verification loop AND made the
+    /// `signatures.length < 0` guard unreachable → a quorum caveat passed with
+    /// ZERO signatures. Now it fails closed.
+    function test_EN11_threshold_zero_reverts_with_zero_sigs() public {
+        bytes memory args = abi.encode(payloadHash, new bytes(0));
+        vm.expectRevert(abi.encodeWithSelector(QuorumEnforcer.InvalidThreshold.selector, uint8(0), uint256(3)));
+        enf.beforeHook(_terms(0), args, bytes32(0), address(0), address(0), address(0), 0, "");
+    }
+
+    /// A threshold larger than the signer set is unsatisfiable → reject up front.
+    function test_EN11_threshold_exceeds_signerSet_reverts() public {
+        bytes memory args = abi.encode(payloadHash, new bytes(0));
+        vm.expectRevert(abi.encodeWithSelector(QuorumEnforcer.InvalidThreshold.selector, uint8(4), uint256(3)));
+        enf.beforeHook(_terms(4), args, bytes32(0), address(0), address(0), address(0), 0, "");
+    }
 }

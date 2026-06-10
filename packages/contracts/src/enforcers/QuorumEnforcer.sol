@@ -82,6 +82,9 @@ contract QuorumEnforcer is ICaveatEnforcer {
     error UnauthorizedSigner(address signer);
     error DuplicateOrUnsortedSigner(address signer);
     error PayloadHashMismatch(bytes32 expected, bytes32 supplied);
+    /// @notice EN-11: a degenerate quorum caveat (threshold 0, or a threshold the
+    ///         signer set can never satisfy) must fail closed, not pass with zero sigs.
+    error InvalidThreshold(uint8 threshold, uint256 signerSetSize);
 
     /// @notice Typehash for the quorum-action binding (contract audit C-4).
     /// @dev Bound to (chainId, enforcer, delegationHash, delegator, redeemer,
@@ -134,6 +137,15 @@ contract QuorumEnforcer is ICaveatEnforcer {
         (address[] memory signerSet, uint8 threshold, address approvedHashRegistry) =
             abi.decode(terms, (address[], uint8, address));
         (bytes32 suppliedPayloadHash, bytes memory signatures) = abi.decode(args, (bytes32, bytes));
+
+        // EN-11: fail closed on a degenerate quorum. threshold == 0 would skip the
+        // verification loop entirely AND make `signatures.length < 0` unreachable, so
+        // the caveat would pass with ZERO signatures. A threshold larger than the
+        // signer set is unsatisfiable; reject it up front rather than running out of
+        // slots mid-loop.
+        if (threshold == 0 || threshold > signerSet.length) {
+            revert InvalidThreshold(threshold, signerSet.length);
+        }
 
         // Contract audit C-4: bind the signed payload to the actual
         // execution context. Previously the redeemer chose payloadHash
