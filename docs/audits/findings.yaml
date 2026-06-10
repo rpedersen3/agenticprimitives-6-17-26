@@ -558,9 +558,20 @@ findings:
   - id: GOV-1
     severity: medium
     title: immutable guardian can perpetually re-pause (permanent DoS, redeploy-only fix)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/governance/AgenticGovernance.sol]
+    anchor: setGuardian
+    enforcement: test-covered
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/governance/AgenticGovernance.t.sol
+    note: >
+      Fixed: the guardian (fast-pause) role moved from `immutable` to a storage var rotatable by the
+      timelock (`setGuardian`, onlyTimelock + non-zero). A compromised guardian that perpetually
+      re-pauses can now be rotated out after one timelock window WITHOUT a governance redeploy, so the
+      DoS is bounded instead of permanent. Declared after the existing storage vars so slots don't shift;
+      AgenticGovernance is not proxy-upgradeable (and not in the storage-layout lock set). 3 regression
+      tests incl. the headline rotate-out-griefing-guardian scenario. enforcement: test-covered (redeploy pending).
   - id: WA-1
     severity: medium
     title: WebAuthn/P256 verification lacks low-s enforcement (P-256 signature malleability)

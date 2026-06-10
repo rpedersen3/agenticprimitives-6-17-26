@@ -42,14 +42,20 @@ contract AgenticGovernance is IGovernanceView {
     ///         construction; rotate by redeploying.
     address public immutable timelock;
 
-    /// @notice Fast-path emergency-pauser role. Can pause without delay
-    ///         but CANNOT unpause (unpause requires the timelock).
-    address public immutable guardian;
-
     // ─── State ────────────────────────────────────────────────────
 
     bool private _paused;
     mapping(address => bool) private _signers;
+
+    /// @notice Fast-path emergency-pauser role. Can pause without delay but
+    ///         CANNOT unpause (unpause requires the timelock). GOV-1: this is a
+    ///         STORAGE var (not immutable) so the timelock can ROTATE it — a
+    ///         guardian whose key is compromised and grief-pauses the system can
+    ///         be replaced WITHOUT a full governance redeploy, bounding the
+    ///         re-pause DoS to one timelock window instead of "permanent". Set
+    ///         (`setGuardian`) only by the timelock. Declared after the existing
+    ///         storage vars so their slot assignments don't shift.
+    address public guardian;
 
     // ─── Errors ───────────────────────────────────────────────────
 
@@ -64,6 +70,8 @@ contract AgenticGovernance is IGovernanceView {
     event Unpaused(address indexed by);
     event SignerSet(address indexed who, bool isSigner);
     event Executed(address indexed target, uint256 value, bytes data);
+    /// @notice GOV-1 — the guardian (fast-pause) role was rotated by the timelock.
+    event GuardianRotated(address indexed oldGuardian, address indexed newGuardian);
 
     // ─── Constructor ──────────────────────────────────────────────
 
@@ -132,6 +140,20 @@ contract AgenticGovernance is IGovernanceView {
         if (msg.sender != timelock) revert NotTimelock(msg.sender);
         _signers[who] = sig;
         emit SignerSet(who, sig);
+    }
+
+    /// @notice GOV-1 — rotate the guardian (fast-pause) role. Timelock-only, so a
+    ///         compromised guardian that is perpetually re-pausing the system can
+    ///         be replaced after one timelock window WITHOUT a governance redeploy.
+    ///         To retire the fast-pause capability entirely, rotate to a burn
+    ///         address. Cannot be the zero address (would make `pause()` an
+    ///         accidental no-op while looking live).
+    function setGuardian(address newGuardian) external {
+        if (msg.sender != timelock) revert NotTimelock(msg.sender);
+        if (newGuardian == address(0)) revert ZeroAddress();
+        address old = guardian;
+        guardian = newGuardian;
+        emit GuardianRotated(old, newGuardian);
     }
 
     // ─── Receive ETH ──────────────────────────────────────────────

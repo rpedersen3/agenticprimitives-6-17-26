@@ -198,4 +198,48 @@ contract AgenticGovernanceTest is Test {
         );
         assertEq(factory.bundlerSigner(), newSigner);
     }
+
+    // ─── GOV-1 — guardian is timelock-rotatable ─────────────────────
+
+    function test_GOV1_non_timelock_cannot_setGuardian() public {
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(AgenticGovernance.NotTimelock.selector, attacker));
+        gov.setGuardian(attacker);
+    }
+
+    function test_GOV1_setGuardian_zero_reverts() public {
+        vm.prank(address(timelock));
+        vm.expectRevert(AgenticGovernance.ZeroAddress.selector);
+        gov.setGuardian(address(0));
+    }
+
+    /// The headline GOV-1 scenario: a compromised guardian perpetually re-pauses,
+    /// but the timelock can ROTATE it out — after which the old guardian can no
+    /// longer pause and the new one can. The DoS is bounded by one timelock
+    /// window, not "permanent / redeploy-only".
+    function test_GOV1_timelock_rotates_out_griefing_guardian() public {
+        address newGuardian = address(0x6A6D);
+
+        // Compromised guardian griefs: pause.
+        vm.prank(guardian);
+        gov.pause();
+        assertTrue(gov.isPaused());
+
+        // Timelock unpauses AND rotates the guardian away from the compromised key.
+        vm.prank(address(timelock));
+        gov.unpause();
+        vm.prank(address(timelock));
+        gov.setGuardian(newGuardian);
+        assertEq(gov.guardian(), newGuardian);
+
+        // The OLD guardian can no longer re-pause — the perpetual-DoS loop is broken.
+        vm.prank(guardian);
+        vm.expectRevert(abi.encodeWithSelector(AgenticGovernance.NotGuardian.selector, guardian));
+        gov.pause();
+
+        // The NEW guardian holds the fast-pause capability.
+        vm.prank(newGuardian);
+        gov.pause();
+        assertTrue(gov.isPaused());
+    }
 }
