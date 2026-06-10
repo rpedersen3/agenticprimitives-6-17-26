@@ -13,8 +13,18 @@
     "typed-record-encoding",
     "name-management-call-builders"
   ],
-  "runtime": ["browser", "node", "worker"],
-  "readFirst": ["CLAUDE.md", "README.md", "src/index.ts", "docs/concepts.md", "docs/api.md"],
+  "runtime": [
+    "browser",
+    "node",
+    "worker"
+  ],
+  "readFirst": [
+    "CLAUDE.md",
+    "README.md",
+    "src/index.ts",
+    "docs/concepts.md",
+    "docs/api.md"
+  ],
   "docs": {
     "concepts": "docs/concepts.md",
     "api": "docs/api.md",
@@ -23,7 +33,11 @@
     "migration": "docs/migration.md",
     "audit": "AUDIT.md"
   },
-  "examples": ["examples/basic.ts", "examples/records.ts", "examples/custody-rotation.ts"],
+  "examples": [
+    "examples/basic.ts",
+    "examples/records.ts",
+    "examples/custody-rotation.ts"
+  ],
   "validation": [
     "pnpm check:agent-naming",
     "pnpm check:public-exports",
@@ -50,8 +64,12 @@
     ]
   },
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"]
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ]
   },
   "imports": [
     "@agenticprimitives/types",
@@ -124,7 +142,8 @@
     "buildSetBytes32AttributeCall",
     "buildRecordCalls",
     "buildSubregistryRegisterCall",
-    "permissionlessSubregistryAbi"
+    "permissionlessSubregistryAbi",
+    "normalizeLabel"
   ],
   "forbiddenTerms": [
     {
@@ -173,7 +192,12 @@
       "owningPackage": "@agenticprimitives/mcp-runtime"
     }
   ],
-  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
   "contextBudget": {
     "claudeMdMaxWords": 900,
     "readmeMaxWords": 1800,

@@ -64,9 +64,12 @@ export type TaskState =
   | 'auth-required';
 
 const TASK_TRANSITIONS: Record<TaskState, TaskState[]> = {
-  submitted: ['working', 'rejected', 'auth-required'],
+  // spec 245 §4 — a `working` handler may suspend to `auth-required` pending a fresh/again-scoped
+  // delegation (the auth-required loop); resubmission goes `auth-required → submitted`. A not-yet-started
+  // `submitted` task can also be `canceled` (the sender withdraws before processing).
+  submitted: ['working', 'rejected', 'auth-required', 'canceled'],
   'auth-required': ['submitted'],
-  working: ['completed', 'failed', 'canceled', 'input-required'],
+  working: ['completed', 'failed', 'canceled', 'input-required', 'auth-required'],
   'input-required': ['working'],
   completed: [],
   failed: [],

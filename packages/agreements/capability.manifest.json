@@ -79,7 +79,9 @@
     "bytesCommitment",
     "nullifierFor",
     "AgreementIssuancePayload",
-    "StatusUpdatePayload"
+    "StatusUpdatePayload",
+    "AGREEMENT_ISSUER_TYPEHASH",
+    "issuerAttestationDigest"
   ],
   "ignoreForAgentContext": [
     "dist/**",

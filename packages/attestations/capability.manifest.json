@@ -5,7 +5,7 @@
   "agentEntry": "CLAUDE.md",
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/242-trust-credentials-and-public-assertions.md",
-  "summary": "AttestationRegistry SDK (EAS-aligned, bilateral-consent) — Association + JointAgreement + Evidence + Outcome + Validation + TrustUpdate credential types in one on-chain registry per ADR-0023.",
+  "summary": "AttestationRegistry SDK (EAS-aligned, bilateral-consent) \u2014 Association + JointAgreement + Evidence + Outcome + Validation + TrustUpdate credential types in one on-chain registry per ADR-0023.",
   "spineLayers": [
     12,
     13,
@@ -79,7 +79,9 @@
     "JOINT_CONSENT_TYPEHASH",
     "jointConsentDigest",
     "AssociationAttestationRequest",
-    "JointAgreementAttestationRequest"
+    "JointAgreementAttestationRequest",
+    "ASSOCIATION_ATTESTATION_TYPEHASH",
+    "associationAttestationDigest"
   ],
   "ignoreForAgentContext": [
     "dist/**",

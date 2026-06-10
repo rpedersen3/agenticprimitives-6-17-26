@@ -46,6 +46,9 @@ importers:
 
   apps/demo-a2a:
     dependencies:
+      '@agenticprimitives/a2a':
+        specifier: workspace:*
+        version: link:../../packages/a2a
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../../packages/agent-account
@@ -92,93 +95,6 @@ importers:
       wrangler:
         specifier: ^4.0.0
         version: 4.93.0(@cloudflare/workers-types@4.20260605.1)(bufferutil@4.1.0)(utf-8-validate@5.0.10)
-
-  apps/demo-bible-a2a:
-    dependencies:
-      '@agenticprimitives/content-primitives':
-        specifier: workspace:*
-        version: link:../../packages/content-primitives
-      '@agenticprimitives/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-      hono:
-        specifier: ^4.12.23
-        version: 4.12.23
-    devDependencies:
-      '@cloudflare/workers-types':
-        specifier: ^4.20260604.1
-        version: 4.20260605.1
-      '@types/node':
-        specifier: ^22.7.0
-        version: 22.19.19
-      typescript:
-        specifier: ~5.7.0
-        version: 5.7.3
-      wrangler:
-        specifier: ^4.0.0
-        version: 4.93.0(@cloudflare/workers-types@4.20260605.1)(bufferutil@4.1.0)(utf-8-validate@5.0.10)
-
-  apps/demo-bible-mcp:
-    dependencies:
-      '@agenticprimitives/audit':
-        specifier: workspace:*
-        version: link:../../packages/audit
-      '@agenticprimitives/content-primitives':
-        specifier: workspace:*
-        version: link:../../packages/content-primitives
-      '@agenticprimitives/scripture-content-extension':
-        specifier: workspace:*
-        version: link:../../domains/scripture-content-extension
-      '@agenticprimitives/tool-policy':
-        specifier: workspace:*
-        version: link:../../packages/tool-policy
-      '@agenticprimitives/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-      hono:
-        specifier: ^4.12.23
-        version: 4.12.23
-      viem:
-        specifier: ^2.52.2
-        version: 2.52.2(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
-    devDependencies:
-      '@cloudflare/workers-types':
-        specifier: ^4.20260604.1
-        version: 4.20260605.1
-      '@types/node':
-        specifier: ^22.7.0
-        version: 22.19.19
-      typescript:
-        specifier: ~5.7.0
-        version: 5.7.3
-      wrangler:
-        specifier: ^4.0.0
-        version: 4.93.0(@cloudflare/workers-types@4.20260605.1)(bufferutil@4.1.0)(utf-8-validate@5.0.10)
-
-  apps/demo-bible-web:
-    dependencies:
-      react:
-        specifier: ^19.2.7
-        version: 19.2.7
-      react-dom:
-        specifier: ^19.2.7
-        version: 19.2.7(react@19.2.7)
-    devDependencies:
-      '@types/react':
-        specifier: ^19.2.16
-        version: 19.2.16
-      '@types/react-dom':
-        specifier: ^19.2.3
-        version: 19.2.3(@types/react@19.2.16)
-      '@vitejs/plugin-react':
-        specifier: ^6.0.0
-        version: 6.0.2(vite@8.0.16(@types/node@22.19.19)(esbuild@0.28.0)(tsx@4.22.4))
-      typescript:
-        specifier: ~5.7.0
-        version: 5.7.3
-      vite:
-        specifier: ^8.0.16
-        version: 8.0.16(@types/node@22.19.19)(esbuild@0.28.0)(tsx@4.22.4)
 
   apps/demo-gs:
     dependencies:
@@ -720,6 +636,31 @@ importers:
         specifier: workspace:*
         version: link:../../packages/content-primitives
     devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.19.19
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.19.19)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.19.19)(esbuild@0.28.0)(tsx@4.22.4))
+
+  packages/a2a:
+    dependencies:
+      '@agenticprimitives/delegation':
+        specifier: workspace:*
+        version: link:../delegation
+      '@agenticprimitives/fulfillment':
+        specifier: workspace:*
+        version: link:../fulfillment
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../types
+      viem:
+        specifier: ^2.52.2
+        version: 2.52.2(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20240117.0
+        version: 4.20260605.1
       '@types/node':
         specifier: ^22.7.0
         version: 22.19.19

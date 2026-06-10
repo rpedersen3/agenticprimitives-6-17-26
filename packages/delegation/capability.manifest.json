@@ -5,7 +5,7 @@
   "agentEntry": "CLAUDE.md",
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/202-delegation.md",
-  "summary": "EIP-712 delegations spanning web app → agent → MCP. Caveats, token envelope, validation, session lifecycle.",
+  "summary": "EIP-712 delegations spanning web app \u2192 agent \u2192 MCP. Caveats, token envelope, validation, session lifecycle.",
   "owns": {
     "source": [
       "src/**"
@@ -88,7 +88,8 @@
     "TxContext",
     "VerifyError",
     "VerifyOpts",
-    "VerifyOptsExt"
+    "VerifyOptsExt",
+    "sessionDelegateBindingError"
   ],
   "forbiddenTerms": [
     {

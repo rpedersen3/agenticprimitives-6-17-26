@@ -108,7 +108,12 @@
     "SHAPE_DID_PREFIX",
     "buildShapeUri",
     "parseShapeUri",
-    "shapeHash"
+    "shapeHash",
+    "verifyCredential",
+    "parseEip155Caip10",
+    "VerifyCredentialResult",
+    "Erc1271Verifier",
+    "Caip10Eip155"
   ],
   "ignoreForAgentContext": [
     "dist/**",

@@ -1,0 +1,143 @@
+{
+  "name": "@agenticprimitives/a2a",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/269-async-delegation-authorized-a2a.md",
+  "summary": "Async, delegation-authorized Agent-to-Agent task transport (spec 269): Task runtime + SkillHandler dispatch, delegation-auth gate, scoped grants, JSON-RPC + client, push + SSE, Cloudflare DO adapter.",
+  "capabilities": [
+    "async-task-transport",
+    "task-lifecycle-runtime",
+    "skill-handler-dispatch",
+    "delegation-authorized-messaging",
+    "scoped-grant-caveats"
+  ],
+  "runtime": ["browser", "node", "worker"],
+  "readFirst": ["CLAUDE.md", "README.md", "src/index.ts"],
+  "docs": {},
+  "validation": [
+    "pnpm --filter @agenticprimitives/a2a typecheck",
+    "pnpm --filter @agenticprimitives/a2a test",
+    "pnpm check:public-exports",
+    "pnpm check:no-domain-in-packages"
+  ],
+  "securityInvariants": [
+    "every task transition is fail-closed via canTaskTransition; unknown skill -> rejected",
+    "no task is created for an unverifiable grant (W2 auth gate)",
+    "task.permissionGrantRef binds every task to hashDelegation(grant); revoke fails in-flight closed",
+    "message + artifact bodies live in the vault (VaultRef); only hashes/refs in task state",
+    "the core ships NO Cloudflare coupling — the DurableObject is the ./cloudflare adapter (ADR-0034)",
+    "no long-lived signing key for a claimed agent; KMS/session signer only"
+  ],
+  "integrationPoints": {
+    "consumes": [
+      "@agenticprimitives/types",
+      "@agenticprimitives/fulfillment",
+      "@agenticprimitives/delegation"
+    ],
+    "mustNotImport": [
+      "@agenticprimitives/mcp-runtime",
+      "@agenticprimitives/tool-policy",
+      "@modelcontextprotocol/sdk"
+    ]
+  },
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"]
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/fulfillment",
+    "@agenticprimitives/delegation",
+    "viem"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/fulfillment",
+    "@agenticprimitives/delegation",
+    "viem"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@modelcontextprotocol/sdk"
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "Task",
+    "TaskState",
+    "Artifact",
+    "A2aArtifact",
+    "A2aMessage",
+    "VaultRef",
+    "TaskRecord",
+    "TaskEvent",
+    "TERMINAL_STATES",
+    "isTerminal",
+    "TaskStore",
+    "createInMemoryTaskStore",
+    "SkillHandler",
+    "SkillContext",
+    "SkillResult",
+    "VaultClient",
+    "McpClient",
+    "AuthRequired",
+    "buildSkillRegistry",
+    "newTaskRecord",
+    "applyTransition",
+    "dispatchTask",
+    "TransitionResult",
+    "A2A_ANY_SKILL",
+    "skillSelector",
+    "buildA2aGrantCaveats",
+    "A2aEnforcers",
+    "authorizeA2aMessage",
+    "hashA2aMessage",
+    "decodeTimestampTerms",
+    "decodeAllowedTargetsTerms",
+    "decodeAllowedMethodsTerms",
+    "OnChainChecks",
+    "MessageIdReserver",
+    "AuthorizeResult",
+    "createA2aAgent",
+    "A2aAgent",
+    "A2aAgentConfig",
+    "AgentCard",
+    "MessageSendParams",
+    "ResubmitParams",
+    "RpcResult",
+    "RpcOk",
+    "RpcErr",
+    "dispatchA2aRpc",
+    "handleA2aRpcBody",
+    "JsonRpcRequest",
+    "JsonRpcResponse",
+    "A2aWireAdapter",
+    "A2aTransport",
+    "hashPushPayload",
+    "deliverPush",
+    "verifyPushEnvelope",
+    "PushPayload",
+    "PushEnvelope",
+    "TerminalSigner",
+    "PushSender",
+    "SSE_HEADERS",
+    "formatSseEvent",
+    "formatSseComment",
+    "isStreamEnd",
+    "PushConfig"
+  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  }
+}

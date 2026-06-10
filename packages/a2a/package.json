@@ -1,0 +1,65 @@
+{
+  "name": "@agenticprimitives/a2a",
+  "version": "0.0.0-alpha.0",
+  "description": "Async, delegation-authorized Agent-to-Agent (A2A) task transport: Task/Message/Artifact runtime over a TaskStore port, JSON-RPC method handlers, SkillHandler dispatch, the A2aWireAdapter client, and scoped-grant caveat builders. Transport-agnostic core (spec 269 / ADR-0034); the Cloudflare TaskStoreDO ships as the ./cloudflare adapter subpath.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/a2a"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/a2a",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cloudflare": {
+      "types": "./dist/cloudflare/index.d.ts",
+      "import": "./dist/cloudflare/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md",
+    "CLAUDE.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/fulfillment": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
+    "viem": "^2.52.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "@types/node": "^22.7.0",
+    "vitest": "^4.1.8"
+  },
+  "keywords": [
+    "a2a",
+    "agent-to-agent",
+    "task",
+    "delegation",
+    "jsonrpc",
+    "agentic"
+  ]
+}
