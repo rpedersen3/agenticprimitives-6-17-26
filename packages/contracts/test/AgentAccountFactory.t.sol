@@ -72,7 +72,7 @@ contract AgentAccountFactoryTest is Test {
 
     function test_createAgentAccount_mode0_eoa_at_predicted_address() public {
         AgentAccountInitParams memory p = _simpleParams(_eoaArr(owner), bytes32(0), 0, 0);
-        address predicted = factory.getAddressForAgentAccount(p, 7);
+        address predicted = factory.getAddressForAgentAccount(p, _defaultTimelocks(), 7);
         assertEq(predicted.code.length, 0);
         AgentAccount acct = factory.createAgentAccount(p, _defaultTimelocks(), 7);
         assertEq(address(acct), predicted);
@@ -93,20 +93,20 @@ contract AgentAccountFactoryTest is Test {
 
     function test_createAgentAccount_mode0_address_changes_with_salt() public view {
         AgentAccountInitParams memory p = _simpleParams(_eoaArr(owner), bytes32(0), 0, 0);
-        address a1 = factory.getAddressForAgentAccount(p, 0);
-        address a2 = factory.getAddressForAgentAccount(p, 1);
+        address a1 = factory.getAddressForAgentAccount(p, _defaultTimelocks(), 0);
+        address a2 = factory.getAddressForAgentAccount(p, _defaultTimelocks(), 1);
         assertTrue(a1 != a2);
     }
 
     function test_createAgentAccount_mode0_address_changes_with_custodian() public view {
-        address a1 = factory.getAddressForAgentAccount(_simpleParams(_eoaArr(owner), bytes32(0), 0, 0), 0);
-        address a2 = factory.getAddressForAgentAccount(_simpleParams(_eoaArr(address(0x99)), bytes32(0), 0, 0), 0);
+        address a1 = factory.getAddressForAgentAccount(_simpleParams(_eoaArr(owner), bytes32(0), 0, 0), _defaultTimelocks(), 0);
+        address a2 = factory.getAddressForAgentAccount(_simpleParams(_eoaArr(address(0x99)), bytes32(0), 0, 0), _defaultTimelocks(), 0);
         assertTrue(a1 != a2);
     }
 
     function test_createAgentAccount_mode0_emits_event() public {
         AgentAccountInitParams memory p = _simpleParams(_eoaArr(owner), bytes32(0), 0, 0);
-        address predicted = factory.getAddressForAgentAccount(p, 9);
+        address predicted = factory.getAddressForAgentAccount(p, _defaultTimelocks(), 9);
         vm.expectEmit(true, false, false, true);
         emit AgentAccountFactory.AgentAccountCreated(predicted, /*mode=*/ 0, 1, /*withPasskey=*/ false, 9);
         factory.createAgentAccount(p, _defaultTimelocks(), 9);
@@ -116,7 +116,7 @@ contract AgentAccountFactoryTest is Test {
 
     function test_createAgentAccount_mode0_passkey_at_predicted_address() public {
         AgentAccountInitParams memory p = _simpleParams(_emptyArr(), CRED, PX, PY);
-        address predicted = factory.getAddressForAgentAccount(p, 0);
+        address predicted = factory.getAddressForAgentAccount(p, _defaultTimelocks(), 0);
         assertEq(predicted.code.length, 0);
         AgentAccount acct = factory.createAgentAccount(p, _defaultTimelocks(), 0);
         assertEq(address(acct), predicted);
@@ -134,14 +134,14 @@ contract AgentAccountFactoryTest is Test {
     }
 
     function test_createAgentAccount_mode0_passkey_address_changes_with_credId() public view {
-        address a1 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), CRED, PX, PY), 0);
-        address a2 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), keccak256("other"), PX, PY), 0);
+        address a1 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), CRED, PX, PY), _defaultTimelocks(), 0);
+        address a2 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), keccak256("other"), PX, PY), _defaultTimelocks(), 0);
         assertTrue(a1 != a2);
     }
 
     function test_createAgentAccount_mode0_passkey_address_changes_with_pubkey() public view {
-        address a1 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), CRED, PX, PY), 0);
-        address a2 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), CRED, PX + 1, PY), 0);
+        address a1 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), CRED, PX, PY), _defaultTimelocks(), 0);
+        address a2 = factory.getAddressForAgentAccount(_simpleParams(_emptyArr(), CRED, PX + 1, PY), _defaultTimelocks(), 0);
         assertTrue(a1 != a2);
     }
 

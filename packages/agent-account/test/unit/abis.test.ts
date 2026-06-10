@@ -20,8 +20,11 @@ describe('abis', () => {
     const fn = agentAccountFactoryAbi.find((e) => e.type === 'function' && e.name === 'getAddressForAgentAccount');
     expect(fn).toBeDefined();
     expect(fn!.stateMutability).toBe('view');
-    expect(fn!.inputs).toHaveLength(2);
+    // CA-F1: (params, timelockOverrides, salt) — the address commits to custody config.
+    expect(fn!.inputs).toHaveLength(3);
     expect(fn!.inputs[0]?.type).toBe('tuple');
+    expect(fn!.inputs[1]?.type).toBe('uint32[7]');
+    expect(fn!.inputs[2]?.type).toBe('uint256');
   });
 
   it('exposes custodyPolicy view (factory-immutable validator address)', () => {

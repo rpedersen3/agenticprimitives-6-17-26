@@ -156,10 +156,13 @@ contract AgentAccountFactory is GovernanceManaged {
         // timelock (see AgenticGovernance).
         _validateInitParams(params);
 
-        address addr = _getAddressForAgentAccount(params, salt);
+        // CA-F1 (audit 2026-06-10): derive the deploy salt from the FULL custody config so the
+        // counterfactual address commits to mode/trustees/timelocks too — not just custodians/passkey.
+        bytes32 deploySalt = _effectiveSalt(params, timelockOverrides, salt);
+        address addr = _getAddressFromSalt(params, deploySalt);
         if (addr.code.length > 0) return AgentAccount(payable(addr));
 
-        ERC1967Proxy proxy = new ERC1967Proxy{salt: bytes32(salt)}(
+        ERC1967Proxy proxy = new ERC1967Proxy{salt: deploySalt}(
             address(accountImplementation),
             _initData(params)
         );
@@ -181,12 +184,16 @@ contract AgentAccountFactory is GovernanceManaged {
     }
 
     /// @notice Counterfactual address for `createAgentAccount`.
+    /// @dev CA-F1: takes `timelockOverrides` because the address now commits to it. Callers MUST
+    ///      predict with the SAME (params, timelockOverrides, salt) they will deploy with, else the
+    ///      predicted address won't match the deployed one.
     function getAddressForAgentAccount(
         AgentAccountInitParams calldata params,
+        uint32[7] calldata timelockOverrides,
         uint256 salt
     ) external view returns (address) {
         _validateInitParams(params);
-        return _getAddressForAgentAccount(params, salt);
+        return _getAddressFromSalt(params, _effectiveSalt(params, timelockOverrides, salt));
     }
 
     // ─── Internals ──────────────────────────────────────────────────────
@@ -209,22 +216,40 @@ contract AgentAccountFactory is GovernanceManaged {
         );
     }
 
-    function _getAddressForAgentAccount(
+    /// @dev CA-F1 (audit 2026-06-10) — the deploy salt commits to the FULL custody configuration:
+    ///      mode, trustees, and per-tier timelock overrides. `_initData` already folds custodians +
+    ///      the initial passkey into the proxy bytecode hash (and thus the address); those, plus the
+    ///      mode/trustees/timelocks bound here, mean the canonical address IS its complete custody
+    ///      config. Two `createAgentAccount` calls that differ in ANY of these resolve to DIFFERENT
+    ///      addresses, so an attacker can no longer front-run a victim's counterfactual address with a
+    ///      weaker mode, attacker-controlled recovery trustees, or shortened timelocks. The
+    ///      occupied-address branch is consequently reachable only by an identical-config request —
+    ///      which also closes CA-F2 (silent adoption of a mismatched pre-existing account) by
+    ///      construction, with no separate config-equality assertion needed.
+    function _effectiveSalt(
         AgentAccountInitParams calldata params,
+        uint32[7] calldata timelockOverrides,
         uint256 salt
-    ) internal view returns (address) {
-        bytes memory initData = _initData(params);
-        return _create2Address(initData, salt);
+    ) internal pure returns (bytes32) {
+        return keccak256(abi.encode(salt, params.mode, params.trustees, timelockOverrides));
     }
 
-    function _create2Address(bytes memory initData, uint256 salt) internal view returns (address) {
+    function _getAddressFromSalt(
+        AgentAccountInitParams calldata params,
+        bytes32 deploySalt
+    ) internal view returns (address) {
+        bytes memory initData = _initData(params);
+        return _create2Address(initData, deploySalt);
+    }
+
+    function _create2Address(bytes memory initData, bytes32 salt) internal view returns (address) {
         bytes memory proxyBytecode = abi.encodePacked(
             type(ERC1967Proxy).creationCode,
             abi.encode(address(accountImplementation), initData)
         );
         bytes32 bytecodeHash = keccak256(proxyBytecode);
         return address(uint160(uint256(keccak256(
-            abi.encodePacked(bytes1(0xff), address(this), bytes32(salt), bytecodeHash)
+            abi.encodePacked(bytes1(0xff), address(this), salt, bytecodeHash)
         ))));
     }
 

@@ -61,13 +61,17 @@ export async function derivePasskeyRpIdHash(): Promise<Hex> {
 export async function predictAccountAddress(args: {
   factoryAddress: Address;
   initParams: AgentAccountInitParams;
+  // CA-F1 (audit 2026-06-10): the CREATE2 address now commits to the per-tier
+  // timelock overrides too. This MUST be the SAME tuple passed to
+  // `createAgentAccount`, or the predicted address won't match the deployed one.
+  timelockOverrides: readonly [number, number, number, number, number, number, number];
   salt: bigint;
 }): Promise<Address> {
   return (await publicClient.readContract({
     address: args.factoryAddress,
     abi: agentAccountFactoryAbi,
     functionName: 'getAddressForAgentAccount',
-    args: [args.initParams, args.salt],
+    args: [args.initParams, args.timelockOverrides, args.salt],
   })) as Address;
 }
 

@@ -178,7 +178,7 @@ contract AgentAccountTest is Test {
         // CREATE2 happens. The factory will subsequently call the
         // initializer which emits PasskeyAdded from the proxy.
         address[] memory empty;
-        address predicted = factory.getAddressForAgentAccount(_simpleParams(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y), 103);
+        address predicted = factory.getAddressForAgentAccount(_simpleParams(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y), _defaultTimelocks(), 103);
         vm.expectEmit(true, false, false, true, predicted);
         emit AgentAccount.PasskeyAdded(TEST_CRED_DIGEST, TEST_X, TEST_Y, bytes32(uint256(0x7270696468617368)));
         factory.createAgentAccount(_simpleParams(empty, TEST_CRED_DIGEST, TEST_X, TEST_Y), _defaultTimelocks(), 103);

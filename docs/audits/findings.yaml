@@ -254,15 +254,23 @@ findings:
   - id: CA-F1
     severity: high
     title: factory counterfactual address omits mode/trustees/timelocks → pre-deploy custody hijack
-    status: open
+    status: closed
     concerns: [packages/contracts/src/AgentAccountFactory.sol]
+    anchor: _effectiveSalt
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/AgentAccountFactoryMode.t.sol
     note: >
-      The CREATE2 salt commits only to custodians/passkey/salt, not mode/trustees/timelockOverrides
-      (applied post-deploy). An attacker who knows a victim's public salt+custodians front-runs
-      deployment at the canonical address with attacker-chosen recovery trustees, then drives a
-      CustodyPolicy recovery to seize the identity. Fix: fold config into salt/initialize + assert
-      config-match on the occupied branch. MAINNET BLOCKER.
+      Fixed per ADR-0035: the deploy salt is now keccak256(abi.encode(salt, mode, trustees,
+      timelockOverrides)), so the CREATE2 address commits to the FULL custody config (mode/trustees/
+      timelocks) on top of the custodians+passkey already in the bytecode hash. A front-runner can no
+      longer occupy a victim's counterfactual address with weaker/attacker recovery config — any change
+      yields a different address. This also closes CA-F2 (silent adoption) by construction: the
+      occupied branch is reachable only by an identical-config request, so no separate config-equality
+      assertion is needed. getAddressForAgentAccount gains a timelockOverrides param; the agent-account
+      client + app predictors thread the deploy-time tuple. NOTE: moves all CREATE2 addresses → needs a
+      full factory redeploy (CON-FACTORY-001 still tracks the governance side). 5 property tests +
+      full 764-test contract suite green.
   - id: CP-1
     severity: high
     title: custody tier thresholds default to 1-of-n (unconfigured quorum collapses to single signer)

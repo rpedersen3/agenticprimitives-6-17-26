@@ -108,7 +108,7 @@ contract UniversalSignatureValidatorTest is Test {
     function test_erc6492_path_deploys_then_verifies() public {
         // Predict address of a not-yet-deployed account.
         address[] memory custodians = _eoaArr(owner);
-        address predicted = factory.getAddressForAgentAccount(_simpleParams(custodians, bytes32(0), 0, 0), 99);
+        address predicted = factory.getAddressForAgentAccount(_simpleParams(custodians, bytes32(0), 0, 0), _defaultTimelocks(), 99);
         assertEq(predicted.code.length, 0);
 
         bytes32 hash = keccak256("6492");
@@ -128,7 +128,7 @@ contract UniversalSignatureValidatorTest is Test {
 
     function test_erc6492_path_view_returns_false_when_not_deployed() public view {
         address[] memory custodians = _eoaArr(owner);
-        address predicted = factory.getAddressForAgentAccount(_simpleParams(custodians, bytes32(0), 0, 0), 100);
+        address predicted = factory.getAddressForAgentAccount(_simpleParams(custodians, bytes32(0), 0, 0), _defaultTimelocks(), 100);
         bytes32 hash = keccak256("6492-view");
         bytes memory innerSig = _signRaw(OWNER_PK, hash);
         bytes memory factoryCalldata = abi.encodeCall(
@@ -151,7 +151,7 @@ contract UniversalSignatureValidatorTest is Test {
 
     function test_erc6492_path_reverts_when_factory_call_does_not_deploy() public {
         address[] memory custodians = _eoaArr(owner);
-        address predicted = factory.getAddressForAgentAccount(_simpleParams(custodians, bytes32(0), 0, 0), 101);
+        address predicted = factory.getAddressForAgentAccount(_simpleParams(custodians, bytes32(0), 0, 0), _defaultTimelocks(), 101);
         bytes32 hash = keccak256("6492-bad-factory");
         bytes memory innerSig = _signRaw(OWNER_PK, hash);
         // Wrong factoryCalldata — deploy at a different salt:

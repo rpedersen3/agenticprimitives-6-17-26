@@ -42,6 +42,10 @@ export const agentAccountFactoryAbi = [
     stateMutability: 'view',
     inputs: [
       initParamsTuple,
+      // CA-F1 (audit 2026-06-10): the counterfactual address commits to the full
+      // custody config, so the view takes timelockOverrides too. Predict with the
+      // SAME (params, timelockOverrides, salt) you will deploy with.
+      { name: 'timelockOverrides', type: 'uint32[7]' },
       { name: 'salt', type: 'uint256' },
     ],
     outputs: [{ name: '', type: 'address' }],

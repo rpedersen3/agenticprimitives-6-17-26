@@ -211,6 +211,9 @@ export class AgentAccountClient {
     });
     return (await factory.read.getAddressForAgentAccount([
       _initParamsTuple(spec),
+      // CA-F1: the address commits to the custody config; predict with the same
+      // timelockOverrides used at deploy (zeros = inherit factory defaults).
+      _timelockOverridesTuple(spec),
       spec.salt,
     ])) as Address;
   }
@@ -260,6 +263,10 @@ export class AgentAccountClient {
     salt?: bigint;
     trustees?: readonly Address[];
     passkey?: AgentAccountSpec['passkey'];
+    // CA-F1 (audit 2026-06-10): the derivation commits to the per-tier timelock
+    // overrides too, so an honest claimed address must be checked against the
+    // same timelocks it will deploy with (zeros = inherit factory defaults).
+    timelockOverrides?: readonly number[];
   }): Promise<Address> {
     const spec: AgentAccountSpec = {
       mode: opts.mode ?? 0,
@@ -267,6 +274,7 @@ export class AgentAccountClient {
       trustees: opts.trustees ?? [],
       passkey: opts.passkey,
       salt: opts.salt ?? 0n,
+      timelockOverrides: opts.timelockOverrides,
     };
     const derived = await this.getAddressForAgentAccount(spec);
     if (derived.toLowerCase() !== opts.claimed.toLowerCase()) {

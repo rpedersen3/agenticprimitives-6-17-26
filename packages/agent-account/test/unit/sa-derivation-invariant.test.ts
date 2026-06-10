@@ -36,12 +36,14 @@ vi.mock('viem', async (importOriginal) => {
             // (mode, custodians, salt) tuple so different specs return
             // different addresses (tests can assert mismatch).
             getAddressForAgentAccount: vi.fn(
-              async ([initParams, salt]: [
+              // CA-F1: view signature is now (initParams, timelockOverrides, salt).
+              async ([initParams, , salt]: [
                 {
                   mode: number;
                   custodians: readonly string[];
                   trustees: readonly string[];
                 },
+                readonly number[],
                 bigint,
               ]) => {
                 const key = `${initParams.mode}|${initParams.custodians.join(',')}|${salt.toString()}`;

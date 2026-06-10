@@ -258,6 +258,8 @@ export function Act2CreateOrg({ onComplete }: { onComplete: () => void }) {
     const orgAddress = await predictAccountAddress({
       factoryAddress,
       initParams,
+      // CA-F1: predict with the SAME timelock override used in the deploy above.
+      timelockOverrides: [0, 0, 0, 0, 1, 0, 0],
       salt,
     });
     const deployed = await waitForCode(orgAddress);

@@ -125,7 +125,7 @@ contract AgentAccountFactoryModeTest is Test {
 
     function test_getAddressForAgentAccount_matches_deploy() public {
         AgentAccountInitParams memory p = _params(1, _custodians(owner1), _guardians(1, guardian1, address(0), address(0)));
-        address predicted = factory.getAddressForAgentAccount(p, 7);
+        address predicted = factory.getAddressForAgentAccount(p, _defaultTimelocks(), 7);
         AgentAccount actual = factory.createAgentAccount(p, _defaultTimelocks(), 7);
         assertEq(predicted, address(actual));
     }
@@ -185,7 +185,7 @@ contract AgentAccountFactoryModeTest is Test {
 
     function test_createAgentAccount_emitsEvent() public {
         AgentAccountInitParams memory p = _params(1, _custodians(owner1), _guardians(1, guardian1, address(0), address(0)));
-        address predicted = factory.getAddressForAgentAccount(p, 13);
+        address predicted = factory.getAddressForAgentAccount(p, _defaultTimelocks(), 13);
 
         vm.expectEmit(true, false, false, true, address(factory));
         emit AgentAccountFactory.AgentAccountCreated(
@@ -225,5 +225,83 @@ contract AgentAccountFactoryModeTest is Test {
         assertTrue(validator.isInstalledOn(address(acct)));
         // N=1 (just the PIA) → T4=1.
         assertEq(validator.approvalsRequired(address(acct), 4), 1);
+    }
+
+    // ─── CA-F1: the CREATE2 address commits to the FULL custody config ──────
+    // Before the fix, mode/trustees/timelockOverrides were applied post-deploy
+    // and absent from the salt, so differing-config calls collided at one address
+    // and the occupied-address guard silently adopted whoever deployed first — a
+    // pre-deployment custody hijack of the canonical identity. These prove every
+    // config axis now changes the address.
+
+    function _shortTimelocks() internal pure returns (uint32[7] memory tl) {
+        tl[4] = 1; tl[5] = 1; tl[6] = 1;
+    }
+
+    function test_caf1_differentMode_differentAddress() public view {
+        address[] memory owners = _custodians(owner1);
+        // mode 1 (≥1 trustee) vs mode 2 (≥2 trustees), same custodians + salt.
+        address a1 = factory.getAddressForAgentAccount(
+            _params(1, owners, _guardians(2, guardian1, guardian2, address(0))), _defaultTimelocks(), 77
+        );
+        address a2 = factory.getAddressForAgentAccount(
+            _params(2, owners, _guardians(2, guardian1, guardian2, address(0))), _defaultTimelocks(), 77
+        );
+        assertTrue(a1 != a2, "mode must change the address");
+    }
+
+    function test_caf1_differentTrustees_differentAddress() public view {
+        address[] memory owners = _custodians(owner1);
+        // SAME mode + custodians + salt, different recovery trustees → different address.
+        address victim = factory.getAddressForAgentAccount(
+            _params(3, owners, _guardians(3, guardian1, guardian2, guardian3)), _defaultTimelocks(), 88
+        );
+        address attacker = factory.getAddressForAgentAccount(
+            _params(3, owners, _guardians(3, address(0xEE), guardian2, guardian3)), _defaultTimelocks(), 88
+        );
+        assertTrue(victim != attacker, "trustee set must change the address");
+    }
+
+    function test_caf1_differentTimelocks_differentAddress() public view {
+        address[] memory owners = _custodians(owner1);
+        address[] memory g = _guardians(3, guardian1, guardian2, guardian3);
+        address a1 = factory.getAddressForAgentAccount(_params(3, owners, g), _defaultTimelocks(), 99);
+        address a2 = factory.getAddressForAgentAccount(_params(3, owners, g), _shortTimelocks(), 99);
+        assertTrue(a1 != a2, "timelock overrides must change the address");
+    }
+
+    /// @dev The headline hijack: an attacker front-runs the victim's deploy with the
+    ///      same custodians+salt but attacker-controlled recovery config. Post-fix the
+    ///      attacker's account lands at a DIFFERENT address, the victim's canonical
+    ///      address stays unoccupied, and the victim deploys their real config there.
+    function test_caf1_frontRun_cannotOccupyVictimAddress() public {
+        address[] memory owners = _custodians(owner1);
+        AgentAccountInitParams memory victimP =
+            _params(3, owners, _guardians(3, guardian1, guardian2, guardian3));
+        AgentAccountInitParams memory attackerP =
+            _params(1, owners, _guardians(1, address(0xEE), address(0), address(0)));
+
+        address victimAddr = factory.getAddressForAgentAccount(victimP, _defaultTimelocks(), 123);
+
+        // Attacker front-runs with the same custodians+salt but their own recovery shape.
+        AgentAccount attackerAcct = factory.createAgentAccount(attackerP, _defaultTimelocks(), 123);
+        assertTrue(address(attackerAcct) != victimAddr, "attacker cannot occupy the victim address");
+        assertEq(victimAddr.code.length, 0, "victim address must still be free");
+
+        // Victim deploys their real config at their canonical address.
+        AgentAccount victimAcct = factory.createAgentAccount(victimP, _defaultTimelocks(), 123);
+        assertEq(address(victimAcct), victimAddr, "victim deploys at the predicted address");
+        // The victim's trustees govern recovery — not the attacker's.
+        uint256 recThr = validator.approvalsRequired(victimAddr, 6); // T6 recovery tier present
+        assertTrue(recThr >= 1, "victim custody policy installed");
+    }
+
+    function test_caf1_identicalConfig_idempotent() public {
+        address[] memory owners = _custodians(owner1);
+        AgentAccountInitParams memory p = _params(2, owners, _guardians(2, guardian1, guardian2, address(0)));
+        AgentAccount a = factory.createAgentAccount(p, _defaultTimelocks(), 55);
+        // identical (params, timelocks, salt) → same address, occupied branch adopts it (no revert).
+        AgentAccount b = factory.createAgentAccount(p, _defaultTimelocks(), 55);
+        assertEq(address(a), address(b), "identical config is idempotent");
     }
 }

@@ -231,6 +231,8 @@ export function Act2_5CreateTreasury({ onComplete }: { onComplete: () => void })
     const treasuryAddress = await predictAccountAddress({
       factoryAddress,
       initParams,
+      // CA-F1: predict with the SAME timelock override used in the deploy above.
+      timelockOverrides: [0, 0, 0, 0, 1, 0, 0],
       salt,
     });
     const deployed = await waitForCode(treasuryAddress);
