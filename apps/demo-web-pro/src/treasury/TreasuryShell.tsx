@@ -20,6 +20,7 @@ import {
   type SeatClaim,
 } from '../lib/seats';
 import { getPasskeyForSeat } from '../lib/passkey';
+import { PasskeyGate } from './components/PasskeyGate';
 import { ProgressRail } from './components/ProgressRail';
 import { PrincipalChip } from './components/PrincipalChip';
 import { LiveStatusBadge } from './components/LiveStatusBadge';
@@ -290,6 +291,9 @@ export function TreasuryShell() {
 
   return (
     <div className="treasury-shell">
+      {/* WebAuthn transient-activation gate — renders only when a chained passkey
+          assertion (the custody APPLY step) needs a fresh user tap. */}
+      <PasskeyGate />
       <TopBar
         seats={seats}
         activeSeatId={activeSeatId}

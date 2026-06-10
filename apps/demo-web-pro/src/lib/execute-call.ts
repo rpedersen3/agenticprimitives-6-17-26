@@ -149,7 +149,11 @@ export async function executeCallFromAgent(args: {
   // 2. Passkey-sign the userOpHash.
   let signature: Hex;
   try {
-    const assertion = await assertWithPasskey(args.passkey, built.userOpHash);
+    const assertion = await assertWithPasskey(
+      args.passkey,
+      built.userOpHash,
+      'Approve this transaction with your passkey.',
+    );
     signature = encodeWebAuthnSignature(assertion);
   } catch (e) {
     return {

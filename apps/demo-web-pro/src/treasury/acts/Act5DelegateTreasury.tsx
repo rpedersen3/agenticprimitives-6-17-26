@@ -206,7 +206,11 @@ export function Act5DelegateTreasury({ onComplete }: { onComplete: () => void })
       // — using it here makes Alice's isValidSignature return 0xffffffff.
       const passkey = getPasskeyForSeat(signerSeat.seatId);
       if (!passkey) throw new Error(`Passkey for seat ${signerSeat.seatId} missing on this device.`);
-      const assertion = await assertWithPasskey(passkey, delegationHash);
+      const assertion = await assertWithPasskey(
+        passkey,
+        delegationHash,
+        'Approve this delegation with your passkey.',
+      );
       return encodeWebAuthnSignature(assertion);
     }
     if (siweAuth) {

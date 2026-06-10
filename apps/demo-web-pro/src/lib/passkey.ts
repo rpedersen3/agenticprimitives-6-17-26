@@ -21,6 +21,7 @@ import {
   buildWebAuthnAssertion,
   type WebAuthnAssertion,
 } from '@agenticprimitives/connect-auth/passkey';
+import { runWithPasskeyGesture } from './passkey-gate';
 
 const STORAGE_KEY = 'agenticprimitives:demo-web-pro:passkeys';
 
@@ -213,7 +214,7 @@ export async function registerPasskeyForSeat(
  * `encodeWebAuthnSignature` to produce the 0x01-prefixed blob the
  * on-chain `_verifyWebAuthn` expects.
  */
-export async function assertWithPasskey(
+async function assertWithPasskeyRaw(
   passkey: DemoPasskey,
   digest: Hex,
 ): Promise<WebAuthnAssertion> {
@@ -244,6 +245,27 @@ export async function assertWithPasskey(
     clientDataJSON: new Uint8Array(response.clientDataJSON),
     derSignature: new Uint8Array(response.signature),
   });
+}
+
+/**
+ * Sign `digest` with the passkey. ROUTES THROUGH THE GESTURE GATE (`<PasskeyGate/>`,
+ * mounted by TreasuryShell) so the underlying `navigator.credentials.get()` always
+ * runs inside a fresh user tap. Custody ceremonies AND delegation issuance fire
+ * several assertions in sequence (schedule + apply, a 2-of-2 step signs with both
+ * signers, "Issue delegation" signs each grant in a loop); all but the first lose
+ * the original click's transient activation, so WebKit/Safari (and increasingly
+ * Chrome) reject OR silently hang the prompt. Gating every assertion behind a tap
+ * — and running it in that tap's handler — is bulletproof against both. `label`
+ * names what is being signed (shown on the gate). Gating at THIS layer means every
+ * call site (and any future one) is covered without per-call wiring; the gate
+ * falls back to a direct call when its UI isn't mounted (see `runWithPasskeyGesture`).
+ */
+export function assertWithPasskey(
+  passkey: DemoPasskey,
+  digest: Hex,
+  label = 'Approve this signature with your passkey.',
+): Promise<WebAuthnAssertion> {
+  return runWithPasskeyGesture(label, () => assertWithPasskeyRaw(passkey, digest));
 }
 
 function bytesToHex(bytes: Uint8Array): Hex {

@@ -119,7 +119,19 @@ async function signCeremonyHash(args: {
   const { signer } = args;
   const passkeyAuth = getPasskeyAuth(signer.seat);
   if (passkeyAuth && signer.passkey) {
-    const assertion = await assertWithPasskey(signer.passkey, args.hash);
+    const pk = signer.passkey;
+    // A ceremony fires SEVERAL passkey assertions (schedule + apply, and a 2-of-2
+    // step signs the same hash with both signers back-to-back), so all but the first
+    // lose the click's transient activation → WebKit rejects or hangs the prompt.
+    // assertWithPasskey now routes through the gesture gate at the source (every
+    // assertion runs inside its own tap), so we just call it with a descriptive
+    // label — no per-call gate wiring needed here.
+    const stepLabel = args.primaryType === 'ScheduleCustodyChangeRequest' ? 'schedule' : 'apply';
+    const assertion = await assertWithPasskey(
+      pk,
+      args.hash,
+      `Approve the ${stepLabel} signature with your passkey.`,
+    );
     // H7-C.1 / CON-WEBAUTHN-001: v=2 quorum slot tail body now includes
     // rpIdHash (PR after #94, 2026-06-01). The on-chain decoder at
     // SignatureSlotRecovery.sol:172 expects 4 fields; encoding 3 caused
