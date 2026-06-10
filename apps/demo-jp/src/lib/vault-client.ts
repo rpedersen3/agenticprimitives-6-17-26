@@ -18,13 +18,25 @@ import {
   encodeTimestampTerms,
   encodeValueTerms,
   hashDelegation,
+  mintDelegationToken,
   ROOT_AUTHORITY,
 } from '@agenticprimitives/delegation';
 import type { Address } from '@agenticprimitives/types';
 import { CHAIN_ID, CONTRACTS, personaSignHash } from './chain.js';
+import { sessionKeySigner } from '../connect-client.js';
 import { ensureCsrfToken, csrfHeaders, refreshCsrfToken } from '../csrf.js';
 import type { PersonaState } from './personas.js';
 import type { DelegationWire } from './delegation.js';
+import type { MemberSession } from './session.js';
+
+// The MCP audience demo-mcp verifies tokens against — MUST match demo-a2a's MCP_AUDIENCE
+// and demo-mcp's MCP_AUDIENCE env. A mismatch fails verification with an `aud` error.
+const MCP_AUDIENCE = 'urn:mcp:server:person';
+
+/** Rehydrate a stored wire delegation into the bigint-salt struct the token minter needs. */
+function fromWire(w: DelegationWire): Delegation {
+  return { ...w, salt: BigInt(w.salt) };
+}
 
 /** The agent + the custodian that controls it — all that's needed to act on its vault. */
 export interface VaultOwner {
@@ -161,4 +173,49 @@ export async function vaultWriteWithDelegation(
   data: unknown,
 ): Promise<void> {
   await postVault('set', { delegation, requester: delegation.delegate, recordType, data });
+}
+
+// ── Client-mint: a connected MEMBER reads/writes their OWN vault (spec 270 v4 W2) ──────────
+//
+// The DEL-001 closure. Instead of handing the raw `member→JP` grant to demo-a2a (which would mint
+// the token itself), the member's browser session MINTS the delegation token directly — signed by
+// the session key it generated at connect — and embeds the DEL-001 leaf (`member SA → session key`,
+// signed by the member's home credential) in the token claims. demo-a2a only forwards it; demo-mcp
+// recovers the session key from the signature and (W3) checks the leaf binds it to the member SA, so
+// observing a token can't let anyone re-mint it under their own key. The session private key never
+// leaves this origin. `sub` = the member SA, so demo-mcp keys the record in the MEMBER's namespace.
+
+/** Mint a single-use-ish (usage-capped) delegation token for the connected member, signed by their
+ *  session key, carrying the grant + the DEL-001 leaf. Throws if the session lacks the v4 material. */
+async function memberVaultToken(s: MemberSession): Promise<string> {
+  if (!s.sessionKey || !s.sessionDelegation || !s.grant) {
+    throw new Error('member session is missing the session key, leaf, or grant (re-connect required)');
+  }
+  const { token } = await mintDelegationToken(
+    {
+      iss: 'demo-jp',
+      aud: MCP_AUDIENCE,
+      sub: s.address, // the canonical person SA (the grant's delegator) — demo-mcp keys by this
+      delegation: fromWire(s.grant),
+      sessionKeyAddress: s.sessionKey.address,
+      sessionDelegation: fromWire(s.sessionDelegation),
+      ttlSeconds: 300,
+      usageLimit: 10, // covers postVault's bounded same-token retries; tokens are short-lived
+    },
+    sessionKeySigner(s.sessionKey),
+  );
+  return token;
+}
+
+/** Read one record from the connected member's OWN vault via a client-minted, leaf-bound token. */
+export async function vaultReadAsMember<T = unknown>(s: MemberSession, recordType: string): Promise<T | null> {
+  const token = await memberVaultToken(s);
+  const j = await postVault('get', { token, recordType });
+  return (j.data ?? null) as T | null;
+}
+
+/** Upsert a record in the connected member's OWN vault. `data === null` soft-deletes (tombstone). */
+export async function vaultWriteAsMember(s: MemberSession, recordType: string, data: unknown): Promise<void> {
+  const token = await memberVaultToken(s);
+  await postVault('set', { token, recordType, data });
 }

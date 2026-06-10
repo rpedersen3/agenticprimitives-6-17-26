@@ -21,7 +21,7 @@
 // removed here.
 import { buildSubregistryRegisterCall, buildSetPrimaryNameCall } from '@agenticprimitives/agent-naming';
 import { buildExecuteBatchCallData } from '@agenticprimitives/agent-account';
-import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts';
+import { generatePrivateKey, privateKeyToAddress, privateKeyToAccount } from 'viem/accounts';
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { DelegationWire } from './lib/delegation';
 
@@ -34,6 +34,15 @@ export interface SessionKey {
 export function generateSessionKey(): SessionKey {
   const privateKey = generatePrivateKey();
   return { privateKey, address: privateKeyToAddress(privateKey) };
+}
+
+/** spec 270 v4 W2 client-mint — an EIP-191 `signMessage` over the canonical delegation-token claims,
+ *  produced by the held session key. demo-jp signs its own MCP request tokens with this (the relying app
+ *  mints; demo-a2a only forwards). The verifier recovers this address from the signature and checks it
+ *  against the leaf binding it to the person SA — closing observe-and-re-mint. */
+export function sessionKeySigner(key: SessionKey): (msg: string) => Promise<Hex> {
+  const account = privateKeyToAccount(key.privateKey);
+  return (msg: string) => account.signMessage({ message: msg });
 }
 import { AGENT_NAME_PARENT, isAllowedIssuerOrigin, nameLabel, personalAuthOrigin, PLATFORM_AUTH_ORIGIN } from './lib/domain';
 
