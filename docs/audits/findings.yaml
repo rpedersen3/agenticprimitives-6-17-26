@@ -315,15 +315,23 @@ findings:
   - id: CP-1
     severity: medium
     title: custody tier thresholds default to 1-of-n (unconfigured quorum collapses to single signer)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/custody/CustodyPolicy.sol]
+    anchor: UnconfiguredTier
+    enforcement: test-covered
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/CustodyPolicyBranchR610b.t.sol
     note: >
-      Re-rated High → Medium by the 2026-06-10 deep dive (reachable-path correction): the factory's
-      _buildValidatorInitData DOES populate T1–T5 via defaultApprovals + sets recoveryApprovals, so
-      factory-deployed accounts are NOT 1-of-n. The gap is a direct onInstall that bypasses the factory
-      with a zeroed/partial array, or a T6 read via _approvalsValue (defense-in-depth). Fix: populate
-      unset tiers from _defaultApprovals at install + hard-revert unconfigured T4–T6. P1.
+      Fixed: onInstall now (a) floors each unset tier from _defaultApprovals using a best-effort
+      custodianCount read from the installing account, and (b) HARD-REVERTS UnconfiguredTier(4)/(5)
+      for any non-single (mode≥1) install where the admin/critical tiers end up unset — so a direct
+      onInstall that bypasses the factory with a zeroed/partial array can no longer collapse to 1-of-n.
+      Defense-in-depth: _approvalsValue now fails closed (UnconfiguredTier(6)) on a T6 read — the
+      recovery quorum lives in recoveryApprovals, never the tier map. Mode 0 (single) is unaffected.
+      7 CP-1 regression tests (direct-install revert, partial-tier revert, mode-0 ok, T6 read fail-closed,
+      real-account flooring via a mock that answers custodianCount). enforcement: test-covered (contract
+      code + tests; deployed-enforcement awaits the next Base Sepolia redeploy).
   - id: AN-1-ONCHAIN
     severity: high
     title: on-chain name registry enforces no label normalization (SDK fix bypassable by direct callers)
@@ -455,9 +463,20 @@ findings:
   - id: CP-2
     severity: medium
     title: CustodyPolicy recoveryApprovals unvalidated at install (can brick the T6 recovery lifeline)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/custody/CustodyPolicy.sol]
+    anchor: "recThr > c.trusteeCount"
+    enforcement: test-covered
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/CustodyPolicyBranchR610b.t.sol
+    note: >
+      Fixed: onInstall now validates `recThr > c.trusteeCount` → revert RecoveryRequiresGuardians, the
+      same invariant _applySetRecoveryThreshold enforces at runtime. A recovery threshold the trustee
+      set can never satisfy (incl. a positive threshold with zero trustees) can no longer be installed,
+      so the T6 lifeline can't be bricked from birth. recoveryApprovals==0 (trustee recovery disabled)
+      remains a legitimate state. 2 CP-2 regression tests (exceeds-trustees revert, zero-approvals ok).
+      enforcement: test-covered (deployed-enforcement awaits the next Base Sepolia redeploy).
   - id: DM-1
     severity: medium
     title: delegation caveat caps are per-call, not cumulative (N-time redemption of a value cap)
@@ -491,15 +510,42 @@ findings:
   - id: PM-1
     severity: medium
     title: paymaster validation reads governance storage (ERC-7562 violation → bundlers drop sponsored ops)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/SmartAgentPaymaster.sol]
+    anchor: _pausedMirror
+    enforcement: test-covered
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/SmartAgentPaymasterValidateR610.t.sol
+    note: >
+      Fixed: _validatePaymasterUserOp no longer staticcalls governance.isPaused() (an ERC-7562
+      validation-scope violation that gets sponsored ops dropped by bundlers). It reads the paymaster's
+      OWN-storage mirror `_pausedMirror` instead; the mirror is refreshed OUT of validation by a
+      permissionless `syncPauseFromGovernance()` (cache-of-canonical, ADR-0013 — no second mechanism) or
+      a governance `setPauseMirror`. 3 PM-1 regression tests (validation ignores un-synced governance
+      pause, permissionless sync propagates, setPauseMirror is governance-only). enforcement: test-covered
+      (deployed-enforcement awaits the next Base Sepolia redeploy).
   - id: PM-2
     severity: medium
     title: paymaster EntryPoint deposit drainable by the Ownable owner (no timelock, decoupled from governance)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/SmartAgentPaymaster.sol]
+    anchor: scheduleDepositWithdrawal
+    enforcement: test-covered
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/SmartAgentPaymasterValidateR610.t.sol
+    note: >
+      The inherited BasePaymaster.withdrawTo is `public onlyOwner` and NON-virtual (can't be overridden),
+      so the contract-level fix adds a governance-native, TIMELOCKED drain: scheduleDepositWithdrawal /
+      executeDepositWithdrawal / cancelDepositWithdrawal (onlyGovernance, DEPOSIT_WITHDRAWAL_TIMELOCK=48h).
+      This couples a withdrawal to governance (→ the 24h TimelockController via governance.execute) AND a
+      48h delay, so the sponsorship treasury can't be emptied in one tx by a governance action either. The
+      residual instant owner `withdrawTo` is closed operationally by handing the Ownable owner to the
+      governance timelock via Ownable2Step (documented in the contract's production checklist; bootstrap
+      window tracked under the governance-key custody item CON-FACTORY-001). 5 PM-2 regression tests
+      (onlyGovernance, pre-timelock revert, post-timelock payout, cancel, no-pending revert). enforcement:
+      test-covered.
   - id: GOV-1
     severity: medium
     title: immutable guardian can perpetually re-pause (permanent DoS, redeploy-only fix)
@@ -559,14 +605,20 @@ findings:
   - id: NEW-MCP-1
     severity: high
     title: memory JTI store NODE_ENV inference falls open on Workers (contradicts its own H7-B.9 fix comment)
-    status: open
+    status: closed
     concerns: [packages/mcp-runtime/src/jti-stores.ts]
+    anchor: CreateMemoryJtiStoreOpts
+    enforcement: production-enforced
     origin: 2026-06-10-production-readiness-audit.md
+    tests:
+      - packages/mcp-runtime/test/unit/jti-stores.test.ts
     note: >
-      createMemoryJtiStore still infers environment from NODE_ENV when opts.environment is omitted
-      (:50); on Workers/SES process.env is absent so it resolves to 'development' and skips the
-      production throw — non-durable replay protection ships silently. Fix: require environment
-      explicitly or throw when it cannot be determined. Lead-verified at source.
+      Fixed: `environment` is now a REQUIRED field on CreateMemoryJtiStoreOpts and is never inferred —
+      the NODE_ENV fallback (which resolved to 'development' on Workers/SES where process.env is absent,
+      silently skipping the production refusal) is removed. A caller in production must DECLARE
+      environment:'production', which refuses construction unless the explicit AGENTIC_ALLOW_MEMORY_JTI_STORE
+      opt-out is set. Compile-time required (TS), so the fall-open path is unrepresentable. 2 regression
+      tests assert the production refusal + opt-out gate; 66 mcp-runtime tests green.
   - id: NEW-AP-1
     severity: medium
     title: agent-profile fetchProfile skips integrity check on zero on-chain anchor (fail-open)

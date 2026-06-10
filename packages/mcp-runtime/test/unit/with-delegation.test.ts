@@ -27,7 +27,7 @@ const config: McpResourceVerifyConfig = {
     allowedTargets: '0x0000000000000000000000000000000000000004',
     allowedMethods: '0x0000000000000000000000000000000000000005',
   },
-  jtiStore: createMemoryJtiStore(),
+  jtiStore: createMemoryJtiStore({ environment: 'development' }),
 };
 
 describe('withDelegation', () => {

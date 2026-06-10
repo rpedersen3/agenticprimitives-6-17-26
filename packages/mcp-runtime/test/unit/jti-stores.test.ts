@@ -3,19 +3,20 @@ import {
   createMemoryJtiStore,
   createSqliteJtiStore,
   createPostgresJtiStore,
+  ALLOW_MEMORY_JTI_ENV,
 } from '../../src/jti-stores';
 import type { BetterSqlite3DatabaseLike, PgPoolLike } from '../../src/types';
 
 describe('createMemoryJtiStore', () => {
   it('first use is usage=1, allowed under limit', async () => {
-    const s = createMemoryJtiStore();
+    const s = createMemoryJtiStore({ environment: 'development' });
     const r = await s.trackUsage('jti_1', 10);
     expect(r.usage).toBe(1);
     expect(r.allowed).toBe(true);
   });
 
   it('increments per call until limit then rejects', async () => {
-    const s = createMemoryJtiStore();
+    const s = createMemoryJtiStore({ environment: 'development' });
     for (let i = 1; i <= 5; i++) {
       const r = await s.trackUsage('jti_x', 5);
       expect(r.usage).toBe(i);
@@ -27,7 +28,7 @@ describe('createMemoryJtiStore', () => {
   });
 
   it('different jtis are independent', async () => {
-    const s = createMemoryJtiStore();
+    const s = createMemoryJtiStore({ environment: 'development' });
     await s.trackUsage('a', 1);
     await s.trackUsage('a', 1);
     const b = await s.trackUsage('b', 1);
@@ -35,8 +36,34 @@ describe('createMemoryJtiStore', () => {
     expect(b.allowed).toBe(true);
   });
 
+  // NEW-MCP-1 — `environment` is required and never inferred. The production
+  // gate must fire from the DECLARED environment, not a NODE_ENV guess that
+  // falls open to 'development' on Workers / SES (where process.env is absent).
+  it('refuses construction when environment="production" (no opt-out env set)', () => {
+    const prev = process.env[ALLOW_MEMORY_JTI_ENV];
+    delete process.env[ALLOW_MEMORY_JTI_ENV];
+    try {
+      expect(() => createMemoryJtiStore({ environment: 'production' })).toThrow(
+        /createMemoryJtiStore refused/,
+      );
+    } finally {
+      if (prev !== undefined) process.env[ALLOW_MEMORY_JTI_ENV] = prev;
+    }
+  });
+
+  it('allows production ONLY with the explicit opt-out env flag', () => {
+    const prev = process.env[ALLOW_MEMORY_JTI_ENV];
+    process.env[ALLOW_MEMORY_JTI_ENV] = 'true';
+    try {
+      expect(() => createMemoryJtiStore({ environment: 'production' })).not.toThrow();
+    } finally {
+      if (prev === undefined) delete process.env[ALLOW_MEMORY_JTI_ENV];
+      else process.env[ALLOW_MEMORY_JTI_ENV] = prev;
+    }
+  });
+
   it('atomic under simulated concurrency (100 parallel writers, single jti)', async () => {
-    const s = createMemoryJtiStore();
+    const s = createMemoryJtiStore({ environment: 'development' });
     const results = await Promise.all(
       Array.from({ length: 100 }, () => s.trackUsage('concurrent', 100)),
     );

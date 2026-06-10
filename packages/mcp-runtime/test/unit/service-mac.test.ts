@@ -162,7 +162,7 @@ describe('verifyServiceMac', () => {
 
   it('accepts a freshly-generated MAC', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const result = await verifyServiceMac({
       ctx: ctx(),
       headers,
@@ -175,7 +175,7 @@ describe('verifyServiceMac', () => {
 
   it('emits mcp-runtime.service-mac.accept when sink is wired', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const sink = createMemoryAuditSink();
     const result = await verifyServiceMac({
       ctx: ctx(),
@@ -206,7 +206,7 @@ describe('verifyServiceMac', () => {
     // treat its absence as a security regression and want the auth flow
     // aborted. Wrapper no longer swallows sink errors.
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const throwingSink = {
       async write() {
         throw new Error('[audit:fail-hard] sink down');
@@ -226,7 +226,7 @@ describe('verifyServiceMac', () => {
 
   it('rejects a tampered MAC', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     // Flip the FIRST char to something guaranteed to decode differently.
     //
     // `headers.mac` is a base64url-encoded 32-byte HMAC (43 chars, no
@@ -253,7 +253,7 @@ describe('verifyServiceMac', () => {
 
   it('rejects a different-audience MAC (same key, wrong target)', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const result = await verifyServiceMac({
       ctx: ctx({ audience: 'urn:mcp:server:other' }),
       headers,
@@ -266,7 +266,7 @@ describe('verifyServiceMac', () => {
 
   it('rejects a different-route MAC', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const result = await verifyServiceMac({
       ctx: ctx({ route: 'update_profile' }),
       headers,
@@ -279,7 +279,7 @@ describe('verifyServiceMac', () => {
 
   it('rejects a different body digest', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const result = await verifyServiceMac({
       ctx: ctx({ bodyDigest: bodyDigestHex('different body') }),
       headers,
@@ -292,7 +292,7 @@ describe('verifyServiceMac', () => {
 
   it('rejects a stale MAC outside clock skew', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const result = await verifyServiceMac({
       ctx: ctx(),
       headers,
@@ -306,7 +306,7 @@ describe('verifyServiceMac', () => {
 
   it('rejects a future-dated MAC outside clock skew', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const result = await verifyServiceMac({
       ctx: ctx(),
       headers,
@@ -320,7 +320,7 @@ describe('verifyServiceMac', () => {
 
   it('rejects a malformed timestamp', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const result = await verifyServiceMac({
       ctx: ctx(),
       headers: { ...headers, timestamp: 'not-a-number' },
@@ -334,7 +334,7 @@ describe('verifyServiceMac', () => {
 
   it('rejects malformed mac base64url', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const result = await verifyServiceMac({
       ctx: ctx(),
       headers: { ...headers, mac: '$$invalid$$' },
@@ -350,7 +350,7 @@ describe('verifyServiceMac', () => {
 
   it('rejects a replayed nonce (second verification with same nonce)', async () => {
     const { provider, headers } = await freshHeaders();
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const first = await verifyServiceMac({ ctx: ctx(), headers, provider, jtiStore, now: () => NOW });
     expect(first.ok).toBe(true);
     const second = await verifyServiceMac({ ctx: ctx(), headers, provider, jtiStore, now: () => NOW });
@@ -361,7 +361,7 @@ describe('verifyServiceMac', () => {
   it('rejects when provider returns a different MAC than the generator (wrong key)', async () => {
     const callerProvider = createTestMacProvider(MASTER);
     const verifierProvider = createTestMacProvider('0x' + 'cc'.repeat(32)); // different master
-    const jtiStore = createMemoryJtiStore();
+    const jtiStore = createMemoryJtiStore({ environment: 'development' });
     const headers = await generateServiceMac({ ctx: ctx(), provider: callerProvider, now: () => NOW });
     const result = await verifyServiceMac({
       ctx: ctx(),

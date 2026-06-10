@@ -71,6 +71,20 @@ import "./governance/IGovernance.sol";
  *          `SenderNotAccepted` until governance explicitly opts a sender
  *          in. That is the documented safe state.
  *   2. Monitor `getDeposit()` and alert below a runway threshold.
+ *   3. PM-2 — hand the Ownable owner to the governance TimelockController via
+ *      `Ownable2Step` (`transferOwnership(governance)` then a timelocked
+ *      `acceptOwnership`) once deploy-time staking/funding is done. The owner
+ *      controls the INHERITED instant `withdrawTo`/stake drains; in production
+ *      it MUST be the timelock, not the bootstrap deployer EOA. The
+ *      governance-native, TIMELOCKED `scheduleDepositWithdrawal` /
+ *      `executeDepositWithdrawal` path below is the sanctioned drain that stays
+ *      coupled to governance + delayed regardless of the owner handoff state.
+ *      The deployer-owned window is bootstrap-only (tracked under the
+ *      governance-key custody item).
+ *   4. PM-1 — after governance pauses, call `syncPauseFromGovernance()` (or
+ *      `setPauseMirror(true)` from governance) so the validation-time mirror
+ *      halts sponsorship. Validation never reads governance storage directly
+ *      (ERC-7562), so the mirror must be pushed/synced.
  *
  * @dev Inherits `addStake`, `unlockStake`, `withdrawStake`, `deposit`,
  *      and `withdrawTo` from `BasePaymaster`. Ownable owner is set in
@@ -95,19 +109,62 @@ contract SmartAgentPaymaster is BasePaymaster {
     ///         validation. Stored immutable.
     address public immutable governance;
 
+    /// @notice PM-1 — local mirror of the governance pause flag. This is the
+    ///         ONLY pause signal read during ERC-4337 validation. Reading the
+    ///         external governance contract's storage inside
+    ///         `_validatePaymasterUserOp` violates the ERC-7562 validation-scope
+    ///         rules (a paymaster may touch only its own / associated storage),
+    ///         so reputable bundlers (Pimlico/Stackup/Alchemy) drop the sponsored
+    ///         op during simulation. We read this own-storage mirror instead;
+    ///         `syncPauseFromGovernance()` — a normal call OUTSIDE validation —
+    ///         refreshes it from the canonical governance flag. The mirror is a
+    ///         validation-time cache of governance's pause bit, never a second
+    ///         independent source (ADR-0013: cache-of-canonical, no fallback).
+    bool private _pausedMirror;
+
+    /// @notice PM-2 — a scheduled, governance-authorized EntryPoint-deposit
+    ///         withdrawal. The inherited owner `withdrawTo` is an INSTANT drain
+    ///         gated only by the Ownable owner; this path couples a withdrawal to
+    ///         governance (`onlyGovernance`) AND a fixed timelock, so the
+    ///         sponsorship treasury cannot be emptied in a single transaction.
+    struct PendingWithdrawal {
+        address payable to;
+        uint64 eta;
+        uint256 amount;
+    }
+    PendingWithdrawal private _pendingWithdrawal;
+
+    /// @notice PM-2 — delay between scheduling and executing a governance
+    ///         deposit withdrawal. Gives the guardian a window to pause if a
+    ///         withdrawal is unexpected (incident response).
+    uint64 public constant DEPOSIT_WITHDRAWAL_TIMELOCK = 48 hours;
+
     error SenderNotAccepted(address sender);
     error SystemPaused();
     error ZeroGovernance();
     error NotGovernance();
     error PaymasterDataMalformed();
     error PaymasterSignatureInvalid();
+    /// @dev PM-2 withdrawal-lifecycle errors.
+    error NoPendingWithdrawal();
+    error WithdrawalNotReady(uint64 eta);
+    error WithdrawalAmountZero();
+    error WithdrawalToZero();
 
     event DevModeSet(bool dev);
     event SenderAcceptedSet(address indexed sender, bool accepted);
     event VerifyingSignerSet(address indexed oldSigner, address indexed newSigner);
+    /// @notice PM-1 — emitted whenever the local pause mirror is updated.
+    event PauseMirrorSynced(bool paused, address indexed by);
+    /// @notice PM-2 — deposit-withdrawal lifecycle.
+    event DepositWithdrawalScheduled(address indexed to, uint256 amount, uint64 eta);
+    event DepositWithdrawalExecuted(address indexed to, uint256 amount);
+    event DepositWithdrawalCancelled(address indexed to, uint256 amount);
 
     /// @dev Storage gap reserves slots for future state. Phase A.5 §3.1.
-    uint256[49] private __gap;
+    ///      PM-1/PM-2 consumed 3 slots (`_pausedMirror` packs into 1;
+    ///      `PendingWithdrawal` is 2) — gap reduced 49 → 46 to preserve layout.
+    uint256[46] private __gap;
 
     /// @dev Length of the paymaster-data tail when in verifying mode:
     ///      6 (validUntil) + 6 (validAfter) + 65 (sig) = 77 bytes.
@@ -173,6 +230,90 @@ contract SmartAgentPaymaster is BasePaymaster {
         emit VerifyingSignerSet(old, newSigner);
     }
 
+    // ─── PM-1: pause mirror (own-storage, ERC-7562-compliant) ──────────
+
+    /// @notice PM-1 — refresh the local pause mirror from the canonical
+    ///         governance flag. Permissionless ON PURPOSE: validation may not
+    ///         read governance storage, so the mirror must be refreshable by
+    ///         anyone (a keeper, a bundler, the guardian's incident response)
+    ///         the moment governance pauses. This call is a NORMAL transaction
+    ///         (not paymaster validation), so the ERC-7562 scope rules don't
+    ///         apply to its cross-contract read. The mirror only ever holds the
+    ///         canonical governance value — no independent pause source.
+    function syncPauseFromGovernance() external {
+        bool p = _governanceIsPaused();
+        _pausedMirror = p;
+        emit PauseMirrorSynced(p, msg.sender);
+    }
+
+    /// @notice PM-1 — direct governance push of the pause mirror, for when
+    ///         governance wants to halt sponsorship without depending on a
+    ///         third party to sync. `onlyGovernance` ⇒ inherits the 24h
+    ///         timelock (or guardian-driven governance flow).
+    function setPauseMirror(bool paused_) external onlyGovernance {
+        _pausedMirror = paused_;
+        emit PauseMirrorSynced(paused_, msg.sender);
+    }
+
+    /// @notice The pause bit read during validation (the local mirror).
+    function paused() external view returns (bool) {
+        return _pausedMirror;
+    }
+
+    /// @dev Read the canonical governance pause flag. Used ONLY by the
+    ///      out-of-band sync path, never during validation. Mirrors the prior
+    ///      defensive decode: a non-conforming governance (EOA / missing fn)
+    ///      reads as "not paused" so legacy / test deploys keep working.
+    function _governanceIsPaused() internal view returns (bool) {
+        if (governance.code.length == 0) return false;
+        (bool ok, bytes memory data) = governance.staticcall(
+            abi.encodeWithSelector(IGovernanceView.isPaused.selector)
+        );
+        return ok && data.length >= 32 && abi.decode(data, (bool));
+    }
+
+    // ─── PM-2: governance-timelocked deposit withdrawal ────────────────
+
+    /// @notice PM-2 — schedule a governance-authorized withdrawal of the
+    ///         EntryPoint deposit. Coupled to governance AND delayed by
+    ///         `DEPOSIT_WITHDRAWAL_TIMELOCK`, unlike the inherited owner
+    ///         `withdrawTo` (instant, owner-only). Overwrites any prior pending
+    ///         withdrawal (governance is the single scheduler).
+    function scheduleDepositWithdrawal(address payable to, uint256 amount) external onlyGovernance {
+        if (to == address(0)) revert WithdrawalToZero();
+        if (amount == 0) revert WithdrawalAmountZero();
+        uint64 eta = uint64(block.timestamp) + DEPOSIT_WITHDRAWAL_TIMELOCK;
+        _pendingWithdrawal = PendingWithdrawal({to: to, eta: eta, amount: amount});
+        emit DepositWithdrawalScheduled(to, amount, eta);
+    }
+
+    /// @notice PM-2 — execute a previously-scheduled withdrawal once its
+    ///         timelock has elapsed. `onlyGovernance` so the same authority
+    ///         that scheduled it confirms; the delay gives the guardian time to
+    ///         pause if the withdrawal is unexpected.
+    function executeDepositWithdrawal() external onlyGovernance {
+        PendingWithdrawal memory w = _pendingWithdrawal;
+        if (w.eta == 0) revert NoPendingWithdrawal();
+        if (block.timestamp < w.eta) revert WithdrawalNotReady(w.eta);
+        delete _pendingWithdrawal;
+        entryPoint().withdrawTo(w.to, w.amount);
+        emit DepositWithdrawalExecuted(w.to, w.amount);
+    }
+
+    /// @notice PM-2 — cancel a pending withdrawal (governance de-escalation).
+    function cancelDepositWithdrawal() external onlyGovernance {
+        PendingWithdrawal memory w = _pendingWithdrawal;
+        if (w.eta == 0) revert NoPendingWithdrawal();
+        delete _pendingWithdrawal;
+        emit DepositWithdrawalCancelled(w.to, w.amount);
+    }
+
+    /// @notice PM-2 — view the pending withdrawal (zero `eta` ⇒ none).
+    function pendingWithdrawal() external view returns (address to, uint256 amount, uint64 eta) {
+        PendingWithdrawal memory w = _pendingWithdrawal;
+        return (w.to, w.amount, w.eta);
+    }
+
     // ─── Views ──────────────────────────────────────────────────────────
 
     function devMode() external view returns (bool) {
@@ -229,17 +370,13 @@ contract SmartAgentPaymaster is BasePaymaster {
         bytes32 /*userOpHash*/,
         uint256 /*maxCost*/
     ) internal view override returns (bytes memory context, uint256 validationData) {
-        // H7-C.10 / EXT3-010: gated behind system-wide governance pause.
-        // Skipped when `governance` is an EOA or non-conforming contract
-        // (legacy / test deploys); production deploys MUST pass an
-        // AgenticGovernance address, which the production-deploy preflight
-        // (`check:production-deploy`) enforces.
-        if (governance.code.length > 0) {
-            (bool ok, bytes memory data) = governance.staticcall(
-                abi.encodeWithSelector(IGovernanceView.isPaused.selector)
-            );
-            if (ok && data.length >= 32 && abi.decode(data, (bool))) revert SystemPaused();
-        }
+        // PM-1 / H7-C.10 / EXT3-010: gated behind the system-wide governance
+        // pause — but read from the LOCAL mirror (`_pausedMirror`), never the
+        // external governance contract's storage. A cross-contract staticcall
+        // here violates the ERC-7562 validation-scope rules and gets the op
+        // dropped by bundlers. The mirror is refreshed out-of-band via
+        // `syncPauseFromGovernance()` (a normal call) or `setPauseMirror()`.
+        if (_pausedMirror) revert SystemPaused();
 
         if (_dev) {
             // Dev mode: accept all. validationData = 0 → "valid sig,

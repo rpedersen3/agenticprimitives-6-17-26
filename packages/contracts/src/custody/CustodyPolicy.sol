@@ -313,6 +313,9 @@ contract CustodyPolicy {
     error TrusteeDoesNotExist(address guardian);
     error InvalidMode(uint8 mode_);
     error InvalidThresholdValue(uint8 thr);
+    /// @dev CP-1: a tier that must be configured (T4/T5 at install, T6 at read)
+    ///      was left unset — refuse rather than fall to the 1-of-n read fallback.
+    error UnconfiguredTier(uint8 tier);
     error RecoveryRequiresGuardians();
     error EmptyOwnerSet();
     error CustodyActionNotYetImplemented(uint8 action);
@@ -370,17 +373,58 @@ contract CustodyPolicy {
         c.t3HighValueCeiling = t3Ceiling;
         c.approvedHashRegistry = approvedHashReg;
 
-        for (uint8 t = 1; t <= 6; t++) {
-            if (thresholds[t] > 0) c.approvalsRequiredByTier[t] = thresholds[t];
-            if (timelocks[t] > 0) c.safetyDelayByTier[t] = timelocks[t];
-        }
-
+        // Trustees first so `trusteeCount` is known for the CP-2 recovery check.
         for (uint256 i; i < trustees.length; i++) {
             address g = trustees[i];
             if (g == address(0)) revert ZeroAddress();
             if (c.trustees[g]) revert TrusteeAlreadyExists(g);
             c.trustees[g] = true;
             c.trusteeCount += 1;
+        }
+
+        // CP-2: a recovery threshold the trustee set can NEVER satisfy bricks the
+        // T6 recovery lifeline from birth. Validate at install exactly as
+        // `_applySetRecoveryThreshold` does at runtime. `recoveryApprovals == 0`
+        // is a legitimate state (trustee recovery simply disabled); a positive
+        // threshold MUST be reachable by the configured trustees.
+        if (recThr > c.trusteeCount) revert RecoveryRequiresGuardians();
+
+        // CP-1: floor each unset tier to the spec default-approvals matrix so a
+        // direct onInstall that bypasses the factory with a zeroed/partial
+        // threshold array can't collapse the admin/critical tiers to the 1-of-n
+        // read fallback in `_approvalsValue`. T1–T3 legitimately stay at the
+        // 1-of-n floor (read/write/value are single-signer tiers by design);
+        // T4/T5 get the council default. T6 (recovery) lives in
+        // `recoveryApprovals`, not this map.
+        //
+        // The custodian count is read best-effort from the installing account
+        // (the ERC-7579 flow guarantees `msg.sender` is the deployed account).
+        // If it can't be determined (the account isn't yet/at all an
+        // `IAgentAccount`), `nCustodians` stays 0 so no flooring happens — and
+        // the hard-revert below then REQUIRES the installer to have passed
+        // explicit T4/T5 thresholds. Either way the admin/critical tiers can
+        // never silently resolve to 1-of-n; the floor is a convenience, the
+        // hard-revert is the security invariant.
+        uint8 nCustodians;
+        if (account.code.length > 0) {
+            try IAgentAccount(account).custodianCount() returns (uint256 cnt) {
+                nCustodians = cnt > 255 ? 255 : uint8(cnt);
+            } catch {}
+        }
+        for (uint8 t = 1; t <= 6; t++) {
+            uint8 thr = thresholds[t];
+            if (thr == 0) thr = _defaultApprovals(nCustodians, t);
+            if (thr > 0) c.approvalsRequiredByTier[t] = thr;
+            if (timelocks[t] > 0) c.safetyDelayByTier[t] = timelocks[t];
+        }
+
+        // CP-1 hard-revert: a non-single account MUST have the admin (T4) +
+        // critical (T5) custody quorum configured (explicitly or via the floor
+        // above) — never the 1-of-n read fallback. Mode 0 (single signer) has no
+        // custody council, so thresholds are moot and this is skipped.
+        if (modeVal >= 1) {
+            if (c.approvalsRequiredByTier[4] == 0) revert UnconfiguredTier(4);
+            if (c.approvalsRequiredByTier[5] == 0) revert UnconfiguredTier(5);
         }
 
         emit CustodyPolicyInstalled(account, modeVal, recThr);
@@ -633,7 +677,16 @@ contract CustodyPolicy {
     function _approvalsValue(Config storage c, uint8 tier) internal view returns (uint8) {
         if (tier == 0 || tier > 6) revert InvalidTier(tier);
         uint8 v = c.approvalsRequiredByTier[tier];
-        return v == 0 ? 1 : v;
+        if (v == 0) {
+            // CP-1 defense-in-depth: the T6 (recovery) quorum lives in
+            // `recoveryApprovals`, never in this map — a T6 read here is a
+            // mis-wire, so fail closed instead of returning the 1-of-n fallback.
+            // T1–T5 keep the 1-of-n floor (T4/T5 are install-floored, so the
+            // fallback only ever applies to the low single-signer tiers).
+            if (tier == 6) revert UnconfiguredTier(6);
+            return 1;
+        }
+        return v;
     }
 
     function _safetyDelayValue(Config storage c, uint8 tier) internal view returns (uint32) {

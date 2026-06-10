@@ -37,10 +37,24 @@
       "contract": "src/SmartAgentPaymaster.sol:SmartAgentPaymaster"
     },
     {
-      "label": "__gap",
+      "label": "_pausedMirror",
+      "slot": "3",
+      "offset": 20,
+      "type": "t_bool",
+      "contract": "src/SmartAgentPaymaster.sol:SmartAgentPaymaster"
+    },
+    {
+      "label": "_pendingWithdrawal",
       "slot": "4",
       "offset": 0,
-      "type": "t_array(t_uint256)49_storage",
+      "type": "t_struct(PendingWithdrawal)_storage",
+      "contract": "src/SmartAgentPaymaster.sol:SmartAgentPaymaster"
+    },
+    {
+      "label": "__gap",
+      "slot": "6",
+      "offset": 0,
+      "type": "t_array(t_uint256)46_storage",
       "contract": "src/SmartAgentPaymaster.sol:SmartAgentPaymaster"
     }
   ]

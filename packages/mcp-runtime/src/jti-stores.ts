@@ -31,23 +31,25 @@ export const ALLOW_MEMORY_JTI_ENV = 'AGENTIC_ALLOW_MEMORY_JTI_STORE';
 let memoryStoreWarnedOnce = false;
 
 /**
- * H7-B.9 / XPKG-005 — explicit environment opt-in. The memory store is
- * the only JTI store that ships with this package and has cross-isolate
- * replay-vulnerability; production deploys MUST pass `environment:
- * 'production'` to gate it on (and supply the `AP_ALLOW_MEMORY_JTI_STORE`
- * opt-out). The previous `process.env.NODE_ENV` check silently opened on
- * Cloudflare Workers / SES where `process.env` is undefined.
+ * H7-B.9 / XPKG-005 / NEW-MCP-1 — `environment` is REQUIRED, never inferred.
+ * The memory store is the only JTI store that ships with this package and has
+ * cross-isolate replay-vulnerability; production deploys MUST pass `environment:
+ * 'production'` to gate it on (and supply the `AGENTIC_ALLOW_MEMORY_JTI_STORE`
+ * opt-out). It is required (not optional-with-a-default) because there is NO
+ * runtime signal we can trust to infer it: `process.env.NODE_ENV` is absent on
+ * Cloudflare Workers / SES, where it would silently resolve to 'development' and
+ * skip the production refusal — shipping non-durable replay protection unnoticed
+ * (the NEW-MCP-1 fall-open). Security-relevant configuration is declared, not guessed.
  */
 export interface CreateMemoryJtiStoreOpts {
-  environment?: 'production' | 'development';
+  environment: 'production' | 'development';
 }
 
-export function createMemoryJtiStore(opts: CreateMemoryJtiStoreOpts = {}): JtiStore {
-  // Production guard — H7-B.9: the caller MUST pass `environment: 'production'`
-  // to opt into the gate. We no longer infer from NODE_ENV (Workers / SES
-  // runtimes don't reliably expose it, leading to silent fall-open).
+export function createMemoryJtiStore(opts: CreateMemoryJtiStoreOpts): JtiStore {
+  // NEW-MCP-1: the caller DECLARES the environment — we never infer it from NODE_ENV
+  // (Workers / SES don't expose `process.env`, so inference fell open to 'development').
   const env = typeof process !== 'undefined' ? (process.env ?? {}) : {};
-  const environment = opts.environment ?? (env.NODE_ENV === 'production' ? 'production' : 'development');
+  const environment = opts.environment;
   if (environment === 'production' && env[ALLOW_MEMORY_JTI_ENV] !== 'true') {
     throw new Error(
       '[mcp-runtime] createMemoryJtiStore refused: environment="production". ' +

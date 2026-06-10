@@ -291,8 +291,10 @@ contract AgentAccountFactoryModeTest is Test {
         // Victim deploys their real config at their canonical address.
         AgentAccount victimAcct = factory.createAgentAccount(victimP, _defaultTimelocks(), 123);
         assertEq(address(victimAcct), victimAddr, "victim deploys at the predicted address");
-        // The victim's trustees govern recovery — not the attacker's.
-        uint256 recThr = validator.approvalsRequired(victimAddr, 6); // T6 recovery tier present
+        // The victim's trustees govern recovery — not the attacker's. T6 (recovery)
+        // quorum lives in `recoveryApprovals`, not the tier map (CP-1: reading
+        // `approvalsRequired(.,6)` now fails closed since it was never the T6 source).
+        uint256 recThr = validator.recoveryApprovals(victimAddr);
         assertTrue(recThr >= 1, "victim custody policy installed");
     }
 

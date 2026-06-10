@@ -132,6 +132,9 @@ contract SmartAgentPaymasterValidateR610Test is Test {
 
     function test_R6_10_validate_paused_reverts() public {
         gov.setPaused(true);
+        // PM-1: validation reads the LOCAL mirror (ERC-7562), not governance
+        // storage — propagate the pause via the out-of-band sync first.
+        pm.syncPauseFromGovernance();
         PackedUserOperation memory op = _baseOp(someSender);
         op.paymasterAndData = _verifyingPaymasterData(op, uint48(block.timestamp + 1 hours), 0, VS_PK);
 
@@ -142,6 +145,7 @@ contract SmartAgentPaymasterValidateR610Test is Test {
 
     function test_R6_10_validate_paused_then_unpaused_succeeds() public {
         gov.setPaused(true);
+        pm.syncPauseFromGovernance(); // PM-1: push pause into the validation-time mirror
         PackedUserOperation memory op = _baseOp(someSender);
         uint48 validUntil = uint48(block.timestamp + 1 hours);
         op.paymasterAndData = _verifyingPaymasterData(op, validUntil, 0, VS_PK);
@@ -151,6 +155,7 @@ contract SmartAgentPaymasterValidateR610Test is Test {
         pm.validatePaymasterUserOp(op, bytes32(0), 0);
 
         gov.setPaused(false);
+        pm.syncPauseFromGovernance(); // PM-1: refresh the mirror to the unpaused state
         vm.prank(address(ep));
         (, uint256 vd) = pm.validatePaymasterUserOp(op, bytes32(0), 0);
         assertGt(vd, 0, "unpaused must produce a non-zero validationData (encoded window)");
@@ -406,5 +411,105 @@ contract SmartAgentPaymasterValidateR610Test is Test {
         (, uint256 vd) = pm.validatePaymasterUserOp(op, bytes32(0), 0);
         uint48 decoded = uint48((vd >> 160) & ((1 << 48) - 1));
         assertEq(decoded, validUntil);
+    }
+
+    // ─── PM-1 (2026-06-10 contract-by-contract audit) ─────────────────
+
+    /// PM-1: validation reads the LOCAL mirror, NOT governance storage. Pausing
+    /// governance WITHOUT syncing must NOT halt validation — proving the
+    /// ERC-7562-violating cross-contract read is gone.
+    function test_PM1_validation_readsLocalMirror_notGovernanceStorage() public {
+        gov.setPaused(true); // governance paused, but mirror not synced
+        PackedUserOperation memory op = _baseOp(someSender);
+        op.paymasterAndData = _verifyingPaymasterData(op, uint48(block.timestamp + 1 hours), 0, VS_PK);
+        vm.prank(address(ep));
+        // Succeeds: the mirror is still false (no cross-contract read in validation).
+        (, uint256 vd) = pm.validatePaymasterUserOp(op, bytes32(0), 0);
+        assertGt(vd, 0);
+        assertFalse(pm.paused());
+    }
+
+    /// PM-1: `syncPauseFromGovernance` is permissionless and refreshes the mirror
+    /// from the canonical governance flag.
+    function test_PM1_syncPause_permissionless_propagates() public {
+        gov.setPaused(true);
+        vm.prank(address(0xBEEF)); // anyone may sync
+        pm.syncPauseFromGovernance();
+        assertTrue(pm.paused());
+        gov.setPaused(false);
+        pm.syncPauseFromGovernance();
+        assertFalse(pm.paused());
+    }
+
+    /// PM-1: the direct push `setPauseMirror` is governance-only.
+    function test_PM1_setPauseMirror_onlyGovernance() public {
+        vm.prank(address(0xBAD));
+        vm.expectRevert(SmartAgentPaymaster.NotGovernance.selector);
+        pm.setPauseMirror(true);
+
+        vm.prank(address(gov));
+        pm.setPauseMirror(true);
+        assertTrue(pm.paused());
+    }
+
+    // ─── PM-2 (2026-06-10 contract-by-contract audit) ─────────────────
+
+    function _fundDeposit(uint256 amount) internal {
+        vm.deal(address(this), address(this).balance + amount);
+        pm.deposit{value: amount}();
+    }
+
+    /// PM-2: scheduling a deposit withdrawal is governance-only.
+    function test_PM2_schedule_onlyGovernance() public {
+        vm.prank(address(0xBAD));
+        vm.expectRevert(SmartAgentPaymaster.NotGovernance.selector);
+        pm.scheduleDepositWithdrawal(payable(address(0xBEEF)), 1);
+    }
+
+    /// PM-2: a scheduled withdrawal cannot execute before its timelock elapses.
+    function test_PM2_executeBeforeTimelock_reverts() public {
+        _fundDeposit(1 ether);
+        vm.prank(address(gov));
+        pm.scheduleDepositWithdrawal(payable(address(0xBEEF)), 0.5 ether);
+        (, , uint64 eta) = pm.pendingWithdrawal();
+        vm.prank(address(gov));
+        vm.expectRevert(abi.encodeWithSelector(SmartAgentPaymaster.WithdrawalNotReady.selector, eta));
+        pm.executeDepositWithdrawal();
+    }
+
+    /// PM-2: after the timelock, the governance-scheduled withdrawal pays out.
+    function test_PM2_executeAfterTimelock_withdraws() public {
+        _fundDeposit(1 ether);
+        address payable to = payable(address(0xBEEF));
+        vm.prank(address(gov));
+        pm.scheduleDepositWithdrawal(to, 0.5 ether);
+        skip(pm.DEPOSIT_WITHDRAWAL_TIMELOCK());
+        uint256 before = to.balance;
+        vm.prank(address(gov));
+        pm.executeDepositWithdrawal();
+        assertEq(to.balance - before, 0.5 ether, "recipient paid out");
+        (, , uint64 eta) = pm.pendingWithdrawal();
+        assertEq(eta, 0, "pending cleared after execute");
+    }
+
+    /// PM-2: a pending withdrawal can be cancelled (governance de-escalation),
+    /// after which execute reverts.
+    function test_PM2_cancel_thenExecuteReverts() public {
+        _fundDeposit(1 ether);
+        vm.prank(address(gov));
+        pm.scheduleDepositWithdrawal(payable(address(0xBEEF)), 0.5 ether);
+        vm.prank(address(gov));
+        pm.cancelDepositWithdrawal();
+        skip(pm.DEPOSIT_WITHDRAWAL_TIMELOCK());
+        vm.prank(address(gov));
+        vm.expectRevert(SmartAgentPaymaster.NoPendingWithdrawal.selector);
+        pm.executeDepositWithdrawal();
+    }
+
+    /// PM-2: executing with nothing scheduled reverts.
+    function test_PM2_executeWithNoPending_reverts() public {
+        vm.prank(address(gov));
+        vm.expectRevert(SmartAgentPaymaster.NoPendingWithdrawal.selector);
+        pm.executeDepositWithdrawal();
     }
 }

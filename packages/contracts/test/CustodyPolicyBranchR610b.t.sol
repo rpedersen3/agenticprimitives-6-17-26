@@ -203,11 +203,12 @@ contract CustodyPolicyBranchR610bTest is Test {
         address mockAcct = address(0xACC10);
         address[] memory trustees = new address[](1);
         trustees[0] = guardian1;
-        uint8[7] memory thresholds; thresholds[4] = 1;
+        // CP-1: a mode≥1 install must configure T4 + T5 (no 1-of-n fallback).
+        uint8[7] memory thresholds; thresholds[4] = 1; thresholds[5] = 1;
         uint32[7] memory timelocks; timelocks[6] = 1; // any non-zero
         bytes memory initData = abi.encode(
             uint8(1),       // mode = hybrid
-            uint8(0),       // recoveryApprovals = 0 ← trigger
+            uint8(0),       // recoveryApprovals = 0 ← trigger (valid under CP-2: 0 ≤ trustees)
             trustees,
             thresholds,
             timelocks,
@@ -231,13 +232,16 @@ contract CustodyPolicyBranchR610bTest is Test {
     }
 
     function test_R6_10b_schedule_revertsRecoveryRequiresGuardianQuorum_zeroTrusteeCount() public {
-        // Same revert via the OTHER `||` branch: trusteeCount==0.
+        // Same revert via the OTHER `||` branch: trusteeCount==0. recoveryApprovals
+        // must be 0 here — CP-2 now refuses an install where recoveryApprovals
+        // exceeds the trustee set (a bricked recovery lifeline). 0 ≤ 0 is valid,
+        // and the zero-trustee schedule guard still fires.
         address mockAcct = address(0xACC11);
-        uint8[7] memory thresholds; thresholds[4] = 1;
+        uint8[7] memory thresholds; thresholds[4] = 1; thresholds[5] = 1; // CP-1: T4+T5 required
         uint32[7] memory timelocks; timelocks[6] = 1;
         bytes memory initData = abi.encode(
             uint8(1),
-            uint8(1),       // recoveryApprovals=1, but trusteeCount=0 still triggers
+            uint8(0),       // recoveryApprovals=0; trusteeCount=0 triggers the schedule guard
             new address[](0),
             thresholds,
             timelocks,
@@ -674,4 +678,92 @@ contract CustodyPolicyBranchR610bTest is Test {
         vm.expectRevert(abi.encodeWithSelector(CustodyPolicy.InvalidThresholdValue.selector, uint8(0)));
         policy.applyCustodyChange(address(acct), cid, _signRaw(OWNER_PK, eh));
     }
+
+    // ─── CP-1 / CP-2 (2026-06-10 contract-by-contract audit) ──────────
+
+    function _installData(
+        uint8 mode_,
+        uint8 recoveryApprovals_,
+        address[] memory trustees_,
+        uint8 t4,
+        uint8 t5
+    ) internal pure returns (bytes memory) {
+        uint8[7] memory thresholds;
+        thresholds[4] = t4;
+        thresholds[5] = t5;
+        uint32[7] memory timelocks;
+        timelocks[4] = 1; timelocks[5] = 1; timelocks[6] = 1;
+        return abi.encode(mode_, recoveryApprovals_, trustees_, thresholds, timelocks, uint256(0), address(0));
+    }
+
+    /// CP-1: a non-single (mode≥1) direct install with the admin/critical tiers
+    /// left unset is REFUSED — it can no longer silently collapse to 1-of-n.
+    function test_CP1_directInstall_mode1_unsetT4T5_reverts() public {
+        vm.prank(address(0xC1A));
+        vm.expectRevert(abi.encodeWithSelector(CustodyPolicy.UnconfiguredTier.selector, uint8(4)));
+        policy.onInstall(_installData(1, 0, new address[](0), 0, 0));
+    }
+
+    /// CP-1: an install that sets T4 but forgets T5 still fails closed.
+    function test_CP1_directInstall_partialTiers_reverts() public {
+        vm.prank(address(0xC1B));
+        vm.expectRevert(abi.encodeWithSelector(CustodyPolicy.UnconfiguredTier.selector, uint8(5)));
+        policy.onInstall(_installData(1, 0, new address[](0), 1, 0));
+    }
+
+    /// CP-1: mode 0 (single) needs no council tiers — install succeeds with zeros.
+    function test_CP1_mode0_singleSigner_installs_withoutTiers() public {
+        vm.prank(address(0xC1C));
+        policy.onInstall(_installData(0, 0, new address[](0), 0, 0));
+        assertTrue(policy.isInstalledOn(address(0xC1C)));
+    }
+
+    /// CP-1 defense-in-depth: reading T6 via `approvalsRequired` fails closed —
+    /// the recovery quorum lives in `recoveryApprovals`, never the tier map.
+    function test_CP1_approvalsRequired_tier6_failsClosed() public {
+        // `acct` is a real factory install (mode 1, council tiers set).
+        vm.expectRevert(abi.encodeWithSelector(CustodyPolicy.UnconfiguredTier.selector, uint8(6)));
+        policy.approvalsRequired(address(acct), 6);
+        // The honest T6 source still reads fine.
+        assertGt(policy.recoveryApprovals(address(acct)), 0);
+    }
+
+    /// CP-1: a direct install on an account that answers `custodianCount()`
+    /// floors the UNSET council tiers from the spec default-approvals matrix
+    /// while preserving the EXPLICIT ones — never the 1-of-n fallback.
+    function test_CP1_floorsUnsetTierFromDefault() public {
+        MockCountAccount mock = new MockCountAccount(3); // n=3 custodians
+        // mode 1, T4 explicit = 2, T5 UNSET (0) → floored to _defaultApprovals(3,5)=3.
+        vm.prank(address(mock));
+        policy.onInstall(_installData(1, 0, new address[](0), 2, 0));
+        assertEq(policy.approvalsRequired(address(mock), 4), 2, "explicit T4 preserved");
+        assertEq(policy.approvalsRequired(address(mock), 5), 3, "unset T5 floored to default(3)");
+    }
+
+    /// CP-2: an install whose recovery threshold exceeds the trustee set bricks
+    /// the T6 lifeline from birth — now refused at install.
+    function test_CP2_install_recoveryExceedsTrustees_reverts() public {
+        address[] memory trustees = new address[](1);
+        trustees[0] = guardian1;
+        vm.prank(address(0xC2A));
+        vm.expectRevert(CustodyPolicy.RecoveryRequiresGuardians.selector);
+        policy.onInstall(_installData(1, 2, trustees, 1, 1)); // recoveryApprovals=2 > 1 trustee
+    }
+
+    /// CP-2: recoveryApprovals == 0 (trustee recovery disabled) is a legitimate
+    /// install state regardless of the trustee count.
+    function test_CP2_install_zeroRecoveryApprovals_ok() public {
+        vm.prank(address(0xC2B));
+        policy.onInstall(_installData(1, 0, new address[](0), 1, 1));
+        assertEq(policy.recoveryApprovals(address(0xC2B)), 0);
+    }
+}
+
+/// @dev Minimal account stub that only answers `custodianCount()` — enough for
+///      the CP-1 install-time flooring path (which best-effort reads the count
+///      from the installing account).
+contract MockCountAccount {
+    uint256 private immutable _n;
+    constructor(uint256 n_) { _n = n_; }
+    function custodianCount() external view returns (uint256) { return _n; }
 }

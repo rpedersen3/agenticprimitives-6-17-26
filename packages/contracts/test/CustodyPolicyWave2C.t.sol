@@ -167,8 +167,12 @@ contract CustodyPolicyWave2CTest is Test {
     function _emptyInstallData() internal pure returns (bytes memory) {
         uint8[7] memory thresholds; // all zeros
         uint32[7] memory timelocks; // all zeros
+        // mode = 0 (single): the reinstall LOCK these tests exercise is
+        // mode-independent, and a single-signer install needs no T4/T5 quorum
+        // (CP-1 only floors / hard-reverts the council tiers for mode ≥ 1), so
+        // this is the minimal install that works on a codeless mock account.
         return abi.encode(
-            uint8(1),                       // mode = hybrid
+            uint8(0),                       // mode = single
             uint8(0),                       // recoveryApprovals (0 ok at install)
             new address[](0),               // trustees
             thresholds,
