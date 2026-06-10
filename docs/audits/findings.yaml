@@ -272,16 +272,17 @@ findings:
       full factory redeploy (CON-FACTORY-001 still tracks the governance side). 5 property tests +
       full 764-test contract suite green.
   - id: CP-1
-    severity: high
+    severity: medium
     title: custody tier thresholds default to 1-of-n (unconfigured quorum collapses to single signer)
     status: open
     concerns: [packages/contracts/src/custody/CustodyPolicy.sol]
     origin: 2026-06-10-contract-by-contract-audit.md
     note: >
-      onInstall only writes a tier when thresholds[t] > 0; _approvalsValue returns 1 for 0; the
-      _defaultApprovals matrix is never invoked. A zeroed/partial threshold array lets one custodian key
-      rotate the whole custodian set (T4) or upgrade the implementation (T5). Fix: populate defaults at
-      install + hard-revert unconfigured T4–T6. MAINNET BLOCKER.
+      Re-rated High → Medium by the 2026-06-10 deep dive (reachable-path correction): the factory's
+      _buildValidatorInitData DOES populate T1–T5 via defaultApprovals + sets recoveryApprovals, so
+      factory-deployed accounts are NOT 1-of-n. The gap is a direct onInstall that bypasses the factory
+      with a zeroed/partial array, or a T6 read via _approvalsValue (defense-in-depth). Fix: populate
+      unset tiers from _defaultApprovals at install + hard-revert unconfigured T4–T6. P1.
   - id: AN-1-ONCHAIN
     severity: high
     title: on-chain name registry enforces no label normalization (SDK fix bypassable by direct callers)
@@ -299,17 +300,24 @@ findings:
       subregistry routes through register(), so it inherits the same enforcement (the homoglyph half of
       SUB-2). 11 new Foundry cases; 41 AgentNameRegistry tests green.
   - id: SUB-1
-    severity: high
+    severity: medium
     title: permissionless subregistry name front-running (no commit-reveal)
     status: open
     concerns: [packages/contracts/src/naming/PermissionlessSubregistry.sol]
     origin: 2026-06-10-contract-by-contract-audit.md
+    note: >
+      Re-rated High → Medium: the contract documents itself as demo/sybil-rollup grade
+      (PermissionlessSubregistry.sol:24-29). Fix for any production subregistry: commit-reveal.
   - id: SUB-2
-    severity: high
+    severity: medium
     title: subregistry sybil/homoglyph mass-squatting (no rate/cost barrier + AN-1-ONCHAIN gap)
     status: open
     concerns: [packages/contracts/src/naming/PermissionlessSubregistry.sol]
     origin: 2026-06-10-contract-by-contract-audit.md
+    note: >
+      Re-rated High → Medium: a one-name-per-msg.sender cap + MIN_LABEL_LENGTH exist (so "no rate
+      barrier" was inaccurate), but the cap is sybil-bypassable. Demo-grade. The homoglyph half is
+      addressed by AN-1-ONCHAIN (subregistry routes through registry.register). Fix: fee/allowlist.
   - id: ATT-1
     severity: high
     title: assertJointAgreement issuer signature over bare credentialHash (SC-2 class, issuer side)
@@ -474,20 +482,32 @@ findings:
     concerns: [packages/contracts/src/naming/AgentNameRegistry.sol]
     origin: 2026-06-10-contract-by-contract-audit.md
   - id: RES-1
-    severity: medium
+    severity: low
     title: resolveName can return an unverified owner-asserted address (no reverse round-trip)
     status: open
     concerns: [packages/contracts/src/naming/AgentNameUniversalResolver.sol]
     origin: 2026-06-10-contract-by-contract-audit.md
+    note: >
+      Re-rated Medium → Low: the owner fallback resolves to the node's legitimate authority; reverse
+      resolution IS round-trip enforced. Optional: document that forward resolution via the owner
+      fallback is not a canonical bidirectional binding.
   - id: ONT-4
-    severity: medium
+    severity: low
     title: ShapeRegistry trusts a caller-supplied store address
     status: open
     concerns: [packages/contracts/src/ontology/ShapeRegistry.sol]
     origin: 2026-06-10-contract-by-contract-audit.md
+    note: >
+      Re-rated Medium → Info/by-design: validateSubject/isValid are VIEW-only; a caller-supplied store
+      grants no authority and mutates no state (only fools the caller). Every mutator is onlyGovernor.
+      Optional: document that consumers must pass a trusted store. Not a vulnerability.
   - id: ONT-7
-    severity: medium
+    severity: low
     title: AttributeStorage base has no subject-ownership gate
     status: open
     concerns: [packages/contracts/src/ontology/AttributeStorage.sol]
     origin: 2026-06-10-contract-by-contract-audit.md
+    note: >
+      Re-rated Medium → Info/by-design: AttributeStorage is abstract with all-internal setters that
+      explicitly delegate auth to subclasses; it cannot be deployed and exposes no external write.
+      Re-scope (open action): verify each concrete subclass gates its external write surface.

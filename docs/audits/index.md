@@ -8,6 +8,7 @@
 | Read | For |
 | --- | --- |
 | [`findings.yaml`](./findings.yaml) | Current status of every first-class finding (id, severity, status, source-linked). |
+| [`2026-06-10-contract-by-contract-audit.md`](./2026-06-10-contract-by-contract-audit.md) | Active contract-layer tracker — independent per-contract deep dive of all 42 `.sol` files (corrected severities + the P0/P1/P2 remediation roadmap). |
 | [`../architecture/product-readiness-audit.md`](../architecture/product-readiness-audit.md) | Living system-level readiness verdict + backlog. |
 | [`audit-evidence-index.md`](./audit-evidence-index.md) | "What proves what" — the artifact/evidence map. |
 
