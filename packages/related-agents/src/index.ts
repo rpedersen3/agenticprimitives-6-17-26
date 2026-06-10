@@ -46,6 +46,66 @@ export interface RelatedAgentBody extends Record<string, unknown> {
   agentName: string;
   /** Optional app-level kind tag (opaque to this package). */
   agentKind?: string;
+  /** spec 271 (W0) — the recoverable custody descriptor for this related agent SA. Private (the credential
+   *  is `visibility: private`); lets an authenticated owner reconstruct the SA's custodian (ADR-0035). */
+  custody?: CustodyDescriptor;
+}
+
+// ─── Recoverable custody descriptor (spec 271 / ADR-0035 pillar 1) ──────────
+
+/** How an SA's custodian is reconstructed. For `kms-subject` the owner's `(iss,sub)` is DELIBERATELY
+ *  absent — it is supplied by the live owner session at recovery time, so the descriptor alone never
+ *  identifies the owner (RC-INV-3 / ADR-0025 privacy). */
+export type CustodyKind =
+  | { kind: 'kms-subject'; rotation: number }
+  | { kind: 'passkey'; credentialId: string }
+  | { kind: 'eoa'; address: Address };
+
+/** The recoverable record of how an SA is custodied. Persisted (by the app/Connect, never this package)
+ *  in the owner's PRIVATE related vault. The `salt` is the otherwise-discarded deployment salt
+ *  (random per ADR-0010); reconstruction also needs the KMS master + an authenticated owner session, so
+ *  the descriptor alone grants nothing (RC-INV-1). */
+export interface CustodyDescriptor {
+  /** The SA this descriptor reconstructs the custodian for (== the credential's `relatedAgent` role). */
+  targetSA: Address;
+  /** The deployment salt (bytes32). The piece lost today when an org SA deploys with a random salt. */
+  salt: Hex;
+  /** The custodian reconstruction method. */
+  custody: CustodyKind;
+}
+
+const CD_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const CD_BYTES32 = /^0x[0-9a-fA-F]{64}$/;
+
+/** Validate + canonicalize a custody descriptor. Rebuilds `custody` field-by-field so no extra field
+ *  (e.g. a smuggled `iss`/`sub`) can survive into the stored record (RC-INV-3). Fail-closed on bad input. */
+export function buildCustodyDescriptor(d: CustodyDescriptor): CustodyDescriptor {
+  if (!CD_ADDRESS.test(d.targetSA)) throw new Error('custody descriptor: targetSA must be a 20-byte address');
+  if (!CD_BYTES32.test(d.salt)) throw new Error('custody descriptor: salt must be bytes32 (0x + 64 hex)');
+  let custody: CustodyKind;
+  switch (d.custody.kind) {
+    case 'kms-subject': {
+      const { rotation } = d.custody;
+      if (!Number.isInteger(rotation) || rotation < 0) {
+        throw new Error('custody descriptor: kms-subject rotation must be a non-negative integer');
+      }
+      custody = { kind: 'kms-subject', rotation }; // explicit — drops any smuggled owner identifier
+      break;
+    }
+    case 'passkey': {
+      if (!d.custody.credentialId) throw new Error('custody descriptor: passkey requires credentialId');
+      custody = { kind: 'passkey', credentialId: d.custody.credentialId };
+      break;
+    }
+    case 'eoa': {
+      if (!CD_ADDRESS.test(d.custody.address)) throw new Error('custody descriptor: eoa address invalid');
+      custody = { kind: 'eoa', address: d.custody.address };
+      break;
+    }
+    default:
+      throw new Error(`custody descriptor: unknown custody kind ${(d.custody as { kind?: string }).kind}`);
+  }
+  return { targetSA: d.targetSA, salt: d.salt, custody };
 }
 
 export type RelatedAgentCredential = UnsignedCredential<Situation<{ payload: RelatedAgentBody }>>;

@@ -1,12 +1,15 @@
 const PACKAGE_STATUS: "w1-foundational"
+function buildCustodyDescriptor(d: CustodyDescriptor): CustodyDescriptor
 function buildRelatedAgentCredential(args: BuildRelatedAgentCredentialArgs): RelatedAgentCredential
 function relatedAgentProofHash(credential: RelatedAgentCredential): Hex32
 function relatedAgentReadCaveats(args: RelatedAgentReadCaveatArgs): Caveat[]
 interface BuildRelatedAgentCredentialArgs
+interface CustodyDescriptor
 interface DelegatedAgentLink
 interface ListDelegatedAgentsResponse
 interface ListRelatedAgentsResponse
 interface RelatedAgentBodyextends Record<string, unknown>
 interface RelatedAgentLink
 interface RelatedAgentReadCaveatArgs
+type CustodyKind = { kind: 'kms-subject'
 type RelatedAgentCredential = UnsignedCredential<Situation<{ payload: RelatedAgentBody
