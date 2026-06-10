@@ -140,6 +140,36 @@ function fail(audit: string, check: string, message: string) {
   }
 })();
 
+// ─── C4.7: DEL-001 session-delegate binding MUST be enforced for client-mint ─
+//
+// The audit's #1 P0: binding must be MANDATORY in production, not an optional flag. We refuse the
+// production deploy if the enforcement chain is missing — the relying app (demo-a2a) must flag every
+// client-minted vault call (`enforceBinding: true`), demo-mcp must enforce the binding
+// (`requireSessionDelegateBinding`) AND fail closed if asked to enforce without a UniversalSignatureValidator.
+// Removing any of these markers makes the deploy fail here, so the binding can't silently be disabled.
+
+(function checkDel001BindingEnforced() {
+  const mcp = join(REPO_ROOT, 'apps', 'demo-mcp', 'src', 'index.ts');
+  const a2a = join(REPO_ROOT, 'apps', 'demo-a2a', 'src', 'index.ts');
+  if (!existsSync(mcp) || !existsSync(a2a)) return;
+  const mcpText = readFileSync(mcp, 'utf8');
+  const a2aText = readFileSync(a2a, 'utf8');
+
+  if (!/requireSessionDelegateBinding:\s*true/.test(mcpText)) {
+    fail('C4', 'del001-binding-not-enforced',
+      'apps/demo-mcp/src/index.ts no longer sets requireSessionDelegateBinding: true — client-minted vault tokens would not be bound to the delegator (DEL-001 reopens).');
+  }
+  // demo-mcp must FAIL CLOSED if asked to enforce binding without a validator (not silently skip).
+  if (!/UNIVERSAL_SIGNATURE_VALIDATOR[\s\S]{0,400}throw|binding enforcement requested but UNIVERSAL_SIGNATURE_VALIDATOR/.test(mcpText)) {
+    fail('C4', 'del001-binding-not-fail-closed',
+      'apps/demo-mcp/src/index.ts does not fail closed when binding is requested but UNIVERSAL_SIGNATURE_VALIDATOR is unset (DEL-001 could be bypassed by dropping the validator).');
+  }
+  if (!/enforceBinding:\s*true/.test(a2aText)) {
+    fail('C4', 'del001-binding-not-flagged',
+      'apps/demo-a2a/src/index.ts no longer flags client-mint vault calls with enforceBinding: true — demo-mcp would verify them WITHOUT the DEL-001 binding.');
+  }
+})();
+
 // ─── C4.5: Live deployments JSON has a paymaster with non-trivial deposit ─
 
 (function checkLiveDeploymentsShape() {
