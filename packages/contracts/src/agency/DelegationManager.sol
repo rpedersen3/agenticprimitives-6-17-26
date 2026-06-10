@@ -251,6 +251,13 @@ contract DelegationManager is IDelegationManager, ReentrancyGuard {
     ///         the chain is well-formed (signatures, authority chain, not
     ///         revoked) WITHOUT executing it.
     ///
+    /// @dev ⚠️ DANGER — CHAIN-ONLY, NOT A CALL AUTHORIZATION (audit 2026-06-10). This validates ONLY
+    ///      the chain (signatures / authority / revocation). It does NOT evaluate caveats, so a `true`
+    ///      result is NOT permission to perform any specific (target, value, calldata). Anything
+    ///      authorizing a concrete action MUST use {verifyAuthorizationForCall} (evaluates every caveat,
+    ///      fail-closed) or live {redeemDelegation}. Treating this boolean as call authorization
+    ///      re-opens the exact over-trust the caveats exist to prevent.
+    ///
     /// Spec 242 §6 (PD-9): the `attestations` package uses this to verify
     /// bilateral-consent delegations as signed authorization predicates,
     /// rather than redeeming them as cross-account execution. Returning

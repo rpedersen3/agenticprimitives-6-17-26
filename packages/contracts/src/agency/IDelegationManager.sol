@@ -72,6 +72,9 @@ interface IDelegationManager {
     ///         Used by trust-substrate contracts (e.g. AttestationRegistry's
     ///         bilateral-consent path per spec 242 PD-9) to validate a packed
     ///         delegation as a signed authorization predicate.
+    /// @dev    ⚠️ DANGER — chain-only; does NOT evaluate caveats. `true` is NOT permission for any
+    ///         specific call. Use {verifyAuthorizationForCall} (fail-closed, evaluates caveats) or live
+    ///         redemption to authorize a concrete (target, value, calldata).
     /// @param delegations Delegation chain, leaf first
     /// @param sender The address that would be the redeemer
     /// @return ok True if the chain verifies

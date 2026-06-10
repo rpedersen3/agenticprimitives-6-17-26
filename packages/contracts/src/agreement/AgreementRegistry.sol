@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /**
  * @title AgreementRegistry
@@ -276,6 +277,15 @@ contract AgreementRegistry {
     ///         that permits public joint assertion (currently any non-NONE
     ///         status; revoked agreements can still be jointly disclosed as
     ///         historical record).
+    ///
+    /// @dev    NOT a consent or validity oracle (audit 2026-06-10). A `true`
+    ///         result means only that `agreementCommitment` is REGISTERED — it is
+    ///         an opaque back-reference, NOT proof that any particular party
+    ///         consented, that the agreement is currently valid, or that a given
+    ///         credential is bound to it. Bilateral consent for a joint assertion
+    ///         is established separately by `AttestationRegistry.assertJointAgreement`,
+    ///         which recomputes both parties' consent signatures. Consumers MUST
+    ///         NOT treat the boolean here as authorization.
     function isAssertableCommitment(
         bytes32 agreementCommitment,
         address /* actor */
@@ -311,19 +321,11 @@ contract AgreementRegistry {
                 return false;
             }
         }
+        // P2-2 (audit 2026-06-10): route EOA recovery through OpenZeppelin ECDSA.tryRecover instead of
+        // raw ecrecover — it rejects high-s (malleable) signatures and malformed lengths, matching the
+        // DelegationManager idiom so every signature-verifying contract shares one low-s-safe path.
         bytes32 ethHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest));
-        if (signature.length != 65) return false;
-        bytes32 r;
-        bytes32 s;
-        uint8 v;
-        // solhint-disable-next-line no-inline-assembly
-        assembly {
-            r := mload(add(signature, 0x20))
-            s := mload(add(signature, 0x40))
-            v := byte(0, mload(add(signature, 0x60)))
-        }
-        if (v < 27) v += 27;
-        address recovered = ecrecover(ethHash, v, r, s);
-        return recovered != address(0) && recovered == signer;
+        (address recovered, ECDSA.RecoverError err, ) = ECDSA.tryRecover(ethHash, signature);
+        return err == ECDSA.RecoverError.NoError && recovered == signer;
     }
 }

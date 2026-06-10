@@ -30,17 +30,19 @@ contract AttestationRegistryTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    /// @dev Mirror of AttestationRegistry's recomputed joint-consent digest (RW1-1).
+    /// @dev Mirror of AttestationRegistry's recomputed joint-consent digest (RW1-1 + ATT-3).
     bytes32 internal constant JOINT_CONSENT_TYPEHASH = keccak256(
-        "JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash)"
+        "JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash,uint256 chainId,address verifyingContract)"
     );
 
     function _consentDigest(address p1, address p2, bytes32 refUID, bytes32 credHash)
         internal
-        pure
+        view
         returns (bytes32)
     {
-        return keccak256(abi.encode(JOINT_CONSENT_TYPEHASH, p1, p2, refUID, credHash));
+        return keccak256(
+            abi.encode(JOINT_CONSENT_TYPEHASH, p1, p2, refUID, credHash, block.chainid, address(reg))
+        );
     }
 
     /// @dev Mirrors AttestationRegistry.JOINT_ISSUER_TYPEHASH (ATT-1).

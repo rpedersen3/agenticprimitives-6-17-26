@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /**
  * @title AttestationRegistry
@@ -17,9 +18,19 @@ import "@openzeppelin/contracts/interfaces/IERC1271.sol";
  *   ─── Key invariants (AR-*) ───
  *
  * AR-01 deterministic UID = keccak256(subject, issuer, credentialType, credentialHash, refUID, salt)
- * AR-02 issuer signature verified via ERC-1271 against the named issuer SA
- * AR-03 schemaId MUST point to a registered ShapeRegistry shape (governance-gated)
- * AR-04 bilateral-consent verified via DelegationManager.verifyAuthorization
+ * AR-02 issuer signature verified (ERC-1271 for SAs, low-s ECDSA for EOAs) over a CANONICAL TYPED
+ *       digest recomputed on-chain — ASSOCIATION_ATTESTATION_TYPEHASH (unilateral) /
+ *       JOINT_ISSUER_TYPEHASH (joint), each binding the parties/subject + schema + credentialType +
+ *       credentialHash + chainId + this contract (SC-2 / ATT-1). A bare credentialHash is never trusted.
+ * AR-03 schemaId is an OPAQUE tag stored on the attestation. This registry does NOT dereference
+ *       ShapeRegistry on-chain; shape/governance validation of schemaId is an off-chain/consumer
+ *       concern. (Earlier drafts claimed on-chain ShapeRegistry enforcement — that is not implemented
+ *       here and consumers MUST NOT assume it.)
+ * AR-04 bilateral consent is VERIFIED on-chain by recomputing JOINT_CONSENT_TYPEHASH (party1, party2,
+ *       agreementCommitment, credentialHash, chainId, this contract) and requiring BOTH parties'
+ *       signatures over it (ERC-1271 / low-s ECDSA). This entrypoint uses the direct two-party-signature
+ *       form; the DelegationManager.verifyAuthorization predicate path is spec 249's alternative (b),
+ *       NOT this contract's direct joint path.
  * AR-05 holder-only revocation for unilateral; either-party for joint
  * AR-06 NO issuerRevoke(...) entrypoint — by static analysis
  * AR-07 epoch-bucket timestamps; raw block.timestamp never stored
@@ -48,8 +59,12 @@ contract AttestationRegistry {
     /// @dev RW1-1 (ADR-0027) — the canonical consent payload each party signs to consent to a
     ///      joint agreement. The contract RECOMPUTES this digest from calldata; a stored/supplied
     ///      reference is not consent. Binds the consent to the exact parties + agreement + credential.
+    ///      ATT-3 (audit 2026-06-10): also binds chainId + this registry, mirroring the issuer side
+    ///      (ATT-1) and the association path (SC-2). Without it a party's consent signature could be
+    ///      replayed on another chain or a redeployed registry (the attestation map is per-instance
+    ///      storage, so a cross-instance replay anchors a fresh spoofed attestation).
     bytes32 internal constant JOINT_CONSENT_TYPEHASH = keccak256(
-        "JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash)"
+        "JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash,uint256 chainId,address verifyingContract)"
     );
 
     /// @dev ATT-1 (audit 2026-06-10): the SC-2 bug class lived on in the JOINT issuer signature — it was
@@ -245,8 +260,17 @@ contract AttestationRegistry {
         }
 
         // VERIFY bilateral consent: recompute the digest, require both parties' signatures over it.
+        // ATT-3: chainId + address(this) bound (anti cross-chain / redeployed-registry replay).
         bytes32 consentDigest = keccak256(
-            abi.encode(JOINT_CONSENT_TYPEHASH, req.party1, req.party2, req.refUID, req.credentialHash)
+            abi.encode(
+                JOINT_CONSENT_TYPEHASH,
+                req.party1,
+                req.party2,
+                req.refUID,
+                req.credentialHash,
+                block.chainid,
+                address(this)
+            )
         );
         if (!_isValidSignatureBool(req.party1, consentDigest, req.party1Signature)) revert InvalidPartyConsent();
         if (!_isValidSignatureBool(req.party2, consentDigest, req.party2Signature)) revert InvalidPartyConsent();
@@ -349,20 +373,12 @@ contract AttestationRegistry {
                 return false;
             }
         }
-        // EOA fallback via eth-signed message hash + ecrecover
+        // EOA fallback via eth-signed message hash + malleability-safe ECDSA.
+        // P2-2 (audit 2026-06-10): route EOA recovery through OpenZeppelin ECDSA.tryRecover instead of
+        // raw ecrecover — it rejects high-s (malleable) signatures and malformed lengths, matching the
+        // DelegationManager idiom so every signature-verifying contract shares one low-s-safe path.
         bytes32 ethHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest));
-        if (signature.length != 65) return false;
-        bytes32 r;
-        bytes32 s;
-        uint8 v;
-        // solhint-disable-next-line no-inline-assembly
-        assembly {
-            r := mload(add(signature, 0x20))
-            s := mload(add(signature, 0x40))
-            v := byte(0, mload(add(signature, 0x60)))
-        }
-        if (v < 27) v += 27;
-        address recovered = ecrecover(ethHash, v, r, s);
-        return recovered != address(0) && recovered == signer;
+        (address recovered, ECDSA.RecoverError err, ) = ECDSA.tryRecover(ethHash, signature);
+        return err == ECDSA.RecoverError.NoError && recovered == signer;
     }
 }

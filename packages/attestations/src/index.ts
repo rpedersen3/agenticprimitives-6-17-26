@@ -64,28 +64,35 @@ export function computeAttestationUid(args: {
  * typehash-equality gate (`check:eip712-typehash-equality`).
  */
 export const JOINT_CONSENT_TYPEHASH: Hex32 = hashName(
-  'JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash)',
+  // ATT-3 (audit 2026-06-10): bind chainId + verifyingContract so a party's consent signature can't
+  // be replayed cross-chain or on a redeployed registry.
+  'JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash,uint256 chainId,address verifyingContract)',
 );
 
 /**
  * Recompute the consent digest each party signs to consent to a joint agreement
  * (RW1-1). Equals the contract's `keccak256(abi.encode(JOINT_CONSENT_TYPEHASH,
- * party1, party2, agreementCommitment, credentialHash))`. `assertJointAgreement`
- * recomputes the same digest on-chain and verifies BOTH party signatures (ERC-1271
- * / ECDSA) against it — a stored or supplied consent reference is not consent.
+ * party1, party2, agreementCommitment, credentialHash, chainId, verifyingContract))`.
+ * `assertJointAgreement` recomputes the same digest on-chain and verifies BOTH party
+ * signatures (ERC-1271 / ECDSA) against it — a stored or supplied consent reference is
+ * not consent. ATT-3: `chainId` + the registry address are bound (anti cross-chain/replay).
  */
 export function jointConsentDigest(args: {
   party1: Address;
   party2: Address;
   agreementCommitment: Hex32;
   credentialHash: Hex32;
+  chainId: bigint;
+  verifyingContract: Address;
 }): Hex32 {
-  const buf = new Uint8Array(5 * 32);
+  const buf = new Uint8Array(7 * 32);
   writeHex32(buf, 0, JOINT_CONSENT_TYPEHASH);
   writeAddress(buf, 32, args.party1);
   writeAddress(buf, 64, args.party2);
   writeHex32(buf, 96, args.agreementCommitment);
   writeHex32(buf, 128, args.credentialHash);
+  writeUint256(buf, 160, args.chainId);
+  writeAddress(buf, 192, args.verifyingContract);
   const digest = keccak_256(buf);
   let hex = '0x';
   for (const v of digest) hex += v.toString(16).padStart(2, '0');

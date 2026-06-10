@@ -52,6 +52,12 @@ export interface VerifyAuthorizationResult {
  * View-only verification of a delegation chain. Returns whether the chain
  * authorizes `sender` to redeem WITHOUT executing it.
  *
+ * ⚠️ DANGER — chain-only. This does NOT evaluate caveats, so a `true` result is
+ * NOT permission to perform any specific (target, value, calldata). To authorize a
+ * concrete call use `verifyAuthorizationForCall` (fail-closed, evaluates every
+ * caveat) or live redemption. Treating this boolean as call authorization re-opens
+ * the exact over-trust the caveats exist to prevent.
+ *
  * Spec 242 §6 uses this to validate bilateral-consent delegations as signed
  * authorization predicates rather than as cross-account execution.
  */

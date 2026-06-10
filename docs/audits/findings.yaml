@@ -331,6 +331,50 @@ findings:
     status: open
     concerns: [packages/contracts/src/attestation/AttestationRegistry.sol]
     origin: 2026-06-10-contract-by-contract-audit.md
+  - id: ATT-3
+    severity: medium
+    title: joint-agreement CONSENT digest lacks chain/contract binding (cross-chain/registry replay)
+    status: closed
+    concerns: [packages/contracts/src/attestation/AttestationRegistry.sol]
+    anchor: JointAgreementConsent
+    origin: 2026-06-10-external-production-readiness-audit.md
+    tests:
+      - packages/attestations/test/unit/cross-stack-consent-typehash.test.ts
+      - packages/contracts/test/AttestationRegistry.t.sol
+    note: >
+      ATT-1 bound the joint ISSUER signature but the CONSENT half (JOINT_CONSENT_TYPEHASH) still bound
+      only party1/party2/agreementCommitment/credentialHash — a party's consent signature could replay
+      on another chain or a redeployed registry (the attestation map is per-instance). Now binds chainId
+      + address(this), mirroring ATT-1/SC-2. Cross-stack typehash equality locked; 17 Foundry + 16 TS green.
+  - id: SIG-1
+    severity: low
+    title: registries used raw ecrecover (no low-s) instead of malleability-safe ECDSA
+    status: closed
+    concerns:
+      - packages/contracts/src/attestation/AttestationRegistry.sol
+      - packages/contracts/src/agreement/AgreementRegistry.sol
+    anchor: ECDSA.tryRecover
+    origin: 2026-06-10-external-production-readiness-audit.md
+    note: >
+      The EOA fallback in both registries used raw ecrecover (accepts high-s/malleable sigs). Routed
+      through OpenZeppelin ECDSA.tryRecover (rejects high-s + malformed length), matching the
+      DelegationManager idiom — one low-s-safe signature path across signature-verifying contracts.
+  - id: DM-VERIFYAUTH-1
+    severity: low
+    title: verifyAuthorization (chain-only, caveat-free) is easy to misuse as call authorization
+    status: closed
+    concerns:
+      - packages/contracts/src/agency/DelegationManager.sol
+      - packages/delegation/src/verify-authorization.ts
+    anchor: DANGER
+    origin: 2026-06-10-external-production-readiness-audit.md
+    note: >
+      verifyAuthorization validates chain/signature/authority/revocation but NOT caveats; a `true` is
+      not permission for a specific call. Added a prominent ⚠️ DANGER annotation to the contract, the
+      IDelegationManager interface, and the SDK helper directing concrete-call authorization to
+      verifyAuthorizationForCall (fail-closed) or live redemption. (Rename declined: it is a published
+      SDK export + interface symbol; a view-function rename is a wide breaking change for no safety gain
+      over the explicit danger contract.)
   - id: CA-1
     severity: medium
     title: AgentAccount upgrade timelock is dead code (set but never enforced)

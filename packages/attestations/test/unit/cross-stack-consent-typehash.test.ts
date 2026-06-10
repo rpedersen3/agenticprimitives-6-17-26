@@ -38,7 +38,7 @@ function solTypeString(constant: string): string {
 }
 
 const CANONICAL_CONSENT_TYPE_STRING =
-  'JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash)';
+  'JointAgreementConsent(address party1,address party2,bytes32 agreementCommitment,bytes32 credentialHash,uint256 chainId,address verifyingContract)';
 
 describe('RW1-1 — AttestationRegistry joint-consent typehash convergence', () => {
   it('the LIVE Solidity JOINT_CONSENT_TYPEHASH type string is the canonical form', () => {
@@ -55,8 +55,11 @@ describe('RW1-1 — AttestationRegistry joint-consent typehash convergence', () 
   });
 });
 
-describe('RW1-1 — jointConsentDigest byte-matches the contract recompute', () => {
-  it('equals keccak256(abi.encode(TYPEHASH, party1, party2, agreementCommitment, credentialHash))', () => {
+describe('RW1-1 / ATT-3 — jointConsentDigest byte-matches the contract recompute', () => {
+  const chainId = 84532n;
+  const verifyingContract = '0x2222222222222222222222222222222222222222' as const;
+
+  it('equals keccak256(abi.encode(TYPEHASH, party1, party2, agreementCommitment, credentialHash, chainId, verifyingContract))', () => {
     const party1 = '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as const;
     const party2 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as const;
     const agreementCommitment = `0x${'ab'.repeat(32)}` as const;
@@ -70,11 +73,15 @@ describe('RW1-1 — jointConsentDigest byte-matches the contract recompute', () 
           { type: 'address' },
           { type: 'bytes32' },
           { type: 'bytes32' },
+          { type: 'uint256' },
+          { type: 'address' },
         ],
-        [JOINT_CONSENT_TYPEHASH, party1, party2, agreementCommitment, credentialHash],
+        [JOINT_CONSENT_TYPEHASH, party1, party2, agreementCommitment, credentialHash, chainId, verifyingContract],
       ),
     );
-    expect(jointConsentDigest({ party1, party2, agreementCommitment, credentialHash })).toBe(expected);
+    expect(
+      jointConsentDigest({ party1, party2, agreementCommitment, credentialHash, chainId, verifyingContract }),
+    ).toBe(expected);
   });
 
   it('is party-order sensitive (party1/party2 are not interchangeable)', () => {
@@ -82,9 +89,23 @@ describe('RW1-1 — jointConsentDigest byte-matches the contract recompute', () 
     const b = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as const;
     const agreementCommitment = `0x${'11'.repeat(32)}` as const;
     const credentialHash = `0x${'22'.repeat(32)}` as const;
-    const ab = jointConsentDigest({ party1: a, party2: b, agreementCommitment, credentialHash });
-    const ba = jointConsentDigest({ party1: b, party2: a, agreementCommitment, credentialHash });
+    const ab = jointConsentDigest({ party1: a, party2: b, agreementCommitment, credentialHash, chainId, verifyingContract });
+    const ba = jointConsentDigest({ party1: b, party2: a, agreementCommitment, credentialHash, chainId, verifyingContract });
     expect(ab).not.toBe(ba);
+  });
+
+  it('ATT-3: is sensitive to chainId + verifyingContract (anti cross-chain/contract replay)', () => {
+    const base = {
+      party1: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as const,
+      party2: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as const,
+      agreementCommitment: `0x${'11'.repeat(32)}` as const,
+      credentialHash: `0x${'22'.repeat(32)}` as const,
+      chainId,
+      verifyingContract,
+    };
+    const d = jointConsentDigest(base);
+    expect(jointConsentDigest({ ...base, chainId: 1n })).not.toBe(d);
+    expect(jointConsentDigest({ ...base, verifyingContract: '0x4444444444444444444444444444444444444444' })).not.toBe(d);
   });
 });
 
