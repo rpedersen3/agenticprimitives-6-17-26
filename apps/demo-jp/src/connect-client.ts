@@ -21,8 +21,20 @@
 // removed here.
 import { buildSubregistryRegisterCall, buildSetPrimaryNameCall } from '@agenticprimitives/agent-naming';
 import { buildExecuteBatchCallData } from '@agenticprimitives/agent-account';
+import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts';
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { DelegationWire } from './lib/delegation';
+
+/** spec 270 v4 W2 — demo-jp's own session keypair. The private key NEVER leaves this origin; only the
+ *  address is sent to the home (which signs the DEL-001 leaf for it). */
+export interface SessionKey {
+  privateKey: Hex;
+  address: Address;
+}
+export function generateSessionKey(): SessionKey {
+  const privateKey = generatePrivateKey();
+  return { privateKey, address: privateKeyToAddress(privateKey) };
+}
 import { AGENT_NAME_PARENT, isAllowedIssuerOrigin, nameLabel, personalAuthOrigin, PLATFORM_AUTH_ORIGIN } from './lib/domain';
 
 void buildSubregistryRegisterCall; // exports kept reachable for future name-claim flows; harmless if unused
@@ -88,6 +100,9 @@ interface AuthorizeParams {
   orgBase?: string;
   purpose?: string;
   grantOrg?: Address;
+  /** spec 270 v4 W2 — demo-jp's session-key address; the home signs a DEL-001 leaf binding it to the
+   *  person SA. demo-jp keeps the private key (never leaves this origin). */
+  sessionKey?: Address;
 }
 /** Build the OIDC `/authorize` URL (the OP's consent UI is the SPA at the origin root). */
 function buildAuthorizeUrl(p: AuthorizeParams): string {
@@ -103,6 +118,7 @@ function buildAuthorizeUrl(p: AuthorizeParams): string {
   u.searchParams.set('agent_name', p.agentName);
   u.searchParams.set('delegate', p.delegate);
   u.searchParams.set('delegation_template', p.template);
+  if (p.sessionKey) u.searchParams.set('session_key', p.sessionKey);
   if (p.orgBase) u.searchParams.set('org_base', p.orgBase);
   if (p.purpose) u.searchParams.set('org_purpose', p.purpose);
   if (p.grantOrg) u.searchParams.set('grant_org', p.grantOrg);
@@ -163,6 +179,9 @@ export interface TokenResult {
   idToken: string;
   delegation?: DelegationWire;
   org?: OrgTokenPayload;
+  /** spec 270 v4 W2 — the DEL-001 leaf the home signed for our session-key address (public). Combined
+   *  with the stashed session private key, it lets demo-jp mint tokens bound to the person SA. */
+  sessionDelegation?: DelegationWire;
 }
 
 export interface IdTokenClaims {
@@ -184,11 +203,15 @@ export interface IdTokenClaims {
  *  with `?code=…&state=…`. demo-jp uses that grant to read/write the member's records. */
 export async function startSiteEnrollment(
   name: string,
-): Promise<{ ok: true; url: string; state: string; authOrigin: string; codeVerifier: string; nonce: string }> {
+): Promise<{ ok: true; url: string; state: string; authOrigin: string; codeVerifier: string; nonce: string; sessionKey: SessionKey }> {
   const state = randomB64url(16);
   const nonce = randomB64url(16);
   const { verifier, challenge } = await generatePkce();
   const authOrigin = await resolveAuthOrigin(name); // person's secure home (spec 229 §4)
+  // spec 270 v4 W2 — generate OUR session keypair here; the private key stays in this origin. We send
+  // only its address so the home can sign the DEL-001 leaf binding it to the person SA. The caller
+  // stashes `sessionKey.privateKey` with `state` and combines it with the returned `sessionDelegation`.
+  const sessionKey = generateSessionKey();
   const url = buildAuthorizeUrl({
     authOrigin,
     state,
@@ -197,8 +220,9 @@ export async function startSiteEnrollment(
     agentName: name,
     delegate: DEMO_JP_DELEGATE,
     template: 'jp-data-access',
+    sessionKey: sessionKey.address,
   });
-  return { ok: true, url, state, authOrigin, codeVerifier: verifier, nonce };
+  return { ok: true, url, state, authOrigin, codeVerifier: verifier, nonce, sessionKey };
 }
 
 /** Start a two-party agreement CONSENT ceremony (RW1-1 / ADR-0027) at a party's secure
@@ -298,9 +322,9 @@ export async function exchangeCode(authOrigin: string, code: string, codeVerifie
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ grant_type: 'authorization_code', code, code_verifier: codeVerifier, client_id: CLIENT_ID, redirect_uri: redirectUri() }),
   });
-  const b = (await r.json().catch(() => ({}))) as { id_token?: string; delegation?: DelegationWire; org?: OrgTokenPayload; error?: string };
+  const b = (await r.json().catch(() => ({}))) as { id_token?: string; delegation?: DelegationWire; org?: OrgTokenPayload; sessionDelegation?: DelegationWire; error?: string };
   if (!r.ok || !b.id_token) throw new Error(b.error ?? `token exchange failed (HTTP ${r.status})`);
-  return { idToken: b.id_token, delegation: b.delegation, org: b.org };
+  return { idToken: b.id_token, delegation: b.delegation, org: b.org, sessionDelegation: b.sessionDelegation };
 }
 
 /** Verify the OIDC id_token against the OP's JWKS — ES256 alg-pinned to the key, iss/aud

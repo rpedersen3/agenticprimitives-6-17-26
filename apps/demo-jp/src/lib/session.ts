@@ -13,6 +13,7 @@
 
 import type { Address } from '@agenticprimitives/types';
 import type { DelegationWire } from './delegation';
+import type { SessionKey } from '../connect-client';
 
 /** A connected member's login credential + the grant the app reads/writes their vault through.
  *  NO `kind` — adopter/facilitator is a UI preference (active-role.ts), never part of identity. */
@@ -30,6 +31,11 @@ export interface MemberSession {
    *  member's JP-program records in the MEMBER's own vault through this grant — the data lives with the
    *  member, JP only holds the delegation. */
   grant?: DelegationWire;
+  /** spec 270 v4 W2 — demo-jp's own session keypair (private key held here) + the DEL-001 leaf the home
+   *  signed for it. demo-jp signs delegation tokens with this key + presents the leaf, so its tokens bind
+   *  to the person SA's authority. */
+  sessionKey?: SessionKey;
+  sessionDelegation?: DelegationWire;
 }
 
 const SESSION_KEY = 'agenticprimitives:demo-jp:session';
@@ -38,6 +44,8 @@ interface StoredSession {
   token?: string;
   name?: string;
   grant?: DelegationWire;
+  sessionKey?: SessionKey;
+  sessionDelegation?: DelegationWire;
 }
 
 function decodeToken(token: string): { sub?: string; exp?: number } | null {
@@ -76,7 +84,7 @@ export function restoreSession(): MemberSession | null {
       localStorage.removeItem(SESSION_KEY);
       return null;
     }
-    return { token: s.token, name: s.name ?? '', address: addr, fresh: false, grant: s.grant };
+    return { token: s.token, name: s.name ?? '', address: addr, fresh: false, grant: s.grant, sessionKey: s.sessionKey, sessionDelegation: s.sessionDelegation };
   } catch {
     return null;
   }
@@ -87,7 +95,7 @@ export function restoreSession(): MemberSession | null {
 export function setSession(s: MemberSession): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    const stored: StoredSession = { token: s.token, name: s.name, grant: s.grant };
+    const stored: StoredSession = { token: s.token, name: s.name, grant: s.grant, sessionKey: s.sessionKey, sessionDelegation: s.sessionDelegation };
     localStorage.setItem(SESSION_KEY, JSON.stringify(stored));
   } catch {
     /* ignore */

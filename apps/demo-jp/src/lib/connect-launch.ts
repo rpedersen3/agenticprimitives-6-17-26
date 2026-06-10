@@ -8,7 +8,7 @@
 // returns `tok.delegation`, the person → JP grant); the role (adopt / facilitate) is chosen AFTER
 // connecting, from inside the intranet (the RoleHub). There is no role in the connect stash.
 
-import { startSiteEnrollment } from '../connect-client';
+import { startSiteEnrollment, type SessionKey } from '../connect-client';
 import { openCentralAuthPopup } from './central-auth';
 
 /** sessionStorage key for the in-flight site-login stash (read by App's connect-return handler).
@@ -27,6 +27,9 @@ export interface ConnectStash {
   authOrigin: string;
   codeVerifier: string;
   nonce: string;
+  /** spec 270 v4 W2 — our session keypair, carried across the redirect so the connect-return handler can
+   *  combine it with the leaf the home signs for its address. Transient (cleared when connect completes). */
+  sessionKey?: SessionKey;
 }
 
 /** Begin the role-agnostic JP person site-login: stash PKCE + redirect to the person's home.
@@ -38,7 +41,7 @@ export async function startConnect(name?: string): Promise<void> {
   const trimmed = (name ?? '').trim();
   const r = await startSiteEnrollment(trimmed);
   const stash: ConnectStash = {
-    name: trimmed, state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce,
+    name: trimmed, state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce, sessionKey: r.sessionKey,
   };
   sessionStorage.setItem(CONNECT_KEY, JSON.stringify(stash));
   window.location.href = r.url; // → <name>.impact-agent.me (or platform); returns with ?code&state
@@ -81,7 +84,7 @@ export async function startConnectPopup(
   const trimmed = (name ?? '').trim();
   const r = await startSiteEnrollment(trimmed);
   const stash: ConnectStash = {
-    name: trimmed, state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce,
+    name: trimmed, state: r.state, authOrigin: r.authOrigin, codeVerifier: r.codeVerifier, nonce: r.nonce, sessionKey: r.sessionKey,
   };
   // expectedOrigin MUST be the RESOLVED authOrigin (audit F3): messages are accepted ONLY from the exact
   // Connect origin this name/credential resolves to, never a module constant or a wildcard.

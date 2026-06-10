@@ -80,6 +80,14 @@ const ALLOWED_IN: ReadonlySet<string> = new Set([
   'apps/demo-gs/src/lib/personas.ts',
   'apps/demo-gs/src/lib/chain.ts',
   'apps/demo-gs/scripts/seed-substrate.ts',
+  // demo-jp connect-client `generateSessionKey` (spec 270 v4 DEL-001): the relying app mints a fresh,
+  // EPHEMERAL session keypair PER CONNECT and holds the private key on its OWN origin (browser session).
+  // This is NOT an identity key — identity is the SA address (ADR-0010); it is a short-lived
+  // session-signing key whose authority is bounded by the DEL-001 leaf the home signs for its public
+  // address (timestamp + value-0 caveats). Generating it client-side IS the security property:
+  // the private key never crosses origins (no cross-origin key transport), so observe-and-re-mint
+  // cannot impersonate the delegator. App-local; never imported by packages.
+  'apps/demo-jp/src/connect-client.ts',
 ]);
 
 // Env-var names that are tolerated EVERYWHERE in apps/. Reserved for the

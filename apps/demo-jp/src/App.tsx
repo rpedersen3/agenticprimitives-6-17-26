@@ -3,7 +3,7 @@ import { Box, Card as MuiCard, CardContent, Typography, Link as MuiLink, Stack, 
 import { AgreementTimeline } from './components/AgreementTimeline';
 import type { Address, Hex } from '@agenticprimitives/types';
 import { JP } from './lib/brand';
-import { startOrgCreation, exchangeCode, verifyIdToken, listRelatedOrgs, type RelatedOrgLink } from './connect-client';
+import { startOrgCreation, exchangeCode, verifyIdToken, listRelatedOrgs, type RelatedOrgLink, type SessionKey } from './connect-client';
 import { orgPurpose } from './lib/member-org';
 import { predictOrgAddress } from './lib/onchain';
 import { MemberOrgSection } from './components/MemberOrgSection';
@@ -117,6 +117,7 @@ interface EnrollStash {
   authOrigin?: string;
   codeVerifier?: string;
   nonce?: string;
+  sessionKey?: SessionKey; // spec 270 v4 W2 — our session keypair, carried across the redirect
 }
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -329,10 +330,11 @@ export function App() {
 
   // Establish the connected member identity (NO role) + route through discovery → hub. Mirrors
   // demo-gs's connect-return → discovery → hub reflow.
-  const openMember = useCallback((token: string, name: string, grant?: DelegationWire) => {
+  const openMember = useCallback((token: string, name: string, grant?: DelegationWire, sessionKey?: SessionKey, sessionDelegation?: DelegationWire) => {
     const addr = addrFromToken(token);
     if (!addr) { setError("We couldn't read your agent address from the session token."); return; }
-    const next: MemberSession = { token, name, address: addr, fresh: true, grant };
+    // spec 270 v4 W2 — persist our session key + the DEL-001 leaf the home signed for it (when present).
+    const next: MemberSession = { token, name, address: addr, fresh: true, grant, sessionKey, sessionDelegation };
     setMember(next);
     persistSession(next);
     registerGrant(addr, grant);
@@ -347,14 +349,15 @@ export function App() {
     authOrigin: string,
     code: string,
     codeVerifier: string,
-    meta: { name?: string; nonce?: string },
+    meta: { name?: string; nonce?: string; sessionKey?: SessionKey },
   ): Promise<boolean> => {
     try {
       const tok = await exchangeCode(authOrigin, code, codeVerifier);
       const claims = await verifyIdToken(authOrigin, tok.idToken, meta.nonce ?? '');
       const name = claims.agent_name ?? meta.name ?? '';
       // Role-agnostic: enroll the PERSON; the role is chosen in the hub afterwards (mirrors demo-gs).
-      openMember(tok.idToken, name, tok.delegation);
+      // spec 270 v4 W2 — combine our stashed session key with the leaf the home signed for it.
+      openMember(tok.idToken, name, tok.delegation, meta.sessionKey, tok.sessionDelegation);
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'sign-in failed');
@@ -473,7 +476,7 @@ export function App() {
     }
     // The popup-blocked REDIRECT fallback returns here. Delegate to the SAME `finishConnect` the
     // popup-success path uses (exchange + verify + openMember), so there is one enrollment mechanism.
-    void finishConnect(stash.authOrigin, code, stash.codeVerifier, { name: stash.name, nonce: stash.nonce });
+    void finishConnect(stash.authOrigin, code, stash.codeVerifier, { name: stash.name, nonce: stash.nonce, sessionKey: stash.sessionKey });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -703,7 +706,7 @@ export function App() {
             <ConnectScreen
               onBack={() => setView('landing')}
               onConnected={(r: ConnectPopupSuccess) =>
-                finishConnect(r.authOrigin, r.code, r.codeVerifier, { name: r.stash.name, nonce: r.stash.nonce })
+                finishConnect(r.authOrigin, r.code, r.codeVerifier, { name: r.stash.name, nonce: r.stash.nonce, sessionKey: r.stash.sessionKey })
               }
             />
           )}
