@@ -15,8 +15,7 @@
 // projection (vaultProjection) is the small derived view that flows over the delegation.
 
 import type { Address, Hex } from '@agenticprimitives/types';
-import { vaultRead, vaultWrite, vaultList, vaultReadWithDelegation, vaultWriteWithDelegation, vaultReadAsMember, vaultWriteAsMember } from './vault-client.js';
-import type { MemberSession } from './session.js';
+import { vaultRead, vaultWrite, vaultList, vaultReadWithDelegation, vaultWriteWithDelegation } from './vault-client.js';
 import { jpVaultOwner } from './onchain.js';
 import type { DelegationWire } from './delegation.js';
 
@@ -100,20 +99,6 @@ export async function loadImpactProfile(grant: DelegationWire): Promise<ImpactPr
 
 export async function saveImpactProfile(grant: DelegationWire, profile: ImpactProfile): Promise<void> {
   await vaultWriteWithDelegation(grant, RT_PROFILE, profile);
-}
-
-// ── Member-self accessors (DEL-001 client-mint, spec 270 v4) ──────────────────
-// The CONNECTED member reading/writing their OWN vault. The session signs the token with its own
-// session key + presents the leaf, so demo-mcp ENFORCES the session-key↔delegator binding (W3). This
-// is the per-source split: the broker (matches.ts), operators (OperatorDashboards), and the org→member
-// read (MemberOrgSection) keep the grant-based `*WithDelegation` path above (delegated, unenforced).
-export async function loadImpactProfileAsMember(s: MemberSession): Promise<ImpactProfile> {
-  const p = await vaultReadAsMember<ImpactProfile>(s, RT_PROFILE);
-  return p && p.v === 1 ? p : EMPTY_PROFILE;
-}
-
-export async function saveImpactProfileAsMember(s: MemberSession, profile: ImpactProfile): Promise<void> {
-  await vaultWriteAsMember(s, RT_PROFILE, profile);
 }
 
 // ── JP's received member grants (the broker pool, in JP's own vault) ───────────
@@ -200,16 +185,6 @@ export async function saveJpAdopterRecord(grant: DelegationWire, record: JpAdopt
 
 export async function clearJpAdopterRecord(grant: DelegationWire): Promise<void> {
   await vaultWriteWithDelegation(grant, RT_ADOPTER, null);
-}
-
-// Member-self (DEL-001 client-mint) — the connected adopter's OWN record.
-export async function loadJpAdopterRecordAsMember(s: MemberSession): Promise<JpAdopterRecord> {
-  const r = await vaultReadAsMember<JpAdopterRecord>(s, RT_ADOPTER);
-  return r && r.v === 1 ? r : EMPTY_ADOPTER;
-}
-
-export async function saveJpAdopterRecordAsMember(s: MemberSession, record: JpAdopterRecord): Promise<void> {
-  await vaultWriteAsMember(s, RT_ADOPTER, record);
 }
 
 // ── JP requirements ───────────────────────────────────────────────────────────
@@ -411,16 +386,6 @@ export async function clearJpFacilitatorRecord(grant: DelegationWire): Promise<v
   await vaultWriteWithDelegation(grant, RT_FACILITATOR, null);
 }
 
-// Member-self (DEL-001 client-mint) — the connected facilitator's OWN record.
-export async function loadJpFacilitatorRecordAsMember(s: MemberSession): Promise<JpFacilitatorRecord> {
-  const r = await vaultReadAsMember<JpFacilitatorRecord>(s, RT_FACILITATOR);
-  return r && r.v === 1 ? r : EMPTY_FACILITATOR;
-}
-
-export async function saveJpFacilitatorRecordAsMember(s: MemberSession, record: JpFacilitatorRecord): Promise<void> {
-  await vaultWriteAsMember(s, RT_FACILITATOR, record);
-}
-
 /** Enumerate every address that has a JpFacilitatorRecord in localStorage.
  *
  *  Used by the demo-broker matching layer so a facilitator added in one persona
@@ -530,8 +495,6 @@ export async function recordContactExchange(grant: DelegationWire, matchId: stri
 export async function clearContactExchanges(grant: DelegationWire): Promise<void> {
   await vaultWriteWithDelegation(grant, RT_EXCHANGE, null);
 }
-// NOTE (spec 270 v4 W3 follow-up): contact-exchange stays on the grant-based delegated path above —
-// switching it to client-mint needs `session` threaded through the 5 matched-card components.
 
 export function projectFacilitatorForJp(impact: ImpactProfile, record: JpFacilitatorRecord): FacilitatorProjection {
   return {

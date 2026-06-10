@@ -23,15 +23,11 @@ import {
   FACILITATOR_PROFILE_TYPE,
   adopterSteps, canDeclareAdoption, canDeclareCoverage, facilitatorSteps,
   impactProfileMissingFields, isAdopterOnboardingComplete, isFacilitatorOnboardingComplete,
-  jpRequiredFields,
-  // spec 270 v4 W3 — the connected member's primary records (profile/adopter/facilitator) read/write via
-  // the client-mint (leaf-bound, DEL-001-enforced) accessors. Contact-exchange consent stays on the
-  // delegated path for now (it threads `grant` through 5 matched-card components — follow-up).
-  loadContactExchanges, loadImpactProfileAsMember, loadJpAdopterRecordAsMember,
-  loadJpFacilitatorRecordAsMember,
+  jpRequiredFields, loadContactExchanges, loadImpactProfile, loadJpAdopterRecord,
+  loadJpFacilitatorRecord,
   nextAdopterStep, nextFacilitatorStep, profileCompleteness,
   projectFacilitatorForJp, projectForJp, recordContactExchange, requiresWea,
-  saveImpactProfileAsMember, saveJpAdopterRecordAsMember, saveJpFacilitatorRecordAsMember, storeMemberGrant,
+  saveImpactProfile, saveJpAdopterRecord, saveJpFacilitatorRecord, storeMemberGrant,
   storeReceivedDelegation,
 } from './lib/vault';
 import type { DelegationWire } from './lib/delegation';
@@ -222,16 +218,15 @@ export function App() {
   const [recordsLoaded, setRecordsLoaded] = useState(false);
   const [recordsLoadFailed, setRecordsLoadFailed] = useState(false);
   useEffect(() => {
-    const m = member;
-    if (!m) { setImpact(null); setAdopterRecord(null); setFacilitatorRecord(null); setRecordsLoaded(false); setRecordsLoadFailed(false); return; }
-    if (!m.grant) { setRecordsLoaded(true); setRecordsLoadFailed(false); return; } // grant-missing is resolved by the resolver
+    const grant = member?.grant;
+    if (!member) { setImpact(null); setAdopterRecord(null); setFacilitatorRecord(null); setRecordsLoaded(false); setRecordsLoadFailed(false); return; }
+    if (!grant) { setRecordsLoaded(true); setRecordsLoadFailed(false); return; } // grant-missing is resolved by the resolver
     let cancelled = false;
     setRecordsLoaded(false); setRecordsLoadFailed(false);
     void (async () => {
       try {
-        // spec 270 v4 W3 — the connected member reads their OWN vault via client-mint (leaf-bound).
         const [i, a, f] = await Promise.all([
-          loadImpactProfileAsMember(m), loadJpAdopterRecordAsMember(m), loadJpFacilitatorRecordAsMember(m),
+          loadImpactProfile(grant), loadJpAdopterRecord(grant), loadJpFacilitatorRecord(grant),
         ]);
         if (cancelled) return;
         setImpact(i); setAdopterRecord(a); setFacilitatorRecord(f);
@@ -518,13 +513,14 @@ export function App() {
 
     const restored = restoreMemberSession();
     if (!restored?.grant) return;
+    const grant = restored.grant;
     void (async () => {
-      const existing = await loadImpactProfileAsMember(restored);
+      const existing = await loadImpactProfile(grant);
       const nextProfile: ImpactProfile = {
         ...existing,
         contact: { ...(existing.contact ?? {}), ...collected },
       };
-      await saveImpactProfileAsMember(restored, nextProfile);
+      await saveImpactProfile(grant, nextProfile);
       setVaultBump((b) => b + 1);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -594,7 +590,8 @@ export function App() {
       }
       const restored = restoreMemberSession();
       if (!restored?.grant) return;
-      const existing = await loadImpactProfileAsMember(restored);
+      const grant = restored.grant;
+      const existing = await loadImpactProfile(grant);
       const nextProfile: ImpactProfile = {
         ...existing,
         attestations: {
@@ -602,7 +599,7 @@ export function App() {
           wea: { docHash: docHash as Hex, docId, signedAt, consentBoundTo: consentBoundTo as Hex },
         },
       };
-      await saveImpactProfileAsMember(restored, nextProfile);
+      await saveImpactProfile(grant, nextProfile);
       setVaultBump((b) => b + 1);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -898,12 +895,13 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
   // Profile + JP record live in the member's vault (spec 247), read via the grant; load on mount (the
   // parent re-mounts this on vaultBump after handoff-return merges, so edits reload).
   useEffect(() => {
-    if (!session.grant) { setLoadState('grant-missing'); return; }
+    const grant = session.grant;
+    if (!grant) { setLoadState('grant-missing'); return; }
     let cancelled = false;
     setLoadState('loading');
     void (async () => {
       try {
-        const [i, r] = await Promise.all([loadImpactProfileAsMember(session), loadJpAdopterRecordAsMember(session)]);
+        const [i, r] = await Promise.all([loadImpactProfile(grant), loadJpAdopterRecord(grant)]);
         if (cancelled) return;
         setImpact(i); setRecord(r); setLoadState('ready');
       } catch {
@@ -922,7 +920,7 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
   }, [session.grant]);
 
   const update = useCallback((next: JpAdopterRecord) => {
-    if (session.grant) void saveJpAdopterRecordAsMember(session, next);
+    if (session.grant) void saveJpAdopterRecord(session.grant, next);
     setRecord(next);
   }, [session.grant]);
 
@@ -2551,12 +2549,13 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onReconnect
   // Profile + JP facilitator record live in the member's own vault (spec 247), read through the
   // member's grant; load on mount (the parent re-mounts this on vaultBump after handoff-return merges).
   useEffect(() => {
-    if (!session.grant) { setLoadState('grant-missing'); return; }
+    const grant = session.grant;
+    if (!grant) { setLoadState('grant-missing'); return; }
     let cancelled = false;
     setLoadState('loading');
     void (async () => {
       try {
-        const [i, r] = await Promise.all([loadImpactProfileAsMember(session), loadJpFacilitatorRecordAsMember(session)]);
+        const [i, r] = await Promise.all([loadImpactProfile(grant), loadJpFacilitatorRecord(grant)]);
         if (cancelled) return;
         setImpact(i); setRecord(r); setLoadState('ready');
       } catch {
@@ -2567,7 +2566,7 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onReconnect
   }, [session.grant]);
 
   const update = useCallback((next: JpFacilitatorRecord) => {
-    if (session.grant) void saveJpFacilitatorRecordAsMember(session, next);
+    if (session.grant) void saveJpFacilitatorRecord(session.grant, next);
     setRecord(next);
   }, [session.grant]);
 
