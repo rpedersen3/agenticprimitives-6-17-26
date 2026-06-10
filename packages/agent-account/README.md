@@ -1,15 +1,12 @@
 # @agenticprimitives/agent-account
 
-ERC-4337 Smart Agent substrate — **canonical identity owner**.
+**The address IS the identity.**
 
-Every person, org, service, or treasury agent is anchored by its Smart Agent
-address (`0x…` / CAIP-10 `eip155:<chainId>:<address>`). This package deploys
-that account, derives its address, builds UserOps, and verifies ERC-1271
-signatures. Names, profiles, and passkeys are **facets** handled by sibling
-packages.
+Every person, organization, service agent, and treasury in this stack is an ERC-4337 Smart Agent address (`0x…` / CAIP-10 `eip155:<chainId>:<address>`). Not a username with a wallet attached — the address itself is the canonical identity, and everything else (names, passkeys, profiles, registry entries) is a replaceable facet pointing at it. This package is where that anchor comes from: it derives the address counterfactually, deploys the account, builds UserOperations, and verifies ERC-1271 signatures.
 
-> **Layer:** Core — the canonical identity **anchor**.
-> **Canonical key:** Smart Agent address (CAIP-10 `eip155:<chainId>:<address>`). Names / profiles / edges point AT it; they never *are* the identity.
+That design choice has a consequence most smart-account SDKs cannot offer: the CREATE2 salt derives from auth methods and user scope — never from a name, never from credential material ([ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md), [spec 220](../../specs/220-agent-identity-bootstrap.md)). Lose a passkey, rotate a signer, change your name — the address never moves, and every delegation it ever issued stays valid ([ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md)).
+
+> Part of [agenticprimitives](../../README.md) — the trust substrate for the agent economy: one canonical Smart Agent identity with custody, delegation, naming, credentials, and audit evidence designed as one system.
 
 ## Use This When
 
@@ -60,6 +57,8 @@ if (!(await account.isDeployed(address))) {
 }
 ```
 
+The address exists before the account does. You can name it, fund it, and issue authority to it counterfactually; deployment happens when it first acts.
+
 ## Main Concepts
 
 - **Smart Agent address**: the canonical identifier; stable across credential
@@ -86,6 +85,10 @@ const executeData = buildExecuteCallData(calls);
 import { encodeWebAuthnSignature, SIG_TYPE_WEBAUTHN } from '@agenticprimitives/agent-account';
 // WebAuthn ceremony output is produced by connect-auth; on-chain wire format here.
 ```
+
+## How it's different
+
+Safe, ZeroDev, and Alchemy Account Kit ship excellent smart accounts — and stop there. The account is a container; who it is, what it may do, and how to prove it are someone else's integration problem. Here the account is the anchor of a substrate: the same address that `agent-account` derives is what `agent-naming` resolves, `account-custody` governs, `delegation` issues authority from, and `audit` attributes evidence to. The account contract itself is a thin ERC-7579 modular core ([spec 209](../../specs/209-erc7579-module-taxonomy.md)) — custody, threshold, and session machinery are modules, not inlined features. We ported the patterns worth porting (Safe-style signature packing) without taking a runtime dependency on anyone else's account stack.
 
 ## Runtime Support
 
@@ -116,6 +119,10 @@ See [`docs/security.md`](docs/security.md) and [`AUDIT.md`](AUDIT.md).
 pnpm check:agent-account
 pnpm check:forbidden-terms
 ```
+
+## Status
+
+Testnet/pilot-ready. Production launch is gated on the public checklist in the root README — including third-party contract audit and governance key rotation. Track every security finding live in [`docs/audits/findings.yaml`](../../docs/audits/findings.yaml).
 
 ## License
 

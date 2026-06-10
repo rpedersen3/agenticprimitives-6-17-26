@@ -1,15 +1,12 @@
 # @agenticprimitives/connect-auth
 
-**Credential connection** for Smart Agents — passkey, SIWE, and OAuth ceremonies,
-JWT sessions, and pluggable `Signer` interfaces.
+**Credential ceremonies that resolve to a canonical identity — not the other way around.**
 
-This package resolves **how a user proves control** (passkey, EOA, OAuth). The
-**canonical identity** is the Smart Agent address (`agent-account`). Session JWTs
-use the SA as primary subject; credentials appear as signer claims only
-([ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)).
+Most auth SDKs make the credential the identity: lose the passkey, lose the account. `connect-auth` inverts that. Passkey, SIWE, and OAuth are **ceremonies that prove control**; the identity they resolve to is the Smart Agent address ([ADR-0010](../../docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)). Session JWTs carry the SA address as primary subject — the credential is a signer claim only. So when a credential rotates ([ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md)), the user signs back in as the same agent, with the same delegations, the same name, the same reputation. Identity persists; credentials rotate.
 
-Identity persists. Credentials rotate ([ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md)).
-Custodian add/remove belongs to `custody`, not here.
+This package also defines the `Signer` interfaces (`Signer`, `PasskeySigner`, `EOASigner`, `KMSSigner`) that `agent-account` and `delegation` consume — the architectural contract that lets the whole stack swap signing backends without touching account or delegation code. Custodian add/remove belongs to `custody`, not here: this package never mutates a credential set, only resolves credential → SA.
+
+> Part of [agenticprimitives](../../README.md) — the trust substrate for the agent economy: one canonical Smart Agent identity with custody, delegation, naming, credentials, and audit evidence designed as one system.
 
 ## Use This When
 
@@ -69,6 +66,14 @@ See [`docs/concepts.md`](docs/concepts.md).
 - `@agenticprimitives/connect-auth/siwe`
 - `@agenticprimitives/connect-auth/google`
 
+## How it's different from Privy, Dynamic, and Web3Auth
+
+Hosted auth vendors give you login plus an embedded key, and the identity lives in their database — your users exist because the vendor's account table says so. Here the identity is an on-chain address that no auth provider can revoke, and this package is one composable layer over it:
+
+- **Framework-agnostic and stateless.** No hosted dashboard, no database, no cookie I/O — your app wires HTTP routes and storage; this package handles the cryptographic ceremonies and JWT mint/verify.
+- **No key custody.** It defines the `KMSSigner` interface; concrete signing backends live in `key-custody`. The auth layer never holds material it could lose.
+- **Login is not authority.** A session JWT proves who signed in. What the agent may *do* is the delegation layer's job — scoped, revocable, on-chain-enforceable — not a side effect of holding a session.
+
 ## Security Invariants
 
 - JWT secrets never logged; CSRF origin exact-match.
@@ -87,6 +92,10 @@ See [`docs/security.md`](docs/security.md) and [`AUDIT.md`](AUDIT.md).
 - [`docs/migration.md`](docs/migration.md) — migration notes.
 - [`CLAUDE.md`](CLAUDE.md) — agent routing.
 - [`spec.md`](spec.md) — spec pointer.
+
+## Status
+
+Testnet/pilot-ready. Production launch is gated on the public checklist in the root README — including third-party contract audit and governance key rotation. Track every security finding live in [`docs/audits/findings.yaml`](../../docs/audits/findings.yaml).
 
 ## Validation
 

@@ -1,168 +1,125 @@
 # agenticprimitives
 
-`agenticprimitives` is a native substrate for agentic applications: Smart Agent accounts, custody, names, profiles, delegations, policy, MCP access, audit trails, and directory reads designed as one coherent system.
+**The trust substrate for the agent economy** — an open monorepo of TypeScript packages and Solidity contracts that gives every AI agent, person, and organization one canonical on-chain identity, with custody, delegation, naming, credentials, and audit evidence designed as a single system.
 
-The fundamental premise is that automation in security review, architecture governance, testing, and audit evidence can let a small team build a seamless primitive layer faster than product teams can integrate a suite of disconnected vendors. Instead of stitching together separate auth, wallet, delegation, policy, audit, profile, and agent-runtime products, this repo aims to make those concerns share one canonical identity model, one custody model, one delegation model, and one evidence trail.
+AI agents are getting wallets, names, registries, and payment rails — this year. ERC-8004 agent identity went to mainnet. MetaMask shipped an Agent Wallet. GoDaddy launched an Agent Naming Service. x402 made machine payments real. Every team building agentic products now faces the same question with real money behind it:
 
-That does not mean skipping hardening. It means using AI-assisted review, static analysis, invariant tests, package-boundary checks, specs, ADRs, and public self-audit artifacts as a continuous engineering system. The goal is a substrate where user experience stays simple because the primitives below it are already integrated.
+> **When an agent acts on a human's behalf — who authorized what, under which limits, provable to whom?**
 
-## Architectural Strategy
+The standard answer is a stitch-job: Privy + Safe + Pimlico + ENS + EAS + Turnkey + a policy engine + an audit log. Eight vendors. Eight identity models. Zero coherent trust chain. The stitched stack cannot answer the question above, because no two of its parts agree on who "the agent" even is.
 
-- **Canonical Smart Agent identity:** every person, organization, service agent, and treasury service is anchored by a CAIP-10 Smart Agent address. Names, credentials, profiles, skills, relationships, and app-specific records are facets pointing at that anchor.
-- **Credential-first access:** Google, passkeys, SIWE wallets, and future credentials are replaceable control facets. A public name is a handle, not the login key.
-- **Custody is separate from authority:** custody controls the Smart Agent; delegation grants scoped authority to apps, agents, and MCP tools. Relying apps receive revocable permissions, not keys.
-- **Substrate-level integration:** packages are intentionally small, but their contracts fit together: Connect issues sessions for the same Smart Agent that owns delegations, vault grants, names, profiles, and audit evidence.
-- **No silent fallbacks:** product paths use one canonical mechanism at a time. Empty results are real answers, not triggers for hidden weaker paths.
-- **Audit as product infrastructure:** audit events, evidence indexes, storage snapshots, branch coverage, typehash checks, and public review docs are part of the build, not a final ceremony.
+`agenticprimitives` is the other answer: **30+ TypeScript packages and 42 Solidity contracts, designed as one system**, where identity, custody, delegation, naming, credentials, policy, and audit evidence all point at one canonical anchor — and every security finding we've ever logged is public.
 
-## Product Suite Replaced
+## Five things that are true here and almost nowhere else
 
-Most web3 applications assemble a product suite: auth provider, embedded wallet, smart-account vendor, paymaster, naming service, attestation service, treasury tool, recovery flow, multi-sig, policy layer, audit trail, and agent runtime. `agenticprimitives` is the substrate-level version of that suite.
+### 1. The address IS the identity
 
-| Architectural area | Typical product category | Native primitive |
-| --- | --- | --- |
-| Auth / SSO / embedded login | Privy, Dynamic, Web3Auth, Magic, Coinbase Embedded Wallets | `connect`, `connect-auth`, Connect apps |
-| Smart accounts | Safe, ZeroDev, Biconomy, Alchemy Account Kit, Coinbase Smart Wallet, Stackup | `agent-account`, `contracts` |
-| Passkeys / social custody | Privy, Turnkey, Web3Auth, Magic, Capsule | `connect-auth`, `key-custody`, `account-custody` |
-| KMS / signer infrastructure | Turnkey, Fireblocks, Lit Protocol, AWS / GCP KMS wrappers | `key-custody` |
-| Recovery / trustees | Argent recovery, Safe recovery modules, Web3Auth recovery, Privy recovery | `account-custody`, recovery specs |
-| Multi-sig / org control | Safe, Squads, Fireblocks, Coinshift | `agent-account`, custody modules |
-| Delegation / session authority | MetaMask Delegation Toolkit, Safe modules, Lit Actions, custom session keys | `delegation`, `tool-policy` |
-| Paymaster / sponsored gas | Pimlico, Alchemy Gas Manager, Biconomy, Gelato Relay, Stackup | `SmartAgentPaymaster`, `agent-account`, `demo-a2a` relayer paths |
-| Bundler / UserOp flow | Pimlico, Alchemy, Stackup, Biconomy, ZeroDev | `agent-account` clients + app relayer paths |
-| Naming service | ENS, Unstoppable Domains, SPACE ID, Lens handles | `agent-naming` |
-| Agent naming / agent domains | Agent Naming Service, GoDaddy-style agent domains, custom vanity domains | `agent-naming`, Connect home domains, A2A endpoint routing |
-| Agent registries / discovery | ERC-8004 registries, Hashgraph Online agent discovery, custom agent catalogues | `identity-directory`, `agent-profile`, `agent-relationships`, future registry projections |
-| Profiles / AgentCard | ENS text records, Lens profiles, Farcaster profiles, custom DB profiles | `agent-profile` |
-| Directory / read model | Ceramic, IDX, custom indexers, CRM / member directories | `identity-directory`, `identity-directory-adapters` |
-| Attestations / claims | EAS, Verax, Gitcoin Passport, Sismo, Clique | contracts + claim / attestation specs |
-| Relationships / trust graph | EAS schemas, Lens graph, Ceramic graph, custom DB edges | `agent-relationships` for public edges; private vault credentials for confidential edges |
-| Treasury / org funds | Safe treasury, Coinshift, Request Finance, Fireblocks, Utopia | service Smart Agents + custody / delegation / policy primitives |
-| MCP / agent tool authorization | Custom API keys, OAuth scopes, LangChain guards, MCP middleware | `mcp-runtime`, `delegation`, `tool-policy` |
-| Audit / evidence / monitoring | OpenZeppelin Defender, Tenderly, Forta, Hypernative, custom audit logs | `audit`, CI checks, audit evidence docs |
-| Ontology / controlled vocabularies | Custom schemas, SKOS stores, graph DB vocabularies | `ontology` |
-| Skills / geo / capability registry | Marketplace databases, CRM tags, directory taxonomies | planned skills + geo registries over `ontology` |
-| Agent standards interop | HCS, ERC-8004, CAIP-10, DID-style identifiers, AgentCard conventions | `types`, `agent-profile`, `identity-directory-adapters`, `ontology` |
+Every person, organization, service agent, and treasury is an ERC-4337 Smart Agent address. Names, passkeys, Google logins, SIWE wallets, profiles, credentials, ERC-8004 registry entries — all of them are **replaceable facets pointing at that one anchor** ([ADR-0010](docs/architecture/decisions/0010-smart-agent-canonical-identifier.md)).
 
-The target integrated stack is not `Privy + Safe + Pimlico + ENS + EAS + Turnkey + Defender + custom backend`. It is one Smart Agent substrate where credentials, names, delegations, policies, paymasters, attestations, treasury controls, MCP access, and audit evidence all point at the same canonical address.
+Lose your passkey? Recovery rotates the credential, **never the address**. Every delegation your agent ever issued stays valid. Your name still resolves. Your reputation still attaches. Identity persists; credentials rotate ([ADR-0011](docs/architecture/decisions/0011-credential-recovery-and-re-association.md)).
 
-## Standards Posture
+### 2. One delegation model, everywhere
 
-The substrate follows standards at the primitive boundary rather than treating standards as one-off app integrations:
+The same EIP-712 delegation — with on-chain caveat enforcers for time windows, per-call value caps, allowed methods, quorums — authorizes a web app session, an A2A agent call, an MCP tool invocation, and an on-chain spend. *"This agent may call these two tools until Friday, spend at most 0.1 ETH per call, and I can revoke it instantly"* is one primitive, not four products. Apps and agents receive **revocable, scoped authority — never keys**. (Cumulative cross-redemption budgets are on the [contracts roadmap](docs/feature-analysis/90-prioritized-feature-gaps.md) — we say so because the audit does.)
 
-- **CAIP-10:** canonical agent identifiers are chain-qualified Smart Agent addresses.
-- **ERC-4337:** Smart Agents are account-abstraction accounts with UserOp-based execution.
-- **ERC-7579:** account capabilities should live in modules, not in a monolithic account core.
-- **ERC-1271:** Smart Agents verify signatures for sessions, delegations, and app grants.
-- **EIP-712:** delegations, custody actions, agreements, and attestations use typed-data commitments where signatures need durable meaning.
-- **ERC-7710-style delegation:** scoped, caveated authority is modeled as a first-class primitive.
-- **ERC-8004:** agent registry / trust / discovery semantics are an interop target; this repo keeps CAIP-10 Smart Agent addresses as the native ID and maps registry records as facets.
-- **HCS-11 / HCS-14 and Hashgraph Online:** agent profiles, registry records, and CAIP-10 alignment are supported as profile / directory / ontology interop surfaces rather than replacing the Smart Agent anchor.
-- **MCP and A2A:** tool access and agent-to-agent endpoints consume the same delegation and policy substrate as web apps.
-- **SKOS / SHACL / ontology vocabularies:** skills, geo features, controlled vocabularies, and validation shapes are modeled as reusable semantic primitives.
+### 3. Custody is not authority
 
-## Working Hypothesis
+Credential rotation, trustee quorums, guardian recovery, and upgrades are **custody-policy operations** enforced by our own ERC-7579 modules — never delegations, never a third-party multi-sig dependency. We ported the patterns worth porting (Safe-style signature packing) and own the rest, because the trust substrate shouldn't outsource its spine.
 
-Agentic trust standards are moving quickly. ERC-8004, HCS, Hashgraph Online, Agent Naming Service patterns, and agent registry products are converging on the question of how agents are discovered, named, trusted, and verified. At the same time, MetaMask Delegation Toolkit, ERC-7710-style delegation, ERC-4337 accounts, and ERC-7579 modules are making authority programmable at the account layer.
+### 4. Contracts and SDK are one artifact
 
-Our hypothesis is that the winning platform is not a pile of integrations across those product categories. It is a substrate where standards are implemented as interoperable facets over the same Smart Agent anchor.
+TypeScript typehashes are CI-locked to the Solidity constants. ABIs are sync-gated. Storage layouts are snapshot-gated. Package boundaries are doctrine-gated. You cannot drift the client from the chain, and you cannot quietly break a downstream package. The contract layer and the SDK co-evolve under the same checks — which is what "designed as one system" actually means in practice.
 
-The timing also matters. Security automation has changed the build strategy. Static analysis, invariant testing, symbolic execution, AI-assisted review, and community audit loops are now fast enough to run continuously, not just before launch. Recent public examples, including AI-assisted discovery of serious issues in mature crypto systems such as Zcash, reinforce the point: audit-first engineering can find cross-layer failures that traditional product integration often hides.
+### 5. Audited in the open
 
-Over the last two months, this repo has been moving toward that model: specs before non-trivial code, package-boundary checks, storage-layout snapshots, typehash equality gates, Foundry / fuzz / invariant coverage, public self-audit docs, and explicit community-review packets. The bet is that a transparent, audit-first primitive substrate will increasingly beat the traditional web3 suite model on UX coherence, security evidence, and long-term adaptability.
+Most projects publish an audit PDF once. We maintain a **live, CI-gated findings ledger** — [`docs/audits/findings.yaml`](docs/audits/findings.yaml) — where a "closed" finding must anchor to real source code or the build fails. We run adversarial line-by-line audits on ourselves ([all 42 contracts](docs/audits/2026-06-10-contract-by-contract-audit.md), [every package](docs/audits/2026-06-10-production-readiness-audit.md)) and publish the results, open findings included, before anyone asks.
 
-## Packages
+Trust infrastructure should be the most transparent code you depend on. That transparency is the moat: anyone can copy a feature; almost no one will show you their open findings.
 
-**17 publishable `@agenticprimitives/*` packages**, each independently consumable, each backed by competitive-landscape research. Grouped below by concern; see [`specs/100-package-boundary-doctrine.md`](./specs/100-package-boundary-doctrine.md) for the package-boundary contract.
+## What it replaces
 
-### Auth + sessions
-
-| Package | Purpose |
+| You'd normally integrate… | Here it's… |
 | --- | --- |
-| [`@agenticprimitives/connect-auth`](./packages/connect-auth) | Credential primitives for passkey / SIWE / Google OAuth, JWT sessions, and pluggable `Signer` interfaces |
-| [`@agenticprimitives/connect`](./packages/connect) | Connect / SSO broker primitives: AgentSession mint + verify, OIDC-style bound grants, redirect helpers |
+| Privy / Dynamic / Web3Auth (auth + embedded wallets) | [`connect`](packages/connect), [`connect-auth`](packages/connect-auth) — sessions bound to the Smart Agent, not a vendor account |
+| Safe / ZeroDev / Alchemy Account Kit (smart accounts) | [`agent-account`](packages/agent-account) + [`contracts`](packages/contracts) — ERC-4337 + ERC-7579 modular core |
+| Turnkey / Fireblocks (KMS, signing policy) | [`key-custody`](packages/key-custody) — a pluggable KMS boundary your HSM/cloud KMS plugs *into*, so signing infrastructure never owns your identity |
+| Safe multi-sig + Argent recovery (org control, recovery) | [`account-custody`](packages/account-custody) + native CustodyPolicy module — quorums + trustees + recovery, on-chain |
+| MetaMask Delegation Toolkit / session keys (scoped authority) | [`delegation`](packages/delegation) + [`tool-policy`](packages/tool-policy) — caveats enforced on-chain, replay-protected off-chain |
+| Pimlico / Alchemy Gas Manager (sponsored gas) | `SmartAgentPaymaster` + account clients |
+| ENS / Unstoppable (naming) | [`agent-naming`](packages/agent-naming) — hierarchical registry, forward + reverse, on-chain normalization |
+| EAS / Verax (attestations) | [`attestations`](packages/attestations), [`agreements`](packages/agreements) — bilateral consent, joint assertions, EIP-712-bound (W1 foundational — registries live on testnet, maturing toward production) |
+| ERC-8004 registries / GoDaddy ANS / agent cards (discovery) | [`agent-profile`](packages/agent-profile), [`identity-directory`](packages/identity-directory) — profiles + directory reads today; ERC-8004/ANS mapping is an active interop target on the [roadmap](docs/feature-analysis/90-prioritized-feature-gaps.md) |
+| OAuth scopes + API keys (agent tool access) | [`mcp-runtime`](packages/mcp-runtime) — MCP tools gated by the same delegations, JTI replay protection included |
+| Custom audit logging | [`audit`](packages/audit) + evidence trail across every layer above |
 
-### Agent account + custody
+The point isn't that each row is impossible elsewhere. The point is that **here, every row shares one identity, one delegation model, and one evidence trail** — and the seams between rows are exactly where stitched stacks leak authority.
 
-| Package | Purpose |
-| --- | --- |
-| [`@agenticprimitives/agent-account`](./packages/agent-account) | ERC-4337 + ERC-7579 smart-account substrate: deterministic addressing, ERC-1271, UserOp building, factory mode wiring |
-| [`@agenticprimitives/account-custody`](./packages/account-custody) | Custody-policy SDK: action enum + arg builders, EIP-712 typed-data, custodian/trustee/recovery types |
-| [`@agenticprimitives/key-custody`](./packages/key-custody) | Pluggable KMS: envelope encryption, secp256k1 signers, HMAC, and per-subject derivation for social-custodied agents |
+## See it run
 
-### Delegation + MCP
+End to end on Base Sepolia: Google/passkey/SIWE sign-in → counterfactual Smart Agent deploy → custody policy + multi-sig → scoped delegations → A2A agent calls → MCP vault and tool access → audit evidence.
 
-| Package | Purpose |
-| --- | --- |
-| [`@agenticprimitives/delegation`](./packages/delegation) | EIP-712 delegations, caveat evaluation, and revocable authority from web apps to agents and MCP tools |
-| [`@agenticprimitives/tool-policy`](./packages/tool-policy) | Protocol-agnostic classification + risk tiers + threshold policy + exact-call DSL |
-| [`@agenticprimitives/mcp-runtime`](./packages/mcp-runtime) | `withDelegation` middleware around the official MCP SDK + JTI stores (sqlite/postgres/memory) |
-
-### Names + facets
-
-| Package | Purpose |
-| --- | --- |
-| [`@agenticprimitives/agent-naming`](./packages/agent-naming) | Hierarchical name registry + resolver for deployment-configured names such as `.impact` (forward + reverse) |
-| [`@agenticprimitives/agent-profile`](./packages/agent-profile) | CAIP-10 profile resolver + AgentCard schema + on-chain profile reads |
-| [`@agenticprimitives/agent-relationships`](./packages/agent-relationships) | ⚠️ EXPERIMENTAL — on-chain trust-fabric edges. Public graph; **not for confidential edges** (see package README) |
-
-### Directory + ontology
-
-| Package | Purpose |
-| --- | --- |
-| [`@agenticprimitives/identity-directory`](./packages/identity-directory) | Evidence-backed read model — composes canonical addresses, names, profiles, public relationships, and index projections into a queryable directory |
-| [`@agenticprimitives/identity-directory-adapters`](./packages/identity-directory-adapters) | CAIP-10 / on-chain / naming / indexer adapter implementations for `identity-directory` |
-| [`@agenticprimitives/ontology`](./packages/ontology) | Hashgraph-aligned ontology (T-box / C-box) + controlled vocabularies + SHACL shapes |
-
-### Audit + types + contracts
-
-| Package | Purpose |
-| --- | --- |
-| [`@agenticprimitives/audit`](./packages/audit) | Audit-event schema + sink interface + in-band sinks (console / memory / PII guardrail) + `MetricsSink` observability primitive |
-| [`@agenticprimitives/types`](./packages/types) | Cross-cutting branded primitives (`SmartAgentAddress`, `Hex`, etc.) — leaf in the dependency graph |
-| [`@agenticprimitives/contracts`](./packages/contracts) | Solidity sources + ABIs + storage-layout snapshots for the on-chain primitives consumed by the other packages |
-
-See [`specs/`](./specs) for the full design. Start with [`000-product-overview.md`](./specs/000-product-overview.md) and [`100-package-boundary-doctrine.md`](./specs/100-package-boundary-doctrine.md).
-
-## Layout
-
-```
-agenticprimitives/
-├── packages/         # The 17 publishable @agenticprimitives/* packages
-├── apps/             # Demo apps (web + a2a + mcp + sso + org + jp + contracts)
-├── specs/            # Doctrine, per-package contracts, archive
-├── docs/             # Usage guides, ADRs, audits, runbooks
-└── scripts/          # CI guardrails + dev orchestration
-```
-
-## Demo Apps
-
-The demo apps exercise the substrate end to end: Connect sign-in, Smart Agent deployment, scoped app grants, A2A routing, MCP vault access, organization creation, intent matching, and audit evidence on Base Sepolia.
+**Prerequisites:** Node ≥ 20.19, pnpm ≥ 9, [Foundry](https://book.getfoundry.sh/getting-started/installation) (anvil + forge).
 
 ```bash
-# First time only:
-cd apps/contracts && bash setup.sh && cd ..
+pnpm install
 
-# Run the demo (Anvil + deploy + 3 apps in parallel):
+# First time only (contract deps + build):
+pnpm setup:contracts
+
+# Anvil + deploy + apps in parallel:
 pnpm dev
 ```
 
-Then open http://127.0.0.1:5173. See [`apps/demo-web/`](./apps/demo-web), [`apps/demo-web-pro/`](./apps/demo-web-pro), [`apps/demo-sso-next/`](./apps/demo-sso-next), [`apps/demo-a2a/`](./apps/demo-a2a), [`apps/demo-mcp/`](./apps/demo-mcp), [`apps/demo-jp/`](./apps/demo-jp), and [`apps/demo-gs/`](./apps/demo-gs).
+Then open http://127.0.0.1:5173. Demo apps: [`demo-web`](apps/demo-web) and [`demo-web-pro`](apps/demo-web-pro) (full product flows), [`demo-sso-next`](apps/demo-sso-next) (Connect/SSO), [`demo-a2a`](apps/demo-a2a) (agent-to-agent), [`demo-mcp`](apps/demo-mcp) (MCP vault + tools), [`demo-org`](apps/demo-org), [`demo-jp`](apps/demo-jp), [`demo-gs`](apps/demo-gs).
 
-Live deploy targets are Cloudflare Pages / Workers plus Base Sepolia contracts.
+**Where to go next:**
 
-## Status
+- **Evaluate the architecture** — read [`specs/000-product-overview.md`](specs/000-product-overview.md), then [`specs/100-package-boundary-doctrine.md`](specs/100-package-boundary-doctrine.md).
+- **Adopt a primitive** — pick one package from the table below; each README stands alone.
+- **Audit us** — start at [`docs/audits/findings.yaml`](docs/audits/findings.yaml) and the [latest full pass](docs/audits/2026-06-10-production-readiness-audit.md).
 
-**Ready for test and pre-production environments — not yet full production.** This is a comprehensive, vertically-integrated set of trust primitives — smart-account custody, multi-sig and credential recovery, agent-to-agent delegation with on-chain caveat enforcement, naming, verifiable credentials, attestation and agreement registries, and MCP/A2A authority — implemented **natively** rather than assembled from third-party components. Package boundaries are enforced by CI; cross-stack EIP-712 typehash, ABI-sync, storage-layout, and finding-ledger gates keep the contract and TypeScript layers in lockstep; the demo apps exercise the full chain (Google/passkey/SIWE auth → smart-account deploy → custody policy + multi-sig → off-chain delegations + MCP vault/tool calls) end to end on Base Sepolia. Use it today for **test, staging, and pre-production work**: integration prototyping, technical pilots that bind testnet value, security review, and audit preparation.
+## The packages
 
-**A comprehensive set of native primitives warrants a comprehensive audit — which we are actively undertaking.** Because we implement the trust substrate ourselves (no third-party multi-sig, no borrowed delegation framework), the security surface is correspondingly broad, and we hold it to a correspondingly broad bar rather than inheriting someone else's. A continuously-maintained finding ledger — [`docs/audits/findings.yaml`](./docs/audits/findings.yaml) — is the single source of truth for every security finding's status, gated in CI so a "closed" finding cannot drift from source. The active contract-layer tracker is [`docs/audits/2026-06-10-contract-by-contract-audit.md`](./docs/audits/2026-06-10-contract-by-contract-audit.md) (independent per-contract deep dive of all 42 `.sol` files), and the public self-audit packet starts at [`docs/audits/archive/2026-06-03/self-audit-2026-06.md`](./docs/audits/archive/2026-06-03/self-audit-2026-06.md).
+Publishable `@agenticprimitives/*` packages — each independently consumable, each validated against the competitive landscape it plays in ([feature-analysis series](docs/feature-analysis/index.md)). Dependency direction is doctrine: `types ← identity/auth ← account ← delegation ← runtime`, no back-edges.
 
-**Full production launch additionally requires** a small set of operational steps, independent of the architecture:
+| Concern | Packages |
+| --- | --- |
+| **Auth + sessions** | [`connect-auth`](packages/connect-auth) (passkey/SIWE/OAuth credentials, JWT sessions), [`connect`](packages/connect) (SSO broker, bound grants), [`browser-identity`](packages/browser-identity), [`fedcm-idp`](packages/fedcm-idp) / [`fedcm-rp`](packages/fedcm-rp) (FedCM) |
+| **Account + custody** | [`agent-account`](packages/agent-account) (4337+7579 account SDK), [`account-custody`](packages/account-custody) (custody-policy actions), [`key-custody`](packages/key-custody) (KMS) |
+| **Delegation + tools** | [`delegation`](packages/delegation), [`tool-policy`](packages/tool-policy), [`mcp-runtime`](packages/mcp-runtime), [`a2a`](packages/a2a) |
+| **Names + discovery** | [`agent-naming`](packages/agent-naming), [`agent-profile`](packages/agent-profile), [`identity-directory`](packages/identity-directory) (+ [`adapters`](packages/identity-directory-adapters)), [`agent-relationships`](packages/agent-relationships), [`related-agents`](packages/related-agents) |
+| **Credentials + trust** | [`verifiable-credentials`](packages/verifiable-credentials), [`attestations`](packages/attestations), [`agreements`](packages/agreements), [`agent-skills`](packages/agent-skills), [`geo-features`](packages/geo-features) |
+| **Coordination + commerce** | [`intent-marketplace`](packages/intent-marketplace), [`intent-resolver`](packages/intent-resolver), [`fulfillment`](packages/fulfillment), [`payments`](packages/payments), [`content-primitives`](packages/content-primitives) |
+| **Semantics + evidence** | [`ontology`](packages/ontology), [`audit`](packages/audit), [`types`](packages/types), [`contracts`](packages/contracts) |
 
-1. **External contracts audit** (Cyfrin / CodeHawks contest planned) — the independent third-party complement to our in-house program above.
-2. **Clean production governance keys** — the current testnet deployer is intentionally public so the demo stack is reproducible from a clean clone; production deploys MUST rotate to a fresh KMS-backed key per the [`packages/contracts/AUDIT.md`](./packages/contracts/AUDIT.md) runbook.
-3. **Closure of the residual production-readiness items** tracked in [`docs/architecture/product-readiness-audit.md`](./docs/architecture/product-readiness-audit.md).
+Start with [`specs/000-product-overview.md`](specs/000-product-overview.md) and [`specs/100-package-boundary-doctrine.md`](specs/100-package-boundary-doctrine.md). Layout:
+
+```
+agenticprimitives/
+├── packages/         # Publishable @agenticprimitives/* packages
+├── apps/             # Demo + reference apps (web, a2a, mcp, sso, org…)
+├── specs/            # Doctrine + per-capability specs (the architects of record)
+├── docs/             # ADRs, audits, feature analysis, runbooks
+└── scripts/          # CI guardrails + dev orchestration
+```
+
+## Standards as facets, not integrations
+
+Standards are implemented at the primitive boundary as facets of the Smart Agent anchor — not as one-off app integrations:
+
+**CAIP-10** identifiers · **ERC-4337** accounts · **ERC-7579** modules · **ERC-1271** signatures · **EIP-712** typed commitments · **ERC-7710-style** caveated delegation · **ERC-8004** agent registries (interop target — registry records map onto the SA anchor) · **HCS-11/HCS-14** + Hashgraph Online (profile/UAID interop) · **MCP + A2A** (tool and agent endpoints consume the same delegation substrate) · **SKOS/SHACL** semantic vocabularies.
+
+The bet: agent trust standards are converging *right now* on how agents are named, discovered, and trusted. The winner won't be whoever integrates the most products — it'll be the substrate where every standard is a facet of one identity. That's the design center here.
+
+## Status — honest version
+
+**Testnet/pilot-ready. Not yet production.** That phrase is doing real work, and we can prove both halves:
+
+- **What works today:** the full chain — auth → account deploy → custody → delegation → MCP/A2A → audit — runs end to end on Base Sepolia, behind 774 Foundry tests (including invariant suites), 27 package test suites, and the cross-stack CI gates described above. Use it now for integration prototyping, technical pilots, security review, and staging.
+- **What gates production:** an external contracts audit (Cyfrin/CodeHawks contest planned), rotation of the intentionally-public testnet governance keys to KMS-backed production keys, and closure of the open items in the [findings ledger](docs/audits/findings.yaml) — which you can read, today, in full. The current self-audit pass: [production-readiness audit (2026-06-10)](docs/audits/2026-06-10-production-readiness-audit.md).
+
+Because we build the trust substrate natively — our own multi-sig, our own delegation framework, our own registries — the security surface is broad, and we hold it to a correspondingly broad bar rather than inheriting someone else's. The findings ledger is gated in CI so a "closed" finding cannot drift from source.
 
 ## Provenance
 
-Capabilities are extracted from [`smart-agent`](https://github.com/agentictrustlabs/smart-agent) (branch `003-intent-marketplace-proposal`), then re-shaped as standalone, dependency-minimal packages. Boundaries and feature choices are validated against MetaMask DTK, 1claw, Coinbase AgentKit, Alchemy Account Kit, ZeroDev, Pimlico, Safe, TurnKey, Lit Protocol, Privy, MCP SDK, and A2A SDK, while preserving the native-substrate goal: fewer glued products, more coherent primitives.
+Capabilities are extracted from [`smart-agent`](https://github.com/agentictrustlabs/smart-agent) and re-shaped as standalone, dependency-minimal packages. Boundaries and features are validated against the landscape they compete in — MetaMask DTK + Agent Wallet, Safe, ZeroDev, Alchemy, Pimlico, Turnkey, Privy, Lit, ERC-8004 tooling, GoDaddy ANS, Hashgraph Online, MCP + A2A SDKs — documented per focus area in [`docs/feature-analysis/`](docs/feature-analysis/index.md). Fewer glued products. More coherent primitives.

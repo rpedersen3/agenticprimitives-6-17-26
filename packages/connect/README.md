@@ -1,11 +1,10 @@
 # @agenticprimitives/connect
 
-**Agentic Connect** — the SSO broker ([spec 224](../../specs/224-agentic-connect.md);
-[ADR-0014](../../docs/architecture/decisions/0014-connect-is-an-sso-broker.md)).
-It runs at one central origin, proves a credential once (via
-[`connect-auth`](../connect-auth)), resolves it to a canonical agent (via
-[`identity-directory`](../identity-directory)), and issues a **CAIP-10-subject,
-no-owner `AgentSession`** that relying sites verify with the broker's public key.
+**Single sign-on where the session subject is an on-chain identity, not a vendor account.**
+
+Every hosted identity provider can tell a relying site "this is user `8f3a…` in our database." None can tell it "this is Smart Agent `0xAB12…`, with custody policy behind it and authority you can verify on-chain." That gap is what `connect` closes. It is the SSO broker of the agenticprimitives stack ([spec 224](../../specs/224-agentic-connect.md); [ADR-0014](../../docs/architecture/decisions/0014-connect-is-an-sso-broker.md)): it runs at one central origin, proves a credential once (via [`connect-auth`](../connect-auth)), resolves it to a canonical agent (via [`identity-directory`](../identity-directory)), and issues a **CAIP-10-subject, no-owner `AgentSession`** that relying sites verify with the broker's public key. One passkey enrollment serves every relying site — and the token names the agent itself, never a vendor user ID.
+
+> Part of [agenticprimitives](../../README.md) — the trust substrate for the agent economy: one canonical Smart Agent identity with custody, delegation, naming, credentials, and audit evidence designed as one system.
 
 ## What's here
 
@@ -33,6 +32,8 @@ const v = await verifyAgentSession(token, { keys: await importJwks(jwks), expect
 
 ## Security (audit CN controls)
 
+This is an IdP-class trust concentration, and the package treats it that way — each control below maps to a finding ID in the [spec 224](../../specs/224-agentic-connect.md) audit:
+
 - **Token (CN-4):** verification pins the algorithm to the key (by `kid`), never
   the token's header — rejects `alg:none` + RS/ES↔HS confusion; an `AgentSession`
   carrying an `owner` is rejected (ADR-0016).
@@ -49,3 +50,25 @@ const v = await verifyAgentSession(token, { keys: await importJwks(jwks), expect
 
 The HS256 same-origin `BrokerSession` is `connect-auth`'s, a different token from
 this asymmetric cross-origin `AgentSession`.
+
+## Why this instead of Privy, Dynamic, or Web3Auth
+
+Auth and embedded-wallet vendors end at login plus a key held inside their account system. `connect` begins there. The session it issues is bound to a canonical on-chain Smart Agent — an identity with custody policy, recoverable credentials, and delegated authority behind it, none of which depends on the broker's database surviving. Two consequences worth naming:
+
+- **A login-grade session authorizes no on-chain write.** Custody-class actions require explicit step-up classification (CN-2); execution happens on-chain, never inside this package. Vendor sessions typically carry whatever the embedded key can sign.
+- **The subject outlives the credential.** Recovery rotates passkeys; the CAIP-10 subject — and every delegation the agent ever issued — stays valid ([ADR-0011](../../docs/architecture/decisions/0011-credential-recovery-and-re-association.md)).
+
+What this package deliberately does not do: verify credentials (that is `connect-auth`), own the resolution graph (`identity-directory`), or execute custody changes (on-chain modules). One job, audited.
+
+## Status
+
+Testnet/pilot-ready. Production launch is gated on the public checklist in the root README — including third-party contract audit and governance key rotation. Track every security finding live in [`docs/audits/findings.yaml`](../../docs/audits/findings.yaml).
+
+## Validate
+
+```bash
+pnpm --filter @agenticprimitives/identity-directory build   # dep dist for vitest
+pnpm --filter @agenticprimitives/connect typecheck
+pnpm --filter @agenticprimitives/connect test
+pnpm check:forbidden-terms
+```
