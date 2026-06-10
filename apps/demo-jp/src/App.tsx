@@ -14,7 +14,7 @@ import { AccessRequestState } from './components/AccessRequestState';
 import { adopterLifecycle, type AdopterLifecyclePosition, type AdopterRequestStatus } from './lib/adopter-lifecycle';
 import { facilitatorLifecycle, type FacilitatorLifecyclePosition, type FacilitatorMatchStatus } from './lib/facilitator-lifecycle';
 import { loadIntents, type BoardIntent } from './lib/broker-store';
-import { personalAuthOrigin, nameLabel } from './lib/domain';
+import { homeOriginFor } from './lib/domain';
 import {
   type AdopterStep, type AdopterType, type Attestation,
   type FacilitatorAdopterType, type FacilitatorMinistryArea, type FacilitatorSizeBand,
@@ -294,7 +294,7 @@ export function App() {
     let cancelled = false;
     void (async () => {
       try {
-        const authOrigin = personalAuthOrigin(nameLabel(member.name));
+        const authOrigin = homeOriginFor(member.name);
         await verifyIdToken(authOrigin, member.token, '');
       } catch (e) {
         if (cancelled) return;
@@ -410,7 +410,7 @@ export function App() {
   }, [view, relatedOrgsLoaded, recordsLoaded, recordsLoadFailed, goHub]);
 
   const onOpenHome = useCallback(() => {
-    if (member) window.open(`${personalAuthOrigin(nameLabel(member.name))}/you`, '_blank', 'noopener');
+    if (member) window.open(`${homeOriginFor(member.name)}/you`, '_blank', 'noopener');
   }, [member]);
 
   // OIDC return-path handler (demo-org / spec 230 pattern). Role-agnostic now: the connect ceremony
@@ -537,7 +537,7 @@ export function App() {
    *  attaches the missing-fields list, and redirects. On return we land back at JP root
    *  with `?profile_state=&profile_<key>=...` which the effect above merges into the vault. */
   const goEditProfileAtImpact = useCallback((name: string, missingKeys: string[]) => {
-    const homeOrigin = personalAuthOrigin(nameLabel(name));
+    const homeOrigin = homeOriginFor(name);
     const state = randomB64url(16);
     try { sessionStorage.setItem(PROFILE_HANDOFF_KEY, JSON.stringify({ state })); } catch { /* ignore */ }
     const returnUrl = window.location.origin + '/';
@@ -552,7 +552,7 @@ export function App() {
   /** Hand the member off to their Impact home's /wea-sign ceremony. On return we get
    *  `?wea_state=&wea_docHash=&wea_signedAt=&wea_consentBoundTo=&wea_docId=`. */
   const goSignWeaAtImpact = useCallback((name: string) => {
-    const homeOrigin = personalAuthOrigin(nameLabel(name));
+    const homeOrigin = homeOriginFor(name);
     const state = randomB64url(16);
     try { sessionStorage.setItem(WEA_HANDOFF_KEY, JSON.stringify({ state })); } catch { /* ignore */ }
     const returnUrl = window.location.origin + '/';
@@ -934,7 +934,7 @@ function AdopterIntranet({ session, org, relatedOrgs, onCreateOrg, onSignOut, on
   const complete = useMemo(() => isAdopterOnboardingComplete(impact, record), [impact, record]);
   const completeness = useMemo(() => profileCompleteness(impact, record.adopterType), [impact, record.adopterType]);
   const canDeclare = useMemo(() => canDeclareAdoption(impact, record), [impact, record]);
-  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const homeUrl = homeOriginFor(session.name);
 
   // This adopter's own facilitator requests (expressed by the person SA or one of their related orgs).
   const myRequests = useMemo(() => {
@@ -1426,7 +1426,7 @@ function IntranetTopbar({
           <a
             className="btn btn-ghost"
             style={{ padding: '.5rem 1rem', fontSize: '.85rem' }}
-            href={`${personalAuthOrigin(nameLabel(session.name))}/you`}
+            href={`${homeOriginFor(session.name)}/you`}
             target="_blank"
             rel="noopener noreferrer"
             title="Your home + data vault on Impact"
@@ -1978,7 +1978,7 @@ function FpgCard({ g, active, onPick }: { g: PeopleGroup; active: boolean; onPic
 
 function AdoptionSummary({ session, record, impact }: { session: Session; record: JpAdopterRecord; impact: ImpactProfile }) {
   const pg = record.adoption ? findPeopleGroup(record.adoption.peopleGroupId) : undefined;
-  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const homeUrl = homeOriginFor(session.name);
   const displayName = displayNameFromImpact(impact, session.name);
   // If the adopter asked to be matched, look up facilitators serving this FPG with capacity
   // for this adopter type. The match runs over `MatchedFacilitator` (the released scoped
@@ -2493,7 +2493,7 @@ const disclosureListStyle: React.CSSProperties = {
 
 function JpProjectionPanel({ impact, record, session }: { impact: ImpactProfile; record: JpAdopterRecord; session: Session }) {
   const projection = useMemo(() => projectForJp(impact, record), [impact, record]);
-  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const homeUrl = homeOriginFor(session.name);
   return (
     <section className="section wrap" style={{ paddingTop: 0 }}>
       <div className="trust">
@@ -2608,7 +2608,7 @@ function FacilitatorIntranet({ session, org, onCreateOrg, onSignOut, onReconnect
   );
 
   const displayName = displayNameFromImpact(impact, session.name);
-  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const homeUrl = homeOriginFor(session.name);
   const orgName = impact.contact?.organizationName;
 
   // ── Grant-missing: render the request-access state instead of a raw error (§15c / §15b.1). The ONE
@@ -3419,7 +3419,7 @@ function FacilitatorCoverageSummary({ session, impact, coverage }: {
   session: Session; impact: ImpactProfile; coverage: import('./lib/vault').FacilitatorCoverage;
 }) {
   const groups = coverage.peopleGroupIds.map(findPeopleGroup).filter((g): g is NonNullable<typeof g> => !!g);
-  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const homeUrl = homeOriginFor(session.name);
   const displayName = displayNameFromImpact(impact, session.name);
   const orgName = impact.contact?.organizationName;
 
@@ -3827,7 +3827,7 @@ function CapacityCard({ title, values }: { title: string; values: string[] }) {
 
 function FacilitatorProjectionPanel({ impact, record, session }: { impact: ImpactProfile; record: JpFacilitatorRecord; session: Session }) {
   const projection = useMemo(() => projectFacilitatorForJp(impact, record), [impact, record]);
-  const homeUrl = personalAuthOrigin(nameLabel(session.name));
+  const homeUrl = homeOriginFor(session.name);
   return (
     <section className="section wrap" style={{ paddingTop: 0 }}>
       <div className="trust">

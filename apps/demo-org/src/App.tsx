@@ -16,7 +16,7 @@ import type { DelegationWire } from './lib/delegation';
 import { hasWallet } from './lib/wallet';
 import { loadPasskey } from './lib/passkey';
 // Deployment-domain config lives in one place (ADR-0021): `./lib/domain`.
-import { AGENT_NAME_PARENT, toAgentName as fullName, personalHome, personalAuthOrigin, nameLabel } from './lib/domain';
+import { AGENT_NAME_PARENT, toAgentName as fullName, personalHome, homeOriginFor } from './lib/domain';
 // This app's white-label identity (the Faith App gateway): `./lib/brand`.
 import { GATEWAY, gatewayCta } from './lib/brand';
 
@@ -226,7 +226,7 @@ export function App() {
     let cancelled = false;
     void (async () => {
       try {
-        const authOrigin = personalAuthOrigin(nameLabel(session.name));
+        const authOrigin = homeOriginFor(session.name);
         await verifyIdToken(authOrigin, session.token, '');
       } catch (e) {
         if (cancelled) return;
@@ -734,7 +734,7 @@ export function App() {
                     role="menuitem"
                     onClick={() => {
                       setMenuOpen(false);
-                      window.open(personalAuthOrigin(nameLabel(session.name)), '_blank', 'noopener,noreferrer');
+                      window.open(homeOriginFor(session.name), '_blank', 'noopener,noreferrer');
                     }}
                   >
                     Go to my Impact home ↗

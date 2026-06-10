@@ -48,6 +48,15 @@ export function personalAuthOrigin(label: string): string {
   return `https://${label}.${CONNECT_DOMAIN}`;
 }
 
+/** A member's home origin for JWKS re-verification + `/you` links. NAMELESS members
+ *  (credential-first / name-deferral, spec 257) have no `.impact` subdomain yet, so they
+ *  resolve to the central platform home instead of throwing — `personalAuthOrigin('')` was
+ *  crashing the dashboard. Sync (usable in render). */
+export function homeOriginFor(name?: string | null): string {
+  const label = name ? nameLabel(name) : '';
+  return label && LABEL_RE.test(label) ? personalAuthOrigin(label) : PLATFORM_AUTH_ORIGIN;
+}
+
 /** SEC-018: RP-side issuer allowlist. An id_token's `iss` claim is only accepted if
  *  it's a well-formed Connect origin under our deployment's CONNECT_DOMAIN. */
 export function isAllowedIssuerOrigin(origin: string): boolean {
