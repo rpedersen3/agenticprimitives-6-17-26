@@ -257,6 +257,26 @@ const ACCOUNT_ABI_ERC1271 = [
   },
 ] as const;
 
+/** spec 270 v4 — the deployed UniversalSignatureValidator: ONE connection-agnostic surface that validates
+ *  a signature for a deployed SA (ERC-1271), a counterfactual SA (ERC-6492 deploy-on-verify), or a raw EOA
+ *  (ECDSA). `isValidSig` is state-changing on-chain (the 6492 path may deploy), but we call it via
+ *  `eth_call` — marking it `view` here makes viem `readContract` execute it ephemerally + decode the bool,
+ *  the standard off-chain ERC-6492 pattern. Routing the delegation + leaf checks through this is what makes
+ *  the verifier never branch on HOW the user connected — every credential strategy validates via one surface. */
+const UNIVERSAL_SIG_VALIDATOR_ABI = [
+  {
+    type: 'function',
+    name: 'isValidSig',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'signer', type: 'address' },
+      { name: 'hash', type: 'bytes32' },
+      { name: 'sig', type: 'bytes' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
 const ACCEPTED_SESSION_DELEGATION_ABI = [
   {
     type: 'function',
@@ -412,10 +432,15 @@ function decodeToken(token: string): DecodedToken | null {
 }
 
 /**
- * DEL-001 — the chain-free part of the session-delegate binding (testable without an RPC). Returns an
- * error reason, or `null` when the leaf links correctly: `sessionDelegation` present, its delegator is
- * the outer delegation's delegate, and its delegate is the presenting session key. The ERC-1271 proof
- * that the delegate SA actually signed the leaf is verified separately in `verifyDelegationToken`.
+ * DEL-001 (spec 270 v4) — the chain-free part of the session-key binding (testable without an RPC).
+ * Returns an error reason, or `null` when the leaf links correctly: `sessionDelegation` present, its
+ * delegator is the outer delegation's DELEGATOR (the principal's SA — the canonical identity every
+ * connection strategy signs for), and its delegate is the presenting session key. The signature proof
+ * (the delegator SA authorized the leaf — validated via the UniversalSignatureValidator, so any
+ * credential type works) is checked separately in `verifyDelegationToken`.
+ *
+ * v4 binds to the DELEGATOR (was the delegate in v3): the SA's own authority — recoverable at connect
+ * under every credential strategy alike — vouches for the session key.
  */
 export function sessionDelegateBindingError(
   delegation: Delegation,
@@ -423,8 +448,8 @@ export function sessionDelegateBindingError(
   sessionKeyAddress: Address,
 ): string | null {
   if (!sessionDelegation) return 'session-delegation required (DEL-001)';
-  if (sessionDelegation.delegator.toLowerCase() !== delegation.delegate.toLowerCase()) {
-    return 'session-delegation delegator != delegation delegate (DEL-001)';
+  if (sessionDelegation.delegator.toLowerCase() !== delegation.delegator.toLowerCase()) {
+    return 'session-delegation delegator != delegation delegator (DEL-001)';
   }
   if (sessionDelegation.delegate.toLowerCase() !== sessionKeyAddress.toLowerCase()) {
     return 'session key is not the session-delegation delegate (DEL-001)';
@@ -510,6 +535,17 @@ export async function verifyDelegationToken(
   // permissive behavior MUST set `revocationFailMode: 'open'` explicitly.
   const revocationFailMode = opts.revocationFailMode ?? 'closed';
   const publicClient = createPublicClient({ transport: http(opts.rpcUrl) });
+  // spec 270 v4 — validate an SA's signature through the UniversalSignatureValidator (one surface for
+  // ERC-1271 / ERC-6492 / ECDSA), called via eth_call. `null` when no USV is configured (legacy path).
+  const validateSaSig = opts.universalSignatureValidator
+    ? async (signer: Address, hash: Hex, sig: Hex): Promise<boolean> =>
+        (await publicClient.readContract({
+          address: opts.universalSignatureValidator as Address,
+          abi: UNIVERSAL_SIG_VALIDATOR_ABI,
+          functionName: 'isValidSig',
+          args: [signer, hash, sig],
+        })) as boolean
+    : null;
   try {
     const revoked = (await publicClient.readContract({
       address: opts.delegationManager,
@@ -531,71 +567,92 @@ export async function verifyDelegationToken(
     void e;
   }
 
-  try {
-    const code = await publicClient.getCode({ address: claims.delegation.delegator });
-    const isDeployed = !!(code && code !== '0x' && code.length > 2);
-    if (!isDeployed) {
-      if (requireDeployed) {
-        return rejectWith(
-          `delegator smart account ${claims.delegation.delegator} is not deployed — cannot verify ERC-1271. Set verifyDelegationToken opt requireDeployed=false only for explicit counterfactual-demo use cases.`,
-          claims.delegation.delegator,
-          eip712Hash,
-        );
+  if (validateSaSig) {
+    // spec 270 v4 — one connection-agnostic surface; counterfactual delegators verify via ERC-6492, so
+    // no requireDeployed hard-reject.
+    try {
+      if (!(await validateSaSig(claims.delegation.delegator, eip712Hash, claims.delegation.signature))) {
+        return rejectWith('signature validation failed', claims.delegation.delegator, eip712Hash);
       }
-      // Tolerated: caller opted into the undeployed path explicitly.
-    } else {
-      const magic = (await publicClient.readContract({
-        address: claims.delegation.delegator,
-        abi: ACCOUNT_ABI_ERC1271,
-        functionName: 'isValidSignature',
-        args: [eip712Hash, claims.delegation.signature],
-      })) as Hex;
-      if (magic.toLowerCase() !== ERC1271_MAGIC) {
-        return rejectWith('erc1271 validation failed', claims.delegation.delegator, eip712Hash);
-      }
+    } catch (e) {
+      return rejectWith(`signature validation reverted: ${e instanceof Error ? e.message : e}`, claims.delegation.delegator, eip712Hash);
     }
-  } catch (e) {
-    return rejectWith(
-      `erc1271 call reverted: ${e instanceof Error ? e.message : e}`,
-      claims.delegation.delegator,
-      eip712Hash,
-    );
+  } else {
+    try {
+      const code = await publicClient.getCode({ address: claims.delegation.delegator });
+      const isDeployed = !!(code && code !== '0x' && code.length > 2);
+      if (!isDeployed) {
+        if (requireDeployed) {
+          return rejectWith(
+            `delegator smart account ${claims.delegation.delegator} is not deployed — cannot verify ERC-1271. Set verifyDelegationToken opt requireDeployed=false only for explicit counterfactual-demo use cases.`,
+            claims.delegation.delegator,
+            eip712Hash,
+          );
+        }
+        // Tolerated: caller opted into the undeployed path explicitly.
+      } else {
+        const magic = (await publicClient.readContract({
+          address: claims.delegation.delegator,
+          abi: ACCOUNT_ABI_ERC1271,
+          functionName: 'isValidSignature',
+          args: [eip712Hash, claims.delegation.signature],
+        })) as Hex;
+        if (magic.toLowerCase() !== ERC1271_MAGIC) {
+          return rejectWith('erc1271 validation failed', claims.delegation.delegator, eip712Hash);
+        }
+      }
+    } catch (e) {
+      return rejectWith(
+        `erc1271 call reverted: ${e instanceof Error ? e.message : e}`,
+        claims.delegation.delegator,
+        eip712Hash,
+      );
+    }
   }
 
-  // 3.5. DEL-001 (audit 2026-06-09) — session-key↔delegate binding.
+  // 3.5. DEL-001 (spec 270 v4) — session-key↔identity binding.
   //
   // The full signed `delegation` travels in cleartext inside every token, so a verifier that only
-  // checks "some session key signed these claims" lets anyone who OBSERVES a token re-mint it with
-  // their own session key and impersonate the delegator. We close that by requiring a `sessionDelegation`
-  // LEAF whose delegator is `delegation.delegate` (the relying-site SA) and whose delegate IS the
-  // presenting session key — ERC-1271-signed by that delegate SA. An attacker can't forge the delegate
-  // SA's signature over THEIR session key, so the re-mint fails. `principal` stays `delegation.delegator`.
+  // checks "some session key signed these claims" lets anyone who OBSERVES a token re-mint it with their
+  // own session key and impersonate the delegator. We close that by requiring a `sessionDelegation` LEAF
+  // whose delegator is `delegation.delegator` (the principal's SA — the canonical identity, v4) and whose
+  // delegate IS the presenting session key, signed by that SA. The signature is validated through the
+  // UniversalSignatureValidator (ERC-1271 / ERC-6492 / ECDSA), so it works for ANY connection strategy and
+  // an attacker can't forge the SA's authorization of THEIR key. `principal` stays `delegation.delegator`.
   if (opts.requireSessionDelegateBinding) {
     // Chain-free checks: leaf present, delegator-link, delegate === presenting session key.
     const bindErr = sessionDelegateBindingError(claims.delegation, claims.sessionDelegation, recovered);
     if (bindErr) return rejectWith(bindErr, claims.delegation.delegator, eip712Hash);
     const sd = claims.sessionDelegation as Delegation;
-    // ERC-1271: the delegate SA actually authorized THIS session key.
+    // The delegator SA (the principal's canonical identity) actually authorized THIS session key. Validated
+    // via the UniversalSignatureValidator when configured (v4 — connection-agnostic: every credential
+    // strategy passes through one surface), else legacy deployed-ERC-1271.
     const sdHash = hashDelegation(sd, opts.chainId, opts.delegationManager);
     try {
-      const sdCode = await publicClient.getCode({ address: sd.delegator });
-      if (!sdCode || sdCode === '0x' || sdCode.length <= 2) {
-        if (requireDeployed) {
-          return rejectWith('session-delegation delegate SA not deployed — cannot verify ERC-1271 (DEL-001)', claims.delegation.delegator, eip712Hash);
+      if (validateSaSig) {
+        if (!(await validateSaSig(sd.delegator, sdHash, sd.signature))) {
+          return rejectWith('session-delegation signature validation failed (DEL-001)', claims.delegation.delegator, eip712Hash);
         }
       } else {
-        const magic = (await publicClient.readContract({
-          address: sd.delegator,
-          abi: ACCOUNT_ABI_ERC1271,
-          functionName: 'isValidSignature',
-          args: [sdHash, sd.signature],
-        })) as Hex;
-        if (magic.toLowerCase() !== ERC1271_MAGIC) {
-          return rejectWith('session-delegation erc1271 validation failed (DEL-001)', claims.delegation.delegator, eip712Hash);
+        const sdCode = await publicClient.getCode({ address: sd.delegator });
+        if (!sdCode || sdCode === '0x' || sdCode.length <= 2) {
+          if (requireDeployed) {
+            return rejectWith('session-delegation delegator SA not deployed — cannot verify ERC-1271 (DEL-001)', claims.delegation.delegator, eip712Hash);
+          }
+        } else {
+          const magic = (await publicClient.readContract({
+            address: sd.delegator,
+            abi: ACCOUNT_ABI_ERC1271,
+            functionName: 'isValidSignature',
+            args: [sdHash, sd.signature],
+          })) as Hex;
+          if (magic.toLowerCase() !== ERC1271_MAGIC) {
+            return rejectWith('session-delegation erc1271 validation failed (DEL-001)', claims.delegation.delegator, eip712Hash);
+          }
         }
       }
     } catch (e) {
-      return rejectWith(`session-delegation erc1271 call reverted: ${e instanceof Error ? e.message : e}`, claims.delegation.delegator, eip712Hash);
+      return rejectWith(`session-delegation signature check reverted: ${e instanceof Error ? e.message : e}`, claims.delegation.delegator, eip712Hash);
     }
   }
 

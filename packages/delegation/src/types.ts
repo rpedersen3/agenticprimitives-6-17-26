@@ -36,11 +36,12 @@ export interface DelegationTokenClaims {
   sessionKeyAddress: Address;
   /**
    * DEL-001 (audit 2026-06-09) — the session-scoped leaf delegation that BINDS the session key to the
-   * delegation's delegate. Its `delegator` MUST equal `delegation.delegate` (the relying-site SA) and
-   * its `delegate` MUST equal `sessionKeyAddress`; it is ERC-1271-signed by that delegate SA. Without
-   * this, the full `delegation` travels in cleartext and anyone observing a token re-mints it with their
-   * own session key (permanent delegator impersonation). `principal` stays `delegation.delegator` (the
-   * person) — the leaf only proves the presenting session key was authorized by the delegate.
+   * delegator. v4 binds to the DELEGATOR (the principal's canonical SA), not the delegate: its
+   * `delegator` MUST equal `delegation.delegator` and its `delegate` MUST equal `sessionKeyAddress`;
+   * the delegator SA authorized it (validated via the UniversalSignatureValidator, so any credential
+   * strategy works). Without this leaf the full `delegation` travels in cleartext and anyone observing a
+   * token re-mints it with their own session key (permanent delegator impersonation). `principal` stays
+   * `delegation.delegator` — the leaf proves the presenting session key was authorized by that principal.
    */
   sessionDelegation?: Delegation;
   jti: string;
@@ -102,12 +103,22 @@ export interface VerifyOpts {
   enforceOnChain?: boolean;
   /**
    * DEL-001 — require the token to carry a valid `sessionDelegation` leaf binding the presenting
-   * session key to `delegation.delegate` (delegator-link + `delegate === sessionKeyAddress` +
-   * ERC-1271 by the delegate SA). The MCP verifier (demo-mcp) sets this once the minter (demo-a2a)
-   * issues the leaf, closing the token re-mint vector. Default off for backward compatibility while
-   * the minter is wired; flipping it on is the enforcement switch.
+   * session key to the DELEGATOR (`leaf.delegator === delegation.delegator` + `leaf.delegate ===
+   * sessionKeyAddress` + the delegator SA's signature, validated via the UniversalSignatureValidator).
+   * The MCP verifier (demo-mcp) sets this once the minter (demo-a2a) issues the leaf, closing the token
+   * re-mint vector. Default off for backward compatibility while the minter is wired; flipping it on is
+   * the enforcement switch.
    */
   requireSessionDelegateBinding?: boolean;
+  /**
+   * spec 270 v4 — the deployed `UniversalSignatureValidator` address. When set, the delegation AND the
+   * `sessionDelegation` leaf signatures are validated through it (ERC-1271 deployed / ERC-6492
+   * counterfactual / ECDSA EOA) instead of a raw `isValidSignature` against a deployed SA — making the
+   * verifier connection-agnostic (every credential strategy validates via one
+   * surface) and removing the `requireDeployed` hard-reject for counterfactual SAs. Omit ⇒ legacy
+   * deployed-ERC-1271-only path (non-breaking).
+   */
+  universalSignatureValidator?: Address;
 }
 
 /**

@@ -177,7 +177,7 @@ describe('DEL-001 — sessionDelegateBindingError (chain-free session-key↔dele
   const APP_SA = DELEGATE; // the relying-site delegate SA
   const outer: Delegation = { ...fixtureDelegation, delegate: APP_SA };
   const goodLeaf: Delegation = {
-    delegator: APP_SA,
+    delegator: outer.delegator, // v4 — bound to the PRINCIPAL's SA (the canonical identity), not the delegate
     delegate: SESSION_ADDR as `0x${string}`,
     authority: ROOT_AUTHORITY,
     caveats: [],
@@ -185,7 +185,7 @@ describe('DEL-001 — sessionDelegateBindingError (chain-free session-key↔dele
     signature: '0xabcd',
   };
 
-  it('accepts a leaf whose delegator is the outer delegate and delegate is the session key', () => {
+  it('accepts a leaf whose delegator is the outer delegator and delegate is the session key', () => {
     expect(sessionDelegateBindingError(outer, goodLeaf, SESSION_ADDR as `0x${string}`)).toBeNull();
   });
 
@@ -193,9 +193,9 @@ describe('DEL-001 — sessionDelegateBindingError (chain-free session-key↔dele
     expect(sessionDelegateBindingError(outer, undefined, SESSION_ADDR as `0x${string}`)).toMatch(/required/);
   });
 
-  it('rejects a leaf not issued by the outer delegate (broken chain link)', () => {
-    const badLink: Delegation = { ...goodLeaf, delegator: SMART_ACCOUNT };
-    expect(sessionDelegateBindingError(outer, badLink, SESSION_ADDR as `0x${string}`)).toMatch(/delegator != delegation delegate/);
+  it('rejects a leaf not issued by the outer delegator (broken chain link)', () => {
+    const badLink: Delegation = { ...goodLeaf, delegator: APP_SA }; // the delegate, not the delegator
+    expect(sessionDelegateBindingError(outer, badLink, SESSION_ADDR as `0x${string}`)).toMatch(/delegator != delegation delegator/);
   });
 
   it('rejects when the presenting session key is not the leaf delegate (the re-mint attack)', () => {
