@@ -31,6 +31,10 @@ fs_permissions = [
     # folds into the main deployments-<network>.json.
     { access = "write", path = "./deployments-paymaster-anvil.json" },
     { access = "write", path = "./deployments-paymaster-base-sepolia.json" },
+    # DeployRegistries.s.sol sidecar (SC-1/SC-2 incremental redeploy); scripts/merge-registry-deploy.mjs
+    # folds it into the main deployments-<network>.json.
+    { access = "write", path = "./deployments-registries-anvil.json" },
+    { access = "write", path = "./deployments-registries-base-sepolia.json" },
     { access = "read",  path = "./test/fixtures" },
 ]
 
