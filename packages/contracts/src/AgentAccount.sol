@@ -143,8 +143,20 @@ contract AgentAccount is
     }
 
     /// @dev Spec 007 Phase A.5 — current pending upgrade (set by
-    ///      `upgradeToWithAuthorization` when `_upgradeTimelock > 0`).
+    ///      `scheduleUpgrade` when `_upgradeTimelock > 0`).
     PendingUpgrade private _pendingUpgrade;
+
+    /// @dev CA-1 — transient "the current call stack is an authorized upgrade
+    ///      context" flag. Set while (a) a module action executes
+    ///      (custody-governed, e.g. `CustodyPolicy.ApplySystemUpdate`, which
+    ///      carries its own T5 quorum + timelock) or (b) a matured owner-queued
+    ///      upgrade fires (`executePendingUpgrade`). `_authorizeUpgrade` reads it
+    ///      so that, once an account configures `_upgradeTimelock`, a DIRECT owner
+    ///      `upgradeToAndCall` is refused (must `scheduleUpgrade` then
+    ///      `executePendingUpgrade`), while the custody path keeps working with no
+    ///      double delay. Transient ⇒ tx-global (visible in the nested
+    ///      `_authorizeUpgrade` frame) AND absent from the storage layout.
+    bool private transient _upgradeAuthorizedCtx;
 
     /// @dev Spec 007 Phase A.5 — maximum permitted upgrade timelock to
     ///      protect against an owner accidentally setting an absurdly
@@ -198,6 +210,13 @@ contract AgentAccount is
     error UpgradeNotReady(uint64 readyAt, uint256 nowTs);
     error PendingUpgradeMismatch(address pending, address attempted);
     error UpgradePending();
+    /// @notice CA-1 — a direct `upgradeToAndCall` was attempted while a per-account
+    ///         upgrade timelock is set; route through `scheduleUpgrade` +
+    ///         `executePendingUpgrade` (or the custody module path) instead.
+    error DirectUpgradeBlocked();
+    /// @notice CA-1 — `scheduleUpgrade` called with no upgrade timelock configured
+    ///         (nothing to queue against — upgrade directly).
+    error UpgradeTimelockNotSet();
 
     // Wave 2A — on-chain authority closure (contract audit C-1..C-3).
     error ValidatorRequired();
@@ -412,7 +431,20 @@ contract AgentAccount is
      *      will revert here. Master / bundler / session-issuer
      *      therefore cannot upgrade even by submitting the tx.
      */
-    function _authorizeUpgrade(address) internal view override onlySelf {}
+    function _authorizeUpgrade(address) internal view override onlySelf {
+        // CA-1: the per-account upgrade timelock is now ENFORCED here (it was
+        // previously dead code — set via `setUpgradeTimelock` but never consulted,
+        // so a direct `upgradeToAndCall` fired immediately). When a timelock is
+        // configured, a direct owner upgrade is refused; the owner must
+        // `scheduleUpgrade` then `executePendingUpgrade` after the delay. Authorized
+        // contexts — a custody-module action (its own T5 quorum + timelock) or the
+        // matured owner queue — set `_upgradeAuthorizedCtx` and pass through, so the
+        // custody path is not double-delayed. A zero timelock keeps the
+        // immediate-upgrade default (backward-compatible).
+        if (_upgradeTimelock != 0 && !_upgradeAuthorizedCtx) {
+            revert DirectUpgradeBlocked();
+        }
+    }
 
     /**
      * @notice DEPRECATED — single-signature upgrade path (contract audit C-3).
@@ -439,6 +471,21 @@ contract AgentAccount is
         revert LegacyUpgradePathDisabled();
     }
 
+    /// @notice CA-1 — queue an implementation upgrade subject to the per-account
+    ///         upgrade timelock. The owner signs a userOp that calls this
+    ///         (`onlySelf`); the bound implementation can then be applied via
+    ///         `executePendingUpgrade` once `_upgradeTimelock` has elapsed. Only
+    ///         meaningful when a timelock is configured — with none set, upgrade
+    ///         directly. Overwrites any existing pending upgrade.
+    function scheduleUpgrade(address newImplementation) external onlySelf {
+        if (newImplementation == address(0)) revert ZeroAddress();
+        uint256 tl = _upgradeTimelock;
+        if (tl == 0) revert UpgradeTimelockNotSet();
+        uint64 readyAt = uint64(block.timestamp + tl);
+        _pendingUpgrade = PendingUpgrade({newImplementation: newImplementation, readyAt: readyAt});
+        emit UpgradeProposed(newImplementation, readyAt);
+    }
+
     /// @notice Execute a previously-queued upgrade. Permissionless once
     ///         the timelock has expired — anyone can pay the gas, but
     ///         the implementation address was bound at queue time.
@@ -450,7 +497,12 @@ contract AgentAccount is
         // impl can't replay this state.
         delete _pendingUpgrade;
         emit UpgradeAuthorized(p.newImplementation);
+        // CA-1: authorize the nested `_authorizeUpgrade` for this matured queue
+        // (transient, tx-global). Cleared after so a later same-tx direct upgrade
+        // isn't inadvertently authorized.
+        _upgradeAuthorizedCtx = true;
         this.upgradeToAndCall(p.newImplementation, "");
+        _upgradeAuthorizedCtx = false;
     }
 
     /// @notice Cancel a queued upgrade during the timelock window. Owner
@@ -926,7 +978,14 @@ contract AgentAccount is
             revert NotInstalledExecutor(msg.sender);
         }
         emit ModuleExecuted(msg.sender, target, value);
+        // CA-1: a module action is a custody-governed context (only an installed
+        // EXECUTOR — the CustodyPolicy — reaches here, gated upstream by its own
+        // T5 quorum + timelock). Authorize any upgrade it dispatches so the custody
+        // path is exempt from the per-account `_upgradeTimelock` (no double delay).
+        // Transient + nonReentrant, cleared after the call.
+        _upgradeAuthorizedCtx = true;
         (bool ok, bytes memory ret) = target.call{value: value}(data);
+        _upgradeAuthorizedCtx = false;
         if (!ok) {
             assembly { revert(add(ret, 32), mload(ret)) }
         }

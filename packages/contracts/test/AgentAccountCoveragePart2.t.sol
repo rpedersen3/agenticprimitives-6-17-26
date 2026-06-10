@@ -26,12 +26,12 @@ import {AgentAccountInitParams} from "../src/IAgentAccount.sol";
  *              owner ECDSA accept + bad-sig reject + WebAuthn-type
  *              prefix routing.
  *
- *         (Note: the contract's `upgradeToWithAuthorization` is the
- *         legacy disabled path — there is no production code path that
- *         WRITES `_pendingUpgrade`. Tests inject the pending upgrade
- *         via `vm.store` to exercise the execute / cancel branches.
- *         That itself is a finding to fold into the contract refactor
- *         wave that lands the new authorization-gated upgrade flow.)
+ *         (CA-1, RESOLVED: `scheduleUpgrade` is now the production writer of
+ *         `_pendingUpgrade`, and `_authorizeUpgrade` ENFORCES the per-account
+ *         timelock — a direct `upgradeToAndCall` is refused once a timelock is
+ *         set. The legacy `vm.store` injection helper is retained for the
+ *         older execute/cancel branch tests; the new flow is covered by the
+ *         `test_CA1_*` cases below.)
  */
 contract AgentAccountCoveragePart2Test is Test {
     function _defaultTimelocks() internal pure returns (uint32[7] memory tl) {}
@@ -191,6 +191,89 @@ contract AgentAccountCoveragePart2Test is Test {
 
         vm.expectRevert(); // NotOwnerSig
         acct.cancelPendingUpgrade(badSig);
+    }
+
+    // ─── CA-1 — upgrade timelock is now ENFORCED (was dead code) ────────
+
+    /// With a timelock configured, a DIRECT owner `upgradeToAndCall` is refused —
+    /// the owner must schedule + execute. (Pre-CA-1 the timelock was never
+    /// consulted, so this fired immediately.)
+    function test_CA1_directUpgrade_blockedWhenTimelockSet() public {
+        DummyImpl newImpl = new DummyImpl();
+        vm.prank(address(acct));
+        acct.setUpgradeTimelock(1 days);
+        vm.prank(address(acct));
+        vm.expectRevert(AgentAccount.DirectUpgradeBlocked.selector);
+        acct.upgradeToAndCall(address(newImpl), "");
+    }
+
+    /// With no timelock (default), a direct upgrade still fires immediately
+    /// (backward-compatible).
+    function test_CA1_directUpgrade_allowedWhenNoTimelock() public {
+        DummyImpl newImpl = new DummyImpl();
+        vm.prank(address(acct));
+        acct.upgradeToAndCall(address(newImpl), ""); // no revert
+    }
+
+    /// `scheduleUpgrade` is meaningless without a timelock → rejected.
+    function test_CA1_scheduleUpgrade_revertsWhenNoTimelock() public {
+        DummyImpl newImpl = new DummyImpl();
+        vm.prank(address(acct));
+        vm.expectRevert(AgentAccount.UpgradeTimelockNotSet.selector);
+        acct.scheduleUpgrade(address(newImpl));
+    }
+
+    /// `scheduleUpgrade` is onlySelf.
+    function test_CA1_scheduleUpgrade_onlySelf() public {
+        DummyImpl newImpl = new DummyImpl();
+        vm.prank(address(acct));
+        acct.setUpgradeTimelock(1 days);
+        vm.prank(nonOwner);
+        vm.expectRevert();
+        acct.scheduleUpgrade(address(newImpl));
+    }
+
+    /// The full owner flow: setUpgradeTimelock → scheduleUpgrade → wait →
+    /// executePendingUpgrade. Before the delay it reverts; after, it applies.
+    function test_CA1_scheduleThenExecute_succeedsAfterDelay() public {
+        DummyImpl newImpl = new DummyImpl();
+        vm.prank(address(acct));
+        acct.setUpgradeTimelock(1 days);
+        vm.prank(address(acct));
+        acct.scheduleUpgrade(address(newImpl));
+
+        (address pendImpl, uint64 readyAt) = acct.pendingUpgrade();
+        assertEq(pendImpl, address(newImpl));
+        assertEq(readyAt, uint64(block.timestamp + 1 days));
+
+        vm.expectRevert(); // UpgradeNotReady before the delay
+        acct.executePendingUpgrade();
+
+        vm.warp(block.timestamp + 1 days + 1);
+        acct.executePendingUpgrade(); // matured queue → _authorizeUpgrade passes
+    }
+
+    /// CA-1 "simple-path only": the custody-module path (executeFromModule) is
+    /// EXEMPT from the per-account upgrade timelock — it carries its own quorum +
+    /// timelock, so no double delay. Even with `_upgradeTimelock` set, an upgrade
+    /// dispatched through an installed executor module succeeds immediately.
+    function test_CA1_custodyModulePath_exemptFromTimelock() public {
+        OkModule mod = new OkModule();
+        vm.prank(address(acct));
+        acct.installModule(2 /* EXECUTOR */, address(mod), hex"");
+        vm.prank(address(acct));
+        acct.setUpgradeTimelock(7 days);
+
+        DummyImpl newImpl = new DummyImpl();
+        // The module dispatches `upgradeToAndCall` via executeFromModule (the
+        // account calls itself). _upgradeAuthorizedCtx is set for that frame, so
+        // _authorizeUpgrade passes despite the 7-day timelock — no double delay.
+        vm.prank(address(mod));
+        acct.executeFromModule(
+            address(acct),
+            0,
+            abi.encodeWithSignature("upgradeToAndCall(address,bytes)", address(newImpl), "")
+        );
     }
 
     // ─── ERC-7579 module install/uninstall ──────────────────────────────

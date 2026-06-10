@@ -451,9 +451,24 @@ findings:
   - id: CA-1
     severity: medium
     title: AgentAccount upgrade timelock is dead code (set but never enforced)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/AgentAccount.sol]
+    anchor: scheduleUpgrade
+    enforcement: test-covered
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/AgentAccountCoveragePart2.t.sol
+    note: >
+      Fixed: the per-account upgrade timelock is now ENFORCED. Previously _upgradeTimelock was set via
+      setUpgradeTimelock but never consulted (the only _pendingUpgrade writer, upgradeToWithAuthorization,
+      reverts; _authorizeUpgrade was an empty onlySelf) — so a direct upgradeToAndCall fired immediately.
+      Added scheduleUpgrade (the production queue writer, onlySelf, requires a timelock) and made
+      _authorizeUpgrade revert DirectUpgradeBlocked when a timelock is set unless the call is an authorized
+      context. SIMPLE-PATH ONLY: a transient _upgradeAuthorizedCtx (tx-global, no storage slot) is set by
+      executePendingUpgrade (matured owner queue) AND executeFromModule (custody-governed, e.g.
+      CustodyPolicy.ApplySystemUpdate, which carries its own T5 quorum+timelock), so the custody path is
+      exempt — no double delay. 6 regression tests incl. the custody-exemption proof. enforcement:
+      test-covered (redeploy pending).
   - id: CA-2
     severity: medium
     title: ERC-1271 ECDSA/WebAuthn paths lack address(this)/chainid binding (cross-account sig reuse)
