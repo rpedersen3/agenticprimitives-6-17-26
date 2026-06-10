@@ -77,6 +77,12 @@ contract AgentNameRegistry is GovernanceManaged {
     error NameExpired();
     error RootAlreadyInitialized();
     error EmptyLabel();
+    /// @notice AN-1-ONCHAIN (audit 2026-06-10) — the label is not in canonical form. The off-chain
+    ///         SDK `normalizeLabel` (NFC + lowercase + `[a-z0-9-]`, 1..63, no leading/trailing `-`) was
+    ///         bypassable by any DIRECT contract caller, allowing homoglyph / mixed-case / zero-width /
+    ///         embedded-dot squatting of names. The charset is now enforced ON CHAIN; because a valid
+    ///         label is already lowercase ASCII, raw-byte hashing equals hashing the normalized label.
+    error InvalidLabel();
     error ZeroOwner();
     /// @notice H7-C.4 / CON-NAMING-001 — `initializeRoot` may only be called
     ///         by the immutable `initializer` set at construction. Closes the
@@ -160,6 +166,25 @@ contract AgentNameRegistry is GovernanceManaged {
         return keccak256(abi.encodePacked(bytes32(0), keccak256(bytes("agent"))));
     }
 
+    /// @notice AN-1-ONCHAIN — enforce the canonical single-label charset on chain. Mirrors the SDK
+    ///         `normalizeLabel`: a single label of 1..63 bytes drawn from `[a-z0-9-]`, with no leading
+    ///         or trailing `-`. Reverts `EmptyLabel` / `InvalidLabel`. Reusable from `register` +
+    ///         `initializeRoot` so NO write path can anchor a non-canonical (squattable) label.
+    function _validateLabel(bytes memory b) internal pure {
+        uint256 len = b.length;
+        if (len == 0) revert EmptyLabel();
+        if (len > 63) revert InvalidLabel();
+        // no leading / trailing hyphen (0x2d)
+        if (b[0] == 0x2d || b[len - 1] == 0x2d) revert InvalidLabel();
+        for (uint256 i = 0; i < len; i++) {
+            uint8 c = uint8(b[i]);
+            bool ok = (c >= 0x61 && c <= 0x7a) // a-z
+                || (c >= 0x30 && c <= 0x39) // 0-9
+                || c == 0x2d; // -
+            if (!ok) revert InvalidLabel();
+        }
+    }
+
     // ─── Root Initialization (multi-root) ───────────────────────────
 
     /**
@@ -179,7 +204,7 @@ contract AgentNameRegistry is GovernanceManaged {
         // TLD. The deploy script bundles deploy+init in one transaction so no
         // frontrun window exists.
         if (msg.sender != initializer) revert NotInitializer(msg.sender, initializer);
-        if (bytes(label).length == 0) revert EmptyLabel();
+        _validateLabel(bytes(label)); // AN-1-ONCHAIN: canonical charset on chain
         if (rootOwner == address(0)) revert ZeroOwner();
         rootNode = namehashRoot(label);
         if (_records[rootNode].registeredAt != 0) revert RootAlreadyInitialized();
@@ -229,7 +254,7 @@ contract AgentNameRegistry is GovernanceManaged {
         address resolverContract,
         uint64 expiry
     ) external whenNotPaused returns (bytes32 childNode) {
-        if (bytes(label).length == 0) revert EmptyLabel();
+        _validateLabel(bytes(label)); // AN-1-ONCHAIN: canonical charset on chain
         if (newOwner == address(0)) revert ZeroOwner();
         _requireParentAuth(parentNode);
         _requireNotExpired(parentNode);

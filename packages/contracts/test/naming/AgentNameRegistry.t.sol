@@ -125,6 +125,82 @@ contract AgentNameRegistryTest is Test {
         reg.register(AGENT_ROOT_NODE, "alice", address(0), address(0), 0);
     }
 
+    // ─── AN-1-ONCHAIN: canonical label charset enforced on chain ────────
+    // The SDK normalizeLabel was bypassable by direct callers; these prove the
+    // contract itself rejects every non-canonical label class (no SDK in path).
+
+    function test_register_uppercaseLabelReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(AgentNameRegistry.InvalidLabel.selector);
+        reg.register(AGENT_ROOT_NODE, "Alice", aliceAgent, address(0), 0); // mixed case
+    }
+
+    function test_register_embeddedDotLabelReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(AgentNameRegistry.InvalidLabel.selector);
+        reg.register(AGENT_ROOT_NODE, "a.b", aliceAgent, address(0), 0); // one label at a time
+    }
+
+    function test_register_nonAsciiHomoglyphLabelReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(AgentNameRegistry.InvalidLabel.selector);
+        reg.register(AGENT_ROOT_NODE, unicode"alicе", aliceAgent, address(0), 0); // Cyrillic 'е'
+    }
+
+    function test_register_zeroWidthLabelReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(AgentNameRegistry.InvalidLabel.selector);
+        reg.register(AGENT_ROOT_NODE, unicode"ali​ce", aliceAgent, address(0), 0); // ZWSP
+    }
+
+    function test_register_leadingHyphenReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(AgentNameRegistry.InvalidLabel.selector);
+        reg.register(AGENT_ROOT_NODE, "-alice", aliceAgent, address(0), 0);
+    }
+
+    function test_register_trailingHyphenReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(AgentNameRegistry.InvalidLabel.selector);
+        reg.register(AGENT_ROOT_NODE, "alice-", aliceAgent, address(0), 0);
+    }
+
+    function test_register_whitespaceLabelReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(AgentNameRegistry.InvalidLabel.selector);
+        reg.register(AGENT_ROOT_NODE, " alice", aliceAgent, address(0), 0);
+    }
+
+    function _repeatA(uint256 n) internal pure returns (string memory) {
+        bytes memory b = new bytes(n);
+        for (uint256 i = 0; i < n; i++) b[i] = 0x61; // 'a'
+        return string(b);
+    }
+
+    function test_register_tooLongLabelReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(AgentNameRegistry.InvalidLabel.selector);
+        reg.register(AGENT_ROOT_NODE, _repeatA(64), aliceAgent, address(0), 0); // max is 63
+    }
+
+    function test_register_canonicalLabelsAccepted() public {
+        vm.startPrank(deployer);
+        // lowercase, digits, internal hyphen, and the 63-char boundary all pass.
+        bytes32 a = reg.register(AGENT_ROOT_NODE, "alice-1", aliceAgent, address(0), 0);
+        bytes32 b = reg.register(AGENT_ROOT_NODE, "bob2", bobAgent, address(0), 0);
+        bytes32 c = reg.register(AGENT_ROOT_NODE, _repeatA(63), address(0xC0FFEE), address(0), 0);
+        vm.stopPrank();
+        assertTrue(reg.recordExists(a));
+        assertTrue(reg.recordExists(b));
+        assertTrue(reg.recordExists(c));
+    }
+
+    function test_initializeRoot_uppercaseTldReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(AgentNameRegistry.InvalidLabel.selector);
+        reg.initializeRoot("Agent", deployer, address(0), KIND);
+    }
+
     function test_register_parentNotFoundReverts() public {
         bytes32 fakeParent = keccak256("nope");
         vm.prank(deployer);

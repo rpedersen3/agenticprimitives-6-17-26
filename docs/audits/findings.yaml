@@ -277,13 +277,19 @@ findings:
   - id: AN-1-ONCHAIN
     severity: high
     title: on-chain name registry enforces no label normalization (SDK fix bypassable by direct callers)
-    status: open
+    status: closed
     concerns: [packages/contracts/src/naming/AgentNameRegistry.sol]
+    anchor: _validateLabel
     origin: 2026-06-10-contract-by-contract-audit.md
+    tests:
+      - packages/contracts/test/naming/AgentNameRegistry.t.sol
     note: >
-      register/initializeRoot only check EmptyLabel then hash raw bytes; the TS normalizeLabel (AN-1)
-      is bypassable by any direct caller → homoglyph/mixed-case/zero-width/embedded-dot squatting of
-      .agent names is live on-chain. Fix: enforce [a-z0-9-] charset on-chain.
+      register + initializeRoot now call _validateLabel(bytes(label)) — a single label of 1..63 bytes
+      from [a-z0-9-], no leading/trailing '-'. Because a valid label is already lowercase ASCII,
+      raw-byte hashing equals hashing the SDK normalizeLabel output (mixed-case/zero-width/homoglyph/
+      embedded-dot/whitespace all revert InvalidLabel on chain, no SDK in the path). The permissionless
+      subregistry routes through register(), so it inherits the same enforcement (the homoglyph half of
+      SUB-2). 11 new Foundry cases; 41 AgentNameRegistry tests green.
   - id: SUB-1
     severity: high
     title: permissionless subregistry name front-running (no commit-reveal)
