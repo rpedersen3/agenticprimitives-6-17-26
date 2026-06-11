@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/tool-policy",
-  "version": "1.0.0-alpha.6",
+  "version": "1.0.0-alpha.7",
   "description": "Protocol-agnostic classification, risk tiers, and exact-call policy. Consumable by MCP, A2A, LangGraph, and Vercel AI tool runtimes.",
   "license": "MIT",
   "repository": {

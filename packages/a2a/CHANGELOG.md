@@ -1,6 +1,6 @@
-# @agenticprimitives/verifiable-credentials
+# @agenticprimitives/a2a
 
-## 0.0.0-alpha.3
+## 0.0.0-alpha.1
 
 ### Patch Changes
 
@@ -32,19 +32,8 @@
   `@agenticprimitives/verifiable-credentials` + the first publish of
   `@agenticprimitives/a2a` (async delegation-authorized task transport) are bumped to
   catch the registry up to `master`.
+
+- Updated dependencies [ba49084]
+  - @agenticprimitives/delegation@1.0.0-alpha.7
+  - @agenticprimitives/fulfillment@0.0.0-alpha.3
   - @agenticprimitives/types@1.0.0-alpha.7
-  - @agenticprimitives/ontology@1.0.0-alpha.7
-
-## 0.0.0-alpha.2
-
-### Patch Changes
-
-- @agenticprimitives/types@1.0.0-alpha.6
-- @agenticprimitives/ontology@1.0.0-alpha.6
-
-## 0.0.0-alpha.1
-
-### Patch Changes
-
-- @agenticprimitives/types@1.0.0-alpha.5
-- @agenticprimitives/ontology@1.0.0-alpha.5

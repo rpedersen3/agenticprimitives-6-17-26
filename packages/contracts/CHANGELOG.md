@@ -1,5 +1,112 @@
 # @agenticprimitives/contracts
 
+## 1.0.0-alpha.7
+
+### Patch Changes
+
+- 439eac9: CA-1 — AgentAccount upgrade timelock is now enforced (2026-06-10 audit).
+
+  The per-account upgrade timelock was dead code (set via `setUpgradeTimelock` but
+  never consulted — `_authorizeUpgrade` was an empty `onlySelf` and the only
+  `_pendingUpgrade` writer reverted), so a direct `upgradeToAndCall` fired
+  immediately. Now:
+  - `scheduleUpgrade(newImpl)` (onlySelf) is the production queue writer; the
+    matured upgrade is applied via `executePendingUpgrade`.
+  - `_authorizeUpgrade` reverts `DirectUpgradeBlocked` when a timelock is set and
+    the call is not an authorized context.
+  - **Simple-path only:** a transient `_upgradeAuthorizedCtx` exempts the
+    custody-module path (`CustodyPolicy.ApplySystemUpdate`, which has its own T5
+    quorum + timelock) so there is no double delay.
+
+  AgentAccount bytecode changed → batches into the pending Base Sepolia redeploy.
+
+- a04a0e4: 2026-06-10 audit batch — CP-1/CP-2 (custody), PM-1/PM-2 (paymaster), NEW-MCP-1 (JTI).
+
+  Contract + package fixes from the post-NO-GO hardening program. The
+  `@agenticprimitives/contracts` ABIs move (CustodyPolicy + SmartAgentPaymaster
+  bytecode changed) — a Base Sepolia redeploy is required to make these enforced
+  on-chain.
+  - **CP-1 (Medium)** — `CustodyPolicy.onInstall` now floors unset tiers from the
+    spec default-approvals matrix and HARD-REVERTS `UnconfiguredTier(4/5)` for any
+    non-single install with the admin/critical tiers unset, so a direct install
+    bypassing the factory can't collapse a high tier to 1-of-n. `_approvalsValue`
+    fails closed on a T6 read (recovery quorum lives in `recoveryApprovals`).
+  - **CP-2 (Medium)** — `onInstall` rejects `recoveryApprovals > trusteeCount`
+    (an unsatisfiable threshold that would brick the T6 recovery lifeline).
+  - **PM-1 (Medium)** — `SmartAgentPaymaster._validatePaymasterUserOp` no longer
+    reads external governance storage (an ERC-7562 validation-scope violation that
+    got sponsored ops dropped by bundlers). It reads an own-storage `_pausedMirror`,
+    refreshed out-of-band by `syncPauseFromGovernance()` / `setPauseMirror`.
+  - **PM-2 (Medium)** — adds a governance-only, 48h-TIMELOCKED deposit-withdrawal
+    path (`scheduleDepositWithdrawal` / `executeDepositWithdrawal` /
+    `cancelDepositWithdrawal`); the owner→governance handoff for the inherited
+    instant `withdrawTo` is documented in the contract's production checklist.
+  - **NEW-MCP-1 (High)** — **breaking:** `createMemoryJtiStore`'s `environment` is
+    now a REQUIRED field, never inferred. The prior `NODE_ENV` fallback resolved to
+    `'development'` on Workers/SES (where `process.env` is absent) and silently
+    skipped the production refusal, shipping non-durable replay protection. Callers
+    must pass `{ environment: 'production' | 'development' }`.
+
+- 50690a8: EN-11 — QuorumEnforcer fail-closed on a degenerate quorum (2026-06-10 audit).
+
+  `QuorumEnforcer.beforeHook` now reverts `InvalidThreshold` when `threshold == 0`
+  (which skipped the verification loop and made the signature-count guard
+  unreachable → a quorum caveat passed with ZERO signatures) or when `threshold`
+  exceeds the signer set. Bytecode changed → batches into the pending Base Sepolia
+  redeploy.
+
+- d0a4436: GOV-1 — guardian role is timelock-rotatable (2026-06-10 audit).
+
+  `AgenticGovernance.guardian` moved from `immutable` to a storage var the timelock
+  can rotate via `setGuardian` (onlyTimelock, non-zero). A compromised guardian
+  that perpetually re-pauses the system can now be replaced after one timelock
+  window WITHOUT a governance redeploy — the DoS is bounded, not permanent.
+  Bytecode changed → batches into the pending Base Sepolia redeploy.
+
+- ddbf7d6: WA-1 / WA-2 — WebAuthn custody-signature hardening (2026-06-10 audit).
+
+  `WebAuthnLib` + `SignatureSlotRecovery` bytecode changed → a Base Sepolia
+  redeploy is required for on-chain enforcement.
+  - **WA-1 (Medium)** — `WebAuthnLib.verify` now enforces low-s (`s ≤ n/2`,
+    `P256_N_DIV_2`) before the RIP-7212 call. RIP-7212 accepts both `(r, s)` and
+    `(r, n−s)`, so without this a second valid signature always existed over the
+    same message (P-256 malleability). The bound covers every caller from the one
+    library chokepoint.
+  - **WA-2 (Medium)** — the custody-COUNCIL quorum passkey path
+    (`SignatureSlotRecovery`) now requires User-Verification (`requireUv=true`),
+    consistent with the native ERC-1271 path (AgentAccount, R8.2). A UP-only
+    custody assertion is rejected; custody signers must use
+    `userVerification:'required'`.
+
+- ba49084: 2026-06-10 audit hardening wave + Base Sepolia redeploy.
+
+  Contract/package security fixes from the post-NO-GO hardening program (the
+  `@agenticprimitives/contracts` ABIs + the `deployments-base-sepolia.json`
+  addresses move because **every contract was redeployed** — the new factory is
+  `0x3E68B72B45e7C9d35B210E4Ab06e5Cece85cEbE4`):
+  - **CA-F1 (High)** — `AgentAccountFactory` CREATE2 salt now commits to the full
+    custody config (mode/trustees/timelockOverrides) so the counterfactual address
+    can't be front-run with attacker-controlled recovery (ADR-0035).
+    `getAddressForAgentAccount` gains a `timelockOverrides` param; the
+    `@agenticprimitives/agent-account` client threads it.
+  - **ATT-1 / ATT-3 / AGR-1** — registry issuer + joint-consent + transition digests
+    now bind a full typed payload + `chainId` + `address(this)`.
+  - **AN-1-ONCHAIN** — on-chain canonical label charset in `AgentNameRegistry`.
+  - **SIG-1** — registries use malleability-safe OZ `ECDSA.tryRecover` (low-s).
+  - **DM danger** — `verifyAuthorization` marked ⚠️ chain-only in NatSpec + the SDK.
+  - **DEL-001 (P0-1, Critical)** — the session-key↔delegator binding in
+    `@agenticprimitives/delegation` is now **fail-closed by default** (ADR-0036):
+    `verifyDelegationToken` rejects any token lacking a valid `sessionDelegation` leaf
+    unless the caller passes the explicit, greppable `allowUnboundSessionToken: true`
+    opt-out. `@agenticprimitives/mcp-runtime` threads the same opt-out through
+    `McpResourceVerifyConfig`. **Breaking:** the prior opt-in flags
+    (`requireSessionDelegateBinding`, `strictSessionBinding`) are removed — callers that
+    minted unbound tokens must set `allowUnboundSessionToken: true` or they fail closed.
+
+  `@agenticprimitives/verifiable-credentials` + the first publish of
+  `@agenticprimitives/a2a` (async delegation-authorized task transport) are bumped to
+  catch the registry up to `master`.
+
 ## 1.0.0-alpha.6
 
 ### Patch Changes

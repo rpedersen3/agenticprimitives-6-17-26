@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/intent-resolver",
-  "version": "0.0.0-alpha.2",
+  "version": "0.0.0-alpha.3",
   "private": true,
   "description": "Resolver layer skeleton (W1) — types + PassThroughResolver only. Full resolver engine deferred to W2.",
   "license": "MIT",

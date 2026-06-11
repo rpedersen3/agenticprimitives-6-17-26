@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/payments",
-  "version": "0.0.0-alpha.2",
+  "version": "0.0.0-alpha.3",
   "private": true,
   "description": "PaymentMandate + ContextBinding + MandateConstraints + open/closed mode discrimination. Three W1 rails (x402, wallet, sponsored-userop). PaymentReceipt asserted into AttestationRegistry per ADR-0023.",
   "license": "MIT",

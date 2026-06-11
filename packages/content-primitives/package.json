@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/content-primitives",
-  "version": "1.0.0-alpha.6",
+  "version": "1.0.0-alpha.7",
   "description": "Verifiable Content Substrate SDK: name, resolve, commit, entitlement-gate, and cite off-platform content controlled by third-party rights holders. Owns CanonicalLocus / CorpusManifest / ContentDescriptor / CitationAssertion / Entitlement (FRBR-aligned), deterministic locusId, Merkle corpus commitments, and issuer-signature verification. Content-agnostic — no vertical/faith vocabulary, no content text (ADR-0033).",
   "license": "MIT",
   "repository": {

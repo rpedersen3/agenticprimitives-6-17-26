@@ -1,5 +1,19 @@
 # @agenticprimitives-demo/web-pro
 
+## 0.0.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [ba49084]
+  - @agenticprimitives/delegation@1.0.0-alpha.7
+  - @agenticprimitives/agent-account@1.0.0-alpha.7
+  - @agenticprimitives/agent-naming@1.0.0-alpha.7
+  - @agenticprimitives/agent-profile@1.0.0-alpha.7
+  - @agenticprimitives/agent-relationships@1.0.0-alpha.7
+  - @agenticprimitives/types@1.0.0-alpha.7
+  - @agenticprimitives/connect-auth@1.0.0-alpha.7
+  - @agenticprimitives/account-custody@1.0.0-alpha.7
+
 ## 0.0.2-alpha.4
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @agenticprimitives/agent-naming
 
+## 1.0.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [ba49084]
+  - @agenticprimitives/agent-account@1.0.0-alpha.7
+  - @agenticprimitives/types@1.0.0-alpha.7
+  - @agenticprimitives/connect-auth@1.0.0-alpha.7
+
 ## 1.0.0-alpha.6
 
 ### Patch Changes

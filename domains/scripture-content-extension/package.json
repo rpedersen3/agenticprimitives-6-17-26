@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/scripture-content-extension",
-  "version": "1.0.0-alpha.6",
+  "version": "1.0.0-alpha.7",
   "description": "Scripture vertical for the verifiable-content substrate: the Bible canon (OSIS book codes), a versioned versification model, the scripture.verse selector, and alias parsing (scripture:book.chapter.verse + tolerant forms) that normalizes many surface grammars to ONE scheme-independent canonical locus. Depends on verifiable-content; carries no rendering text and no specific translation.",
   "license": "MIT",
   "repository": {
@@ -9,7 +9,9 @@
     "directory": "packages/scripture-content-extension"
   },
   "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/scripture-content-extension",
-  "bugs": { "url": "https://github.com/agentictrustlabs/agenticprimitives/issues" },
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,7 +21,13 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["LICENSE", "dist", "spec.md", "README.md", "CLAUDE.md"],
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md",
+    "CLAUDE.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -28,7 +36,9 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "@agenticprimitives/content-primitives": "workspace:*"
   },
@@ -36,5 +46,11 @@
     "@types/node": "^22.7.0",
     "vitest": "^4.1.8"
   },
-  "keywords": ["scripture", "bible", "osis", "verifiable-content", "agentic"]
+  "keywords": [
+    "scripture",
+    "bible",
+    "osis",
+    "verifiable-content",
+    "agentic"
+  ]
 }

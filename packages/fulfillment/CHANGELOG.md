@@ -1,5 +1,16 @@
 # @agenticprimitives/fulfillment
 
+## 0.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [ba49084]
+  - @agenticprimitives/delegation@1.0.0-alpha.7
+  - @agenticprimitives/verifiable-credentials@0.0.0-alpha.3
+  - @agenticprimitives/attestations@0.0.0-alpha.3
+  - @agenticprimitives/agreements@0.0.0-alpha.3
+  - @agenticprimitives/types@1.0.0-alpha.7
+
 ## 0.0.0-alpha.2
 
 ### Patch Changes
