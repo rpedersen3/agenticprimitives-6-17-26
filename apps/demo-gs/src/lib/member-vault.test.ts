@@ -26,7 +26,7 @@ const JANE_OWNER: VaultOwner = {
 const switchboardVaultOwner = vi.fn(async () => JANE_OWNER);
 vi.mock('./onchain', () => ({ switchboardVaultOwner: () => switchboardVaultOwner() }));
 
-const isContractDeployed = vi.fn(async () => true);
+const isContractDeployed = vi.fn();
 vi.mock('./chain', () => ({ isContractDeployed: (...a: unknown[]) => isContractDeployed(...a) }));
 
 import {
