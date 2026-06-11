@@ -56,17 +56,19 @@ export async function loadMembers(): Promise<MemberEntry[]> {
 const REC_OFFERING = 'gs:offering'; // KC person's vault
 const REC_NEEDS = 'gs:needs'; // GCO org's vault
 
-/** A KC reads/writes its own expertise offering (its own vault). */
-export async function loadKcOffering(grant: DelegationWire): Promise<ExpertOffering | null> {
-  return vaultReadWithDelegation<ExpertOffering>(grant, REC_OFFERING);
+/** A KC reads/writes its own expertise offering (its own vault). `maxAttempts` lets the broker survey
+ *  (loadBrokerView) read with a single attempt so a stale/orphaned member grant drops without storming. */
+export async function loadKcOffering(grant: DelegationWire, maxAttempts?: number): Promise<ExpertOffering | null> {
+  return vaultReadWithDelegation<ExpertOffering>(grant, REC_OFFERING, maxAttempts);
 }
 export async function saveKcOffering(grant: DelegationWire, o: ExpertOffering): Promise<void> {
   await vaultWriteWithDelegation(grant, REC_OFFERING, o);
 }
 
-/** A GCO reads/writes its own posted needs (its org vault). */
-export async function loadGcoNeeds(grant: DelegationWire): Promise<GcoNeedIntent[]> {
-  return (await vaultReadWithDelegation<GcoNeedIntent[]>(grant, REC_NEEDS)) ?? [];
+/** A GCO reads/writes its own posted needs (its org vault). `maxAttempts` lets the broker survey read
+ *  with a single attempt (see loadKcOffering). */
+export async function loadGcoNeeds(grant: DelegationWire, maxAttempts?: number): Promise<GcoNeedIntent[]> {
+  return (await vaultReadWithDelegation<GcoNeedIntent[]>(grant, REC_NEEDS, maxAttempts)) ?? [];
 }
 export async function saveGcoNeeds(grant: DelegationWire, needs: GcoNeedIntent[]): Promise<void> {
   await vaultWriteWithDelegation(grant, REC_NEEDS, needs);
@@ -79,9 +81,13 @@ export async function loadBrokerView(): Promise<{ needs: GcoNeedIntent[]; offeri
   const offerings: ExpertOffering[] = [];
   for (const m of members) {
     try {
-      if (m.kind === 'gco') needs.push(...(await loadGcoNeeds(m.delegation)));
-      else { const o = await loadKcOffering(m.delegation); if (o) offerings.push(o); }
-    } catch { /* a revoked/expired grant simply drops that member from the view */ }
+      // SINGLE attempt (maxAttempts=1): this is a survey of OTHER members' established vaults, so a
+      // failing grant is permanent (revoked/expired, or a member SA orphaned by the CA-F1 factory move
+      // → ERC-1271 0xffffffff). The default 4× retry would storm the discovery hydrate with 403s before
+      // the catch drops the member. The user's OWN post-connect read keeps the self-heal retry.
+      if (m.kind === 'gco') needs.push(...(await loadGcoNeeds(m.delegation, 1)));
+      else { const o = await loadKcOffering(m.delegation, 1); if (o) offerings.push(o); }
+    } catch { /* a revoked/expired/orphaned grant simply drops that member from the view */ }
   }
   return { needs, offerings };
 }

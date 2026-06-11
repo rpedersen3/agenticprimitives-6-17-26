@@ -66,7 +66,7 @@ describe('member-owned data is read/written via the member grant', () => {
     const o = { id: 'o1' } as ExpertOffering;
     vaultReadWithDelegation.mockResolvedValue(o);
     expect(await loadKcOffering(grant)).toBe(o);
-    expect(vaultReadWithDelegation).toHaveBeenCalledWith(grant, 'gs:offering');
+    expect(vaultReadWithDelegation).toHaveBeenCalledWith(grant, 'gs:offering', undefined);
   });
 
   it('saveKcOffering writes gs:offering through the grant', async () => {
@@ -78,7 +78,7 @@ describe('member-owned data is read/written via the member grant', () => {
   it('loadGcoNeeds reads gs:needs through the grant (empty → [])', async () => {
     vaultReadWithDelegation.mockResolvedValue(null);
     expect(await loadGcoNeeds(grant)).toEqual([]);
-    expect(vaultReadWithDelegation).toHaveBeenCalledWith(grant, 'gs:needs');
+    expect(vaultReadWithDelegation).toHaveBeenCalledWith(grant, 'gs:needs', undefined);
   });
 
   it('saveGcoNeeds writes gs:needs through the grant', async () => {
@@ -103,9 +103,10 @@ describe('loadBrokerView aggregates members through their grants', () => {
     const view = await loadBrokerView();
     expect(view.offerings).toHaveLength(1);
     expect(view.needs).toHaveLength(1);
-    // Every read went through a delegation (the member grant), never a raw owner read.
-    expect(vaultReadWithDelegation).toHaveBeenCalledWith(grant, 'gs:offering');
-    expect(vaultReadWithDelegation).toHaveBeenCalledWith(grant, 'gs:needs');
+    // Every read went through a delegation (the member grant), never a raw owner read; the broker
+    // survey uses a SINGLE attempt so a stale/orphaned member grant drops without a 4× 403 storm.
+    expect(vaultReadWithDelegation).toHaveBeenCalledWith(grant, 'gs:offering', 1);
+    expect(vaultReadWithDelegation).toHaveBeenCalledWith(grant, 'gs:needs', 1);
   });
 
   it('a revoked/expired grant simply drops that member (no fallback)', async () => {

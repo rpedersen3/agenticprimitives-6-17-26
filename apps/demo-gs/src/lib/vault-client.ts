@@ -73,9 +73,13 @@ const VAULT_TIMEOUT_MS = 20_000;
 const VAULT_MAX_ATTEMPTS = 4;
 const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
 
-async function postVault(path: 'get' | 'set' | 'list', body: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function postVault(
+  path: 'get' | 'set' | 'list',
+  body: Record<string, unknown>,
+  maxAttempts: number = VAULT_MAX_ATTEMPTS,
+): Promise<Record<string, unknown>> {
   let lastErr: Error | null = null;
-  for (let attempt = 1; attempt <= VAULT_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     await ensureCsrfToken();
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), VAULT_TIMEOUT_MS);
@@ -104,7 +108,7 @@ async function postVault(path: 'get' | 'set' | 'list', body: Record<string, unkn
     // before retrying; the backoff also covers a brief grant/SA-confirmation propagation window.
     lastErr = new Error((j?.detail as string) ?? (j?.error as string) ?? `vault ${path} failed (HTTP ${r.status})`);
     const transient = r.status === 403 || r.status >= 500;
-    if (!transient || attempt === VAULT_MAX_ATTEMPTS) throw lastErr;
+    if (!transient || attempt === maxAttempts) throw lastErr;
     if (r.status === 403) { try { await refreshCsrfToken(); } catch { /* the next ensureCsrfToken retries */ } }
     await sleep(300 * attempt); // 300 / 600 / 900ms
   }
@@ -134,8 +138,16 @@ export async function vaultList(o: VaultOwner): Promise<Array<{ record_type: str
 // ── Reads/writes on a MEMBER's vault via a delegation they already granted (Wave 2) ──
 
 /** Read a record from the delegation's DELEGATOR vault (the member's own namespace). */
-export async function vaultReadWithDelegation<T = unknown>(delegation: DelegationWire, recordType: string): Promise<T | null> {
-  const j = await postVault('get', { delegation, requester: delegation.delegate, recordType });
+export async function vaultReadWithDelegation<T = unknown>(
+  delegation: DelegationWire,
+  recordType: string,
+  /** The broker SURVEY of established members passes 1: a stale/orphaned/revoked member grant fails
+   *  ERC-1271 PERMANENTLY (e.g. a pre-CA-F1 member SA orphaned by a factory-address move), and the
+   *  default 4× CSRF-style retry would storm the discovery hydrate with 403s before the caller drops
+   *  it. The user's OWN post-connect read keeps the default self-heal (its SA may still be confirming). */
+  maxAttempts?: number,
+): Promise<T | null> {
+  const j = await postVault('get', { delegation, requester: delegation.delegate, recordType }, maxAttempts);
   return (j.data ?? null) as T | null;
 }
 
