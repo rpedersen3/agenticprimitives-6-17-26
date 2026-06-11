@@ -1,7 +1,6 @@
 {
   "name": "@agenticprimitives/agreements",
-  "version": "0.0.0-alpha.3",
-  "private": true,
+  "version": "0.0.0-alpha.4",
   "description": "Commitment-only AgreementRegistry SDK. Owns AgreementCredential shape (PD-22) + commitment math + bilateral status transitions + joint-assertion gateway.",
   "license": "MIT",
   "repository": {
@@ -40,8 +39,6 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/verifiable-credentials": "workspace:*",
     "viem": "^2.52.2"
   },
   "devDependencies": {
@@ -54,6 +51,8 @@
     "agreements"
   ],
   "dependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
     "@noble/hashes": "^2.2.0"
   }
 }

@@ -1,7 +1,6 @@
 {
   "name": "@agenticprimitives/intent-resolver",
   "version": "0.0.0-alpha.3",
-  "private": true,
   "description": "Resolver layer skeleton (W1) — types + PassThroughResolver only. Full resolver engine deferred to W2.",
   "license": "MIT",
   "repository": {
@@ -39,10 +38,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/verifiable-credentials": "workspace:*"
-  },
   "devDependencies": {
     "vitest": "^4.1.8",
     "viem": "^2.52.2"
@@ -53,6 +48,8 @@
     "intent-resolver"
   ],
   "dependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
     "@noble/hashes": "^2.2.0"
   }
 }

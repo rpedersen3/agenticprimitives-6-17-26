@@ -1,7 +1,6 @@
 {
   "name": "@agenticprimitives/geo-features",
   "version": "0.0.0-alpha.3",
-  "private": true,
   "description": "Off-chain geo CLAIM credentials + on-chain GeoFeatureRegistry helpers (spec 251). Features on chain; the agent↔feature claim is a private vault credential pointing to a (featureId, version).",
   "license": "MIT",
   "repository": {
@@ -33,10 +32,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/verifiable-credentials": "workspace:*"
-  },
   "devDependencies": {
     "vitest": "^4.1.8"
   },
@@ -46,6 +41,8 @@
     "geo"
   ],
   "dependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
     "@noble/hashes": "^2.2.0"
   }
 }

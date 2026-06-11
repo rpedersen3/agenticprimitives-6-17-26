@@ -3,7 +3,6 @@
   "version": "1.0.0-alpha.6",
   "description": "Relying-party FedCM wrapper: navigator.credentials.get({identity}) → IdP token. The FedCM strategy injected into browser-identity's chooseSignIn. FedCM-first, not FedCM-only (ADR-0031).",
   "license": "MIT",
-  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",

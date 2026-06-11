@@ -3,7 +3,6 @@
   "version": "1.0.0-alpha.6",
   "description": "FedCM IdP contract as pure builders + validators: web-identity manifest, provider config, accounts list, thin id-assertion claims, request validators. Generic; the app hosts + signs (ADR-0031).",
   "license": "MIT",
-  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",

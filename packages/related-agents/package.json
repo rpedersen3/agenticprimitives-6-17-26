@@ -1,7 +1,6 @@
 {
   "name": "@agenticprimitives/related-agents",
   "version": "0.0.0-alpha.3",
-  "private": true,
   "description": "Private, holder-resident related-agent credentials (person↔org links as vault situation credentials, never on-chain edges — ADR-0025) + scoped-delegation read caveats + list-query shapes. Composes verifiable-credentials + delegation.",
   "license": "MIT",
   "repository": {
@@ -40,9 +39,6 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/verifiable-credentials": "workspace:*",
-    "@agenticprimitives/delegation": "workspace:*",
     "viem": "^2.52.2"
   },
   "devDependencies": {
@@ -54,5 +50,10 @@
     "primitives",
     "related-agents",
     "vault"
-  ]
+  ],
+  "dependencies": {
+    "@agenticprimitives/delegation": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*"
+  }
 }

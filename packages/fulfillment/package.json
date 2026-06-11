@@ -1,7 +1,6 @@
 {
   "name": "@agenticprimitives/fulfillment",
-  "version": "0.0.0-alpha.3",
-  "private": true,
+  "version": "0.0.0-alpha.4",
   "description": "FulfillmentCase lifecycle + Task/Message/Artifact (re-exported from mcp-runtime/a2a) + HandoffPolicy + EvidenceCredential + OutcomeCredential issuance.",
   "license": "MIT",
   "repository": {
@@ -40,11 +39,6 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/verifiable-credentials": "workspace:*",
-    "@agenticprimitives/attestations": "workspace:*",
-    "@agenticprimitives/agreements": "workspace:*",
-    "@agenticprimitives/delegation": "workspace:*",
     "viem": "^2.52.2"
   },
   "devDependencies": {
@@ -57,6 +51,11 @@
     "fulfillment"
   ],
   "dependencies": {
+    "@agenticprimitives/agreements": "workspace:*",
+    "@agenticprimitives/attestations": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
     "@noble/hashes": "^2.2.0"
   }
 }

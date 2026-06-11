@@ -1,7 +1,6 @@
 {
   "name": "@agenticprimitives/intent-marketplace",
   "version": "0.0.0-alpha.3",
-  "private": true,
   "description": "Direct Lane intent matchmaking. Intent + ConstraintSet + AssumptionSet + ResolutionReceipt + IntentMatch + composite-score ranking. Resolver layer 4 folded into PassThrough stub in W1.",
   "license": "MIT",
   "repository": {
@@ -40,10 +39,6 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/verifiable-credentials": "workspace:*",
-    "@agenticprimitives/delegation": "workspace:*",
-    "@agenticprimitives/intent-resolver": "workspace:*",
     "viem": "^2.52.2"
   },
   "devDependencies": {
@@ -56,6 +51,10 @@
     "intent-marketplace"
   ],
   "dependencies": {
+    "@agenticprimitives/delegation": "workspace:*",
+    "@agenticprimitives/intent-resolver": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
     "@noble/hashes": "^2.2.0"
   }
 }

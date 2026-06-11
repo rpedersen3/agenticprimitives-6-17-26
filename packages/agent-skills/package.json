@@ -1,7 +1,6 @@
 {
   "name": "@agenticprimitives/agent-skills",
-  "version": "0.0.0-alpha.3",
-  "private": true,
+  "version": "0.0.0-alpha.4",
   "description": "Off-chain skill CLAIM credentials + on-chain SkillDefinitionRegistry helpers (spec 251). Definitions on chain; the agent↔skill claim is a private vault credential pointing to a (skillId, version).",
   "license": "MIT",
   "repository": {
@@ -33,10 +32,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/verifiable-credentials": "workspace:*"
-  },
   "devDependencies": {
     "vitest": "^4.1.8"
   },
@@ -46,6 +41,8 @@
     "skills"
   ],
   "dependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
     "@noble/hashes": "^2.2.0"
   }
 }

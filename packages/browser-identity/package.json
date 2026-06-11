@@ -3,7 +3,6 @@
   "version": "1.0.0-alpha.6",
   "description": "Browser sign-in adapter seam: feature-detect FedCM and choose the browser-native path vs the guaranteed fallback. FedCM-first, not FedCM-only (ADR-0031).",
   "license": "MIT",
-  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",

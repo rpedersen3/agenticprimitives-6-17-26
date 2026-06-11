@@ -1,7 +1,6 @@
 {
   "name": "@agenticprimitives/payments",
   "version": "0.0.0-alpha.3",
-  "private": true,
   "description": "PaymentMandate + ContextBinding + MandateConstraints + open/closed mode discrimination. Three W1 rails (x402, wallet, sponsored-userop). PaymentReceipt asserted into AttestationRegistry per ADR-0023.",
   "license": "MIT",
   "repository": {
@@ -40,10 +39,6 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/verifiable-credentials": "workspace:*",
-    "@agenticprimitives/attestations": "workspace:*",
-    "@agenticprimitives/delegation": "workspace:*",
     "viem": "^2.52.2"
   },
   "devDependencies": {
@@ -56,6 +51,10 @@
     "payments"
   ],
   "dependencies": {
+    "@agenticprimitives/attestations": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/verifiable-credentials": "workspace:*",
     "@noble/hashes": "^2.2.0"
   }
 }
