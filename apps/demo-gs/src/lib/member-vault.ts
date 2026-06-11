@@ -97,6 +97,7 @@ export async function loadBrokerView(): Promise<{ needs: GcoNeedIntent[]; offeri
   const members = await loadMembers();
   const needs: GcoNeedIntent[] = [];
   const offerings: ExpertOffering[] = [];
+  const prunes: Promise<void>[] = [];
   for (const m of members) {
     try {
       // SINGLE attempt (maxAttempts=1): this is a survey of OTHER members' established vaults, so a
@@ -111,12 +112,18 @@ export async function loadBrokerView(): Promise<{ needs: GcoNeedIntent[]; offeri
       // Prune it. Guard on deployed-SA so a member whose SA is still confirming right after THEY connect
       // (transient) is left alone, and on the error CLASS so a CSRF/network 403 never deletes a member.
       if (isPermanentDelegationFailure(e)) {
-        void isContractDeployed(m.sa)
-          .then((deployed) => (deployed ? unregisterMember(m.sa) : undefined))
-          .catch(() => {/* best-effort prune; the next hydrate retries */});
+        prunes.push(
+          isContractDeployed(m.sa)
+            .then((deployed) => (deployed ? unregisterMember(m.sa) : undefined))
+            .catch(() => {/* best-effort prune; the next hydrate retries */}),
+        );
       }
       /* dropped from this view regardless */
     }
   }
+  // AWAIT the prunes before returning so a fast reload can't cancel an in-flight tombstone mid-write
+  // (that left orphans alive across several reloads). The latency is paid only while orphans exist —
+  // the registry converges to all-valid members and subsequent hydrates have nothing to prune.
+  await Promise.allSettled(prunes);
   return { needs, offerings };
 }
