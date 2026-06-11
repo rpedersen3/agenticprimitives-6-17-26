@@ -34,27 +34,39 @@ export function ensureSwitchboardDeployed(): Promise<DeployState> {
 
 async function _ensure(): Promise<DeployState> {
   const cached = loadState();
-  if (cached?.deployed) return cached;
-
+  // VALIDATE the cache's `deployed` claim against on-chain code every load (one cheap eth_getCode,
+  // shared by concurrent panels via `_inflight`) rather than blindly trusting a stored flag. A dropped/
+  // reverted deploy userOp, or a factory-address change that orphaned the old SA (CA-F1), would otherwise
+  // poison the cache — `cached.deployed` short-circuits every load and sends vault reads to a code-less
+  // SA forever (ERC-1271 → 0xffffffff). Validating the canonical answer is ONE mechanism, not a silent
+  // fallback (ADR-0013); a stale/predicted cached address self-heals into a fresh derive + deploy below.
   const sa = cached?.sa ?? (await deriveOrgSaAddress(JANE_CUSTODIAN.address, SWITCHBOARD_SALT));
-
   if (await isContractDeployed(sa)) {
-    const adopted: DeployState = { sa, deployed: true };
-    saveState(adopted);
-    return adopted;
+    const state: DeployState = { sa, deployed: true };
+    saveState(state);
+    return state;
   }
 
+  // Not deployed — derive canonically (a cached address may be stale/predicted) + deploy via the relayer.
+  const target = await deriveOrgSaAddress(JANE_CUSTODIAN.address, SWITCHBOARD_SALT);
   const res = await deployOrgSa({ custodian: JANE_CUSTODIAN, salt: SWITCHBOARD_SALT });
   if (!res.ok || !res.deployedAddress) {
-    saveState({ sa, deployed: false }); // persist the predicted address for display pre-deploy
+    saveState({ sa: target, deployed: false }); // persist the predicted address for display pre-deploy
     throw new Error(res.error ?? 'Switchboard org deploy failed');
   }
   // The relayer returns optimistically — the deploy userOp may not be mined yet. The first vault
   // write would then 403 (ERC-1271 isValidSignature returns 0x against a code-less address). Wait for
-  // code to appear before declaring the SA usable.
+  // code to appear, and FAIL CLOSED on timeout: NEVER persist deployed:true without confirmed on-chain
+  // code (that poisons the cache, the exact bug above). On timeout, mark NOT deployed + surface it so
+  // the next mount retries (ADR-0013).
+  let mined = false;
   for (let i = 0; i < 30; i++) {
-    if (await isContractDeployed(res.deployedAddress)) break;
+    if (await isContractDeployed(res.deployedAddress)) { mined = true; break; }
     await new Promise((r) => setTimeout(r, 1000));
+  }
+  if (!mined) {
+    saveState({ sa: res.deployedAddress, deployed: false });
+    throw new Error('Switchboard org deploy not yet mined — retry in a moment');
   }
   const state: DeployState = { sa: res.deployedAddress, deployed: true };
   saveState(state);
