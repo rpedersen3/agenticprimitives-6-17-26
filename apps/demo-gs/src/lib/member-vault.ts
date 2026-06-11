@@ -13,6 +13,7 @@ import type { ExpertOffering, GcoNeedIntent } from '../domain/gs-types';
 import type { DelegationWire } from './delegation';
 import { vaultList, vaultRead, vaultReadWithDelegation, vaultWrite, vaultWriteWithDelegation } from './vault-client';
 import { switchboardVaultOwner } from './onchain';
+import { isContractDeployed } from './chain';
 
 // ── Member registry — in JANE's broker vault (the cross-browser single source of who's connected) ──
 export type MemberKind = 'kc' | 'gco';
@@ -37,6 +38,23 @@ const memberKey = (sa: Address) => `${MEMBER_PREFIX}${sa.toLowerCase()}`;
 export async function registerMember(e: MemberEntry): Promise<void> {
   const owner = await switchboardVaultOwner();
   await vaultWrite(owner, memberKey(e.sa), e);
+}
+
+/** Soft-delete (tombstone) a member from Jane's registry. Used to self-heal a member whose stored
+ *  grant can never validate again (see {@link loadBrokerView}). */
+export async function unregisterMember(sa: Address): Promise<void> {
+  const owner = await switchboardVaultOwner();
+  await vaultWrite(owner, memberKey(sa), null);
+}
+
+/** A member read failed because the grant's signature no longer validates under the delegator SA's
+ *  ERC-1271 — as opposed to a transient CSRF/network 403. demo-a2a surfaces this as `delegation_invalid`
+ *  / "ERC-1271 returned 0xffffffff". Against a DEPLOYED SA this is PERMANENT: the WebAuthn/EOA signature
+ *  is over an EIP-712 digest bound to a now-replaced delegationManager (a pre-redeploy grant) or an old
+ *  custodian, and neither will ever change. */
+function isPermanentDelegationFailure(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /delegation_invalid|ERC-1271|0xffffffff/i.test(msg);
 }
 
 /** All connected members Jane knows about (with the grant to read each one's vault). */
@@ -82,12 +100,23 @@ export async function loadBrokerView(): Promise<{ needs: GcoNeedIntent[]; offeri
   for (const m of members) {
     try {
       // SINGLE attempt (maxAttempts=1): this is a survey of OTHER members' established vaults, so a
-      // failing grant is permanent (revoked/expired, or a member SA orphaned by the CA-F1 factory move
-      // → ERC-1271 0xffffffff). The default 4× retry would storm the discovery hydrate with 403s before
-      // the catch drops the member. The user's OWN post-connect read keeps the self-heal retry.
+      // failing grant is permanent (revoked/expired, or a grant bound to a replaced delegationManager
+      // / old custodian → ERC-1271 0xffffffff). The default 4× retry would storm the discovery hydrate
+      // with 403s before the catch drops the member. The user's OWN post-connect read keeps the retry.
       if (m.kind === 'gco') needs.push(...(await loadGcoNeeds(m.delegation, 1)));
       else { const o = await loadKcOffering(m.delegation, 1); if (o) offerings.push(o); }
-    } catch { /* a revoked/expired/orphaned grant simply drops that member from the view */ }
+    } catch (e) {
+      // Self-heal the registry: a PERMANENT delegation failure against a DEPLOYED member SA can never
+      // recover (the signature is over a now-wrong digest), so it would 403 on every hydrate forever.
+      // Prune it. Guard on deployed-SA so a member whose SA is still confirming right after THEY connect
+      // (transient) is left alone, and on the error CLASS so a CSRF/network 403 never deletes a member.
+      if (isPermanentDelegationFailure(e)) {
+        void isContractDeployed(m.sa)
+          .then((deployed) => (deployed ? unregisterMember(m.sa) : undefined))
+          .catch(() => {/* best-effort prune; the next hydrate retries */});
+      }
+      /* dropped from this view regardless */
+    }
   }
   return { needs, offerings };
 }

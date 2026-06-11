@@ -26,6 +26,9 @@ const JANE_OWNER: VaultOwner = {
 const switchboardVaultOwner = vi.fn(async () => JANE_OWNER);
 vi.mock('./onchain', () => ({ switchboardVaultOwner: () => switchboardVaultOwner() }));
 
+const isContractDeployed = vi.fn(async () => true);
+vi.mock('./chain', () => ({ isContractDeployed: (...a: unknown[]) => isContractDeployed(...a) }));
+
 import {
   loadMembers, registerMember, loadKcOffering, saveKcOffering, loadGcoNeeds, saveGcoNeeds, loadBrokerView,
   type MemberEntry,
@@ -38,7 +41,11 @@ beforeEach(() => {
   vaultList.mockReset(); vaultRead.mockReset(); vaultWrite.mockReset();
   vaultReadWithDelegation.mockReset(); vaultWriteWithDelegation.mockReset();
   switchboardVaultOwner.mockClear();
+  isContractDeployed.mockReset(); isContractDeployed.mockResolvedValue(true);
 });
+
+/** Flush the fire-and-forget prune (`.then(isContractDeployed).then(unregisterMember)`) microtasks. */
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('member registry lives in the vault (not localStorage)', () => {
   it('registerMember writes to Jane broker vault under gs:member:<sa>', async () => {
@@ -115,7 +122,32 @@ describe('loadBrokerView aggregates members through their grants', () => {
     vaultRead.mockResolvedValue(kc);
     vaultReadWithDelegation.mockRejectedValue(new Error('grant revoked'));
     const view = await loadBrokerView();
+    await flush();
     expect(view.offerings).toEqual([]);
     expect(view.needs).toEqual([]);
+    // A non-ERC-1271 error is NOT classified permanent → the member is NOT pruned.
+    expect(vaultWrite).not.toHaveBeenCalled();
+  });
+
+  it('self-heals: prunes a member whose DEPLOYED SA permanently fails ERC-1271', async () => {
+    const kc: MemberEntry = { kind: 'kc', sa: SA, name: 'casey', delegation: grant };
+    vaultList.mockResolvedValue([{ record_type: `gs:member:${SA.toLowerCase()}`, updated_at: 'now' }]);
+    vaultRead.mockResolvedValue(kc);
+    vaultReadWithDelegation.mockRejectedValue(new Error('ERC-1271 returned 0xffffffff (expected 0x1626ba7e)'));
+    isContractDeployed.mockResolvedValue(true);
+    await loadBrokerView();
+    await flush();
+    expect(vaultWrite).toHaveBeenCalledWith(JANE_OWNER, `gs:member:${SA.toLowerCase()}`, null);
+  });
+
+  it('does NOT prune a member whose SA is not yet deployed (transient confirm window)', async () => {
+    const kc: MemberEntry = { kind: 'kc', sa: SA, name: 'casey', delegation: grant };
+    vaultList.mockResolvedValue([{ record_type: `gs:member:${SA.toLowerCase()}`, updated_at: 'now' }]);
+    vaultRead.mockResolvedValue(kc);
+    vaultReadWithDelegation.mockRejectedValue(new Error('delegation_invalid: ERC-1271 returned 0xffffffff'));
+    isContractDeployed.mockResolvedValue(false);
+    await loadBrokerView();
+    await flush();
+    expect(vaultWrite).not.toHaveBeenCalled();
   });
 });
