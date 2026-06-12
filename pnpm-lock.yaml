@@ -523,6 +523,58 @@ importers:
         specifier: ^8.0.16
         version: 8.0.16(@types/node@22.19.19)(esbuild@0.28.0)(tsx@4.22.4)
 
+  apps/demo-web-payment:
+    dependencies:
+      '@agenticprimitives/account-custody':
+        specifier: workspace:*
+        version: link:../../packages/account-custody
+      '@agenticprimitives/agent-account':
+        specifier: workspace:*
+        version: link:../../packages/agent-account
+      '@agenticprimitives/connect-auth':
+        specifier: workspace:*
+        version: link:../../packages/connect-auth
+      '@agenticprimitives/delegation':
+        specifier: workspace:*
+        version: link:../../packages/delegation
+      '@agenticprimitives/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
+      '@agenticprimitives/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@tanstack/react-query':
+        specifier: ^5.101.0
+        version: 5.101.0(react@19.2.7)
+      react:
+        specifier: ^19.2.7
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.2.7
+        version: 19.2.7(react@19.2.7)
+      viem:
+        specifier: ^2.52.2
+        version: 2.52.2(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+      wagmi:
+        specifier: ^2.12.0
+        version: 2.19.5(@tanstack/query-core@5.101.0)(@tanstack/react-query@5.101.0(react@19.2.7))(@types/react@19.2.16)(@upstash/redis@1.38.0)(bufferutil@4.1.0)(encoding@0.1.13)(react@19.2.7)(typescript@5.7.3)(utf-8-validate@5.0.10)(viem@2.52.2(bufferutil@4.1.0)(typescript@5.7.3)(utf-8-validate@5.0.10)(zod@3.25.76))(zod@3.25.76)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.16
+        version: 19.2.16
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.16)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.0
+        version: 6.0.2(vite@8.0.16(@types/node@22.19.19)(esbuild@0.28.0)(tsx@4.22.4))
+      typescript:
+        specifier: ~5.7.0
+        version: 5.7.3
+      vite:
+        specifier: ^8.0.16
+        version: 8.0.16(@types/node@22.19.19)(esbuild@0.28.0)(tsx@4.22.4)
+
   apps/demo-web-pro:
     dependencies:
       '@agenticprimitives/account-custody':

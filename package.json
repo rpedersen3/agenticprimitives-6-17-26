@@ -68,6 +68,7 @@
     "check:agent-relationships": "pnpm --filter @agenticprimitives/agent-relationships typecheck && pnpm --filter @agenticprimitives/agent-relationships test",
     "check:demo-web": "pnpm --filter @agenticprimitives-demo/web typecheck",
     "check:demo-web-pro": "pnpm --filter @agenticprimitives-demo/web-pro typecheck",
+    "check:demo-web-payment": "pnpm --filter @agenticprimitives-demo/web-payment typecheck",
     "check:demo-web-recovery": "pnpm --filter @agenticprimitives-demo/web-recovery typecheck",
     "check:demo-a2a": "pnpm --filter @agenticprimitives-demo/a2a typecheck",
     "check:demo-mcp": "pnpm --filter @agenticprimitives-demo/mcp typecheck",
