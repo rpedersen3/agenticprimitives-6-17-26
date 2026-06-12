@@ -28,5 +28,8 @@
   "smartAgentPaymaster": "0x8eF92B9D62826052D8F7e6dcaB630dC3890bF540",
   "timestampEnforcer": "0x7c452434314A5bf2048f9263aeCd0cC20Fa07965",
   "universalSignatureValidator": "0xe8F3e531429F44D77dC3A331C18032bfa1550D84",
-  "valueEnforcer": "0x7c4533e0A9fB0B1cb5aa70327b222a80d72d52db"
+  "valueEnforcer": "0x7c4533e0A9fB0B1cb5aa70327b222a80d72d52db",
+  "paymentEnforcer": "0xAF48273e11435cC2D56f4AFBfD091Abb162458E9",
+  "paymentReceiptRegistry": "0x366616E265cd3cDE0F042A592C17838fe210D1d4",
+  "mockUsdc": "0x8fb56ff3C13347DFC4E1287aE83E88deE5a7211C"
 }

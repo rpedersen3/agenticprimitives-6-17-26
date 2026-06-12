@@ -35,17 +35,11 @@ contract DeployPayments is Script {
         MockUSDC usdc = new MockUSDC();
         vm.stopBroadcast();
 
+        // Log the 3 addresses for the operator / follow-up tooling to merge into
+        // deployments-<network>.json under paymentEnforcer / paymentReceiptRegistry / mockUsdc.
+        // (No vm.writeJson — that path isn't in foundry.toml fs_permissions; merging is done off-chain.)
         console2.log("paymentReceiptRegistry: %s", address(receipts));
         console2.log("paymentEnforcer:        %s", address(enforcer));
         console2.log("mockUsdc:               %s", address(usdc));
-
-        string memory key = "payments";
-        vm.serializeAddress(key, "paymentEnforcer", address(enforcer));
-        vm.serializeAddress(key, "paymentReceiptRegistry", address(receipts));
-        string memory out = vm.serializeAddress(key, "mockUsdc", address(usdc));
-        string memory network = vm.envOr("DEPLOY_NETWORK", string("anvil"));
-        string memory path = string.concat("deployments-payments-", network, ".json");
-        vm.writeJson(out, path);
-        console2.log("wrote %s (merge these 3 keys into deployments-%s.json)", path, network);
     }
 }
