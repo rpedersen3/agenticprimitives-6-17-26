@@ -79,3 +79,6 @@ coverage/
 
 # Playwright live-demo recording artifacts
 tests/e2e/recordings/
+
+# Claude Code transient runtime locks
+.claude/scheduled_tasks.lock
