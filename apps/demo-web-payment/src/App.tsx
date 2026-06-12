@@ -60,11 +60,12 @@ function WalletBar() {
               {import.meta.env.DEV && <button style={S.btnGhost} disabled={app.busy === 'seed'} onClick={app.seedGas}>{app.busy === 'seed' ? 'Seeding…' : 'Seed gas'}</button>}
               <button style={S.btn} disabled={!!app.treasurySa || app.busy === 'setup'} onClick={app.setupAccounts}>{app.busy === 'setup' ? 'Deploying…' : app.treasurySa ? 'Accounts ✓' : 'Set up agent accounts'}</button>
               <button style={S.btnGhost} disabled={!app.treasurySa || app.busy === 'fund'} onClick={() => app.fundTreasury(10)}>{app.busy === 'fund' ? 'Minting…' : 'Fund treasury 10 USDC'}</button>
+              <button style={S.btnGhost} onClick={() => void app.refresh()} title="Re-read on-chain balances">↻</button>
             </span>
           </div>
           <AddrLine label="Personal SA" addr={app.personalSa} />
           <AddrLine label="Service Treasury SA (payer)" addr={app.treasurySa} extra={`${fromUsdc(app.treasuryUsdc)} USDC`} />
-          <AddrLine label="Provider Treasury SA (payee)" addr={app.providerTreasury} />
+          <AddrLine label="Provider Treasury SA (payee)" addr={app.providerTreasury} extra={`${fromUsdc(app.providerUsdc)} USDC received`} />
         </>
       )}
       <p style={S.hint}>The wallet ({app.address?.slice(0, 6)}…) custodies your Personal + Treasury SAs and only ever <strong>signs</strong> — no transactions, <strong>no ETH needed</strong>. Money moves <strong>SA → SA</strong>, every action (set-up, funding, payments) is a <strong>paymaster-sponsored gasless UserOp</strong>. MetaMask shows signature requests, never a "Transaction"/Blockaid prompt. Set up accounts, fund the treasury, then run any flow.</p>

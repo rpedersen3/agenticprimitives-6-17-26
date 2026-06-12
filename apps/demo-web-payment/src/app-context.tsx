@@ -19,6 +19,7 @@ export interface AppState {
   treasurySa: Address | null;
   providerTreasury: Address | null;
   treasuryUsdc: bigint;
+  providerUsdc: bigint;
   busy: string | null;
   status: string;
   error: string;
@@ -50,14 +51,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [treasurySa, setTreasurySa] = useState<Address | null>(null);
   const [providerTreasury, setProviderTreasury] = useState<Address | null>(null);
   const [treasuryUsdc, setTreasuryUsdc] = useState(0n);
+  const [providerUsdc, setProviderUsdc] = useState(0n);
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
 
+  const acctKey = address ? `demo-web-payment:accounts:${address.toLowerCase()}` : null;
+
+  // Restore the deployed SA addresses on load / wallet change (they reset otherwise).
+  useEffect(() => {
+    if (!acctKey) { setPersonalSa(null); setTreasurySa(null); setProviderTreasury(null); return; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(acctKey) || 'null') as { personalSa: Address; treasurySa: Address; providerTreasury: Address } | null;
+      setPersonalSa(saved?.personalSa ?? null);
+      setTreasurySa(saved?.treasurySa ?? null);
+      setProviderTreasury(saved?.providerTreasury ?? null);
+    } catch { /* ignore */ }
+  }, [acctKey]);
+
   const refresh = useCallback(async () => {
     if (address) setEthBal(await readEthBalance(address));
     if (treasurySa) setTreasuryUsdc(await readUsdcBalance(treasurySa));
-  }, [address, treasurySa]);
+    if (providerTreasury) setProviderUsdc(await readUsdcBalance(providerTreasury));
+  }, [address, treasurySa, providerTreasury]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -82,9 +98,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!personal) { setStatus('Deploying your Personal Smart Agent (gasless)…'); const r = await deployPersona(address, { saltSeed: 'personal' }); if (!r.ok) throw new Error(`personal — ${r.error}`); personal = r.address; setPersonalSa(r.address); }
     if (!treasury) { setStatus('Deploying your Service Treasury SA (gasless, same custodian)…'); const r = await deployPersona(address, { saltSeed: 'treasury' }); if (!r.ok) throw new Error(`treasury — ${r.error}`); treasury = r.address; setTreasurySa(r.address); }
     if (!provider) { setStatus('Deploying the Provider Treasury SA (gasless)…'); const r = await deployPersona(providerEoa(), { saltSeed: 'provider' }); if (!r.ok) throw new Error(`provider — ${r.error}`); provider = r.address; setProviderTreasury(r.address); }
+    if (acctKey) localStorage.setItem(acctKey, JSON.stringify({ personalSa: personal, treasurySa: treasury, providerTreasury: provider }));
     setStatus('Accounts ready — fund the treasury, then run any flow.');
     setTreasuryUsdc(await readUsdcBalance(treasury));
-  }), [address, personalSa, treasurySa, providerTreasury, run]);
+    setProviderUsdc(await readUsdcBalance(provider));
+  }), [address, acctKey, personalSa, treasurySa, providerTreasury, run]);
 
   const fundTreasury = useCallback((humanUsdc: number) => run('fund', async () => {
     if (!wallet || !treasurySa) throw new Error('set up accounts first');
@@ -102,7 +120,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppState = {
     address, isConnected, wallet, connectors, connect, disconnect, ethBal,
-    personalSa, treasurySa, providerTreasury, treasuryUsdc,
+    personalSa, treasurySa, providerTreasury, treasuryUsdc, providerUsdc,
     busy, status, error, setStatus, run, seedGas, setupAccounts, fundTreasury, refresh, payCtx,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
