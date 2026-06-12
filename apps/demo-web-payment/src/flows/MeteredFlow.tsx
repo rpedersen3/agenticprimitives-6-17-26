@@ -56,6 +56,8 @@ export function MeteredFlow() {
 
   const onPay = (resource: PricedResource) => app.run(`pay:${resource.url}`, async () => {
     if (!app.wallet || !budget || !readerSa || !treasury) throw new Error('approve a budget first');
+    const bal = await readUsdcBalance(readerSa);
+    if (bal < resource.price) throw new Error(`Reader SA holds ${fromUsdc(bal)} USDC but this charge needs ${fromUsdc(resource.price)} — run step 2 "Mint 25 USDC → reader" first (the wallet-bar mint funds your wallet, not the reader SA).`);
     app.setStatus(`Accessing "${resource.title}" — submitting the gated charge…`);
     const res = await accessAndPay({ wallet: app.wallet, budget, readerSa, treasury, resource });
     setReceipts((p) => [{ title: resource.title, amount: res.amount, hash: res.settlementHash }, ...p]);

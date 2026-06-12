@@ -57,7 +57,7 @@ function WalletBar() {
           </span>
           <span style={{ display: 'flex', gap: 8 }}>
             {import.meta.env.DEV && <button style={S.btnGhost} disabled={app.busy === 'seed'} onClick={app.seedGas}>{app.busy === 'seed' ? 'Seeding…' : 'Seed gas'}</button>}
-            <button style={S.btnGhost} disabled={app.busy === 'fund'} onClick={() => app.fundWallet(10)}>{app.busy === 'fund' ? 'Minting…' : 'Mint 10 USDC'}</button>
+            <button style={S.btnGhost} disabled={app.busy === 'fund'} onClick={() => app.fundWallet(10)} title="Funds your wallet for the Direct/Escrow/Split/Subscription/Voucher flows. Pay-per-use funds its reader SA separately (its step 2).">{app.busy === 'fund' ? 'Minting…' : 'Mint 10 USDC → wallet'}</button>
           </span>
         </div>
       )}
