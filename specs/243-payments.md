@@ -416,6 +416,7 @@ export async function assertPaymentReceipt(vc: SignedReceiptVC, attestationClien
 - [241 — agreement registry](./241-agreement-commitment-registry.md) — produces `agreementCommitment` for context binding
 - [242 — verifiable credentials + attestations](./242-trust-credentials-and-public-assertions.md) — `PaymentReceipt` envelope
 - [244 — fulfillment](./244-fulfillment.md) — produces `taskId` + `artifactHash` for context binding
+- [273 — value exchange](./273-value-exchange-consideration.md) — payment is the `monetary` consideration-leg executor; agreements may carry non-monetary legs (barter) that never touch this package
 
 **Industry references:**
 - [x402 — HTTP-native Agent Payments](https://www.x402.org/)
