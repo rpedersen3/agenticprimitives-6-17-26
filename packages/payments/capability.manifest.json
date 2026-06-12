@@ -121,7 +121,12 @@
     "buildSplitPayout",
     "BPS_DENOMINATOR",
     "SplitRecipient",
-    "SplitLeg"
+    "SplitLeg",
+    "ERC20_APPROVE_ABI",
+    "buildErc20Approve",
+    "escrow",
+    "recurring",
+    "ops"
   ],
   "ignoreForAgentContext": [
     "dist/**",

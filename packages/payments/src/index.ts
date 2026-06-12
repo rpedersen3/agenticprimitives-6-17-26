@@ -156,15 +156,20 @@ export * as x402 from './rails/x402/index.js';
 export * as entitlement from './entitlement/index.js';
 
 // Spec 243 §5.5 — shared transfer plumbing + closed-mandate builder.
-export { ERC20_TRANSFER_ABI, buildErc20Transfer, buildNativeTransfer } from './transfer.js';
+export { ERC20_TRANSFER_ABI, ERC20_APPROVE_ABI, buildErc20Transfer, buildErc20Approve, buildNativeTransfer } from './transfer.js';
 export type { TransferPlan } from './transfer.js';
 export { buildClosedMandate } from './mandate.js';
 export type { ClosedMandateInput } from './mandate.js';
 
-// Spec 243 §5.5 — general-purpose rails + payout legs.
+// Spec 243 §5.5 — general-purpose rails + profiles + payout legs.
 export * as wallet from './rails/wallet.js';
 export * as invoice from './rails/invoice.js';
+export * as escrow from './rails/escrow.js';
+export * as recurring from './rails/recurring.js';
 export { buildRefund } from './refund.js';
 export type { RefundInput, RefundPlan } from './refund.js';
 export { buildSplitPayout, BPS_DENOMINATOR } from './split.js';
 export type { SplitRecipient, SplitLeg } from './split.js';
+
+// Spec 243 §5.5 — ops core (idempotent event log + reconciliation + export).
+export * as ops from './ops.js';

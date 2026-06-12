@@ -41,3 +41,25 @@ export function buildErc20Transfer(asset: Address, to: Address, amount: bigint):
 export function buildNativeTransfer(to: Address, amount: bigint): TransferPlan {
   return { to, value: amount, data: '0x' };
 }
+
+export const ERC20_APPROVE_ABI = [
+  {
+    type: 'function',
+    name: 'approve',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ type: 'bool' }],
+  },
+] as const;
+
+/** An ERC-20 approval — needed before the escrow `deposit` pulls funds via `transferFrom`. */
+export function buildErc20Approve(asset: Address, spender: Address, amount: bigint): TransferPlan {
+  return {
+    to: asset,
+    value: 0n,
+    data: encodeFunctionData({ abi: ERC20_APPROVE_ABI, functionName: 'approve', args: [spender, amount] }),
+  };
+}

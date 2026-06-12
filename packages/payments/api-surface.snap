@@ -12,6 +12,7 @@ interface PaymentRailExecutor
 re-export BPS_DENOMINATOR from ./split.js
 re-export ClosedMandateInput from ./mandate.js
 re-export ERC1271_MAGIC from ./mandate-sign.js
+re-export ERC20_APPROVE_ABI from ./transfer.js
 re-export ERC20_TRANSFER_ABI from ./transfer.js
 re-export Erc1271Reader from ./mandate-sign.js
 re-export MandateDomainOpts from ./mandate-sign.js
@@ -27,6 +28,7 @@ re-export SplitLeg from ./split.js
 re-export SplitRecipient from ./split.js
 re-export TransferPlan from ./transfer.js
 re-export buildClosedMandate from ./mandate.js
+re-export buildErc20Approve from ./transfer.js
 re-export buildErc20Transfer from ./transfer.js
 re-export buildNativeTransfer from ./transfer.js
 re-export buildPaymentMandateTypedData from ./mandate-sign.js
