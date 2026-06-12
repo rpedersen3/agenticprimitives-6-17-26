@@ -22,7 +22,7 @@ import {
 } from '@agenticprimitives/payments';
 import { config } from '../config';
 import { publicClient, type PaymentWallet } from './wallet';
-import { toUsdc } from './x402-pay';
+import { toUsdc, fromUsdc, readUsdcBalance } from './x402-pay';
 
 export type TransferPlan = { to: Address; value: bigint; data: Hex };
 
@@ -30,6 +30,15 @@ async function submit(wallet: PaymentWallet, plan: TransferPlan): Promise<Hex> {
   const account = wallet.account?.address;
   if (!account) throw new Error('wallet not connected');
   return wallet.sendTransaction({ account, to: plan.to, data: plan.data, value: plan.value, chain: baseSepolia });
+}
+
+/** Pre-check the wallet's USDC so an insufficient-balance revert reads as a clear message,
+ *  not a cryptic "exceeds max transaction gas limit". */
+async function requireUsdc(wallet: PaymentWallet, amount: bigint, label: string): Promise<void> {
+  const a = wallet.account?.address;
+  if (!a) throw new Error('wallet not connected');
+  const bal = await readUsdcBalance(a);
+  if (bal < amount) throw new Error(`Your wallet holds ${fromUsdc(bal)} USDC but ${label} needs ${fromUsdc(amount)} — click "Mint 10 USDC → wallet" in the wallet bar first.`);
 }
 
 export function orderHashOf(label: string): Hex32 {
@@ -41,6 +50,7 @@ export function orderHashOf(label: string): Hex32 {
 
 /** Direct checkout: the wallet transfers USDC straight to a treasury. */
 export async function directPay(wallet: PaymentWallet, treasury: Address, amount: bigint): Promise<Hex> {
+  await requireUsdc(wallet, amount, 'this payment');
   return submit(wallet, buildErc20Transfer(config.mockUsdc, treasury, amount));
 }
 
@@ -62,6 +72,7 @@ export function createInvoice(args: { issuer: Address; payTo: Address; lineItems
 
 /** Reader reviews + pays the invoice (wallet transfer to the invoice's payTo). */
 export async function payInvoice(wallet: PaymentWallet, invoice: invoiceRail.Invoice): Promise<Hex> {
+  await requireUsdc(wallet, invoice.amount, 'this invoice');
   return submit(wallet, buildErc20Transfer(config.mockUsdc, invoice.payTo, invoice.amount));
 }
 
@@ -79,6 +90,7 @@ export interface EscrowParams {
 
 /** Deposit into escrow: approve the escrow then deposit (two tiny txs). Payer = wallet. */
 export async function escrowDeposit(wallet: PaymentWallet, p: EscrowParams): Promise<{ approveHash: Hex; depositHash: Hex }> {
+  await requireUsdc(wallet, p.amount, 'the escrow deposit');
   const payer = wallet.account!.address;
   const approveHash = await submit(wallet, buildErc20Approve(config.mockUsdc, config.paymentEscrow, p.amount));
   await new Promise((r) => setTimeout(r, 2500)); // let the approve land before deposit pulls
@@ -130,6 +142,7 @@ export const ESCROW_STATUS_LABEL: Record<number, string> = {
 
 /** Split one amount across recipients by bps; submits one transfer per leg. */
 export async function splitPay(wallet: PaymentWallet, amount: bigint, recipients: SplitRecipient[]): Promise<{ to: Address; amount: bigint; hash: Hex }[]> {
+  await requireUsdc(wallet, amount, 'the split');
   const legs = buildSplitPayout({ asset: config.mockUsdc, amount, recipients });
   const out: { to: Address; amount: bigint; hash: Hex }[] = [];
   for (const leg of legs) {
@@ -176,6 +189,7 @@ export function subscriptionWindow(sub: Subscription, period: number) {
 
 /** Settle one period's charge (wallet transfer for the derived closed mandate). */
 export async function settlePeriod(wallet: PaymentWallet, sub: Subscription, period: number): Promise<Hex> {
+  await requireUsdc(wallet, sub.amountPerPeriod, 'this subscription charge');
   const { plan } = recurringRail.deriveScheduledCharge(sub, period);
   return submit(wallet, plan);
 }
@@ -197,6 +211,7 @@ export interface VoucherPack {
 
 /** Pay once → receive a pack of unlinkable one-use vouchers. */
 export async function buyVoucherPack(wallet: PaymentWallet, treasury: Address, count: number): Promise<VoucherPack> {
+  await requireUsdc(wallet, toUsdc(0.1 * count), 'the voucher pack');
   const payHash = await directPay(wallet, treasury, toUsdc(0.1 * count));
   const reqs = Array.from({ length: count }, () => entitlement.voucher.blindVoucherRequest());
   const issued = entitlement.voucher.issueVouchers(VOUCHER_ISSUER, reqs.map((r) => r.request));
