@@ -11,6 +11,7 @@ import { SplitFlow } from './flows/SplitFlow';
 import { SubscriptionFlow } from './flows/SubscriptionFlow';
 import { VoucherFlow } from './flows/VoucherFlow';
 import { OpsFlow } from './flows/OpsFlow';
+import { IntentFlow } from './flows/IntentFlow';
 
 interface Tab {
   id: string;
@@ -28,7 +29,7 @@ const TABS: Tab[] = [
   { id: 'sub', label: 'Subscription', blurb: 'Recurring profile: approve once (open mandate), derive per-period closed charges; each period only settles inside its window (early re-charge blocked).', render: () => <SubscriptionFlow /> },
   { id: 'anon', label: 'Anonymous', blurb: 'Pay once → a blind-signed VOPRF voucher pack redeemed unlinkably from a separate context; double-spend rejected.', render: () => <VoucherFlow /> },
   { id: 'ops', label: 'Ops dashboard', blurb: 'Idempotent event log + receipt reconciliation/payment-detection + CSV/JSON export.', render: () => <OpsFlow /> },
-  { id: 'intent', label: 'Intent → fulfilment', blurb: 'Express a need → match/agree → fulfil → settle the bound payment; receipt links order ↔ fulfilment ↔ settlement.', reserved: 'wires intent-marketplace + agreements + fulfilment alongside payments — next' },
+  { id: 'intent', label: 'Intent → fulfilment', blurb: 'Express a need → match/agree → fulfil → settle the bound payment; receipt links order ↔ fulfilment ↔ settlement.', render: () => <IntentFlow /> },
 ];
 
 function WalletBar() {

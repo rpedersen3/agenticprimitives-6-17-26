@@ -531,12 +531,21 @@ importers:
       '@agenticprimitives/agent-account':
         specifier: workspace:*
         version: link:../../packages/agent-account
+      '@agenticprimitives/agreements':
+        specifier: workspace:*
+        version: link:../../packages/agreements
       '@agenticprimitives/connect-auth':
         specifier: workspace:*
         version: link:../../packages/connect-auth
       '@agenticprimitives/delegation':
         specifier: workspace:*
         version: link:../../packages/delegation
+      '@agenticprimitives/fulfillment':
+        specifier: workspace:*
+        version: link:../../packages/fulfillment
+      '@agenticprimitives/intent-marketplace':
+        specifier: workspace:*
+        version: link:../../packages/intent-marketplace
       '@agenticprimitives/payments':
         specifier: workspace:*
         version: link:../../packages/payments

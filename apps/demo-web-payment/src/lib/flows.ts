@@ -16,10 +16,17 @@ import {
   buildErc20Transfer,
   buildErc20Approve,
   buildSplitPayout,
+  buildClosedMandate,
+  buildPaymentReceiptCredential,
+  assertContextBindingValid,
   entitlement,
   type SplitRecipient,
+  type PaymentMandate,
   type Hex32,
 } from '@agenticprimitives/payments';
+import { isCompatible, composite, toMatchScore, type Intent } from '@agenticprimitives/intent-marketplace';
+import { computeAgreementCommitment, partySetCommitment, issuerCommitment, bytesCommitment } from '@agenticprimitives/agreements';
+import { canTaskTransition, type Task, type Artifact } from '@agenticprimitives/fulfillment';
 import { config } from '../config';
 import { publicClient, type PaymentWallet } from './wallet';
 import { toUsdc, fromUsdc, readUsdcBalance } from './x402-pay';
@@ -182,3 +189,128 @@ export const opsHelpers = {
   balanceDelta: opsApi.balanceDelta, isOrderPaid: opsApi.isOrderPaid, listReceiptsBy: opsApi.listReceiptsBy,
   exportReceiptsCSV: opsApi.exportReceiptsCSV, exportReceiptsJSON: opsApi.exportReceiptsJSON,
 };
+
+// ── F8 intent → fulfilment (bound payment + linking receipt) ────────
+//
+// Express a need → match a counter-intent → agree (commitment) → fulfil (task + artifact)
+// → settle the bound payment. The closed PaymentMandate's contextBinding carries
+// {intentId, agreementCommitment, taskId, artifactHash}; the PaymentReceipt folds that whole
+// binding into `contextBindingHash`, so the receipt cryptographically links order ↔ fulfilment
+// ↔ settlement. Money still moves SA → SA, gaslessly. Each step uses the real primitive package
+// (intent-marketplace / agreements / fulfillment / payments) — this file is glue only.
+
+const SERVICE_IRI = 'service:premium-consult' as const;
+const EMPTY_CONSTRAINTS = { hardConstraints: [], softConstraints: [] };
+
+export interface IntentMatch {
+  buyerIntent: Intent;
+  providerIntent: Intent;
+  compatible: boolean;
+  matchScore: number; // 0–10000 bps
+}
+
+/** Step 1 — express the buyer's need + the provider's offer, then match them (intent-marketplace:
+ *  opposite direction, same object, topic similar enough). */
+export function expressAndMatch(buyer: Address, provider: Address): IntentMatch {
+  const now = new Date().toISOString();
+  const stamp = Date.now();
+  const buyerIntent: Intent = {
+    id: `intent:need:${stamp}`, direction: 'receive', object: SERVICE_IRI, topic: 'premium-consult',
+    expressedBy: buyer, addressedTo: [provider], hasConstraintSet: EMPTY_CONSTRAINTS,
+    visibility: 'Public', status: 'expressed', createdAt: now,
+  };
+  const providerIntent: Intent = {
+    id: `intent:offer:${stamp}`, direction: 'give', object: SERVICE_IRI, topic: 'premium-consult',
+    expressedBy: provider, addressedTo: [buyer], hasConstraintSet: EMPTY_CONSTRAINTS,
+    visibility: 'Public', status: 'expressed', createdAt: now,
+  };
+  const compatible = isCompatible(buyerIntent, providerIntent, { topicSimilarityThreshold: 0.5 });
+  const matchScore = toMatchScore(composite({ proximity: 0.9, outcome: 0.85 }));
+  return { buyerIntent, providerIntent, compatible, matchScore };
+}
+
+export interface Agreement {
+  agreementCommitment: Hex32;
+  terms: string;
+  schedule: string;
+}
+
+/** Step 2 — agree terms → a commitment-only agreement (agreements / spec 241). Parties + terms
+ *  never go on-chain; only the keccak commitment binds the payment. */
+export function agreeTerms(args: { buyer: Address; provider: Address; issuer: Address; terms: string; schedule: string }): Agreement {
+  const agreementCommitment = computeAgreementCommitment({
+    partySetCommitment: partySetCommitment(args.buyer, args.provider),
+    issuerCommitment: issuerCommitment(args.issuer),
+    termsCommitment: bytesCommitment(args.terms),
+    scheduleCommitment: bytesCommitment(args.schedule),
+    salt: BigInt(Date.now()),
+  });
+  return { agreementCommitment, terms: args.terms, schedule: args.schedule };
+}
+
+export interface Fulfilment {
+  task: Task;
+  artifact: Artifact;
+  artifactHash: Hex32;
+  caseId: Hex32;
+}
+
+/** Step 3 — provider fulfils: a Task moves submitted → working → completed and produces an
+ *  Artifact whose bodyHash anchors the deliverable (fulfillment / spec 244). */
+export function fulfil(args: { provider: Address; intentId: string; agreementCommitment: Hex32; deliverable: string }): Fulfilment {
+  // enforce the legal task lifecycle (submitted → working → completed) via the real state machine.
+  if (!canTaskTransition('submitted', 'working') || !canTaskTransition('working', 'completed')) {
+    throw new Error('illegal task transition');
+  }
+  const caseId = keccak256(toBytes(`case:${args.agreementCommitment}`)) as Hex32;
+  const artifactHash = keccak256(toBytes(args.deliverable)) as Hex32;
+  const taskId = keccak256(toBytes(`task:${caseId}`)) as Hex32;
+  const task: Task = {
+    taskId, parentCaseId: caseId, parentIntentId: args.intentId, state: 'completed',
+    assignee: args.provider, assigneeKind: 'agent', inputHash: keccak256(toBytes(args.intentId)) as Hex32,
+    artifactIds: [artifactHash], maxRetries: 0, permissionGrantRef: ('0x' + '00'.repeat(32)) as Hex32,
+  };
+  const artifact: Artifact = {
+    artifactId: artifactHash, caseId, taskId, producer: args.provider, artifactKind: 'deliverable',
+    bodyHash: artifactHash, bodyContentType: 'text/plain', disclosurePolicy: 'private', createdAt: Math.floor(Date.now() / 1000),
+  };
+  return { task, artifact, artifactHash, caseId };
+}
+
+export interface BoundSettlement {
+  mandate: PaymentMandate;
+  settlementHash: Hex;
+  receipt: ReturnType<typeof buildPaymentReceiptCredential>;
+  contextBindingHash: Hex32;
+}
+
+/** Step 4 — settle the bound payment: a closed mandate whose contextBinding ties the transfer to
+ *  {intentId, agreementCommitment, taskId, artifactHash}; the gasless SA→SA USDC transfer settles
+ *  it; the immutable PaymentReceipt folds the whole binding into `contextBindingHash`. */
+export async function settleBoundPayment(ctx: PayCtx, args: {
+  amount: bigint; intentId: string; agreementCommitment: Hex32; taskId: Hex32; artifactHash: Hex32;
+}): Promise<BoundSettlement> {
+  await requireUsdc(ctx, args.amount, 'this settlement');
+  const now = Math.floor(Date.now() / 1000);
+  const mandate = buildClosedMandate({
+    payer: ctx.treasurySa, payee: ctx.providerTreasury, asset: usdcAsset, amount: args.amount,
+    chain: config.chainId, rail: 'wallet', nonce: BigInt(Date.now()), validFrom: now, expiresAt: now + 3600,
+    orderHash: args.agreementCommitment, // the "order" is the agreement
+  });
+  // bind the mandate to the full intent → agreement → task → artifact chain (PMT-3.1).
+  mandate.contextBinding.intentId = args.intentId;
+  mandate.contextBinding.agreementCommitment = args.agreementCommitment;
+  mandate.contextBinding.taskId = args.taskId;
+  mandate.contextBinding.artifactHash = args.artifactHash;
+  assertContextBindingValid(mandate.contextBinding);
+
+  const { data } = buildErc20Transfer(config.mockUsdc, ctx.providerTreasury, args.amount);
+  const settlementHash = await executeViaSa(ctx.wallet, ctx.treasurySa, config.mockUsdc, 0n, data);
+
+  // the rail executor (provider treasury) issues the immutable receipt VC (PMT-INV-11).
+  const receipt = buildPaymentReceiptCredential({
+    mandate, issuer: ctx.providerTreasury, settlementHash: settlementHash as Hex32, settledAt: new Date().toISOString(),
+  });
+  const contextBindingHash = (receipt.credentialSubject as { contextBindingHash: Hex32 }).contextBindingHash;
+  return { mandate, settlementHash, receipt, contextBindingHash };
+}
