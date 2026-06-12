@@ -181,7 +181,7 @@ export function App() {
           <div style={S.gasRow}>
             <span style={S.hint}>
               Gas: <span style={S.mono}>{Number(formatEther(ethBal)).toFixed(4)} ETH</span>
-              {ethBal < 900_000_000_000_000n && <span style={S.lowGas}> · low</span>}
+              {ethBal < 80_000_000_000_000n && <span style={S.lowGas}> · low</span>}
             </span>
             <button style={S.btnSm} disabled={busy === 'seed'} onClick={onSeedGas}>
               {busy === 'seed' ? 'Seeding…' : 'Seed gas from deployer'}

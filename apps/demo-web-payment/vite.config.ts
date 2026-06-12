@@ -13,8 +13,8 @@ import { baseSepolia } from 'viem/chains';
  * production build (configureServer only runs under `vite dev`).
  */
 function devGasFaucet(): Plugin {
-  const TARGET = parseEther('0.002'); // top recipients up to ~0.002 ETH
-  const FLOOR = parseEther('0.0009'); // …only if they're below this
+  const TARGET = parseEther('0.0002'); // top recipients up to ~0.0002 ETH — plenty for a few L2 txs
+  const FLOOR = parseEther('0.00008'); // …only if they're below this
   const lastSend = new Map<string, number>();
 
   return {
