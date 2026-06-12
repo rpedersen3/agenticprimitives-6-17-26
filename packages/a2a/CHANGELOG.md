@@ -1,5 +1,13 @@
 # @agenticprimitives/a2a
 
+## 0.0.0-alpha.5
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.9
+- @agenticprimitives/delegation@1.0.0-alpha.9
+- @agenticprimitives/fulfillment@0.0.0-alpha.6
+
 ## 0.0.0-alpha.4
 
 ### Minor Changes

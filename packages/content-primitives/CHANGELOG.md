@@ -1,5 +1,12 @@
 # @agenticprimitives/content-primitives
 
+## 1.0.0-alpha.9
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.9
+- @agenticprimitives/verifiable-credentials@0.0.0-alpha.5
+
 ## 1.0.0-alpha.8
 
 ### Patch Changes

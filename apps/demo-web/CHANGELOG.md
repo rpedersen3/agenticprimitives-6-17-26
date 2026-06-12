@@ -1,5 +1,15 @@
 # @agenticprimitives-demo/web
 
+## 0.0.2-alpha.7
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.9
+- @agenticprimitives/connect-auth@1.0.0-alpha.9
+- @agenticprimitives/agent-account@1.0.0-alpha.9
+- @agenticprimitives/delegation@1.0.0-alpha.9
+- @agenticprimitives/agent-naming@1.0.0-alpha.9
+
 ## 0.0.2-alpha.6
 
 ### Patch Changes

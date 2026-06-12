@@ -1,5 +1,15 @@
 # @agenticprimitives/fulfillment
 
+## 0.0.0-alpha.6
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.9
+- @agenticprimitives/delegation@1.0.0-alpha.9
+- @agenticprimitives/agreements@0.0.0-alpha.6
+- @agenticprimitives/attestations@0.0.0-alpha.5
+- @agenticprimitives/verifiable-credentials@0.0.0-alpha.5
+
 ## 0.0.0-alpha.5
 
 ### Patch Changes

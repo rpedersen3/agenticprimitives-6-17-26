@@ -1,5 +1,11 @@
 # @agenticprimitives/audit
 
+## 1.0.0-alpha.9
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.9
+
 ## 1.0.0-alpha.8
 
 ### Patch Changes

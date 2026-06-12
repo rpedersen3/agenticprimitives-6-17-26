@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/verifiable-credentials",
-  "version": "0.0.0-alpha.4",
+  "version": "0.0.0-alpha.5",
   "description": "W3C Verifiable Credentials envelope + Eip712Signature2026 proof + DOLCE+DnS Situation bases + ontology-shape schema registration. Substrate for layers 12–15 credential types.",
   "license": "MIT",
   "repository": {

@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/scripture-content-extension",
-  "version": "1.0.0-alpha.8",
+  "version": "1.0.0-alpha.9",
   "description": "Scripture vertical for the verifiable-content substrate: the Bible canon (OSIS book codes), a versioned versification model, the scripture.verse selector, and alias parsing (scripture:book.chapter.verse + tolerant forms) that normalizes many surface grammars to ONE scheme-independent canonical locus. Depends on verifiable-content; carries no rendering text and no specific translation.",
   "license": "MIT",
   "repository": {
