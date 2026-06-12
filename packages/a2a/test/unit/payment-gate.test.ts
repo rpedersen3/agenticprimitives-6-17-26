@@ -29,6 +29,20 @@ describe('gateSkillPayment (PAY-A2A-3 middleware)', () => {
     const r = await gateSkillPayment({ payment: PRICE, gate: okGate, skill: 's', message: MSG });
     expect(r).toMatchObject({ proceed: true, receiptRef: { settlementHash: '0xsettle' } });
   });
+  it('entitlement lane: a live entitlement satisfies with NO settlement (X402-D8 one lane)', async () => {
+    const entGate: PaymentGate = {
+      async check(a) {
+        return a.entitlementRef
+          ? { satisfied: true, via: 'entitlement', entitlementConsumption: { usesLeftAfter: 2 } }
+          : { satisfied: false, required: { quoteId: '0xq' } };
+      },
+    };
+    const r = await gateSkillPayment({ payment: PRICE, gate: entGate, skill: 's', message: MSG, entitlementRef: { voucherId: '0xv' } });
+    expect(r).toMatchObject({ proceed: true, via: 'entitlement', entitlementConsumption: { usesLeftAfter: 2 } });
+    expect((r as { receiptRef?: unknown }).receiptRef).toBeUndefined(); // no fresh tx
+    // same gate WITHOUT a presented entitlement → must settle → parks
+    expect((await gateSkillPayment({ payment: PRICE, gate: entGate, skill: 's', message: MSG })).proceed).toBe(false);
+  });
   it('priced + gate unsatisfied parks input-required with x402.payment.required (handler never runs)', async () => {
     const r = await gateSkillPayment({ payment: PRICE, gate: needGate, skill: 's', message: MSG });
     expect(r.proceed).toBe(false);

@@ -50,6 +50,10 @@ export interface ContextBinding {
   taskId?: Hex32;
   artifactHash?: Hex32;
   resource?: { method: string; url: string; requestBodyHash: Hex32 };
+  /** EXC-R2 — the ExchangeOrder this payment leg belongs to (273/274). x402 sets `orderHash = quoteId`. */
+  orderHash?: Hex32;
+  /** EXC-R2 — distinguishes legs within one order (charge / refund / split-out / escrow-release). */
+  legId?: Hex32;
   chain: number;
   asset: AssetRef;
   nonce: bigint;
@@ -125,5 +129,47 @@ export function getRail(rail: PaymentRail): PaymentRailExecutor | undefined {
   return _rails.get(rail);
 }
 
+// Spec 243 §4.2 / PMT-INV-02/12 — EIP-712 mandate signing + ERC-1271 verification.
+export {
+  PAYMENT_MANDATE_DOMAIN_NAME,
+  PAYMENT_MANDATE_DOMAIN_VERSION,
+  PAYMENT_MANDATE_EIP712_TYPES,
+  ERC1271_MAGIC,
+  mandateAmount,
+  hashContextBinding,
+  paymentMandateDomain,
+  buildPaymentMandateTypedData,
+  paymentMandateDigest,
+  signPaymentMandate,
+  verifyPaymentMandateSignature,
+} from './mandate-sign.js';
+export type { MandateDomainOpts, MandateSigner, Erc1271Reader } from './mandate-sign.js';
+
+// Spec 243 §7 / X402-D9.3 — PaymentReceipt verifiable credential.
+export { PAYMENT_RECEIPT_TYPE, settlementEpochBucket, buildPaymentReceiptCredential } from './receipt.js';
+export type { PaymentReceiptInput } from './receipt.js';
+
 // Spec 272 — the x402 rail (staged executor + v2 wire + nonce store + resource binding).
 export * as x402 from './rails/x402/index.js';
+
+// Spec 272 §10 — entitlements (pay-once-then-access; credits = maxUses:N).
+export * as entitlement from './entitlement/index.js';
+
+// Spec 243 §5.5 — shared transfer plumbing + closed-mandate builder.
+export { ERC20_TRANSFER_ABI, ERC20_APPROVE_ABI, buildErc20Transfer, buildErc20Approve, buildNativeTransfer } from './transfer.js';
+export type { TransferPlan } from './transfer.js';
+export { buildClosedMandate } from './mandate.js';
+export type { ClosedMandateInput } from './mandate.js';
+
+// Spec 243 §5.5 — general-purpose rails + profiles + payout legs.
+export * as wallet from './rails/wallet.js';
+export * as invoice from './rails/invoice.js';
+export * as escrow from './rails/escrow.js';
+export * as recurring from './rails/recurring.js';
+export { buildRefund } from './refund.js';
+export type { RefundInput, RefundPlan } from './refund.js';
+export { buildSplitPayout, BPS_DENOMINATOR } from './split.js';
+export type { SplitRecipient, SplitLeg } from './split.js';
+
+// Spec 243 §5.5 — ops core (idempotent event log + reconciliation + export).
+export * as ops from './ops.js';

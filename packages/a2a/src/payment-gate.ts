@@ -32,18 +32,35 @@ export interface X402PaymentMetadata {
   'x402.payment.receipts'?: unknown[];
 }
 
+/** X402-D8 — the ONE access lane a request was served by. The gate picks exactly one. */
+export type PaymentLane = 'grant' | 'entitlement' | 'settlement';
+
 export interface PaymentGateDecision {
   satisfied: boolean;
+  /** Which lane satisfied it (audit + so the handler knows whether a tx happened). */
+  via?: PaymentLane;
   /** When NOT satisfied: the PaymentRequired body to park (opaque; app-built from payments PAY-WIRE-1). */
   required?: unknown;
   /** When satisfied via a fresh settlement: the receipt ref to attach to the result. */
   receiptRef?: unknown;
+  /** When satisfied via a live entitlement: the consumption ref (the app consumed one use — no tx). */
+  entitlementConsumption?: unknown;
 }
 
-/** The injected gate. The app wires the payments x402 rail (verify → settle → receipt). a2a only asks:
- *  "is this priced request paid?" and acts on the verdict. */
+/** The injected gate. The app wires the payments x402 rail + entitlement store. a2a only asks:
+ *  "is this priced request paid?" and acts on the verdict. X402-D8: the gate decides ONE lane —
+ *  a standing grant, a LIVE entitlement (`entitlementRef`, consume one use, no settlement), or a
+ *  fresh settlement — never two. */
 export interface PaymentGate {
-  check(args: { skill: string; payment: SkillPayment; message: A2aMessage; payload?: unknown }): Promise<PaymentGateDecision>;
+  check(args: {
+    skill: string;
+    payment: SkillPayment;
+    message: A2aMessage;
+    payload?: unknown;
+    /** Opaque ref the client presents to redeem a pre-paid entitlement / bearer voucher (no new tx).
+     *  The app resolves + consumes it via `@agenticprimitives/payments` entitlement/voucher. */
+    entitlementRef?: unknown;
+  }): Promise<PaymentGateDecision>;
 }
 
 /** PAY-A2A-4 — the agent-card extension a priced agent advertises in `capabilities.extensions[]`.
@@ -78,7 +95,12 @@ export async function gateSkillPayment(args: {
   skill: string;
   message: A2aMessage;
   payload?: unknown;
-}): Promise<{ proceed: true; receiptRef?: unknown } | { proceed: false; parkMetadata: X402PaymentMetadata }> {
+  /** Opaque pre-paid entitlement / voucher ref the client presents (X402-D8 entitlement lane). */
+  entitlementRef?: unknown;
+}): Promise<
+  | { proceed: true; via?: PaymentLane; receiptRef?: unknown; entitlementConsumption?: unknown }
+  | { proceed: false; parkMetadata: X402PaymentMetadata }
+> {
   if (!args.payment) return { proceed: true }; // free skill
   if (!args.gate) return { proceed: true }; // no rail wired (dev / unpriced deployment) — app opts in
   const decision = await args.gate.check({
@@ -86,7 +108,10 @@ export async function gateSkillPayment(args: {
     payment: args.payment,
     message: args.message,
     payload: args.payload,
+    entitlementRef: args.entitlementRef,
   });
-  if (decision.satisfied) return { proceed: true, receiptRef: decision.receiptRef };
+  if (decision.satisfied) {
+    return { proceed: true, via: decision.via, receiptRef: decision.receiptRef, entitlementConsumption: decision.entitlementConsumption };
+  }
   return { proceed: false, parkMetadata: buildPaymentRequiredMetadata(decision.required) };
 }

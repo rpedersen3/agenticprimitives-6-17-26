@@ -25,6 +25,7 @@ export interface DeploymentConfig {
   // spec-272 x402 pay-per-use substrate
   paymentEnforcer: `0x${string}`;
   paymentReceiptRegistry: `0x${string}`;
+  paymentEscrow: `0x${string}`;
   mockUsdc: `0x${string}`;
   // naming (so the created persons get human names)
   agentNameRegistry: `0x${string}`;
@@ -59,6 +60,7 @@ export const config: DeploymentConfig = {
   allowedMethodsEnforcer: addr(import.meta.env.VITE_ALLOWED_METHODS_ENFORCER,  '0xf77cf06aCd8b9e2f3204fe4bE16449B3594c9633'),
   paymentEnforcer:        addr(import.meta.env.VITE_PAYMENT_ENFORCER,          '0xAF48273e11435cC2D56f4AFBfD091Abb162458E9'),
   paymentReceiptRegistry: addr(import.meta.env.VITE_PAYMENT_RECEIPT_REGISTRY,  '0x366616E265cd3cDE0F042A592C17838fe210D1d4'),
+  paymentEscrow:          addr(import.meta.env.VITE_PAYMENT_ESCROW,            '0x954Ba6B3A02E02c5a3Fcd570943126633071cbdD'),
   mockUsdc:               addr(import.meta.env.VITE_MOCK_USDC,                 '0x8fb56ff3C13347DFC4E1287aE83E88deE5a7211C'),
   agentNameRegistry:      addr(import.meta.env.VITE_AGENT_NAME_REGISTRY,       '0x15F7ed064A230C011b0244A14fD9653f011d609B'),
   permissionlessSubregistry: addr(import.meta.env.VITE_PERMISSIONLESS_SUBREGISTRY, '0x1B8ED8693738e1A9DD653FEE5430d49e00202Bb7'),

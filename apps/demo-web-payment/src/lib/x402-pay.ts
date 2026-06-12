@@ -32,6 +32,7 @@ import {
   type Hex32,
 } from '@agenticprimitives/payments';
 import { config } from '../config';
+import { executeViaSa } from './agent-pay';
 import { publicClient, delegationSigner, type PaymentWallet } from './wallet';
 
 /** DelegationManager sentinel: delegate = address(0xa11) ⇒ any redeemer. */
@@ -79,8 +80,8 @@ export interface PaymentBudget {
  */
 export async function approvePaymentBudget(args: {
   wallet: PaymentWallet;
-  readerSa: Address;
-  treasury: Address;
+  treasurySa: Address;
+  providerTreasury: Address;
   perCharge: bigint;
   sessionBudget: bigint;
 }): Promise<PaymentBudget> {
@@ -94,7 +95,7 @@ export async function approvePaymentBudget(args: {
       allowedTargets: config.allowedTargetsEnforcer,
       allowedMethods: config.allowedMethodsEnforcer,
     },
-    payee: args.treasury,
+    payee: args.providerTreasury,
     asset: config.mockUsdc,
     maxAmountPerCharge: args.perCharge,
     maxAggregate: args.sessionBudget,
@@ -106,7 +107,7 @@ export async function approvePaymentBudget(args: {
 
   const client = new DelegationClient({
     signer: delegationSigner(args.wallet, custodian),
-    smartAccount: args.readerSa,
+    smartAccount: args.treasurySa,
     chainId: config.chainId,
     delegationManager: config.delegationManager,
   });
@@ -177,8 +178,9 @@ export interface SettleResult {
 export async function accessAndPay(args: {
   wallet: PaymentWallet;
   budget: PaymentBudget;
-  readerSa: Address;
-  treasury: Address;
+  treasurySa: Address;     // payer (signs the budget; the enforcer moves its USDC)
+  personalSa: Address;     // redeemer (executes the gasless userOp — distinct SA, no reentrancy)
+  providerTreasury: Address;
   resource: PricedResource;
 }): Promise<SettleResult> {
   const custodian = args.wallet.account?.address;
@@ -187,8 +189,8 @@ export async function accessAndPay(args: {
   // Fresh per-charge nonce (the PaymentEnforcer rejects a reused one — PAY-CON-1).
   const nonce = BigInt(Date.now());
   const { mandate, resourceHash } = buildCharge({
-    readerSa: args.readerSa,
-    treasury: args.treasury,
+    readerSa: args.treasurySa,
+    treasury: args.providerTreasury,
     resource: args.resource,
     nonce,
   });
@@ -202,13 +204,9 @@ export async function accessAndPay(args: {
     resourceHash,
   });
 
-  const settlementHash = await args.wallet.sendTransaction({
-    account: custodian,
-    to: plan.to,
-    data: plan.data,
-    value: plan.value,
-    chain: baseSepolia,
-  });
+  // Gasless + enforcer-gated: the Personal SA executes redeemDelegation as a paymaster-sponsored
+  // userOp; the DM runs the PaymentEnforcer and moves USDC Treasury SA → provider treasury SA.
+  const settlementHash = await executeViaSa(args.wallet, args.personalSa, plan.to, plan.value, plan.data);
 
   return { settlementHash, mandateId: mandate.mandateId, amount: args.resource.price };
 }

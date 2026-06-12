@@ -14,7 +14,10 @@
   "dependencies": {
     "@agenticprimitives/agent-account": "workspace:*",
     "@agenticprimitives/account-custody": "workspace:*",
+    "@agenticprimitives/agreements": "workspace:*",
     "@agenticprimitives/delegation": "workspace:*",
+    "@agenticprimitives/fulfillment": "workspace:*",
+    "@agenticprimitives/intent-marketplace": "workspace:*",
     "@agenticprimitives/payments": "workspace:*",
     "@agenticprimitives/connect-auth": "workspace:*",
     "@agenticprimitives/types": "workspace:*",

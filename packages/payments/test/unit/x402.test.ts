@@ -219,3 +219,60 @@ describe('redemption calldata + staged settle (PAY-RAIL-2/3)', () => {
     expect(r).toEqual({ ok: false, reason: 'payment delegation revoked' });
   });
 });
+
+describe('simulate stage + anti-griefing (PAY-RAIL-6)', () => {
+  const delegation = {
+    delegator: READER, delegate: SERVICE,
+    authority: '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
+    caveats: [{ enforcer: ENFORCER, terms: '0xdead' as const, args: '0x' as const }],
+    salt: 1n, signature: '0x' as const,
+  };
+  const baseDeps = (over: Partial<Parameters<typeof x402.createX402Rail>[0]>) => x402.createX402Rail({
+    chainId: 84532, delegationManager: DM, paymentEnforcer: ENFORCER, asset: USDC,
+    nonceStore: x402.createMemoryNonceStore(), isRevoked: async () => false,
+    submitRedemption: async () => ({ settlementHash: '0xsettle' as x402.Hex32 }),
+    now: () => 1_000_000_000, ...over,
+  });
+
+  it('a reverting simulation rejects WITHOUT burning the nonce (mandate survives for retry)', async () => {
+    const q = quote();
+    let submits = 0;
+    const store = x402.createMemoryNonceStore();
+    const fail = x402.createX402Rail({
+      chainId: 84532, delegationManager: DM, paymentEnforcer: ENFORCER, asset: USDC, nonceStore: store,
+      isRevoked: async () => false, submitRedemption: async () => { submits++; return { settlementHash: '0xok' as x402.Hex32 }; },
+      simulate: async () => ({ ok: false, reason: 'PaymentEnforcer: cap exceeded' }), now: () => 1_000_000_000,
+    });
+    const r = await fail.settle({ mandate: mandate(q), delegation, quote: q });
+    expect(r).toEqual({ ok: false, reason: 'simulation reverted: PaymentEnforcer: cap exceeded' });
+    expect(submits).toBe(0); // never submitted
+
+    // same nullifier can be retried once simulation passes (markFailed retryable)
+    const ok = x402.createX402Rail({
+      chainId: 84532, delegationManager: DM, paymentEnforcer: ENFORCER, asset: USDC, nonceStore: store,
+      isRevoked: async () => false, submitRedemption: async () => { submits++; return { settlementHash: '0xok' as x402.Hex32 }; },
+      simulate: async () => ({ ok: true, gas: 120_000n }), now: () => 1_000_000_000,
+    });
+    const r2 = await ok.settle({ mandate: mandate(q), delegation, quote: q });
+    expect(r2).toMatchObject({ ok: true, settlementHash: '0xok' });
+    expect(submits).toBe(1);
+  });
+
+  it('simulated gas over the cap rejects', async () => {
+    const q = quote();
+    const rail = baseDeps({ simulate: async () => ({ ok: true, gas: 900_000n }), maxGasPerSettlement: 500_000n });
+    const r = await rail.settle({ mandate: mandate(q), delegation, quote: q });
+    expect(r).toEqual({ ok: false, reason: 'settlement gas 900000 exceeds cap 500000' });
+  });
+
+  it('a settlement that exceeds the timeout is rejected (retryable)', async () => {
+    const q = quote();
+    const rail = baseDeps({
+      settlementTimeoutMs: 20,
+      submitRedemption: () => new Promise((res) => setTimeout(() => res({ settlementHash: '0xlate' as x402.Hex32 }), 200)),
+    });
+    const r = await rail.settle({ mandate: mandate(q), delegation, quote: q });
+    expect(r).toMatchObject({ ok: false });
+    expect((r as { reason: string }).reason).toMatch(/timed out/);
+  });
+});

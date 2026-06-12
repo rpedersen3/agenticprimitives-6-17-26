@@ -24,6 +24,7 @@ re-export MessageSendParams from ./agent.js
 re-export OnChainChecks from ./auth.js
 re-export PaymentGate from ./payment-gate.js
 re-export PaymentGateDecision from ./payment-gate.js
+re-export PaymentLane from ./payment-gate.js
 re-export PushConfig from ./types.js
 re-export PushEnvelope from ./push.js
 re-export PushPayload from ./push.js

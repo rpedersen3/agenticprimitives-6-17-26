@@ -33,6 +33,8 @@ export interface PaymentWallet {
     value?: bigint;
     chain?: unknown;
   }): Promise<Hex>;
+  /** Sign the userOpHash for a gasless sponsored UserOp (EIP-191 raw). */
+  signMessage(args: { account?: Address | { address: Address }; message: { raw: Hex } }): Promise<Hex>;
 }
 
 /** Native ETH balance (gas) for an address. */

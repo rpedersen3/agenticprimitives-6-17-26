@@ -269,6 +269,51 @@ Future rails register the same interface:
 
 **Substrate role.** The mandate carries `amountPolicy.maxAmount = 0` (no value moved) + sponsor SA as `granter`. The sponsor's paymaster contract validates the mandate at `validatePaymasterUserOp(...)` time.
 
+### 5.5 Rails W1.5 — general-purpose payment surface
+
+x402 (§5.2) ships per-use metering, but a mature payment package also ships direct/invoice pay, escrow + refunds, recurring, and splits. These are **not new wire protocols** — each is the same `PaymentMandate` + `PaymentRailExecutor` (§5.1), reusing the closed-mandate one-shot model (§4.1z) and producing the same `PaymentReceipt` (§7). Evidence symmetry: every leg — charge, refund, split, escrow release — is an audit-equal receipt (273 EXC-D3). Cross-ref [spec 272](272-x402-pay-per-use.md) (x402 wire, anonymity tiers, entitlements) and [spec 273](273-value-exchange-consideration.md) (exchange-leg doctrine).
+
+- **Wallet rail (now built, was §5.3 W1).** `buildWalletTransferPlan(mandate)` → a single ERC-20/native `transfer` from the payer SA for a **closed** mandate (no budget delegation, no 402 round-trip). This is plain "checkout" pay. Nullifier + receipt identical to x402. The smart-agent `PledgeRegistry` cryptographic rail (atomic `executeBatch([transfer, recordHonor])`) is the port.
+
+- **Invoice rail (new).** A push (request-for-payment) artifact, Request-Network pattern, no protocol dependency:
+  ```ts
+  interface Invoice {
+    invoiceId: Hex32; issuer: Address; payTo: Address;     // payTo MAY differ from issuer (treasury)
+    lineItems: { description: string; amount: bigint }[];
+    amount: bigint; asset: AssetRef; dueAt: number;
+    memoHash: Hex32;                                        // memo body in vault
+    orderHash?: Hex32;                                      // links to an ExchangeOrder (273/274)
+  }
+  ```
+  `buildInvoice(input)` → issuer signs; `payInvoice(invoice, payer)` derives the closed mandate bound to `invoiceId`/`orderHash`, settles via the wallet rail; the receipt links invoice ↔ settlement. Payment-detection (§reconciliation) resolves "is this invoice paid?" from receipts, never `eth_getLogs` ([ADR-0012](../docs/architecture/decisions/0012-no-eth-getlogs-in-product-read-paths.md)).
+
+- **Escrow rail (new, over `PaymentEscrow.sol`).** Hold-and-capture for an order. States: `held → captured | refunded | reclaimed`. Flow keyed by `orderHash`:
+  1. `deposit(orderHash, asset, amount, payee, refundTo, expiry)` — payer funds the hold.
+  2. `release(orderHash)` — payee (or an authorized releaser) captures on fulfillment evidence.
+  3. `refund(orderHash)` — payer-initiated before capture, payee-consented.
+  4. `reclaim(orderHash)` — payer reclaims after `expiry` with no release.
+  Symmetric-escrow doctrine (273 EXC-D4): any escrowable leg can be held, not just the buyer's. Hash-only events; fail-closed; no third-party escrow dependency (port patterns from Coinbase Commerce + smart-agent `CommitmentRegistry` only).
+
+- **Recurring profile (a mandate *pattern*, not a rail; PMT-10).** `buildRecurringTemplate({ amountPerPeriod, frequency, totalCap, validUntil })` → an **open** mandate (§4.1z) carrying `MandateConstraints.frequency` (§4.1a). `deriveScheduledCharge(template, period)` → a **closed** per-charge mandate for the current window. The `PaymentEnforcer`'s on-chain frequency window already enforces "one charge per period" + the aggregate cap — no new enforcer. Stripe-MPP `session` is the reserved richer form (§5.6).
+
+- **Refunds (a reverse leg, no enforcer).** `buildRefund(receipt)` → a `transfer` payee→payer carrying `provenance: { refunds: originalMandateId }`; emits its own `PaymentReceipt` (audit-equal, EXC-D3). No caveat needed — the treasury custodian signs the reverse leg directly. Refunds attach to wallet/invoice/escrow/split receipts, never to a metered x402 stream mid-flight.
+
+- **Splits (app-triggered payout fan-out).** `buildSplitPayout(receipt | amount, recipients[{ to, bps }])` → N `transfer` plans from the treasury, `bps` summing to 10000 (Seaport recipient-specific-consideration pattern). Each payout leg is its own receipt. Connected-account onboarding / KYB stays app/provider layer (ADR-0037).
+
+- **Ops core.** Every mature stack needs: an idempotent event model (`payment.created|reserved|settling|settled|failed|refunded|expired|disputed|entitlement.issued|entitlement.consumed`), a webhook-style subscriber interface (in-process for W1, app-delivered later), reconciliation helpers (`listReceiptsBy*`, balance-delta assertion, a payment-detection query object), and CSV/JSON receipt export for treasury/accounting.
+
+### 5.6 Reserved rail/profile families (adapters, not kernel changes)
+
+These are **adapter families** registered behind the same `PaymentRailExecutor` / mandate envelope — they do **not** change the exchange kernel or the x402 wire. Spec + feature-analysis only in this wave (no W1 build):
+
+- **x402 `upto`** — usage-based final amount (cap at sign, settle ≤ cap).
+- **x402 `batch-settlement` / voucher-channel** — high-frequency micropayment aggregation.
+- **MPP-like `session`** — Stripe/Tempo machine sessions over stablecoin/card/bank rails (a richer recurring/metered profile).
+- **Streaming rail** — Superfluid/Sablier continuous streams + vesting; on-chain hook is a windowed draw-down enforcer.
+- **Swap-to-pay** — Coinbase-Commerce-style multi-asset settle (pay in asset X, treasury receives asset Y).
+- **CCTP V2 cross-chain** — Circle native USDC burn/mint + fast-transfer hooks for cross-chain treasury moves.
+- **Fiat / ACP / Merchant-of-Record** — Stripe ACP fiat checkout, Paddle/Lemon-Squeezy tax+chargeback operating model; app/provider layer, not Ring-0.
+
 ## 6. Privacy posture
 
 Per privacy doc Layer 9b:

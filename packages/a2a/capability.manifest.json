@@ -162,7 +162,8 @@
     "x402AgentCardExtension",
     "buildPaymentRequiredMetadata",
     "buildPaymentSettledMetadata",
-    "gateSkillPayment"
+    "gateSkillPayment",
+    "PaymentLane"
   ],
   "ignoreForAgentContext": [
     "dist/**",

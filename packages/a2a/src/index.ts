@@ -29,7 +29,7 @@ export type { SkillHandler, SkillContext, SkillResult, VaultClient, McpClient, H
 export { AuthRequired, HandoffRequested, buildSkillRegistry } from './skill-handler.js';
 
 // Spec 272 PAY-A2A — payment-gated skills (injected x402 rail; a2a stays transport-agnostic).
-export type { SkillPayment, PaymentGate, PaymentGateDecision, X402PaymentMetadata, X402PaymentStatus } from './payment-gate.js';
+export type { SkillPayment, PaymentGate, PaymentGateDecision, PaymentLane, X402PaymentMetadata, X402PaymentStatus } from './payment-gate.js';
 export {
   X402_EXTENSION_URI,
   x402AgentCardExtension,

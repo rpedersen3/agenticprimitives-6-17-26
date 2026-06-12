@@ -196,6 +196,14 @@ export interface X402RailDeps {
   /** Submit the redemption (a sponsored UserOp from the service relayer, X402-D4). Injected by the app /
    *  agent-account layer; returns the settlement tx hash. */
   submitRedemption: (plan: { to: Address; value: bigint; data: Hex }) => Promise<{ settlementHash: Hex32 }>;
+  /** PAY-RAIL-6 — dry-run the redemption (eth_call / estimateGas) BEFORE the nonce is burned, so a
+   *  reverting or griefing settlement is rejected without consuming the one-shot mandate. Injected by
+   *  the app; omit to skip simulation. Returns ok + optional gas estimate. */
+  simulate?: (plan: { to: Address; value: bigint; data: Hex }) => Promise<{ ok: boolean; reason?: string; gas?: bigint }>;
+  /** Anti-griefing: reject a settlement whose simulated gas exceeds this cap. */
+  maxGasPerSettlement?: bigint;
+  /** Anti-griefing: abort `submitRedemption` if it doesn't resolve within this many ms (settlement timeout). */
+  settlementTimeoutMs?: number;
   now?: () => number;
 }
 
@@ -203,7 +211,14 @@ export type SettleResult =
   | { ok: true; settlementHash: Hex32; mandateId: Hex32; idempotent: boolean }
   | { ok: false; reason: string };
 
-/** The staged x402 rail. `settle` runs verify → revoke → reserve(nullifier) → prepare → submit →
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`settlement timed out after ${ms}ms`)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+/** The staged x402 rail. `settle` runs verify → revoke → reserve(nullifier) → simulate → submit →
  *  receipt; a safe retry of an already-settled request returns the original receipt (idempotent). */
 export function createX402Rail(deps: X402RailDeps) {
   const now = deps.now ?? (() => Math.floor(Date.now() / 1000));
@@ -242,9 +257,27 @@ export function createX402Rail(deps: X402RailDeps) {
       asset: deps.asset,
       resourceHash: quote.resourceHash,
     });
+
+    // PAY-RAIL-6 — simulate before burning the nonce: a reverting or over-gas settlement is
+    // rejected as RETRYABLE so the one-shot mandate survives for a corrected resubmit.
+    if (deps.simulate) {
+      const sim = await deps.simulate(plan);
+      if (!sim.ok) {
+        await deps.nonceStore.markFailed(nullifier, true);
+        return { ok: false, reason: `simulation reverted${sim.reason ? `: ${sim.reason}` : ''}` };
+      }
+      if (deps.maxGasPerSettlement !== undefined && sim.gas !== undefined && sim.gas > deps.maxGasPerSettlement) {
+        await deps.nonceStore.markFailed(nullifier, true);
+        return { ok: false, reason: `settlement gas ${sim.gas} exceeds cap ${deps.maxGasPerSettlement}` };
+      }
+    }
+
     await deps.nonceStore.markSettling(nullifier);
     try {
-      const { settlementHash } = await deps.submitRedemption(plan);
+      const submit = deps.submitRedemption(plan);
+      const { settlementHash } = deps.settlementTimeoutMs
+        ? await withTimeout(submit, deps.settlementTimeoutMs)
+        : await submit;
       const receipt: SettledReceipt = { settlementHash, mandateId: mandate.mandateId };
       await deps.nonceStore.markSettled(nullifier, receipt);
       return { ok: true, settlementHash, mandateId: mandate.mandateId, idempotent: false };
