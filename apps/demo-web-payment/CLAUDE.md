@@ -2,28 +2,28 @@
 
 ## What this app is
 
-The **x402 pay-per-use** demo (spec 272). One story end-to-end:
+The **agentic payments** demo (specs 272 + 243 §5.5) — a **tabbed multi-flow** app
+exercising the whole payment surface on the live Base Sepolia substrate.
 
-> A reader Person Smart Agent pays USDC into a provider's treasury Smart Agent
-> to access a priced service — each charge gated on-chain by the
-> `PaymentEnforcer`.
+Wallet-only (no passkey). The connected wagmi wallet is the payer; for pay-per-use
+it custodies the reader SA. Person deploys are gasless via demo-a2a `direct-deploy`.
 
-Wallet-only (no passkey): the connected wagmi wallet custodies the reader SA,
-signs the payment delegation, and submits the redemption tx. Person deploys are
-gasless via demo-a2a `direct-deploy`.
+## The flows (`src/App.tsx` shell + `src/flows/*.tsx`)
 
-## The flow (4 steps, `src/App.tsx`)
+| Tab | File | Exercises |
+| --- | --- | --- |
+| Pay-per-use (x402) | `MeteredFlow` | reader SA + budget + `PaymentEnforcer` gated charges (the SA + OPEN-delegation model in `lib/x402-pay.ts`) |
+| Direct / Invoice | `DirectInvoiceFlow` | `payments.wallet` rail + `payments.invoice` (request-for-payment) |
+| Escrow · deliver-then-pay | `EscrowFlow` | `PaymentEscrow` hold → release+grant entitlement (pay AFTER fulfilment) / reclaim refund |
+| Marketplace split | `SplitFlow` | `buildSplitPayout` bps fan-out |
+| Subscription | `SubscriptionFlow` | `payments.recurring` per-period charges in-window |
+| Anonymous | `VoucherFlow` | `payments.entitlement.voucher` VOPRF blind pack + double-spend |
+| Ops | `OpsFlow` | `payments.ops` idempotent log + reconciliation + export |
+| Intent → fulfilment | reserved | wires intent-marketplace + agreements + fulfilment (next) |
 
-1. **Deploy personas** — reader SA (wallet custodian) + provider treasury SA
-   (ephemeral demo EOA custodian) via `lib/personas.ts` → `deploy-person`.
-2. **Fund** — `MockUSDC.mint(readerSA, …)` (permissionless faucet).
-3. **Approve budget** — reader signs ONE OPEN payment delegation
-   (`buildPaymentMandateCaveats`: PaymentEnforcer + timestamp/targets/methods,
-   per-charge + session caps, treasury-scoped) → repeated capped charges.
-4. **Access + pay** — `x402.buildRedemptionCalldata` → wallet submits
-   `DelegationManager.redeemDelegation`; the DM runs the PaymentEnforcer and
-   moves USDC reader → treasury. Receipt = settlement tx hash + balance delta
-   (no `eth_getLogs` — ADR-0012).
+Shared state in `src/app-context.tsx` (`useApp`: wallet/gas/fund/run); styles in
+`src/ui.tsx`. Non-metered flows use the **wallet EOA as payer** (direct txs, cent-
+sized amounts) so testing stays ETH-cheap. F1 keeps the SA + `redeemDelegation` model.
 
 ## Doctrine pinned here
 
@@ -31,7 +31,7 @@ gasless via demo-a2a `direct-deploy`.
   `delegate` to the *service* SA, which redeems via its own sponsored UserOp
   (spec 272 PAY-DEL-1). The PaymentEnforcer still fully gates every charge.
 - Live substrate (Base Sepolia, deployed 2026-06-02), pinned in `src/config.ts`:
-  PaymentEnforcer `0xAF4827…`, MockUSDC `0x8fb56f…`, ReceiptRegistry `0x366616…`.
+  PaymentEnforcer `0xAF4827…`, PaymentEscrow `0x954Ba6…`, MockUSDC `0x8fb56f…`, ReceiptRegistry `0x366616…`.
 - Addresses come from `packages/contracts/deployments-base-sepolia.json`; any
   `VITE_*` overrides them.
 

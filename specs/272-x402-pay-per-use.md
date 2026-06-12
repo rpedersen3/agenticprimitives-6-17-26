@@ -164,22 +164,22 @@ Each wave deployed/verified before the next (contracts first — everything depe
 - **No subdelegation of payment authority (PAY-DEL-5)** — default-off; explicit equal-or-stricter attenuation only.
 - **LLMs out of the trust path** — agents/LLMs may request content and explain pricing; they never hold keys, build raw calldata, judge mandate validity, override caveat failures, or mark payments settled. All trust decisions are deterministic SDK/contract logic.
 
-## 10. Anonymity: reserved alternative flow (X402-D7)
+## 10. Anonymity tiers (X402-D7) — A3 implemented (W1.5)
 
 Anonymity does **not** drive this architecture. It is an opt-in alternative flow whose extension points are fixed now so it can be added without reshaping Waves 1–4. Not all users want it; the ones who do compose these tiers (weakest → strongest), each riding the unchanged Wave-1 substrate:
 
 | Tier | Flow | What it reuses | What it adds (later wave) | Status |
 |---|---|---|---|---|
 | **A0 — default** | Persistent-pseudonymous reader SA pays; SA-bound entitlement. | Everything in §4–§6. | — | Wave 1 |
-| **A1 — nameless payer** | Reader connects nameless (spec 259); payer SA has no name/credential facets. Payment graph still links SA → treasury. | Nameless connect, unchanged payment path. | Nothing — app policy only. | Available at Wave 4 |
+| **A1 — nameless payer** | Reader connects nameless (spec 259); payer SA has no name/credential facets. Payment graph still links SA → treasury. | Nameless connect, unchanged payment path. | Nothing — app policy only. | **Available** (demo-web-payment Anonymous tab uses a session SA) |
 | **A2 — stealth payer** | Payment delegation minted from an ERC-5564 stealth sub-account; canonical SA absent from the payment graph. | `PaymentEnforcer` unchanged (identity-blind, D7-2); `'x402-pay'` template takes any delegator. | Stealth derivation in `delegation`/`payments` (activates PD-29 / D-45). Funding hop is the residual leak. | Reserved |
-| **A3 — bearer entitlement** | Payment settles from any SA (named, sponsor, org); the X402-D1 entitlement is minted `binding:'bearer'` — a blind-signed one-time voucher (Privacy Pass pattern) presented unlinkably per read. Decouples **who paid** from **who reads**. | The grant-OR-entitlement gate (X402-D1) as the anonymity boundary (D7-1); `binding` field (D7-3). | Blind-sign issue/verify in the entitlement mint + gate. No contract or wire change (`extra.entitlementBinding` advertised in `accepts[]`). | Reserved — first anonymity tier to build |
+| **A3 — bearer entitlement** | Payment settles from any SA (named, sponsor, org); the X402-D1 entitlement is minted `binding:'bearer'` — a blind-signed one-time voucher (Privacy Pass pattern) presented unlinkably per read. Decouples **who paid** from **who reads**. | The grant-OR-entitlement gate (X402-D1) as the anonymity boundary (D7-1); `binding` field (D7-3). | Blind-sign issue/verify in the entitlement mint + gate. No contract or wire change (`extra.entitlementBinding` advertised in `accepts[]`). | **IMPLEMENTED (W1.5)** — `payments.entitlement.voucher`: VOPRF blind tokens (ristretto255, RFC 9497) `blind`→`issue`→`unblind`→`verify` + double-spend spent-set; `binding:'bearer'`. No contract/wire change. |
 | **A4 — predicate gate** | Gate accepts an unlinkable presentation ("holds a valid entitlement/membership") via BBS+/SD-JWT or AnonCreds bridge; enables sponsor-paid + anonymous reader. | Same gate slot as A3. | Depends on `verifiable-credentials` D-44 proof types landing (W2+). | Reserved |
 
 **Rules for Wave 1–4 implementers (the "factor it in" contract):**
 1. The gate's decision function takes an entitlement/grant/mandate — never a reader identity. Threading a `caller`/name into the gate breaks A1–A4 (and NEW-A2A-2).
 2. `PaymentEnforcer`, the `'x402-pay'` template, and the rail executor make no assumption that the delegator SA is named, credentialed, or reused across sessions.
-3. The entitlement record carries `binding: 'sa' | 'bearer'` from day one; Wave 1 only ever writes `'sa'`, and the gate rejects `'bearer'` until A3 ships (fail-closed, ADR-0013 — no silent acceptance).
+3. The entitlement record carries `binding: 'sa' | 'bearer'` from day one; Wave 1 wrote `'sa'` only; **A3 (W1.5) now ships `'bearer'`** via the VOPRF voucher path. The gate still fail-closes on an UNKNOWN binding (ADR-0013) — `checkEntitlement` rejects anything that isn't `'sa'`/`'bearer'`.
 4. Receipts (PAY-CON-4) are required for the default flow (X402-D9.3) but per-charge registry rows are hash-only and the A2/A3 flows omit the payer-linking fields. Don't make any access/read path depend on receipt existence — receipts are audit evidence, not gates.
 5. Confidential rails (PD-30, amount/party-hiding) remain out of scope for this spec; if ever needed they arrive as a sibling rail in `accepts[]`, not a change to this one.
 

@@ -9,12 +9,17 @@
 - **`PaymentMandate` typed primitive** — including `ContextBinding` (PMT-3), `MandateConstraints` (AP2-aligned aggregate scope), and `mode: 'open' | 'closed'` discriminator (PMT-10).
 - **EIP-712 typed-data builder + signer + verifier** — SA-signed via ERC-1271; no raw EOA signatures.
 - **Open vs closed mode invariants (PMT-10.1)** — open mandate refuses final-charge; closed mandate one-shot; PMT-INV-13..15.
-- **Three W1 rails** (each a sub-module under `./rails/`):
-  - `payments/rails/wallet` — SA-to-SA transfer via UserOp (smart-agent treasury pattern adapted).
-  - `payments/rails/x402` — HTTP-native per [x402.org](https://www.x402.org/) + reference facilitator.
-  - `payments/rails/sponsored-userop` — paymaster-sponsored (no value moved; sponsor-mandates).
-- **`PaymentReceipt` issuance** — immutable VC asserted into `AttestationRegistry` (per [ADR-0023](../../docs/architecture/decisions/0023-attestation-registry-eas-aligned-bilateral-consent.md) composability table; no revoke entrypoint).
-- **Rail interface + registry** — `PaymentRailExecutor` + extensible registration; future rails (escrow / invoice / confidential-*) register the same interface.
+- **Rails** (sub-modules under `./rails/`) — spec 243 §5.5:
+  - `x402` — HTTP-native per [x402.org](https://www.x402.org/) (v2 wire, staged executor + simulate, nonce store).
+  - `wallet` — direct SA→SA closed-mandate transfer (`buildWalletTransferPlan`).
+  - `invoice` — request-for-payment object → wallet mandate bound to `invoiceId`.
+  - `escrow` — calldata over `PaymentEscrow.sol` (deposit/release/refund/reclaim).
+  - `recurring` — open-mandate template + per-period closed-charge derivation (PMT-10).
+- **Mandate signing** (`mandate-sign.ts`) — EIP-712 typed-data + `signPaymentMandate` + ERC-1271 `verifyPaymentMandateSignature` (PMT-INV-02/12; `hashContextBinding` = no field-strip).
+- **`PaymentReceipt` VC** (`receipt.ts`) — `buildPaymentReceiptCredential` (immutable; refund legs carry provenance).
+- **Entitlements** (`entitlement/`) — `EntitlementRecord` (sa|bearer) mint/check/consume + credits; **VOPRF blind vouchers** (`entitlement/voucher.ts`, ristretto255/RFC 9497 — spec 272 §10 A3).
+- **Helpers** — `buildRefund` (reverse leg) · `buildSplitPayout` (bps fan-out) · `ops` (idempotent event log + reconciliation + CSV/JSON export).
+- **Rail interface + registry** — `PaymentRailExecutor` + extensible registration; confidential-* rails reserved (PD-30, W2).
 
 ## What this package does NOT own
 
