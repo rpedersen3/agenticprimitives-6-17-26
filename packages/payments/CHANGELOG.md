@@ -1,5 +1,26 @@
 # @agenticprimitives/payments
 
+## 0.0.0-alpha.5
+
+### Minor Changes
+
+- f51a547: Payment stack — full general-purpose capability (spec 243 §5.5).
+  - **payments**: the W1.5 rails + primitives beyond x402 — `wallet` / `invoice` / `escrow` /
+    `recurring` rails; EIP-712 signed `PaymentMandate` (`buildClosedMandate`, `mandate-sign`
+    with ERC-1271 verify); immutable `PaymentReceipt` VC (`buildPaymentReceiptCredential`,
+    `contextBindingHash` linking order ↔ fulfilment ↔ settlement); `entitlement` (pay-after-
+    fulfilment + credits) and VOPRF blind `voucher` pack; `refund` / `split` / `transfer` /
+    `ops` (idempotent event log + reconciliation + export).
+  - **contracts**: `PaymentEscrow.sol` — hold / capture(release) / refund / reclaim with
+    payee-consented refund + expiry reclaim (FG-PAY-7), deploy script + 19 unit tests.
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.9
+- @agenticprimitives/delegation@1.0.0-alpha.9
+- @agenticprimitives/attestations@0.0.0-alpha.5
+- @agenticprimitives/verifiable-credentials@0.0.0-alpha.5
+
 ## 0.0.0-alpha.4
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/identity-directory-adapters",
-  "version": "1.0.0-alpha.8",
+  "version": "1.0.0-alpha.9",
   "description": "Port implementations for @agenticprimitives/identity-directory: NamingPort (wraps agent-naming), OnChainReadPort (viem readContract), IndexerPort (in-memory; SPARQL/GraphDB later). The one composition layer allowed to import agent-naming (spec 100 §4 / ADR-0015).",
   "license": "MIT",
   "repository": {
