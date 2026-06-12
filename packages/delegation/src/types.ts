@@ -4,8 +4,14 @@ import type { Address, Hex } from '@agenticprimitives/types';
 
 export type { Address, Hex };
 
+// MUST equal DelegationManager.ROOT_AUTHORITY (the root-delegation sentinel the
+// on-chain authority-chain check compares against). The contract uses
+// bytes32(type(uint256).max) — the DeleGator-framework convention — NOT the zero
+// hash. A root delegation carrying any other authority reverts `InvalidAuthority`
+// on redeemDelegation. (Was 0x00…00, which silently broke every on-chain
+// redemption; off-chain token paths never exercised the on-chain chain check.)
 export const ROOT_AUTHORITY: Hex =
-  '0x0000000000000000000000000000000000000000000000000000000000000000';
+  '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
 export interface Caveat {
   enforcer: Address;
