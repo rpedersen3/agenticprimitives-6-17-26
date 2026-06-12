@@ -60,6 +60,8 @@ export interface EnforcerAddressMap {
   callDataHash?: Address;
   recovery?: Address;
   rateLimit?: Address;
+  /** Spec 272 PAY-CON-1 — the x402 PaymentEnforcer (spend + frequency cap + transfer-only). */
+  payment?: Address;
 }
 
 export interface CaveatContext {
