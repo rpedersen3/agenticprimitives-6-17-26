@@ -5,7 +5,7 @@
   "agentEntry": "CLAUDE.md",
   "publicEntry": "src/index.ts",
   "specEntry": "../../specs/202-delegation.md",
-  "summary": "EIP-712 delegations spanning web app \u2192 agent \u2192 MCP. Caveats, token envelope, validation, session lifecycle.",
+  "summary": "EIP-712 delegations spanning web app → agent → MCP. Caveats, token envelope, validation, session lifecycle.",
   "owns": {
     "source": [
       "src/**"
@@ -70,7 +70,6 @@
     "mintDelegationToken",
     "verifyDelegationToken",
     "isRevoked",
-    "revokeDelegation",
     "Address",
     "Hex",
     "Caveat",
@@ -91,7 +90,14 @@
     "VerifyError",
     "VerifyOpts",
     "VerifyOptsExt",
-    "sessionDelegateBindingError"
+    "sessionDelegateBindingError",
+    "PAYMENT_TRANSFER_SELECTOR",
+    "encodePaymentTerms",
+    "buildPaymentMandateCaveats",
+    "describePaymentMandate",
+    "PaymentMandateCaveatOpts",
+    "PaymentMandateConsent",
+    "buildRevokeDelegationCall"
   ],
   "forbiddenTerms": [
     {

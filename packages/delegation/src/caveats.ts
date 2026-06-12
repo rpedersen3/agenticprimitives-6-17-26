@@ -182,3 +182,112 @@ export function buildQuorumCaveat(opts: QuorumCaveatOpts): Caveat {
   );
   return { enforcer: opts.enforcer, terms, args: '0x' };
 }
+
+// ── Spec 272 (PAY-DEL-1) — x402 payment-mandate caveats ───────────────────────────────────────────
+
+/** The ONLY method an x402 payment delegation may invoke: `IERC20.transfer(address,uint256)`. */
+export const PAYMENT_TRANSFER_SELECTOR: Hex = '0xa9059cbb';
+
+export interface PaymentMandateCaveatOpts {
+  /** Deployed enforcer addresses: the PaymentEnforcer + the timestamp / allowedTargets /
+   *  allowedMethods enforcers it composes with (from `EnforcerAddressMap`). */
+  enforcers: { payment: Address; timestamp: Address; allowedTargets: Address; allowedMethods: Address };
+  /** Treasury SA that receives every charge (payee). */
+  payee: Address;
+  /** Fee asset (USDC). */
+  asset: Address;
+  /** Smallest-unit caps. `maxAggregate` is the session budget (X402-D5). */
+  maxAmountPerCharge: bigint;
+  maxAggregate: bigint;
+  maxRedemptionsPerWindow: number;
+  windowSeconds: number;
+  validAfter?: number;
+  validUntil: number;
+}
+
+/** Encode the immutable `PaymentEnforcer` terms. MUST match `PaymentEnforcer.sol` `abi.decode`
+ *  order/types: (treasury, asset, maxAmountPerCharge, maxAggregate, maxRedemptionsPerWindow,
+ *  windowSeconds) → 192 bytes. */
+export function encodePaymentTerms(opts: {
+  payee: Address;
+  asset: Address;
+  maxAmountPerCharge: bigint;
+  maxAggregate: bigint;
+  maxRedemptionsPerWindow: number;
+  windowSeconds: number;
+}): Hex {
+  if (opts.maxAmountPerCharge <= 0n) throw new Error('encodePaymentTerms: maxAmountPerCharge must be > 0');
+  if (opts.maxAggregate < opts.maxAmountPerCharge) {
+    throw new Error('encodePaymentTerms: maxAggregate must be >= maxAmountPerCharge');
+  }
+  if (!Number.isInteger(opts.maxRedemptionsPerWindow) || opts.maxRedemptionsPerWindow <= 0) {
+    throw new Error('encodePaymentTerms: maxRedemptionsPerWindow must be a positive integer');
+  }
+  if (!Number.isInteger(opts.windowSeconds) || opts.windowSeconds <= 0) {
+    throw new Error('encodePaymentTerms: windowSeconds must be a positive integer');
+  }
+  return encodeAbiParameters(
+    [
+      { type: 'address' },
+      { type: 'address' },
+      { type: 'uint256' },
+      { type: 'uint256' },
+      { type: 'uint32' },
+      { type: 'uint32' },
+    ],
+    [
+      opts.payee,
+      opts.asset,
+      opts.maxAmountPerCharge,
+      opts.maxAggregate,
+      opts.maxRedemptionsPerWindow,
+      opts.windowSeconds,
+    ],
+  );
+}
+
+/**
+ * PAY-DEL-1 — the caveat set for an x402 PAYMENT delegation (delegator = reader, delegate = the
+ * paid service agent). Composes the stateful `PaymentEnforcer` (spend + windowed-frequency cap +
+ * transfer-only + single-use nonce) with `timestamp` (expiry), `allowedTargets` (USDC only), and
+ * `allowedMethods` (transfer only) so the on-chain enforcers and the off-chain mandate agree.
+ *
+ * Caveat `args` are left `'0x'` at mint; the rail executor fills the PaymentEnforcer caveat's `args`
+ * with `abi.encode(mandateId, nonce, resourceHash)` at REDEMPTION time (terms = mint, args = redeem).
+ * Resource/skill binding rides the mandate's `contextBinding`, not an on-chain caveat (PAY-WIRE-5).
+ */
+export function buildPaymentMandateCaveats(opts: PaymentMandateCaveatOpts): Caveat[] {
+  return [
+    buildCaveat(opts.enforcers.payment, encodePaymentTerms(opts)),
+    buildCaveat(opts.enforcers.timestamp, encodeTimestampTerms(opts.validAfter ?? 0, opts.validUntil)),
+    buildCaveat(opts.enforcers.allowedTargets, encodeAllowedTargetsTerms([opts.asset])),
+    buildCaveat(opts.enforcers.allowedMethods, encodeAllowedMethodsTerms([PAYMENT_TRANSFER_SELECTOR])),
+  ];
+}
+
+/** PAY-DEL-4 — human-readable consent for the connect UI ("Allow X to charge your agent wallet?").
+ *  The UI renders THIS, never raw `delegate execute to contract`. Amounts are smallest-unit; the
+ *  caller formats with the token's decimals. */
+export interface PaymentMandateConsent {
+  recipient: Address;
+  asset: Address;
+  maxAmountPerCharge: bigint;
+  sessionBudget: bigint;
+  maxRedemptionsPerWindow: number;
+  windowSeconds: number;
+  expiresAt: number;
+  revocable: true;
+}
+
+export function describePaymentMandate(opts: PaymentMandateCaveatOpts): PaymentMandateConsent {
+  return {
+    recipient: opts.payee,
+    asset: opts.asset,
+    maxAmountPerCharge: opts.maxAmountPerCharge,
+    sessionBudget: opts.maxAggregate,
+    maxRedemptionsPerWindow: opts.maxRedemptionsPerWindow,
+    windowSeconds: opts.windowSeconds,
+    expiresAt: opts.validUntil,
+    revocable: true,
+  };
+}

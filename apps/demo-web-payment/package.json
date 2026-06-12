@@ -1,0 +1,34 @@
+{
+  "name": "@agenticprimitives-demo/web-payment",
+  "version": "0.0.1-alpha.1",
+  "private": true,
+  "description": "x402 pay-per-use demo: a reader Person SA pays USDC into a provider's treasury Smart Agent to access a priced service, gated on-chain by the spec-272 PaymentEnforcer.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "deploy": "pnpm build && wrangler pages deploy dist --project-name=agenticprimitives-demo-payment --branch=main --commit-dirty=true"
+  },
+  "dependencies": {
+    "@agenticprimitives/agent-account": "workspace:*",
+    "@agenticprimitives/account-custody": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
+    "@agenticprimitives/payments": "workspace:*",
+    "@agenticprimitives/connect-auth": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
+    "@tanstack/react-query": "^5.101.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "viem": "^2.52.2",
+    "wagmi": "^2.12.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "^5.5.0",
+    "vite": "^8.0.16"
+  }
+}

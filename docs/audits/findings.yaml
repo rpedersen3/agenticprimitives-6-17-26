@@ -25,9 +25,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 meta:
-  updated: '2026-06-10'
+  updated: '2026-06-11'
   scope: monorepo (packages/* + apps/* + contracts)
-  verified_against: master @ 2026-06-10
+  verified_against: master @ 2026-06-11 (2189b81)
   note: >
     Reconciled from the 2026-06-09 independent package + contracts audits, the
     remediation-status log, and the per-package AUDIT.md set. Low/informational
@@ -744,3 +744,126 @@ findings:
     status: open
     concerns: [packages/fulfillment/src/index.ts]
     origin: 2026-06-10-production-readiness-audit.md
+
+  # ── 2026-06-11 production-readiness audit (post-fix-wave full pass) ─────────
+  - id: DEPLOY-LAG-001
+    severity: high
+    title: Base Sepolia deployment predates the 2026-06-10 contract fix wave — live bytecode is pre-fix
+    status: open
+    concerns: [packages/contracts/deployments-base-sepolia.json]
+    origin: 2026-06-11-production-readiness-audit.md
+    note: >
+      deployments JSON last written 2026-06-10 11:21; fix commits landed 14:45-15:48. Deployed stack
+      still contains CP-1/CP-2, PM-1/PM-2, WA-1/WA-2, EN-11, GOV-1, CA-1 pre-fix semantics. Closed-in-source
+      != closed-on-chain. Action: redeploy (same ceremony as bbfedc3) + commit deployments JSON; this also
+      closes NEW-CON-1's address half. Ops, not source — but a hard gate for any pilot relying on the fixes.
+  - id: NEW-A2A-2
+    severity: high
+    title: a2a tasks/get + tasks/cancel + pushNotificationConfig/set trust a user-supplied `caller` param for authorization
+    status: open
+    concerns: [packages/a2a/src/jsonrpc.ts, packages/a2a/src/agent.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+    note: >
+      Caller identity is read from request params (jsonrpc.ts:45-53) and used directly in the task
+      authorization check (agent.ts:167-193) — an attacker supplies a victim address as `caller` plus a
+      known taskId to read, cancel, or re-route push notifications for another party's task. Fix: caller
+      identity must come from the authenticated transport principal (verified token/session), never params.
+  - id: NEW-A2A-3
+    severity: medium
+    title: a2a default newTaskId falls back to a deterministic constant — task collision/poisoning when integrators omit it
+    status: open
+    concerns: [packages/a2a/src/agent.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+  - id: NEW-CON-1
+    severity: medium
+    title: published contracts npm package pairs post-fix ABIs with pre-fix deployment addresses
+    status: open
+    concerns: [packages/contracts/deployments-base-sepolia.json, packages/contracts/package.json]
+    origin: 2026-06-11-production-readiness-audit.md
+    note: SDK face of DEPLOY-LAG-001 — consumers decode UnconfiguredTier from the ABI against a chain that never reverts it. Redeploy + commit before next publish.
+  - id: NEW-RAG-1
+    severity: medium
+    title: spec-271 custody descriptor not validated at the storage boundary — raw client `custody` body persisted
+    status: open
+    concerns: [apps/demo-sso-next/server/connect/related-orgs.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+    note: >
+      Persistence stores `body?.custody ?? null` without calling buildCustodyDescriptor, so RC-INV-3
+      (no owner identifiers at rest) is enforced at build/consume but not at rest — a client can store
+      iss/sub directly. Validate/rebuild the descriptor server-side at persist time.
+  - id: NEW-RAG-2
+    severity: medium
+    title: custody-descriptor write auth is an ERC-1271 signature over a constant challenge — replayable forever (denial-of-recovery)
+    status: open
+    concerns: [apps/demo-sso-next/server/connect/related-orgs.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+    note: bind the signed challenge to org + payload hash + nonce + expiry.
+  - id: NEW-VC-2
+    severity: medium
+    title: verifyCredential does not enforce validFrom — not-yet-active credentials verify valid
+    status: open
+    concerns: [packages/verifiable-credentials/src/verifier.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+  - id: NEW-CP-1
+    severity: medium
+    title: content-primitives entitlement check gates validUntil only — no validFrom gate (premature access)
+    status: open
+    concerns: [packages/content-primitives/src/entitlement.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+  - id: NEW-CONNECT-AUTH-2
+    severity: medium
+    title: connect-auth passkey helper normalizes assertions without validating challenge/origin/rpIdHash/UV
+    status: open
+    concerns: [packages/connect-auth/src/methods/passkey.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+    note: an integrator treating its output as ceremony validation accepts replayed or wrong-origin assertions. Either validate fully or rename/document as parse-only.
+  - id: AGS-003
+    severity: medium
+    title: connect session tokens mint a jti but no verifier-side replay store exists
+    status: open
+    concerns: [packages/connect/src/token.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+    note: carried from the connect AUDIT.md backlog; promoted to the ledger this pass. Pair with the mcp-runtime JTI store pattern.
+  - id: NEW-RAG-3
+    severity: low
+    title: custody descriptor under-commits the CA-F1 CREATE2 preimage (mode/trustees/timelocks/multi-custodian absent)
+    status: open
+    concerns: [packages/related-agents/src/index.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+    note: fail-closed (reconstruction asserts CREATE2 match) but custody-configured orgs are silently unrecoverable via the descriptor. Extend the descriptor schema.
+  - id: NEW-CONNECT-AUTH-3
+    severity: low
+    title: connect-auth session expectedIss/expectedAud requirement keyed to NODE_ENV (same inference class as closed NEW-MCP-1)
+    status: open
+    concerns: [packages/connect-auth/src/sessions.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+  - id: NEW-IDA-2
+    severity: low
+    title: identity-directory-adapters caip10 parser accepts any third token as Address without hex validation
+    status: open
+    concerns: [packages/identity-directory-adapters/src/caip10.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+  - id: NEW-CON-2
+    severity: low
+    title: npm publish has no CI provenance for publish-time-generated dist (realized as broken workspace:* alphas immutable on npm)
+    status: open
+    concerns: [packages/contracts/package.json]
+    origin: 2026-06-11-production-readiness-audit.md
+  - id: NEW-CON-3
+    severity: low
+    title: ABI-sync gate watches only 3 functions vs the full hand-maintained ABI mirror surface
+    status: open
+    concerns: [scripts/check-abi-sync.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+  - id: NEW-CP-2
+    severity: low
+    title: content-primitives descriptor accepts issuer-signature-and-hash-v1 without requiring a commitment
+    status: open
+    concerns: [packages/content-primitives/src/descriptor.ts]
+    origin: 2026-06-11-production-readiness-audit.md
+  - id: NEW-AA-3
+    severity: low
+    title: agent-account SDK lacks the CA-1 surface (no scheduleUpgrade ABI / DirectUpgradeBlocked decode) — timelocked accounts see undecodable reverts
+    status: open
+    concerns: [packages/agent-account/src/index.ts]
+    origin: 2026-06-11-production-readiness-audit.md

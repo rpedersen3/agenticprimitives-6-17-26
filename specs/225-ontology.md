@@ -243,6 +243,7 @@ and detailed in
 - `tbox/payment.ttl` — PaymentMandate + PaymentReceipt + ContextBinding + MandateConstraints (Layer 9b)
 - `tbox/fulfillment.ttl` — FulfillmentCase + Task + Message + Artifact + HandoffPolicy + IntentTraceSpan (Layers 10–12)
 - `tbox/attestation.ttl` — Association + Evidence + Outcome + Validation + TrustUpdate credential types (Layers 12–15)
+- `tbox/exchange.ttl` — ResourceItem + ExchangeOrder + Zone + ResourceAdapter + LegSettled + OutcomeReceipt + Entitlement (`apexc:`, exchange kernel; vocabulary + diagrams + x402 conformance profile owned by [spec 274](./274-exchange-ontology-and-x402-profile.md))
 
 **In-scope (new crosswalks):**
 

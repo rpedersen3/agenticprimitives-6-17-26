@@ -17,6 +17,9 @@ import {CallDataHashEnforcer} from "../src/enforcers/CallDataHashEnforcer.sol";
 import {SmartAgentPaymaster} from "../src/SmartAgentPaymaster.sol";
 import {UniversalSignatureValidator} from "../src/UniversalSignatureValidator.sol";
 import {QuorumEnforcer} from "../src/enforcers/QuorumEnforcer.sol";
+import {PaymentEnforcer} from "../src/enforcers/PaymentEnforcer.sol";
+import {PaymentReceiptRegistry} from "../src/payments/PaymentReceiptRegistry.sol";
+import {MockUSDC} from "../src/mocks/MockUSDC.sol";
 import {ApprovedHashRegistry} from "../src/ApprovedHashRegistry.sol";
 import {CustodyPolicy} from "../src/custody/CustodyPolicy.sol";
 import {AgentNameRegistry} from "../src/naming/AgentNameRegistry.sol";
@@ -258,6 +261,24 @@ contract Deploy is Script {
         //     address in immutably; see spec 253.)
         QuorumEnforcer quorumEnforcer = new QuorumEnforcer();
         console2.log("QuorumEnforcer:       %s", address(quorumEnforcer));
+
+        // 4.6. Spec 272 — x402 pay-per-use substrate (Wave 1).
+        //   PaymentReceiptRegistry = trustless settlement log (PAY-CON-4); the
+        //     PaymentEnforcer is wired as its sole authorized recorder.
+        //   PaymentEnforcer = stateful caveat gating a payment delegation to a
+        //     capped IERC20.transfer(treasury, amount) with aggregate + windowed
+        //     frequency caps + single-use nonce (PAY-CON-1).
+        //   MockUSDC = dev fee asset (EIP-3009), TESTNET ONLY.
+        PaymentReceiptRegistry paymentReceipts = new PaymentReceiptRegistry();
+        console2.log("PaymentReceiptRegistry:%s", address(paymentReceipts));
+        PaymentEnforcer paymentEnforcer = new PaymentEnforcer(address(paymentReceipts));
+        paymentReceipts.setEnforcer(address(paymentEnforcer));
+        console2.log("PaymentEnforcer:      %s", address(paymentEnforcer));
+        address mockUsdc = address(0);
+        if (_isTestnetNetwork(network)) {
+            mockUsdc = address(new MockUSDC());
+            console2.log("MockUSDC (testnet):   %s", mockUsdc);
+        }
 
         // 5. SmartAgentPaymaster — sponsors gas for user-op-based account deploys.
         //    Constructor takes entryPoint, initialOwner (multisig from broadcast
@@ -506,6 +527,9 @@ contract Deploy is Script {
         vm.serializeAddress(key, "callDataHashEnforcer", address(callDataHashEnforcer));
         vm.serializeAddress(key, "smartAgentPaymaster", address(paymaster));
         vm.serializeAddress(key, "quorumEnforcer", address(quorumEnforcer));
+        vm.serializeAddress(key, "paymentEnforcer", address(paymentEnforcer));
+        vm.serializeAddress(key, "paymentReceiptRegistry", address(paymentReceipts));
+        vm.serializeAddress(key, "mockUsdc", mockUsdc);
         vm.serializeAddress(key, "approvedHashRegistry", address(approvedHashRegistry));
         vm.serializeAddress(key, "custodyPolicy", address(custodyPolicy));
         vm.serializeAddress(key, "universalSignatureValidator", address(universalValidator));

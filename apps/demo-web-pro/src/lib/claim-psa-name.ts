@@ -63,7 +63,6 @@ export type ClaimPsaNameResult =
   | { ok: false; reason: string };
 
 const ZERO_NODE = '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex;
-const MAX_SUFFIX = 9999;
 
 function namehash(name: string): Hex {
   if (name === '') return ZERO_NODE;
@@ -102,13 +101,25 @@ export async function predictUniqueAgentLabel(baseLabel: string): Promise<string
   }
 }
 
+/** A uniform 5-digit suffix (10000–99999). Browser crypto; collision over a small demo namespace is
+ *  ~1/90000 per try, so the first random candidate is almost always free. */
+function fiveDigitSuffix(): string {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return String(10000 + (buf[0]! % 90000));
+}
+
 async function findUniqueLabel(
   publicClient: ReturnType<typeof createPublicClient>,
   registry: Address,
   baseLabel: string,
 ): Promise<string> {
-  for (let i = 1; i < MAX_SUFFIX; i++) {
-    const candidate = i === 1 ? baseLabel : `${baseLabel}${i}`;
+  // Perf: a RANDOM 5-digit suffix instead of incremental probing (alice → alice2 → alice3 → …). The old
+  // serial loop did up to ~2 reads per taken candidate until it found a gap — on a heavily-run demo
+  // (alice…aliceN already claimed) that's 20–40+ sequential Base-Sepolia round-trips, and ONLY the
+  // passkey path predicts a label (wallet/social skip it) → exactly why passkey felt slow. Now: try the
+  // bare label (first claimer gets "alice"); else `alice<5-digit>` — collision-improbable, so ~1–2 reads.
+  const isFree = async (candidate: string): Promise<boolean> => {
     const labelhash = keccak256(toHex(candidate));
     const childNode = await publicClient.readContract({
       address: registry,
@@ -116,16 +127,21 @@ async function findUniqueLabel(
       functionName: 'childNode',
       args: [DEMO_NODE, labelhash],
     });
-    if (childNode === ZERO_NODE) return candidate;
+    if (childNode === ZERO_NODE) return true;
     const exists = await publicClient.readContract({
       address: registry,
       abi: agentNameRegistryAbi,
       functionName: 'recordExists',
       args: [childNode],
     });
-    if (!exists) return candidate;
+    return !exists;
+  };
+  if (await isFree(baseLabel)) return baseLabel;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const candidate = `${baseLabel}${fiveDigitSuffix()}`;
+    if (await isFree(candidate)) return candidate;
   }
-  throw new Error(`No free label found after ${MAX_SUFFIX} attempts starting from "${baseLabel}"`);
+  throw new Error(`No free label found for "${baseLabel}" after 8 random suffixes`);
 }
 
 /**
@@ -285,12 +301,20 @@ export async function claimPsaName(args: {
     }
   }
 
-  // Step 0 — discover the next-free label.
+  // Step 0 — reuse the label Act1 already resolved for the passkey (it predicts a random-suffix label
+  // pre-ceremony so the OS keychain entry matches the on-chain name). Reusing it keeps predict == claim
+  // under the random-suffix scheme — re-rolling here would claim a DIFFERENT name than the passkey label.
+  // No stored label (or wallet path) → resolve a fresh one.
   let uniqueLabel: string;
-  try {
-    uniqueLabel = await findUniqueLabel(publicClient, config.agentNameRegistry, baseLabel);
-  } catch (err) {
-    return { ok: false, reason: (err as Error).message };
+  const preResolved = passkey?.agentName?.replace(/\.demo\.agent$/, '');
+  if (preResolved && /^[a-z0-9-]{3,}$/.test(preResolved)) {
+    uniqueLabel = preResolved;
+  } else {
+    try {
+      uniqueLabel = await findUniqueLabel(publicClient, config.agentNameRegistry, baseLabel);
+    } catch (err) {
+      return { ok: false, reason: (err as Error).message };
+    }
   }
   const fullName = `${uniqueLabel}.demo.agent`;
   const node = namehash(fullName);

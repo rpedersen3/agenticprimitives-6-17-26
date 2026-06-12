@@ -18,8 +18,12 @@ export {
   MCP_TOOL_SCOPE_ENFORCER,
   DATA_SCOPE_ENFORCER,
   DELEGATE_BINDING_ENFORCER,
+  PAYMENT_TRANSFER_SELECTOR,
+  encodePaymentTerms,
+  buildPaymentMandateCaveats,
+  describePaymentMandate,
 } from './caveats';
-export type { QuorumCaveatOpts } from './caveats';
+export type { QuorumCaveatOpts, PaymentMandateCaveatOpts, PaymentMandateConsent } from './caveats';
 
 export { hashDelegation, hashCaveats, DELEGATION_EIP712_TYPES, delegationDomain } from './hash';
 // DEL-001 session-delegation leaf builder (spec 270 v4 W2) — every connect flow uses this.
@@ -42,7 +46,7 @@ export type { VerifyAuthorizationResult } from './verify-authorization';
 // error string — a public symbol that lies about runtime capability. When the
 // work resumes it lands behind `./experimental` per spec 100 §6.
 export { mintDelegationToken, verifyDelegationToken, sessionDelegateBindingError } from './token';
-export { isRevoked, revokeDelegation } from './onchain';
+export { isRevoked, buildRevokeDelegationCall } from './onchain';
 
 export type {
   Address,

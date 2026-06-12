@@ -28,6 +28,16 @@ export { createInMemoryTaskStore } from './task-store.js';
 export type { SkillHandler, SkillContext, SkillResult, VaultClient, McpClient, HandoffRequest } from './skill-handler.js';
 export { AuthRequired, HandoffRequested, buildSkillRegistry } from './skill-handler.js';
 
+// Spec 272 PAY-A2A — payment-gated skills (injected x402 rail; a2a stays transport-agnostic).
+export type { SkillPayment, PaymentGate, PaymentGateDecision, X402PaymentMetadata, X402PaymentStatus } from './payment-gate.js';
+export {
+  X402_EXTENSION_URI,
+  x402AgentCardExtension,
+  buildPaymentRequiredMetadata,
+  buildPaymentSettledMetadata,
+  gateSkillPayment,
+} from './payment-gate.js';
+
 // Runtime
 export { newTaskRecord, applyTransition, dispatchTask } from './runtime.js';
 export type { TransitionResult } from './runtime.js';

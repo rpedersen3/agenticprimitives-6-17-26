@@ -124,3 +124,6 @@ export function registerRail(executor: PaymentRailExecutor): void {
 export function getRail(rail: PaymentRail): PaymentRailExecutor | undefined {
   return _rails.get(rail);
 }
+
+// Spec 272 — the x402 rail (staged executor + v2 wire + nonce store + resource binding).
+export * as x402 from './rails/x402/index.js';

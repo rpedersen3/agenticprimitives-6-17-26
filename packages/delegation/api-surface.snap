@@ -15,6 +15,9 @@ re-export EvaluateOpts from ./types
 re-export Hex from ./types
 re-export JtiStore from ./types
 re-export MCP_TOOL_SCOPE_ENFORCER from ./caveats
+re-export PAYMENT_TRANSFER_SELECTOR from ./caveats
+re-export PaymentMandateCaveatOpts from ./caveats
+re-export PaymentMandateConsent from ./caveats
 re-export QuorumCaveatOpts from ./caveats
 re-export ROOT_AUTHORITY from ./types
 re-export SessionDelegationParams from ./session-delegation
@@ -32,13 +35,17 @@ re-export buildCaveat from ./caveats
 re-export buildDataScopeCaveat from ./caveats
 re-export buildDelegateBindingCaveat from ./caveats
 re-export buildMcpToolScopeCaveat from ./caveats
+re-export buildPaymentMandateCaveats from ./caveats
 re-export buildQuorumCaveat from ./caveats
+re-export buildRevokeDelegationCall from ./onchain
 re-export buildSessionDelegation from ./session-delegation
 re-export createMemorySessionStore from ./session-manager
 re-export delegationDomain from ./hash
+re-export describePaymentMandate from ./caveats
 re-export encodeAllowedMethodsTerms from ./caveats
 re-export encodeAllowedTargetsTerms from ./caveats
 re-export encodeCallDataHashTerms from ./caveats
+re-export encodePaymentTerms from ./caveats
 re-export encodeTimestampTerms from ./caveats
 re-export encodeValueTerms from ./caveats
 re-export evaluateCaveats from ./evaluator
@@ -46,7 +53,6 @@ re-export hashCaveats from ./hash
 re-export hashDelegation from ./hash
 re-export isRevoked from ./onchain
 re-export mintDelegationToken from ./token
-re-export revokeDelegation from ./onchain
 re-export sessionDelegateBindingError from ./token
 re-export verifyAuthorization from ./verify-authorization
 re-export verifyDelegationToken from ./token
