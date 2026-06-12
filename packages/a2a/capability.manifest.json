@@ -13,8 +13,16 @@
     "delegation-authorized-messaging",
     "scoped-grant-caveats"
   ],
-  "runtime": ["browser", "node", "worker"],
-  "readFirst": ["CLAUDE.md", "README.md", "src/index.ts"],
+  "runtime": [
+    "browser",
+    "node",
+    "worker"
+  ],
+  "readFirst": [
+    "CLAUDE.md",
+    "README.md",
+    "src/index.ts"
+  ],
   "docs": {},
   "validation": [
     "pnpm --filter @agenticprimitives/a2a typecheck",
@@ -43,8 +51,12 @@
     ]
   },
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"]
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ]
   },
   "imports": [
     "@agenticprimitives/types",
@@ -140,9 +152,24 @@
     "formatSseEvent",
     "formatSseComment",
     "isStreamEnd",
-    "PushConfig"
+    "PushConfig",
+    "SkillPayment",
+    "PaymentGate",
+    "PaymentGateDecision",
+    "X402PaymentMetadata",
+    "X402PaymentStatus",
+    "X402_EXTENSION_URI",
+    "x402AgentCardExtension",
+    "buildPaymentRequiredMetadata",
+    "buildPaymentSettledMetadata",
+    "gateSkillPayment"
   ],
-  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
   "contextBudget": {
     "claudeMdMaxWords": 900,
     "readmeMaxWords": 1800,

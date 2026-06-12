@@ -7,10 +7,17 @@
   "specEntry": "../../specs/201-agent-account.md",
   "summary": "ERC-4337 smart-account substrate. Deterministic addressing, factory deployment, ERC-1271 signing, UserOp building. Account-agnostic of which signer signs.",
   "owns": {
-    "source": ["src/**"],
-    "tests": ["test/**"]
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ]
   },
-  "imports": ["@agenticprimitives/types", "@agenticprimitives/connect-auth"],
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/connect-auth"
+  ],
   "allowedImports": [
     "@agenticprimitives/types",
     "@agenticprimitives/connect-auth",
@@ -55,14 +62,22 @@
     "buildExecuteCallData",
     "buildExecuteBatchCallData",
     "ContractCall",
-    "SaMismatchError"
+    "SaMismatchError",
+    "buildErc20TransferCall",
+    "readErc20Balance"
   ],
   "forbiddenTerms": [
     {
       "term": "Caveat",
       "reason": "Belongs in delegation. agent-account may reference the term in cross-cutting-capability docstrings (spec 207 quorum integration).",
       "owningPackage": "@agenticprimitives/delegation",
-      "allowInPaths": ["src/quorum.ts", "spec.md", "README.md", "CLAUDE.md", "AUDIT.md"]
+      "allowInPaths": [
+        "src/quorum.ts",
+        "spec.md",
+        "README.md",
+        "CLAUDE.md",
+        "AUDIT.md"
+      ]
     },
     {
       "term": "Enforcer",
@@ -103,7 +118,10 @@
       "term": "MCP",
       "reason": "Transport-specific; this package is transport-free.",
       "owningPackage": "@agenticprimitives/mcp-runtime",
-      "allowInPaths": ["spec.md", "README.md"]
+      "allowInPaths": [
+        "spec.md",
+        "README.md"
+      ]
     },
     {
       "term": "passkey",
@@ -123,10 +141,18 @@
       "term": "OAuth",
       "reason": "Auth method internals belong in connect-auth.",
       "owningPackage": "@agenticprimitives/connect-auth",
-      "allowInPaths": ["spec.md", "README.md"]
+      "allowInPaths": [
+        "spec.md",
+        "README.md"
+      ]
     }
   ],
-  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**", "*.tsbuildinfo"],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.tsbuildinfo"
+  ],
   "contextBudget": {
     "claudeMdMaxWords": 1100,
     "readmeMaxWords": 1800,
