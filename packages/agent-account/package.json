@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/agent-account",
-  "version": "1.0.0-alpha.7",
+  "version": "1.0.0-alpha.8",
   "description": "ERC-4337 smart-account substrate: deterministic addressing, factory deployment, ERC-1271 signing, UserOp building.",
   "license": "MIT",
   "repository": {

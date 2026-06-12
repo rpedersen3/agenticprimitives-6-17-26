@@ -1,5 +1,12 @@
 # @agenticprimitives/verifiable-credentials
 
+## 0.0.0-alpha.4
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.8
+- @agenticprimitives/ontology@1.0.0-alpha.8
+
 ## 0.0.0-alpha.3
 
 ### Patch Changes

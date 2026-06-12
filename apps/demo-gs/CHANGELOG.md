@@ -1,5 +1,16 @@
 # @agenticprimitives-demo/gs
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [fa345d7]
+  - @agenticprimitives/contracts@1.0.0-alpha.8
+  - @agenticprimitives/delegation@1.0.0-alpha.8
+  - @agenticprimitives/types@1.0.0-alpha.8
+  - @agenticprimitives/agent-skills@0.0.0-alpha.5
+  - @agenticprimitives/geo-features@0.0.0-alpha.4
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes

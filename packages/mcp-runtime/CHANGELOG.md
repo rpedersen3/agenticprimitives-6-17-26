@@ -1,5 +1,16 @@
 # @agenticprimitives/mcp-runtime
 
+## 1.0.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [fa345d7]
+  - @agenticprimitives/delegation@1.0.0-alpha.8
+  - @agenticprimitives/types@1.0.0-alpha.8
+  - @agenticprimitives/audit@1.0.0-alpha.8
+  - @agenticprimitives/key-custody@1.0.0-alpha.8
+  - @agenticprimitives/tool-policy@1.0.0-alpha.8
+
 ## 1.0.0-alpha.7
 
 ### Patch Changes

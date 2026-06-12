@@ -45,7 +45,8 @@
     "@agenticprimitives/browser-identity": "1.0.0-alpha.6",
     "@agenticprimitives/content-primitives": "1.0.0-alpha.6",
     "@agenticprimitives/fedcm-idp": "1.0.0-alpha.6",
-    "@agenticprimitives/fedcm-rp": "1.0.0-alpha.6"
+    "@agenticprimitives/fedcm-rp": "1.0.0-alpha.6",
+    "@agenticprimitives-demo/web-payment": "0.0.1-alpha.1"
   },
   "changesets": [
     "audit-ca1-upgrade-timelock",
@@ -78,6 +79,7 @@
     "r6-8-naming-pause-checks",
     "r6-9-coverage-aggregator",
     "r8-1-required-audit-sink",
-    "r8-2-uv-runtime-enforcement"
+    "r8-2-uv-runtime-enforcement",
+    "x402-pay-per-use"
   ]
 }
