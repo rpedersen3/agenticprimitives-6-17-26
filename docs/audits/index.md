@@ -8,7 +8,8 @@
 | Read | For |
 | --- | --- |
 | [`findings.yaml`](./findings.yaml) | Current status of every first-class finding (id, severity, status, source-linked). |
-| [`2026-06-10-production-readiness-audit.md`](./2026-06-10-production-readiness-audit.md) | **Latest full pass (post-remediation)** — all 29 packages + all 42 contracts re-audited after the 2026-06-10 remediation wave; verifies CA-F1 / AN-1-ONCHAIN / ATT-1 closures in source; current production-blocker list. |
+| [`2026-06-11-production-readiness-audit.md`](./2026-06-11-production-readiness-audit.md) | **Latest full pass** — all 32 packages + all contracts re-audited after the 2026-06-10 afternoon fix wave; re-verifies 12 closures at source (incl. DEL-001 → production-enforced); fresh-code review of the new a2a spec-269 + spec-271 custody surfaces; headline: DEPLOY-LAG-001 (testnet bytecode predates the fixes) + NEW-A2A-2 (caller-spoofable task auth). |
+| [`2026-06-10-production-readiness-audit.md`](./2026-06-10-production-readiness-audit.md) | Prior full pass (post-remediation) — verifies CA-F1 / AN-1-ONCHAIN / ATT-1 closures in source. Superseded by the 06-11 pass for current blocker state. |
 | [`2026-06-10-contract-by-contract-audit.md`](./2026-06-10-contract-by-contract-audit.md) | Contract-layer deep dive — independent per-contract review of all 42 `.sol` files (corrected severities + remediation roadmap). Closure deltas tracked in the production-readiness audit + ledger. |
 | [`../architecture/product-readiness-audit.md`](../architecture/product-readiness-audit.md) | Living system-level readiness verdict + backlog. |
 | [`audit-evidence-index.md`](./audit-evidence-index.md) | "What proves what" — the artifact/evidence map. |
