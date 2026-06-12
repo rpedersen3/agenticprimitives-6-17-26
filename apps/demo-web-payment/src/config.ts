@@ -38,9 +38,15 @@ function addr(v: string | undefined, fallback: `0x${string}`): `0x${string}` {
   return fallback;
 }
 
-const DEMO_A2A_URL =
-  (import.meta.env.VITE_DEMO_A2A_URL as string | undefined) ||
-  'https://agenticprimitives-demo-a2a.richardpedersen3.workers.dev';
+const DEPLOYED_A2A = 'https://demo-a2a-production.richardpedersen3.workers.dev';
+
+// In dev, talk to the worker THROUGH the vite same-origin proxy (`/a2a/*`) so
+// browser CORS never applies and the worker's CSRF gate sees an allow-listed
+// Origin (see vite.config.ts). In a production build the bundle hits the worker
+// directly — the deployed Pages origin IS in the worker's ALLOWED_ORIGINS.
+const DEMO_A2A_URL = import.meta.env.DEV
+  ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5273'}/a2a`
+  : (import.meta.env.VITE_DEMO_A2A_URL as string | undefined) || DEPLOYED_A2A;
 
 export const config: DeploymentConfig = {
   chainId: Number(import.meta.env.VITE_CHAIN_ID) || 84532,

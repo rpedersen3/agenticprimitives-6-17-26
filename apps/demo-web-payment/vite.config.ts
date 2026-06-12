@@ -77,10 +77,26 @@ export default defineConfig({
     // in dev without conflict.
     port: 5273,
     proxy: {
+      // Route all demo-a2a calls (rpc + csrf + session deploy) through this
+      // same-origin proxy. Two reasons it works against the DEPLOYED worker:
+      //  1. CORS is a browser policy — a server-side proxy hop bypasses it, so
+      //     the worker's empty Access-Control-Allow-Origin for localhost is moot.
+      //  2. The worker's CSRF gate requires an ALLOW-LISTED Origin (token-only,
+      //     no cookie). localhost:5273 isn't listed, so we present demo-web-pro's
+      //     Pages origin (which IS in the worker's ALLOWED_ORIGINS) on the hop —
+      //     consistent for both the /auth/csrf mint and the POST verify.
       '/a2a': {
-        target: 'http://127.0.0.1:8787',
+        target: 'https://demo-a2a-production.richardpedersen3.workers.dev',
         changeOrigin: true,
+        secure: true,
         rewrite: (path) => path.replace(/^\/a2a/, ''),
+        configure: (proxy) => {
+          const ALLOWLISTED = 'https://agenticprimitives-demo-pro.pages.dev';
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('origin', ALLOWLISTED);
+            proxyReq.setHeader('referer', `${ALLOWLISTED}/`);
+          });
+        },
       },
     },
   },
