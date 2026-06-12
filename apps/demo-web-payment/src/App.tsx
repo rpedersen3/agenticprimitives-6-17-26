@@ -191,12 +191,20 @@ export function App() {
               Gas: <span style={S.mono}>{Number(formatEther(ethBal)).toFixed(4)} ETH</span>
               {ethBal < 80_000_000_000_000n && <span style={S.lowGas}> · low</span>}
             </span>
-            <button style={S.btnSm} disabled={busy === 'seed'} onClick={onSeedGas}>
-              {busy === 'seed' ? 'Seeding…' : 'Seed gas from deployer'}
-            </button>
+            {import.meta.env.DEV && (
+              <button style={S.btnSm} disabled={busy === 'seed'} onClick={onSeedGas}>
+                {busy === 'seed' ? 'Seeding…' : 'Seed gas from deployer'}
+              </button>
+            )}
           </div>
         )}
-        <p style={S.hint}>The wallet custodies the reader SA, signs the budget, and submits the mint + charge txs. Those need a little Base Sepolia ETH — the deployer faucet seeds it (dev).</p>
+        <p style={S.hint}>
+          The wallet custodies the reader SA, signs the budget, and submits the mint + charge txs —
+          those need a little Base Sepolia ETH.
+          {import.meta.env.DEV
+            ? ' The deployer faucet seeds it (dev only).'
+            : ' Fund the wallet from a Base Sepolia faucet first.'}
+        </p>
       </section>
 
       {/* Step 1 — personas */}
