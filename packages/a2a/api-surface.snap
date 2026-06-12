@@ -22,6 +22,8 @@ re-export McpClient from ./skill-handler.js
 re-export MessageIdReserver from ./auth.js
 re-export MessageSendParams from ./agent.js
 re-export OnChainChecks from ./auth.js
+re-export PaymentGate from ./payment-gate.js
+re-export PaymentGateDecision from ./payment-gate.js
 re-export PushConfig from ./types.js
 re-export PushEnvelope from ./push.js
 re-export PushPayload from ./push.js
@@ -34,6 +36,7 @@ re-export RpcResult from ./agent.js
 re-export SSE_HEADERS from ./sse.js
 re-export SkillContext from ./skill-handler.js
 re-export SkillHandler from ./skill-handler.js
+re-export SkillPayment from ./payment-gate.js
 re-export SkillResult from ./skill-handler.js
 re-export TERMINAL_STATES from ./types.js
 re-export Task from ./types.js
@@ -45,9 +48,14 @@ re-export TerminalSigner from ./push.js
 re-export TransitionResult from ./runtime.js
 re-export VaultClient from ./skill-handler.js
 re-export VaultRef from ./types.js
+re-export X402PaymentMetadata from ./payment-gate.js
+re-export X402PaymentStatus from ./payment-gate.js
+re-export X402_EXTENSION_URI from ./payment-gate.js
 re-export applyTransition from ./runtime.js
 re-export authorizeA2aMessage from ./auth.js
 re-export buildA2aGrantCaveats from ./grant.js
+re-export buildPaymentRequiredMetadata from ./payment-gate.js
+re-export buildPaymentSettledMetadata from ./payment-gate.js
 re-export buildSkillRegistry from ./skill-handler.js
 re-export createA2aAgent from ./agent.js
 re-export createInMemoryTaskStore from ./task-store.js
@@ -60,6 +68,7 @@ re-export dispatchTask from ./runtime.js
 re-export fetchAgentCard from ./discovery.js
 re-export formatSseComment from ./sse.js
 re-export formatSseEvent from ./sse.js
+re-export gateSkillPayment from ./payment-gate.js
 re-export handleA2aRpcBody from ./jsonrpc.js
 re-export hashA2aMessage from ./auth.js
 re-export hashPushPayload from ./push.js
@@ -69,3 +78,4 @@ re-export newTaskRecord from ./runtime.js
 re-export resolveA2aTarget from ./discovery.js
 re-export skillSelector from ./grant.js
 re-export verifyPushEnvelope from ./push.js
+re-export x402AgentCardExtension from ./payment-gate.js
