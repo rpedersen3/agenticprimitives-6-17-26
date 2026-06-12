@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/key-custody",
-  "version": "1.0.0-alpha.7",
+  "version": "1.0.0-alpha.8",
   "description": "Pluggable envelope encryption + signers + HMAC providers (local-AES / AWS KMS / GCP KMS). Pure crypto primitives; no session lifecycle (that's in delegation).",
   "license": "MIT",
   "repository": {

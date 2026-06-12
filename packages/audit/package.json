@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/audit",
-  "version": "1.0.0-alpha.7",
+  "version": "1.0.0-alpha.8",
   "description": "Append-only audit event schema + sink interface. Transport-agnostic; consumers wire concrete sinks (console / D1 / Cloud Logging / etc.).",
   "license": "MIT",
   "repository": {

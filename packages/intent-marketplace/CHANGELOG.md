@@ -1,5 +1,15 @@
 # @agenticprimitives/intent-marketplace
 
+## 0.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [fa345d7]
+  - @agenticprimitives/delegation@1.0.0-alpha.8
+  - @agenticprimitives/types@1.0.0-alpha.8
+  - @agenticprimitives/intent-resolver@0.0.0-alpha.4
+  - @agenticprimitives/verifiable-credentials@0.0.0-alpha.4
+
 ## 0.0.0-alpha.3
 
 ### Patch Changes

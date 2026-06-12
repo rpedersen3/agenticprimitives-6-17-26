@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives-demo/sso",
-  "version": "0.0.2-alpha.5",
+  "version": "0.0.2-alpha.6",
   "private": true,
   "description": "Agentic Connect SSO demo: enroll one credential at the Connect origin, sign in across two relying sites (one-enroll SSO), with a step-up gate for custody-class actions. Wires connect + identity-directory + adapters end-to-end (spec 224).",
   "type": "module",
