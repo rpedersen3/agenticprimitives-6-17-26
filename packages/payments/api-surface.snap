@@ -9,6 +9,24 @@ interface ContextBinding
 interface MandateConstraints
 interface PaymentMandate
 interface PaymentRailExecutor
+re-export ERC1271_MAGIC from ./mandate-sign.js
+re-export Erc1271Reader from ./mandate-sign.js
+re-export MandateDomainOpts from ./mandate-sign.js
+re-export MandateSigner from ./mandate-sign.js
+re-export PAYMENT_MANDATE_DOMAIN_NAME from ./mandate-sign.js
+re-export PAYMENT_MANDATE_DOMAIN_VERSION from ./mandate-sign.js
+re-export PAYMENT_MANDATE_EIP712_TYPES from ./mandate-sign.js
+re-export PAYMENT_RECEIPT_TYPE from ./receipt.js
+re-export PaymentReceiptInput from ./receipt.js
+re-export buildPaymentMandateTypedData from ./mandate-sign.js
+re-export buildPaymentReceiptCredential from ./receipt.js
+re-export hashContextBinding from ./mandate-sign.js
+re-export mandateAmount from ./mandate-sign.js
+re-export paymentMandateDigest from ./mandate-sign.js
+re-export paymentMandateDomain from ./mandate-sign.js
+re-export settlementEpochBucket from ./receipt.js
+re-export signPaymentMandate from ./mandate-sign.js
+re-export verifyPaymentMandateSignature from ./mandate-sign.js
 type AmountPolicy = { kind: 'exact'
 type Hex32 = `0x${string}`
 type PaymentMandateMode = 'open' | 'closed'
