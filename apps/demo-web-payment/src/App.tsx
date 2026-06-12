@@ -96,17 +96,25 @@ export function App() {
   const onCreatePersonas = () =>
     run('personas', async () => {
       if (!address) throw new Error('connect a wallet first');
-      setStatus('Deploying reader Person SA (gasless)…');
-      const reader = await deployPersona(address);
-      if (!reader.ok) throw new Error(`reader deploy failed — ${reader.error}`);
-      setReaderSa(reader.address);
+      let reader = readerSa;
+      if (!reader) {
+        setStatus('Deploying reader Person SA (gasless)…');
+        const r = await deployPersona(address);
+        if (!r.ok) throw new Error(`reader deploy failed — ${r.error}`);
+        reader = r.address;
+        setReaderSa(r.address);
+      }
 
-      setStatus('Deploying provider treasury SA (gasless)…');
-      const provider = await deployPersona(providerEoa());
-      if (!provider.ok) throw new Error(`provider deploy failed — ${provider.error}`);
-      setTreasury(provider.address);
+      let provider = treasury;
+      if (!provider) {
+        setStatus('Deploying provider treasury SA (gasless — retries if the shared relayer nonce is busy)…');
+        const p = await deployPersona(providerEoa());
+        if (!p.ok) throw new Error(`provider deploy failed — ${p.error}`);
+        provider = p.address;
+        setTreasury(p.address);
+      }
       setStatus('Both Smart Agents deployed.');
-      await refreshBalances(reader.address, provider.address);
+      await refreshBalances(reader, provider);
     });
 
   const onFund = () =>

@@ -37,9 +37,30 @@ export interface PersonaError {
   error: string;
 }
 
-/** Deploy (or re-resolve) a Person SA custodied by a single EOA. Gasless. */
-export async function deployPersona(custodian: Address): Promise<PersonaDeploy | PersonaError> {
-  const res = await deployPersonAgent({ custodians: [custodian] });
-  if (!res.ok) return { ok: false, error: res.reason ? `${res.error}: ${res.reason}` : res.error };
-  return { ok: true, address: res.deployedAddress };
+/**
+ * Deploy (or re-resolve) a Person SA custodied by a single EOA. Gasless.
+ *
+ * Bounded same-call retry (ADR-0013 — a retry of the SAME call, not a fallback):
+ * demo-a2a submits every direct-deploy from one shared deployer EOA, so two
+ * deploys fired back-to-back (reader then provider) race on its nonce and the
+ * second gets an `eth_sendRawTransaction` rejection. The failed tx never mines
+ * (no nonce burned); waiting a few seconds for the first to settle and retrying
+ * the SAME deploy succeeds.
+ */
+export async function deployPersona(
+  custodian: Address,
+  opts: { attempts?: number; delayMs?: number } = {},
+): Promise<PersonaDeploy | PersonaError> {
+  const attempts = opts.attempts ?? 3;
+  const delayMs = opts.delayMs ?? 7000;
+  let lastError = 'deploy_failed';
+  for (let i = 0; i < attempts; i++) {
+    const res = await deployPersonAgent({ custodians: [custodian] });
+    if (res.ok) return { ok: true, address: res.deployedAddress };
+    lastError = res.reason ? `${res.error}: ${res.reason}` : res.error;
+    const transient = /direct_deploy_failed|sendRawTransaction|nonce|invalid parameters|replacement/i.test(lastError);
+    if (!transient || i === attempts - 1) break;
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return { ok: false, error: lastError };
 }
