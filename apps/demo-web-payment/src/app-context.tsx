@@ -2,9 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { useAccount, useConnect, useDisconnect, useWalletClient } from 'wagmi';
 import type { Address } from 'viem';
 import { readEthBalance, seedGas as seedGasReq, type PaymentWallet } from './lib/wallet';
-import { fundWithUsdc, readUsdcBalance, toUsdc } from './lib/x402-pay';
+import { readUsdcBalance, toUsdc } from './lib/x402-pay';
 import { deployPersona, providerEoa } from './lib/personas';
-import type { PayCtx } from './lib/flows';
+import { fundTreasuryGasless, type PayCtx } from './lib/flows';
 
 export interface AppState {
   address?: Address;
@@ -88,8 +88,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const fundTreasury = useCallback((humanUsdc: number) => run('fund', async () => {
     if (!wallet || !treasurySa) throw new Error('set up accounts first');
-    setStatus(`Minting ${humanUsdc} demo USDC into your Treasury SA…`);
-    await fundWithUsdc(wallet, treasurySa, toUsdc(humanUsdc));
+    setStatus(`Minting ${humanUsdc} demo USDC into your Treasury SA (gasless — no wallet tx)…`);
+    await fundTreasuryGasless(wallet, treasurySa, toUsdc(humanUsdc));
     await new Promise((res) => setTimeout(res, 2500));
     await refresh();
     setStatus('Treasury funded.');

@@ -7,7 +7,7 @@
  * The recipient is the Provider Treasury SA. The custodian wallet only signs (no gas, no USDC).
  */
 
-import { keccak256, toBytes, type Address, type Hex } from 'viem';
+import { keccak256, toBytes, encodeFunctionData, type Address, type Hex } from 'viem';
 import {
   invoice as invoiceRail,
   escrow as escrowRail,
@@ -40,6 +40,17 @@ async function requireUsdc(ctx: PayCtx, amount: bigint, label: string): Promise<
 
 export function orderHashOf(label: string): Hex32 {
   return keccak256(toBytes(`order:${label}:${Math.floor(Date.now() / 1000)}`)) as Hex32;
+}
+
+const MINT_ABI = [
+  { type: 'function', name: 'mint', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [] },
+] as const;
+
+/** Fund the Treasury SA GASLESSLY: the SA mints demo USDC to itself via a sponsored userOp
+ *  (MockUSDC.mint is permissionless). No wallet transaction → no MetaMask/Blockaid prompt. */
+export async function fundTreasuryGasless(wallet: PaymentWallet, treasurySa: Address, amount: bigint): Promise<Hex> {
+  const data = encodeFunctionData({ abi: MINT_ABI, functionName: 'mint', args: [treasurySa, amount] });
+  return executeViaSa(wallet, treasurySa, config.mockUsdc, 0n, data);
 }
 
 const usdcAsset = { id: config.mockUsdc, symbol: 'USDC', decimals: 6 };

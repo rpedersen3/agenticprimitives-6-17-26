@@ -67,7 +67,7 @@ function WalletBar() {
           <AddrLine label="Provider Treasury SA (payee)" addr={app.providerTreasury} />
         </>
       )}
-      <p style={S.hint}>The wallet ({app.address?.slice(0, 6)}…) custodies your Personal + Treasury SAs. Money moves <strong>SA → SA</strong> and every payment is <strong>gasless</strong> (paymaster-sponsored) — the wallet only signs + needs a little Base Sepolia ETH{import.meta.env.DEV ? ' (faucet seeds it in dev)' : ''}. Set up accounts, fund the treasury, then run any flow.</p>
+      <p style={S.hint}>The wallet ({app.address?.slice(0, 6)}…) custodies your Personal + Treasury SAs and only ever <strong>signs</strong> — no transactions, <strong>no ETH needed</strong>. Money moves <strong>SA → SA</strong>, every action (set-up, funding, payments) is a <strong>paymaster-sponsored gasless UserOp</strong>. MetaMask shows signature requests, never a "Transaction"/Blockaid prompt. Set up accounts, fund the treasury, then run any flow.</p>
     </section>
   );
 }
