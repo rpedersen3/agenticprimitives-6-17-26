@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAccount, useConnect, useDisconnect, useWalletClient } from 'wagmi';
-import type { Address, Hex } from 'viem';
+import { formatEther, type Address, type Hex } from 'viem';
 import { config } from './config';
+import { readEthBalance, seedGas } from './lib/wallet';
 import { deployPersona, providerEoa } from './lib/personas';
 import {
   approvePaymentBudget,
@@ -43,9 +44,18 @@ export function App() {
   const [treasuryBal, setTreasuryBal] = useState<bigint>(0n);
   const [budget, setBudget] = useState<PaymentBudget | null>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [ethBal, setEthBal] = useState<bigint>(0n);
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const [error, setError] = useState<string>('');
+
+  const refreshEth = useCallback(async (a?: Address) => {
+    if (a) setEthBal(await readEthBalance(a));
+  }, []);
+
+  useEffect(() => {
+    if (address) void refreshEth(address);
+  }, [address, refreshEth]);
 
   const refreshBalances = useCallback(async (r: Address | null, t: Address | null) => {
     if (r) setReaderBal(await readUsdcBalance(r));
@@ -67,6 +77,21 @@ export function App() {
       setBusy(null);
     }
   };
+
+  const onSeedGas = () =>
+    run('seed', async () => {
+      if (!address) throw new Error('connect a wallet first');
+      setStatus('Requesting gas from the deployer faucet…');
+      const r = await seedGas(address);
+      if (!r.ok) throw new Error(`faucet — ${r.error}${r.detail ? `: ${r.detail}` : ''}`);
+      if (r.skipped) {
+        setStatus(`Wallet already has enough gas (${r.balance} ETH).`);
+      } else {
+        setStatus(`Seeded ${r.amount} ETH from the deployer. Waiting for confirmation…`);
+        await new Promise((res) => setTimeout(res, 3000));
+      }
+      await refreshEth(address);
+    });
 
   const onCreatePersonas = () =>
     run('personas', async () => {
@@ -152,7 +177,18 @@ export function App() {
             ))
           )}
         </div>
-        <p style={S.hint}>The wallet custodies the reader SA, signs the budget, and submits the charge. Needs a little Base Sepolia ETH for gas.</p>
+        {isConnected && (
+          <div style={S.gasRow}>
+            <span style={S.hint}>
+              Gas: <span style={S.mono}>{Number(formatEther(ethBal)).toFixed(4)} ETH</span>
+              {ethBal < 900_000_000_000_000n && <span style={S.lowGas}> · low</span>}
+            </span>
+            <button style={S.btnSm} disabled={busy === 'seed'} onClick={onSeedGas}>
+              {busy === 'seed' ? 'Seeding…' : 'Seed gas from deployer'}
+            </button>
+          </div>
+        )}
+        <p style={S.hint}>The wallet custodies the reader SA, signs the budget, and submits the mint + charge txs. Those need a little Base Sepolia ETH — the deployer faucet seeds it (dev).</p>
       </section>
 
       {/* Step 1 — personas */}
@@ -280,6 +316,8 @@ const S: Record<string, React.CSSProperties> = {
   btnSm: { background: accent, color: '#fff', border: 0, borderRadius: 7, padding: '6px 12px', fontSize: 13, cursor: 'pointer', fontWeight: 600 },
   linkBtn: { background: 'none', border: 0, color: accent, cursor: 'pointer', fontSize: 13, textDecoration: 'underline' },
   hint: { color: '#7a8aa0', fontSize: 13, marginTop: 10, marginBottom: 0, lineHeight: 1.4 },
+  gasRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f3f8' },
+  lowGas: { color: '#b54708', fontWeight: 600 },
   mono: { fontFamily: 'ui-monospace, monospace', fontSize: 13 },
   muted: { color: '#aab4c2' },
   addrLine: { display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 0', fontSize: 14 },

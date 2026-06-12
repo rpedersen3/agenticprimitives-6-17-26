@@ -35,6 +35,34 @@ export interface PaymentWallet {
   }): Promise<Hex>;
 }
 
+/** Native ETH balance (gas) for an address. */
+export async function readEthBalance(addr: Address): Promise<bigint> {
+  return publicClient.getBalance({ address: addr });
+}
+
+export interface GasSeedResult {
+  ok: boolean;
+  hash?: Hex;
+  skipped?: boolean;
+  balance?: string;
+  amount?: string;
+  error?: string;
+  detail?: string;
+}
+
+/**
+ * Ask the dev gas faucet to drip a little Base Sepolia ETH to `to`. Backed by
+ * the deployer key in the dev-server process (see vite.config.ts) — dev only.
+ */
+export async function seedGas(to: Address): Promise<GasSeedResult> {
+  const res = await fetch('/api/dev-gas', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ to }),
+  });
+  return (await res.json()) as GasSeedResult;
+}
+
 /**
  * Adapt a wagmi WalletClient into the `DelegationClientOpts.signer` shape.
  * `address` is the custodian EOA (= the SA's owner); `smartAccount` (the

@@ -88,6 +88,18 @@ const ALLOWED_IN: ReadonlySet<string> = new Set([
   // the private key never crosses origins (no cross-origin key transport), so observe-and-re-mint
   // cannot impersonate the delegator. App-local; never imported by packages.
   'apps/demo-jp/src/connect-client.ts',
+  // demo-web-payment (spec 272 x402 demo): the PROVIDER persona is an EPHEMERAL
+  // demo EOA minted at runtime (generatePrivateKey) and held only in sessionStorage;
+  // it merely *receives* USDC (a treasury payee) and never signs. It is NOT an
+  // identity key (identity = the SA address, ADR-0010). Testnet/demo only;
+  // app-local, never imported by packages.
+  'apps/demo-web-payment/src/lib/personas.ts',
+  // demo-web-payment DEV-ONLY gas faucet: privateKeyToAccount(process.env.PRIVATE_KEY)
+  // runs ONLY in the vite dev-server process (configureServer), reads the deployer
+  // key from the local env (.env.deploy.local) — never a literal, never bundled into
+  // the browser, absent from production builds. Seeds a little Base Sepolia ETH so the
+  // wallet can pay mint + redemption gas. Same env-read pattern as the deploy scripts.
+  'apps/demo-web-payment/vite.config.ts',
 ]);
 
 // Env-var names that are tolerated EVERYWHERE in apps/. Reserved for the
