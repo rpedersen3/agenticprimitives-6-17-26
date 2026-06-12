@@ -15,6 +15,7 @@ import { buildSkillRegistry, type SkillHandler, type VaultClient, type McpClient
 import { authorizeA2aMessage, type OnChainChecks } from './auth.js';
 import type { A2aEnforcers } from './grant.js';
 import { deliverPush, type TerminalSigner, type PushSender } from './push.js';
+import { x402AgentCardExtension, type PaymentGate, type SkillPayment } from './payment-gate.js';
 
 export interface A2aAgentConfig {
   /** This agent's Smart Account — the assignee + the allowedTargets the gate requires. */
@@ -41,6 +42,10 @@ export interface A2aAgentConfig {
   /** FR-3.6 — the policy gating skill-handler hand-offs (`requestHandoff`). Omit ⇒ hand-offs are
    *  rejected (fail-closed). */
   handoffPolicy?: HandoffPolicy;
+  /** Spec 272 PAY-A2A — the injected x402 payment gate. When a priced skill (handler.payment) is
+   *  invoked, the gate decides paid/unpaid (the app wires the payments x402 rail). Omit ⇒ priced skills
+   *  behave as free (dev / unpriced deployment). */
+  paymentGate?: PaymentGate;
 }
 
 export type RpcOk<T> = { ok: true; result: T };
@@ -79,8 +84,15 @@ export interface AgentCard {
   name: string;
   url: string;
   version: string;
-  capabilities: { streaming: boolean; pushNotifications: boolean; stateTransitionHistory: boolean };
-  skills: { id: string }[];
+  capabilities: {
+    streaming: boolean;
+    pushNotifications: boolean;
+    stateTransitionHistory: boolean;
+    /** PAY-A2A-4 — declared extensions (e.g. x402 pay-per-use); clients activate via X-A2A-Extensions. */
+    extensions?: { uri: string; required: boolean; description: string }[];
+  };
+  /** Priced skills annotate their `payment` so clients learn the price BEFORE calling. */
+  skills: { id: string; payment?: SkillPayment }[];
 }
 
 const RPC_INVALID_REQUEST = -32600;
@@ -256,12 +268,18 @@ export function createA2aAgent(config: A2aAgentConfig): A2aAgent {
     },
 
     agentCard() {
+      const priced = config.handlers.some((h) => h.payment);
       return {
         name: config.agentSA,
         url: `/api/a2a`,
         version: '0.1.0',
-        capabilities: { streaming: true, pushNotifications: true, stateTransitionHistory: true },
-        skills: config.handlers.map((h) => ({ id: h.skill })),
+        capabilities: {
+          streaming: true,
+          pushNotifications: true,
+          stateTransitionHistory: true,
+          ...(priced ? { extensions: [x402AgentCardExtension()] } : {}),
+        },
+        skills: config.handlers.map((h) => (h.payment ? { id: h.skill, payment: h.payment } : { id: h.skill })),
       };
     },
   };

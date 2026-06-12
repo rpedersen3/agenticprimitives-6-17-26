@@ -6,6 +6,8 @@ export { AgentAccountClient, SaMismatchError } from './client';
 export type { AgentAccountClientOpts, AgentAccountSpec } from './client';
 export type { UserOperation, Address, Hex } from './types';
 export { buildExecuteCallData, buildExecuteBatchCallData, type ContractCall } from './execute';
+// Spec 272 PAY-ACCT-1/2 — x402 treasury + payer ERC-20 helpers.
+export { buildErc20TransferCall, readErc20Balance } from './erc20';
 export { BundlerClient, packGasLimits, unpackGasLimits } from './bundler-client';
 export type { BundlerClientOpts, PackedUserOperation } from './bundler-client';
 export {

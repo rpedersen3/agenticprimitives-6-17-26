@@ -5,6 +5,7 @@
 import type { Address, Hex } from '@agenticprimitives/types';
 import type { Delegation } from '@agenticprimitives/delegation';
 import type { VaultRef } from './types.js';
+import type { SkillPayment } from './payment-gate.js';
 
 /** Minimal vault seam — the consumer wires demo-mcp vault read/write over a delegation. FR-3.4: a handler
  *  delivers a result into ANOTHER principal's vault by passing a `delegation` THAT principal granted
@@ -87,6 +88,10 @@ export interface SkillResult {
 
 export interface SkillHandler {
   skill: string;
+  /** PAY-A2A-1 — optional price. A priced skill is gated by the injected `PaymentGate` BEFORE `handle`
+   *  runs; an unpaid request parks `input-required` with `x402.payment.*` metadata (the handler is never
+   *  reached). Free skills omit this. */
+  payment?: SkillPayment;
   handle(ctx: SkillContext): Promise<SkillResult>;
 }
 
