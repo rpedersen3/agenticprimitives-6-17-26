@@ -34,7 +34,8 @@
     "@agenticprimitives/delegation",
     "@agenticprimitives/ontology",
     "viem",
-    "@noble/hashes"
+    "@noble/hashes",
+    "@noble/curves"
   ],
   "forbiddenImports": [
     "apps/*",

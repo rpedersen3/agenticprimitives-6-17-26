@@ -38,7 +38,7 @@
 ## Allowed imports
 
 - `@agenticprimitives/types`, `@agenticprimitives/verifiable-credentials` (type-only — for PaymentReceipt envelope), `@agenticprimitives/attestations` (type-only — for assertion client), `@agenticprimitives/delegation` (type-only — for delegationRef when present), `@agenticprimitives/ontology` (IRI constants)
-- `viem`
+- `viem`, `@noble/curves` (ristretto255 VOPRF for blind vouchers), `@noble/hashes`
 
 ## Forbidden imports
 
