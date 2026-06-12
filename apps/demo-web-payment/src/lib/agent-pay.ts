@@ -10,6 +10,7 @@
  */
 
 import { encodeFunctionData, type Address, type Hex } from 'viem';
+import { buildExecuteBatchCallData, type ContractCall } from '@agenticprimitives/agent-account';
 import { config } from '../config';
 import { ensureCsrfToken, csrfHeaders } from './csrf';
 import type { PaymentWallet } from './wallet';
@@ -39,13 +40,29 @@ export function encodeExecute(target: Address, value: bigint, data: Hex): Hex {
  * settlement tx hash. Throws if the userOp reverts on-chain.
  */
 export async function executeViaSa(wallet: PaymentWallet, sa: Address, target: Address, value: bigint, inner: Hex): Promise<Hex> {
+  return submitSaCallData(wallet, sa, encodeExecute(target, value, inner));
+}
+
+/**
+ * Execute MANY inner calls AS `sa` in ONE gasless UserOp via `AgentAccount.executeBatch`.
+ * Atomic — every leg lands in a single transaction (one account nonce), so back-to-back
+ * legs can't race the bundler's view of the account nonce (the AA25 class of failure that
+ * sequential per-leg UserOps hit on a lagging RPC replica). Any inner revert reverts the
+ * whole batch. Per-leg receipts are still derivable from the single tx's events.
+ */
+export async function executeBatchViaSa(wallet: PaymentWallet, sa: Address, calls: ContractCall[]): Promise<Hex> {
+  if (calls.length === 0) throw new Error('executeBatchViaSa: no calls');
+  return submitSaCallData(wallet, sa, buildExecuteBatchCallData(calls));
+}
+
+/** Shared core: build a sponsored UserOp with this `callData`, sign the hash, submit, return tx hash. */
+async function submitSaCallData(wallet: PaymentWallet, sa: Address, callData: Hex): Promise<Hex> {
   const account = wallet.account?.address;
   if (!account) throw new Error('wallet not connected');
   const base = config.demoA2aUrl;
   if (!base) throw new Error('demo-a2a URL not configured');
   await ensureCsrfToken();
 
-  const callData = encodeExecute(target, value, inner);
   const buildRes = await fetch(`${base.replace(/\/$/, '')}/account/build-call-userop`, {
     method: 'POST',
     credentials: 'include',

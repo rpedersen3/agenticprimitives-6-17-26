@@ -23,7 +23,8 @@ import {
 import { config } from '../config';
 import { publicClient, type PaymentWallet } from './wallet';
 import { toUsdc, fromUsdc, readUsdcBalance } from './x402-pay';
-import { executeViaSa } from './agent-pay';
+import { executeViaSa, executeBatchViaSa } from './agent-pay';
+import type { ContractCall } from '@agenticprimitives/agent-account';
 
 /** Everything a flow needs to pay gaslessly from the Treasury SA. */
 export interface PayCtx {
@@ -113,12 +114,14 @@ export const ESCROW_STATUS_LABEL: Record<number, string> = { 0: 'none', 1: 'held
 export async function splitPay(ctx: PayCtx, amount: bigint, recipients: SplitRecipient[]): Promise<{ to: Address; amount: bigint; hash: Hex }[]> {
   await requireUsdc(ctx, amount, 'the split');
   const legs = buildSplitPayout({ asset: config.mockUsdc, amount, recipients });
-  const out: { to: Address; amount: bigint; hash: Hex }[] = [];
-  for (const leg of legs) {
-    const { data } = buildErc20Transfer(config.mockUsdc, leg.to, leg.amount);
-    out.push({ to: leg.to, amount: leg.amount, hash: await executeViaSa(ctx.wallet, ctx.treasurySa, config.mockUsdc, 0n, data) });
-  }
-  return out;
+  // All legs in ONE gasless userOp (executeBatch) — atomic, one account nonce, so the legs
+  // can't race the bundler's nonce view (sequential per-leg userOps hit AA25 on a lagging
+  // replica). Each leg is still its own ERC-20 transfer + receipt; the single tx carries all.
+  const calls: ContractCall[] = legs.map((leg) => ({
+    to: config.mockUsdc, value: 0n, data: buildErc20Transfer(config.mockUsdc, leg.to, leg.amount).data,
+  }));
+  const hash = await executeBatchViaSa(ctx.wallet, ctx.treasurySa, calls);
+  return legs.map((leg) => ({ to: leg.to, amount: leg.amount, hash }));
 }
 
 // ── entitlement (pay-after-fulfillment, F9) ─────────────────────────
