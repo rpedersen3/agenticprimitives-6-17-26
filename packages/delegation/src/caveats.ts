@@ -248,7 +248,7 @@ export function encodePaymentTerms(opts: {
 
 /**
  * PAY-DEL-1 — the caveat set for an x402 PAYMENT delegation (delegator = reader, delegate = the
- * scripture service). Composes the stateful `PaymentEnforcer` (spend + windowed-frequency cap +
+ * paid service agent). Composes the stateful `PaymentEnforcer` (spend + windowed-frequency cap +
  * transfer-only + single-use nonce) with `timestamp` (expiry), `allowedTargets` (USDC only), and
  * `allowedMethods` (transfer only) so the on-chain enforcers and the off-chain mandate agree.
  *
