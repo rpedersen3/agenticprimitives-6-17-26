@@ -37,10 +37,11 @@ export function EscrowFlow() {
 
   const onDeposit = () =>
     app.run('deposit', async () => {
-      if (!app.wallet || !app.address) throw new Error('connect a wallet');
+      const ctx = app.payCtx();
+      if (!ctx) throw new Error('set up your agent accounts first (top bar)');
       const oh = orderHashOf('escrow-demo');
-      app.setStatus('Approving + depositing 1.00 USDC into escrow (two tiny txs)…');
-      const { depositHash } = await escrowDeposit(app.wallet, { orderHash: oh, amount: AMOUNT, payee: app.treasury, releaser: app.address, expiresInSeconds: EXPIRES_IN });
+      app.setStatus('Treasury SA approving + depositing 1.00 USDC into escrow (gasless)…');
+      const { depositHash } = await escrowDeposit(ctx, { orderHash: oh, amount: AMOUNT, expiresInSeconds: EXPIRES_IN });
       setOrderHash(oh);
       setDepositHash(depositHash);
       setDelivered(false); setReleaseHash(undefined); setReclaimHash(undefined); setEnt(null);
@@ -52,12 +53,13 @@ export function EscrowFlow() {
 
   const onRelease = () =>
     app.run('release', async () => {
-      if (!app.wallet || !app.address || !orderHash) throw new Error('deposit first');
+      const ctx = app.payCtx();
+      if (!ctx || !orderHash) throw new Error('deposit first');
       app.setStatus('Releasing escrow → capture to provider + mint access (pay AFTER fulfilment)…');
-      const h = await escrowRelease(app.wallet, orderHash);
+      const h = await escrowRelease(ctx, orderHash);
       setReleaseHash(h);
       // pay-after-fulfillment: the entitlement is minted ONLY now, on accepted delivery
-      setEnt(grantEntitlement({ subject: app.address, mandateId: orderHash, settlementHash: h as Hex32 }));
+      setEnt(grantEntitlement({ subject: ctx.treasurySa, mandateId: orderHash, settlementHash: h as Hex32 }));
       await new Promise((r) => setTimeout(r, 2500));
       await refreshHold(orderHash);
       await app.refresh();
@@ -66,9 +68,10 @@ export function EscrowFlow() {
 
   const onReclaim = () =>
     app.run('reclaim', async () => {
-      if (!app.wallet || !orderHash) throw new Error('deposit first');
-      app.setStatus('Fulfilment failed/expired — reclaiming the held funds (refund to payer)…');
-      const h = await escrowReclaim(app.wallet, orderHash);
+      const ctx = app.payCtx();
+      if (!ctx || !orderHash) throw new Error('deposit first');
+      app.setStatus('Fulfilment failed/expired — reclaiming the held funds (refund to the treasury SA)…');
+      const h = await escrowReclaim(ctx, orderHash);
       setReclaimHash(h);
       await new Promise((r) => setTimeout(r, 2500));
       await refreshHold(orderHash);
@@ -78,8 +81,8 @@ export function EscrowFlow() {
 
   const onUse = () =>
     app.run('use', async () => {
-      if (!ent || !app.address) throw new Error('no entitlement');
-      const res = entitlement.consumeEntitlement(ent, { scopeHash: SERVICE_SCOPE, now: Math.floor(Date.now() / 1000), presenter: app.address });
+      if (!ent || !app.treasurySa) throw new Error('no entitlement');
+      const res = entitlement.consumeEntitlement(ent, { scopeHash: SERVICE_SCOPE, now: Math.floor(Date.now() / 1000), presenter: app.treasurySa ?? undefined });
       if (!res.ok) throw new Error(res.reason);
       setEnt(res.record);
       app.setStatus(`Accessed the service — ${res.record.usesLeft} use(s) left (no new payment).`);
@@ -91,7 +94,7 @@ export function EscrowFlow() {
   return (
     <>
       <Step n="1" title="Hold funds in escrow for an order">
-        <p style={S.hint}>Deposit funds against an <code>orderHash</code>. They move on exactly one path: release (capture) or reclaim (refund). Provider = <span style={S.mono}>{app.treasury.slice(0, 8)}…</span></p>
+        <p style={S.hint}>Deposit funds against an <code>orderHash</code>. They move on exactly one path: release (capture) or reclaim (refund). Provider = <span style={S.mono}>{app.providerTreasury?.slice(0, 8) ?? '…'}…</span></p>
         <div style={{ ...S.rowBetween, marginTop: 12 }}>
           <span style={S.mono}>1.00 USDC · expires in {EXPIRES_IN}s</span>
           <button style={S.btn} disabled={!app.isConnected || app.busy === 'deposit'} onClick={onDeposit}>

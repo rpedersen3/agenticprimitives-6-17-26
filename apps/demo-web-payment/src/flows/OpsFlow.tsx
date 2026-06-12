@@ -15,8 +15,8 @@ export function OpsFlow() {
 
   // demo receipts (a charge + a refund) over which reconciliation runs
   const receipts: ReceiptRow[] = [
-    { mandateId: ('0x' + '11'.repeat(32)) as Hex32, payer: (app.address ?? ('0x' + '00'.repeat(20)) as Address), payee: app.treasury, asset: app.treasury, amount: toUsdc(1), settlementHash: ('0x' + 'a1'.repeat(32)) as Hex32, at: 1, orderHash: ORDER },
-    { mandateId: ('0x' + '22'.repeat(32)) as Hex32, payer: app.treasury, payee: (app.address ?? ('0x' + '00'.repeat(20)) as Address), asset: app.treasury, amount: toUsdc(0.25), settlementHash: ('0x' + 'a2'.repeat(32)) as Hex32, at: 2, orderHash: ORDER, refunds: ('0x' + '11'.repeat(32)) as Hex32 },
+    { mandateId: ('0x' + '11'.repeat(32)) as Hex32, payer: (app.address ?? ('0x' + '00'.repeat(20)) as Address), payee: (app.providerTreasury ?? ('0x' + '00'.repeat(20)) as Address), asset: (app.providerTreasury ?? ('0x' + '00'.repeat(20)) as Address), amount: toUsdc(1), settlementHash: ('0x' + 'a1'.repeat(32)) as Hex32, at: 1, orderHash: ORDER },
+    { mandateId: ('0x' + '22'.repeat(32)) as Hex32, payer: (app.providerTreasury ?? ('0x' + '00'.repeat(20)) as Address), payee: (app.address ?? ('0x' + '00'.repeat(20)) as Address), asset: (app.providerTreasury ?? ('0x' + '00'.repeat(20)) as Address), amount: toUsdc(0.25), settlementHash: ('0x' + 'a2'.repeat(32)) as Hex32, at: 2, orderHash: ORDER, refunds: ('0x' + '11'.repeat(32)) as Hex32 },
   ];
 
   const emit = (dup: boolean) => {
@@ -34,7 +34,7 @@ export function OpsFlow() {
 
   const events = eventLog.list();
   void tick;
-  const treasuryDelta = opsHelpers.balanceDelta(receipts, app.treasury);
+  const treasuryDelta = opsHelpers.balanceDelta(receipts, (app.providerTreasury ?? ('0x' + '00'.repeat(20)) as Address));
 
   return (
     <>

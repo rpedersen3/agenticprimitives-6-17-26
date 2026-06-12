@@ -17,17 +17,18 @@ export function SubscriptionFlow() {
   }, []);
 
   const onApprove = () => {
-    if (!app.address) { app.setStatus('connect a wallet first'); return; }
-    const s = buildSubscription(app.address, app.treasury);
+    if (!app.treasurySa || !app.providerTreasury) { app.setStatus('set up your agent accounts first (top bar)'); return; }
+    const s = buildSubscription(app.treasurySa, app.providerTreasury);
     setSub(s); setPaid({});
     app.setStatus(`Subscription authorized: ${fromUsdc(s.amountPerPeriod)} USDC × ${s.periods} periods (${s.windowSeconds}s windows). One open mandate covers them all.`);
   };
 
   const onSettle = (period: number) =>
     app.run(`period:${period}`, async () => {
-      if (!app.wallet || !sub) throw new Error('approve the subscription first');
-      app.setStatus(`Settling period ${period + 1}…`);
-      const h = await settlePeriod(app.wallet, sub, period);
+      const ctx = app.payCtx();
+      if (!ctx || !sub) throw new Error('approve the subscription first');
+      app.setStatus(`Treasury SA settling period ${period + 1} (gasless)…`);
+      const h = await settlePeriod(ctx, sub, period);
       setPaid((p) => ({ ...p, [period]: h }));
       await new Promise((r) => setTimeout(r, 2000));
       await app.refresh();

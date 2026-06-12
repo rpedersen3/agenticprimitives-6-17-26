@@ -14,16 +14,17 @@ export function SplitFlow() {
   const [legs, setLegs] = useState<{ to: Address; amount: bigint; hash: Hex }[]>([]);
 
   const recipients = [
-    { to: app.treasury, bps: 7000, label: 'Provider' },
+    { to: (app.providerTreasury ?? PLATFORM), bps: 7000, label: 'Provider' },
     { to: PLATFORM, bps: 2000, label: 'Platform' },
     { to: REFERRER, bps: 1000, label: 'Referrer' },
   ];
 
   const onSplit = () =>
     app.run('split', async () => {
-      if (!app.wallet) throw new Error('connect a wallet');
-      app.setStatus('Splitting 1.00 USDC across 3 recipients (one transfer each)…');
-      const out = await splitPay(app.wallet, AMOUNT, recipients.map((r) => ({ to: r.to, bps: r.bps })));
+      const ctx = app.payCtx();
+      if (!ctx) throw new Error('set up your agent accounts first (top bar)');
+      app.setStatus('Treasury SA splitting 1.00 USDC across 3 recipients (gasless)…');
+      const out = await splitPay(ctx, AMOUNT, recipients.map((r) => ({ to: r.to, bps: r.bps })));
       setLegs(out);
       await new Promise((r) => setTimeout(r, 2000));
       await app.refresh();

@@ -46,15 +46,23 @@ export interface DeployPersonAgentArgs {
   passkey?: DemoPasskey;
   /** Optional — when non-empty, each EOA is added to custodians at init. */
   custodians?: Address[];
+  /** Optional — distinguishes multiple SAs that share ONE custodian (e.g. a person's
+   *  personal SA vs their treasury SA). Mixed into the CREATE2 salt → distinct addresses. */
+  saltSeed?: string;
 }
 
 export async function deployPersonAgent(
   args: DeployPersonAgentArgs,
 ): Promise<DeployResult | DeployError> {
-  const { passkey, custodians = [] } = args;
+  const { passkey, custodians = [], saltSeed } = args;
   if (!passkey && custodians.length === 0) {
     return { ok: false, error: 'no_signers', reason: 'at least one of passkey or custodians required' };
   }
+  // Base-10 salt (the worker requires decimal digits). With a saltSeed, derive a distinct
+  // decimal so the same custodian yields different SA addresses.
+  const salt = saltSeed
+    ? BigInt(keccak256(encodeAbiParameters([{ type: 'string' }, { type: 'string' }], [getSessionSalt(), saltSeed]))).toString()
+    : getSessionSalt();
 
   const base = config.demoA2aUrl;
   if (!base) {
@@ -98,11 +106,8 @@ export async function deployPersonAgent(
         // factory's accepted "no passkey" case.
         initialPasskeyRpIdHash: `0x${'00'.repeat(32)}`,
         timelockOverrides: [],
-        // Session-scoped salt: stable within one demo session (so
-        // re-claims of the same seat reproduce the same SA) but
-        // cleared by Reset → fresh address space per session. See
-        // lib/session-salt.ts.
-        salt: getSessionSalt(),
+        // Session-scoped salt (decimal), optionally seeded so one custodian → multiple SAs.
+        salt,
       }),
     });
     const raw = await directRes.text();

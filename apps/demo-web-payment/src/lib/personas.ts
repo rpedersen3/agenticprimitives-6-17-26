@@ -49,13 +49,13 @@ export interface PersonaError {
  */
 export async function deployPersona(
   custodian: Address,
-  opts: { attempts?: number; delayMs?: number } = {},
+  opts: { attempts?: number; delayMs?: number; saltSeed?: string } = {},
 ): Promise<PersonaDeploy | PersonaError> {
   const attempts = opts.attempts ?? 3;
   const delayMs = opts.delayMs ?? 7000;
   let lastError = 'deploy_failed';
   for (let i = 0; i < attempts; i++) {
-    const res = await deployPersonAgent({ custodians: [custodian] });
+    const res = await deployPersonAgent({ custodians: [custodian], saltSeed: opts.saltSeed });
     if (res.ok) return { ok: true, address: res.deployedAddress };
     lastError = res.reason ? `${res.error}: ${res.reason}` : res.error;
     const transient = /direct_deploy_failed|sendRawTransaction|nonce|invalid parameters|replacement/i.test(lastError);

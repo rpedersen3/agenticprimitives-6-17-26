@@ -10,9 +10,10 @@ export function VoucherFlow() {
 
   const onBuy = () =>
     app.run('buy-vouchers', async () => {
-      if (!app.wallet) throw new Error('connect a wallet');
-      app.setStatus('Paying 0.30 USDC → the issuer blind-signs a 3-voucher pack…');
-      const p = await buyVoucherPack(app.wallet, app.treasury, 3);
+      const ctx = app.payCtx();
+      if (!ctx) throw new Error('set up your agent accounts first (top bar)');
+      app.setStatus('Treasury SA paying 0.30 USDC → the issuer blind-signs a 3-voucher pack (gasless)…');
+      const p = await buyVoucherPack(ctx, 3);
       setPack(p); setResult({});
       await new Promise((r) => setTimeout(r, 2000));
       await app.refresh();

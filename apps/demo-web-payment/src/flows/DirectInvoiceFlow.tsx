@@ -15,19 +15,21 @@ export function DirectInvoiceFlow() {
 
   const onDirect = () =>
     app.run('direct', async () => {
-      if (!app.wallet) throw new Error('connect a wallet');
-      app.setStatus('Paying 0.50 USDC directly to the provider treasury…');
-      const h = await directPay(app.wallet, app.treasury, toUsdc(0.5));
+      const ctx = app.payCtx();
+      if (!ctx) throw new Error('set up your agent accounts first (top bar)');
+      app.setStatus('Treasury SA paying 0.50 USDC to the provider treasury (gasless)…');
+      const h = await directPay(ctx, toUsdc(0.5));
       setDirectHash(h);
       await new Promise((r) => setTimeout(r, 2000));
       await app.refresh();
-      app.setStatus('Direct checkout settled.');
+      app.setStatus('Direct checkout settled (SA → SA, paymaster-sponsored).');
     });
 
   const onIssueInvoice = () => {
+    if (!app.providerTreasury) { app.setStatus('set up your agent accounts first (top bar)'); return; }
     const inv = createInvoice({
-      issuer: app.treasury,
-      payTo: app.treasury,
+      issuer: app.providerTreasury,
+      payTo: app.providerTreasury,
       lineItems: [
         { description: 'Consulting — 2h', amount: toUsdc(1.2) },
         { description: 'Report delivery', amount: toUsdc(0.3) },
@@ -41,9 +43,10 @@ export function DirectInvoiceFlow() {
 
   const onPayInvoice = () =>
     app.run('invoice', async () => {
-      if (!app.wallet || !invoice) throw new Error('issue an invoice first');
-      app.setStatus('Paying the invoice (wallet rail, bound to invoiceId)…');
-      const h = await payInvoice(app.wallet, invoice);
+      const ctx = app.payCtx();
+      if (!ctx || !invoice) throw new Error('issue an invoice + set up accounts first');
+      app.setStatus('Treasury SA paying the invoice (gasless, bound to invoiceId)…');
+      const h = await payInvoice(ctx, invoice);
       setPaidHash(h);
       await new Promise((r) => setTimeout(r, 2000));
       await app.refresh();

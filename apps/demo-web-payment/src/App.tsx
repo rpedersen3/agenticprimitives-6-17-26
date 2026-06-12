@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { formatEther } from 'viem';
 import { config } from './config';
 import { AppProvider, useApp } from './app-context';
-import { S, accent } from './ui';
+import { S, accent, AddrLine } from './ui';
 import { fromUsdc } from './lib/x402-pay';
 import { MeteredFlow } from './flows/MeteredFlow';
 import { DirectInvoiceFlow } from './flows/DirectInvoiceFlow';
@@ -49,19 +49,25 @@ function WalletBar() {
         )}
       </div>
       {app.isConnected && (
-        <div style={S.gasRow}>
-          <span style={S.hint}>
-            Gas <span style={S.mono}>{Number(formatEther(app.ethBal)).toFixed(4)} ETH</span>
-            {app.ethBal < 80_000_000_000_000n && <span style={S.lowGas}> · low</span>}
-            {' '}· Wallet <span style={S.mono}>{fromUsdc(app.walletUsdc)} USDC</span>
-          </span>
-          <span style={{ display: 'flex', gap: 8 }}>
-            {import.meta.env.DEV && <button style={S.btnGhost} disabled={app.busy === 'seed'} onClick={app.seedGas}>{app.busy === 'seed' ? 'Seeding…' : 'Seed gas'}</button>}
-            <button style={S.btnGhost} disabled={app.busy === 'fund'} onClick={() => app.fundWallet(10)} title="Funds your wallet for the Direct/Escrow/Split/Subscription/Voucher flows. Pay-per-use funds its reader SA separately (its step 2).">{app.busy === 'fund' ? 'Minting…' : 'Mint 10 USDC → wallet'}</button>
-          </span>
-        </div>
+        <>
+          <div style={S.gasRow}>
+            <span style={S.hint}>
+              Gas <span style={S.mono}>{Number(formatEther(app.ethBal)).toFixed(4)} ETH</span>
+              {app.ethBal < 80_000_000_000_000n && <span style={S.lowGas}> · low</span>}
+              {' '}· Treasury <span style={S.mono}>{fromUsdc(app.treasuryUsdc)} USDC</span>
+            </span>
+            <span style={{ display: 'flex', gap: 8 }}>
+              {import.meta.env.DEV && <button style={S.btnGhost} disabled={app.busy === 'seed'} onClick={app.seedGas}>{app.busy === 'seed' ? 'Seeding…' : 'Seed gas'}</button>}
+              <button style={S.btn} disabled={!!app.treasurySa || app.busy === 'setup'} onClick={app.setupAccounts}>{app.busy === 'setup' ? 'Deploying…' : app.treasurySa ? 'Accounts ✓' : 'Set up agent accounts'}</button>
+              <button style={S.btnGhost} disabled={!app.treasurySa || app.busy === 'fund'} onClick={() => app.fundTreasury(10)}>{app.busy === 'fund' ? 'Minting…' : 'Fund treasury 10 USDC'}</button>
+            </span>
+          </div>
+          <AddrLine label="Personal SA" addr={app.personalSa} />
+          <AddrLine label="Service Treasury SA (payer)" addr={app.treasurySa} extra={`${fromUsdc(app.treasuryUsdc)} USDC`} />
+          <AddrLine label="Provider Treasury SA (payee)" addr={app.providerTreasury} />
+        </>
       )}
-      <p style={S.hint}>The connected wallet is the payer for the direct/escrow/split flows, and custodies the reader SA for pay-per-use. Needs a little Base Sepolia ETH for gas{import.meta.env.DEV ? ' (the deployer faucet seeds a tiny amount in dev)' : ''}.</p>
+      <p style={S.hint}>The wallet ({app.address?.slice(0, 6)}…) custodies your Personal + Treasury SAs. Money moves <strong>SA → SA</strong> and every payment is <strong>gasless</strong> (paymaster-sponsored) — the wallet only signs + needs a little Base Sepolia ETH{import.meta.env.DEV ? ' (faucet seeds it in dev)' : ''}. Set up accounts, fund the treasury, then run any flow.</p>
     </section>
   );
 }
