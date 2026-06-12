@@ -106,7 +106,22 @@
     "settlementEpochBucket",
     "buildPaymentReceiptCredential",
     "PaymentReceiptInput",
-    "entitlement"
+    "entitlement",
+    "ERC20_TRANSFER_ABI",
+    "buildErc20Transfer",
+    "buildNativeTransfer",
+    "TransferPlan",
+    "buildClosedMandate",
+    "ClosedMandateInput",
+    "wallet",
+    "invoice",
+    "buildRefund",
+    "RefundInput",
+    "RefundPlan",
+    "buildSplitPayout",
+    "BPS_DENOMINATOR",
+    "SplitRecipient",
+    "SplitLeg"
   ],
   "ignoreForAgentContext": [
     "dist/**",
