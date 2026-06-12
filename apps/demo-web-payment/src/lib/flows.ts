@@ -11,6 +11,8 @@ import { baseSepolia } from 'viem/chains';
 import {
   invoice as invoiceRail,
   escrow as escrowRail,
+  recurring as recurringRail,
+  ops as opsApi,
   buildErc20Transfer,
   buildErc20Approve,
   buildSplitPayout,
@@ -20,6 +22,7 @@ import {
 } from '@agenticprimitives/payments';
 import { config } from '../config';
 import { publicClient, type PaymentWallet } from './wallet';
+import { toUsdc } from './x402-pay';
 
 export type TransferPlan = { to: Address; value: bigint; data: Hex };
 
@@ -152,3 +155,68 @@ export function grantEntitlement(args: { subject: Address; mandateId: Hex32; set
     settlementHash: args.settlementHash,
   });
 }
+
+// ── F4 subscription (recurring profile) ─────────────────────────────
+
+export type Subscription = ReturnType<typeof recurringRail.buildRecurringTemplate>;
+
+/** A short-window demo subscription: 1 USDC/period, 4 periods, 60s windows. */
+export function buildSubscription(payer: Address, treasury: Address): Subscription {
+  const now = Math.floor(Date.now() / 1000);
+  return recurringRail.buildRecurringTemplate({
+    payer, payee: treasury, asset: usdcAsset, chain: config.chainId,
+    amountPerPeriod: toUsdc(1), windowSeconds: 60, totalCap: toUsdc(4),
+    validFrom: now, validUntil: now + 3600, startNonce: BigInt(Date.now()),
+  });
+}
+
+export function subscriptionWindow(sub: Subscription, period: number) {
+  return recurringRail.periodWindow(sub, period);
+}
+
+/** Settle one period's charge (wallet transfer for the derived closed mandate). */
+export async function settlePeriod(wallet: PaymentWallet, sub: Subscription, period: number): Promise<Hex> {
+  const { plan } = recurringRail.deriveScheduledCharge(sub, period);
+  return submit(wallet, plan);
+}
+
+// ── F2 anonymous (VOPRF blind voucher pack) ─────────────────────────
+
+export type Voucher = ReturnType<typeof entitlement.voucher.unblindVoucher>;
+
+// demo issuer key (deterministic — a real issuer keeps the secret server-side)
+const VOUCHER_ISSUER = entitlement.voucher.deriveVoucherIssuerKey(('0x' + 'a7'.repeat(32)) as Hex);
+const voucherSpent = entitlement.voucher.createMemorySpentSet();
+
+export interface VoucherPack {
+  payHash: Hex;
+  vouchers: Voucher[];
+  /** the blinded requests the issuer signed — shown to prove unlinkability vs. the redeemed tokens */
+  blinded: string[];
+}
+
+/** Pay once → receive a pack of unlinkable one-use vouchers. */
+export async function buyVoucherPack(wallet: PaymentWallet, treasury: Address, count: number): Promise<VoucherPack> {
+  const payHash = await directPay(wallet, treasury, toUsdc(0.1 * count));
+  const reqs = Array.from({ length: count }, () => entitlement.voucher.blindVoucherRequest());
+  const issued = entitlement.voucher.issueVouchers(VOUCHER_ISSUER, reqs.map((r) => r.request));
+  const vouchers = issued.map((iss, i) => entitlement.voucher.unblindVoucher(reqs[i]!.secret, iss, VOUCHER_ISSUER.publicKey));
+  return { payHash, vouchers, blinded: reqs.map((r) => r.request.blinded) };
+}
+
+/** Redeem a voucher unlinkably (VOPRF verify + double-spend reject). */
+export async function redeemVoucher(voucher: Voucher): Promise<{ ok: boolean; reason?: string }> {
+  return entitlement.voucher.redeemVoucher(VOUCHER_ISSUER, voucher, voucherSpent);
+}
+
+// ── F7 ops (idempotent event log + reconciliation + export) ─────────
+
+export const eventLog = opsApi.createPaymentEventLog();
+export type ReceiptRow = opsApi.ReceiptRow;
+export const opsHelpers = {
+  balanceDelta: opsApi.balanceDelta,
+  isOrderPaid: opsApi.isOrderPaid,
+  listReceiptsBy: opsApi.listReceiptsBy,
+  exportReceiptsCSV: opsApi.exportReceiptsCSV,
+  exportReceiptsJSON: opsApi.exportReceiptsJSON,
+};

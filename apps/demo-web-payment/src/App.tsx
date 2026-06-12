@@ -8,6 +8,9 @@ import { MeteredFlow } from './flows/MeteredFlow';
 import { DirectInvoiceFlow } from './flows/DirectInvoiceFlow';
 import { EscrowFlow } from './flows/EscrowFlow';
 import { SplitFlow } from './flows/SplitFlow';
+import { SubscriptionFlow } from './flows/SubscriptionFlow';
+import { VoucherFlow } from './flows/VoucherFlow';
+import { OpsFlow } from './flows/OpsFlow';
 
 interface Tab {
   id: string;
@@ -22,10 +25,10 @@ const TABS: Tab[] = [
   { id: 'direct', label: 'Direct / Invoice', blurb: 'Plain checkout (wallet rail) + a request-for-payment invoice bound to its invoiceId.', render: () => <DirectInvoiceFlow /> },
   { id: 'escrow', label: 'Escrow · deliver-then-pay', blurb: 'Hold funds for an order → provider fulfils → release captures + grants access (pay AFTER fulfilment); if it fails/expires, reclaim refunds you.', render: () => <EscrowFlow /> },
   { id: 'split', label: 'Marketplace split', blurb: 'One amount split by basis points to provider + platform + referrer — recipient-specific consideration, no dust.', render: () => <SplitFlow /> },
-  { id: 'sub', label: 'Subscription', blurb: 'Recurring profile: approve once (open mandate), derive per-period closed charges; the PaymentEnforcer window blocks an early re-charge.', reserved: 'recurring rail built (payments.recurring) — UI wiring next' },
-  { id: 'anon', label: 'Anonymous', blurb: 'Nameless session SA + blind-signed VOPRF voucher pack redeemed unlinkably from a separate context.', reserved: 'voucher rail built (payments.entitlement.voucher) — UI wiring next' },
+  { id: 'sub', label: 'Subscription', blurb: 'Recurring profile: approve once (open mandate), derive per-period closed charges; each period only settles inside its window (early re-charge blocked).', render: () => <SubscriptionFlow /> },
+  { id: 'anon', label: 'Anonymous', blurb: 'Pay once → a blind-signed VOPRF voucher pack redeemed unlinkably from a separate context; double-spend rejected.', render: () => <VoucherFlow /> },
+  { id: 'ops', label: 'Ops dashboard', blurb: 'Idempotent event log + receipt reconciliation/payment-detection + CSV/JSON export.', render: () => <OpsFlow /> },
   { id: 'intent', label: 'Intent → fulfilment', blurb: 'Express a need → match/agree → fulfil → settle the bound payment; receipt links order ↔ fulfilment ↔ settlement.', reserved: 'wires intent-marketplace + agreements + fulfilment alongside payments — next' },
-  { id: 'ops', label: 'Ops dashboard', blurb: 'Idempotent event log, receipt reconciliation/export, failed/retryable vs terminal states.', reserved: 'ops core built (payments.ops) — UI wiring next' },
 ];
 
 function WalletBar() {
