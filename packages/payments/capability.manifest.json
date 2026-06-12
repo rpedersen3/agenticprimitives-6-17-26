@@ -104,7 +104,8 @@
     "PAYMENT_RECEIPT_TYPE",
     "settlementEpochBucket",
     "buildPaymentReceiptCredential",
-    "PaymentReceiptInput"
+    "PaymentReceiptInput",
+    "entitlement"
   ],
   "ignoreForAgentContext": [
     "dist/**",

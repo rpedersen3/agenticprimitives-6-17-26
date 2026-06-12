@@ -151,3 +151,6 @@ export type { PaymentReceiptInput } from './receipt.js';
 
 // Spec 272 — the x402 rail (staged executor + v2 wire + nonce store + resource binding).
 export * as x402 from './rails/x402/index.js';
+
+// Spec 272 §10 — entitlements (pay-once-then-access; credits = maxUses:N).
+export * as entitlement from './entitlement/index.js';
