@@ -18,6 +18,9 @@
 import { keccak256, encodeAbiParameters, toBytes, type Address } from 'viem';
 import type { Hex32 } from '../index.js';
 
+// tier A3 — blind bearer vouchers (Privacy Pass / VOPRF).
+export * as voucher from './voucher.js';
+
 export type EntitlementBinding = 'sa' | 'bearer';
 
 export interface EntitlementRecord {

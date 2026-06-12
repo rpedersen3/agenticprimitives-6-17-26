@@ -1205,6 +1205,9 @@ importers:
       '@agenticprimitives/verifiable-credentials':
         specifier: workspace:*
         version: link:../verifiable-credentials
+      '@noble/curves':
+        specifier: ^2.2.0
+        version: 2.2.0
       '@noble/hashes':
         specifier: ^2.2.0
         version: 2.2.0
