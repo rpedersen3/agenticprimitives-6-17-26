@@ -6,7 +6,8 @@
 // `<handle>.impact-agent.me/you` portal lists the org. The operator then signs in at
 // that home with the SAME key (deep-link + sign-in-at-home), no cross-origin handoff.
 
-import { keccak256, toBytes } from 'viem';
+import { toHex, type Hex } from 'viem';
+import { relatedAgentWriteContentHash, hashRelatedAgentWriteChallenge } from '@agenticprimitives/related-agents';
 import { buildMessage } from '@agenticprimitives/connect-auth/siwe';
 import { loadOrMintPersona, type PersonaName } from './personas.js';
 import { personaSignHash, personaSignMessage, CHAIN_ID } from './chain.js';
@@ -85,14 +86,15 @@ export async function setupOperatorHome(
   const orgState = await ensureOrgDeployed(org);
 
   onStep?.('Linking your organization to your home…');
-  // Control-of-person proof — sign the fixed challenge with the person SA's custodian.
-  const challenge = keccak256(toBytes(`related-orgs:write:${person.saAddress.toLowerCase()}`));
+  // AUDIT NEW-RAG-2 — control-of-person proof BOUND to this exact write: content hash + one-shot nonce +
+  // short expiry, so the signature can't be replayed for a different write or after the window.
+  const link = { person: person.saAddress, orgAgent: orgState.saAddress, orgName, purpose, requestedBy: 'demo-jp' };
+  const nonce = toHex(crypto.getRandomValues(new Uint8Array(32))) as Hex;
+  const expiry = Math.floor(Date.now() / 1000) + 300; // 5-minute window
+  const contentHash = relatedAgentWriteContentHash(link);
+  const challenge = hashRelatedAgentWriteChallenge({ person: person.saAddress, orgAgent: link.orgAgent, contentHash, nonce, expiry });
   const sig = await personaSignHash(persona)(challenge);
-  await registerRelatedOrg(
-    CONNECT_HOME,
-    { person: person.saAddress, orgAgent: orgState.saAddress, orgName, purpose, requestedBy: 'demo-jp' },
-    sig,
-  );
+  await registerRelatedOrg(CONNECT_HOME, link, sig, { nonce, expiry });
 
   return person;
 }

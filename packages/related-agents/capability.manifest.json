@@ -64,6 +64,8 @@
     "CustodyKind",
     "CustodyDescriptor",
     "buildCustodyDescriptor",
+    "relatedAgentWriteContentHash",
+    "hashRelatedAgentWriteChallenge",
     "RelatedAgentCredential",
     "BuildRelatedAgentCredentialArgs",
     "buildRelatedAgentCredential",

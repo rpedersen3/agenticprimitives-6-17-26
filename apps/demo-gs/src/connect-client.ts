@@ -248,17 +248,19 @@ export async function listDelegatedOrgs(connectOrigin: string, delegate: Address
 
 /** spec 247: register a person→org link the operator already governs (their GC/JP org,
  *  created outside the Connect org-create ceremony) into the person's home vault, so
- *  /you lists it via the existing related-orgs query. Authorized by control of the person
- *  SA — `sig` is an ERC-1271 signature over `keccak256("related-orgs:write:<person>")`. */
+ *  /you lists it via the existing related-orgs query. Authorized by control of the person SA.
+ *  AUDIT NEW-RAG-2: `sig` is an ERC-1271 signature over `hashRelatedAgentWriteChallenge(...)` — bound to
+ *  the content, a one-shot `nonce`, and a short `expiry` (build it like demo-jp's operator-home.ts). */
 export async function registerRelatedOrg(
   connectOrigin: string,
   link: { person: Address; orgAgent: Address; orgName: string; purpose: string; requestedBy: string },
   sig: Hex,
+  auth: { nonce: Hex; expiry: number },
 ): Promise<boolean> {
   const r = await fetch(new URL('/connect/related-orgs', connectOrigin).toString(), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...link, sig }),
+    body: JSON.stringify({ ...link, sig, nonce: auth.nonce, expiry: auth.expiry }),
   });
   return r.ok;
 }

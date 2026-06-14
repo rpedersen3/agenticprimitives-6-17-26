@@ -1,8 +1,10 @@
 const PACKAGE_STATUS: "w1-foundational"
 function buildCustodyDescriptor(d: CustodyDescriptor): CustodyDescriptor
 function buildRelatedAgentCredential(args: BuildRelatedAgentCredentialArgs): RelatedAgentCredential
+function hashRelatedAgentWriteChallenge(a:
 function relatedAgentProofHash(credential: RelatedAgentCredential): Hex32
 function relatedAgentReadCaveats(args: RelatedAgentReadCaveatArgs): Caveat[]
+function relatedAgentWriteContentHash(f:
 interface BuildRelatedAgentCredentialArgs
 interface CustodyDescriptor
 interface DelegatedAgentLink

@@ -801,14 +801,27 @@ findings:
   - id: NEW-RAG-2
     severity: medium
     title: custody-descriptor write auth is an ERC-1271 signature over a constant challenge — replayable forever (denial-of-recovery)
-    status: open
-    concerns: [apps/demo-sso-next/server/connect/related-orgs.ts]
+    status: closed
+    anchor: hashRelatedAgentWriteChallenge
+    enforcement: code-present
+    concerns:
+      - apps/demo-sso-next/server/connect/related-orgs.ts
+      - packages/related-agents/src/index.ts
+      - apps/demo-jp/src/lib/operator-home.ts
+      - apps/demo-gs/src/connect-client.ts
+    tests:
+      - packages/related-agents/test/unit/write-challenge.test.ts
     origin: 2026-06-11-production-readiness-audit.md
     note: >
-      Remediation pending (coordinated demo-jp change) — flagged at the code site in harden/audit-2026-06-13.
-      Bind the signed challenge to org + payload hash + nonce + expiry and add a one-shot nonce store. The
-      ERC-1271 path is the external-custodian (demo-jp operator) path; the home's OWN management uses the
-      nonce-protected session-token branch, which is unaffected. Do NOT widen the ERC-1271 path meanwhile.
+      Fixed in harden/audit-rag2 (coordinated package + 3 apps). The ERC-1271 write challenge is now BOUND to
+      (person, org, content hash, one-shot nonce, short expiry) via the generic
+      `@agenticprimitives/related-agents` helpers `relatedAgentWriteContentHash` + `hashRelatedAgentWriteChallenge`
+      (client + server derive it identically; the server ALWAYS recomputes contentHash from the persisted fields,
+      never trusts a client digest). The server rejects expired/future expiry and replayed nonces (one-shot KV
+      `rag-nonce:<person>:<nonce>`, burned only after a valid signature). demo-jp operator-home + demo-jp/demo-gs
+      registerRelatedOrg build + send nonce+expiry. HARD CUTOVER (no dual-accept) — deploy demo-sso-next (Vercel)
+      BEFORE demo-jp (Cloudflare Pages). enforcement=code-present: no server integration-test harness in the Next
+      app, so the digest binding is test-covered at the package; the server enforcement is verified by typecheck.
   - id: AUD-N1-CONNECT-AUTH-STUBS
     severity: high
     title: connect-auth/passkey ships 4 published public exports that throw "not implemented yet"

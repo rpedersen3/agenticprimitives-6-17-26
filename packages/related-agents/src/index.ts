@@ -32,6 +32,7 @@ import {
   encodeAllowedTargetsTerms,
 } from '@agenticprimitives/delegation';
 import type { Address, Hex, Caveat, Delegation } from '@agenticprimitives/delegation';
+import { keccak256, toBytes, encodeAbiParameters } from 'viem';
 
 export const PACKAGE_NAME = '@agenticprimitives/related-agents';
 export const PACKAGE_STATUS = 'w1-foundational' as const;
@@ -106,6 +107,48 @@ export function buildCustodyDescriptor(d: CustodyDescriptor): CustodyDescriptor 
       throw new Error(`custody descriptor: unknown custody kind ${(d.custody as { kind?: string }).kind}`);
   }
   return { targetSA: d.targetSA, salt: d.salt, custody };
+}
+
+// ─── Related-agent write challenge (AUDIT NEW-RAG-2) ─────────────────────────
+//
+// The Connect home registers an externally-governed person→agent link (e.g. a relying-app operator's
+// org) authorized by an ERC-1271 signature from a custodian of the PERSON SA. The original challenge was
+// the CONSTANT `keccak256("related-orgs:write:<person>")` — no nonce/expiry/payload binding, so one
+// captured signature authorized UNLIMITED writes to any link field forever (link poisoning /
+// denial-of-recovery). These helpers bind the signature to (person, agent, the exact content, a one-shot
+// nonce, a short expiry). Client and server BOTH derive the challenge from these so they can't drift; the
+// server ALWAYS recomputes `contentHash` from the persisted fields and never trusts a client digest.
+
+/** Bind the write to its exact content — a captured signature can only write THIS link, not arbitrary fields. */
+export function relatedAgentWriteContentHash(f: {
+  orgAgent: Address;
+  orgName: string;
+  purpose: string;
+  requestedBy: string;
+}): Hex {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: 'address' }, { type: 'bytes32' }, { type: 'bytes32' }, { type: 'bytes32' }],
+      [f.orgAgent, keccak256(toBytes(f.orgName)), keccak256(toBytes(f.purpose)), keccak256(toBytes(f.requestedBy))],
+    ),
+  );
+}
+
+/** The digest a PERSON-SA custodian signs (ERC-1271) to authorize ONE related-agent write. Bound to the
+ *  person, the agent, the content hash, a one-shot `nonce` (bytes32), and an `expiry` (unix seconds). */
+export function hashRelatedAgentWriteChallenge(a: {
+  person: Address;
+  orgAgent: Address;
+  contentHash: Hex;
+  nonce: Hex;
+  expiry: number;
+}): Hex {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: 'bytes32' }, { type: 'address' }, { type: 'address' }, { type: 'bytes32' }, { type: 'bytes32' }, { type: 'uint256' }],
+      [keccak256(toBytes('related-agents:write:v2')), a.person, a.orgAgent, a.contentHash, a.nonce, BigInt(a.expiry)],
+    ),
+  );
 }
 
 export type RelatedAgentCredential = UnsignedCredential<Situation<{ payload: RelatedAgentBody }>>;
