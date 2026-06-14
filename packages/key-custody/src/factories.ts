@@ -46,9 +46,10 @@ function backendOrEnv(opts: BuildOpts): KmsBackend {
   if (inferEnvironment(opts) === 'production') {
     throw new Error(
       '[key-custody] No backend specified for production. Pass `opts.backend` ' +
-        '(`aws-kms` / `gcp-kms` for real deploys; `local-aes` for dev) or set ' +
+        '(`gcp-kms` for real deploys; `local-aes` for dev) or set ' +
         'the A2A_KMS_BACKEND env var. There is no implicit fallback in production — ' +
-        'pass `developmentMode: true` to opt into the dev default.',
+        'pass `developmentMode: true` to opt into the dev default. ' +
+        '(`aws-kms` is reserved but NOT implemented — selecting it fails fast.)',
     );
   }
   return 'local-aes';

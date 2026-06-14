@@ -50,6 +50,7 @@ export type { A2aEnforcers } from './grant.js';
 export {
   authorizeA2aMessage,
   hashA2aMessage,
+  hashA2aTaskRequest,
   decodeTimestampTerms,
   decodeAllowedTargetsTerms,
   decodeAllowedMethodsTerms,

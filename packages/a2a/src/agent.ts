@@ -12,7 +12,7 @@ import { isTerminal } from './types.js';
 import type { TaskStore } from './task-store.js';
 import { newTaskRecord, applyTransition, dispatchTask } from './runtime.js';
 import { buildSkillRegistry, type SkillHandler, type VaultClient, type McpClient } from './skill-handler.js';
-import { authorizeA2aMessage, type OnChainChecks } from './auth.js';
+import { authorizeA2aMessage, hashA2aTaskRequest, type OnChainChecks } from './auth.js';
 import type { A2aEnforcers } from './grant.js';
 import { deliverPush, type TerminalSigner, type PushSender } from './push.js';
 import { x402AgentCardExtension, type PaymentGate, type SkillPayment } from './payment-gate.js';
@@ -71,10 +71,13 @@ export interface A2aAgent {
   messageSend(params: MessageSendParams): Promise<RpcResult<{ taskId: Hex; state: Task['state'] }>>;
   /** Resume an auth-required task (auth-required → submitted) with a fresh grant + message (FR-3.5). */
   resubmit(params: ResubmitParams): Promise<RpcResult<{ taskId: Hex; state: Task['state'] }>>;
-  tasksGet(params: { taskId: Hex; caller: Address }): Promise<RpcResult<Task & { error?: string; artifactRefs: VaultRef[] }>>;
-  tasksCancel(params: { taskId: Hex; caller: Address }): Promise<RpcResult<{ taskId: Hex; state: Task['state'] }>>;
-  /** Register the push webhook for a task (FR-5.2). Party-authed. */
-  pushConfigSet(params: { taskId: Hex; caller: Address; url: string; token?: string }): Promise<RpcResult<{ taskId: Hex; registered: true }>>;
+  // AUDIT NEW-A2A-2: `caller` is no longer trusted on its own — the caller MUST sign
+  // `hashA2aTaskRequest({ method, taskId, agentSA, chainId })` and pass `signature`; the agent verifies it
+  // (ERC-1271) before the party check. An empty/invalid signature fails closed.
+  tasksGet(params: { taskId: Hex; caller: Address; signature: Hex }): Promise<RpcResult<Task & { error?: string; artifactRefs: VaultRef[] }>>;
+  tasksCancel(params: { taskId: Hex; caller: Address; signature: Hex }): Promise<RpcResult<{ taskId: Hex; state: Task['state'] }>>;
+  /** Register the push webhook for a task (FR-5.2). Signed-caller + party-authed (NEW-A2A-2). */
+  pushConfigSet(params: { taskId: Hex; caller: Address; signature: Hex; url: string; token?: string }): Promise<RpcResult<{ taskId: Hex; registered: true }>>;
   /** The alarm() body — process every due task to a next state. Returns the events to fan out (W4 delivery). */
   processDue(): Promise<TaskEvent[]>;
   agentCard(): AgentCard;
@@ -106,6 +109,17 @@ export function createA2aAgent(config: A2aAgentConfig): A2aAgent {
   let artCounter = 0;
   const newArtifactId = () =>
     config.newArtifactId ? config.newArtifactId() : (`0x${(++artCounter).toString(16).padStart(64, '0')}`) as Hex;
+
+  // AUDIT NEW-A2A-2 — the caller of a read/control op MUST prove control of `caller` by signing the
+  // request digest. Fail-closed: missing or invalid signature → UNAUTHORIZED, before any party check.
+  async function verifyCaller(method: string, taskId: Hex, caller: Address, signature: Hex): Promise<RpcOk<true> | RpcErr> {
+    if (!signature || signature === '0x') return { ok: false, code: RPC_UNAUTHORIZED, message: 'caller signature required' };
+    const digest = hashA2aTaskRequest({ method, taskId, agentSA: config.agentSA, chainId: config.chainId });
+    let valid = false;
+    try { valid = await config.checks.verifyCallerSignature(caller, digest, signature); } catch { valid = false; }
+    if (!valid) return { ok: false, code: RPC_UNAUTHORIZED, message: 'caller signature invalid' };
+    return { ok: true, result: true };
+  }
 
   return {
     async messageSend(params) {
@@ -184,9 +198,11 @@ export function createA2aAgent(config: A2aAgentConfig): A2aAgent {
       return { ok: true, result: { taskId: params.taskId, state: 'submitted' } };
     },
 
-    async tasksGet({ taskId, caller }) {
+    async tasksGet({ taskId, caller, signature }) {
       const rec = await config.taskStore.get(taskId);
       if (!rec) return { ok: false, code: RPC_NOT_FOUND, message: 'unknown task' };
+      const authd = await verifyCaller('tasks/get', taskId, caller, signature);
+      if (!authd.ok) return authd;
       // Caller must be the sender or the assignee (FR-2 tasks/get auth).
       if (!eq(caller, rec.sender) && !eq(caller, rec.task.assignee)) {
         return { ok: false, code: RPC_UNAUTHORIZED, message: 'not a party to this task' };
@@ -194,9 +210,11 @@ export function createA2aAgent(config: A2aAgentConfig): A2aAgent {
       return { ok: true, result: { ...rec.task, error: rec.error, artifactRefs: rec.artifacts.map((a) => a.bodyRef) } };
     },
 
-    async tasksCancel({ taskId, caller }) {
+    async tasksCancel({ taskId, caller, signature }) {
       const rec = await config.taskStore.get(taskId);
       if (!rec) return { ok: false, code: RPC_NOT_FOUND, message: 'unknown task' };
+      const authd = await verifyCaller('tasks/cancel', taskId, caller, signature);
+      if (!authd.ok) return authd;
       if (!eq(caller, rec.sender) && !eq(caller, rec.task.assignee)) {
         return { ok: false, code: RPC_UNAUTHORIZED, message: 'not a party to this task' };
       }
@@ -206,9 +224,11 @@ export function createA2aAgent(config: A2aAgentConfig): A2aAgent {
       return { ok: true, result: { taskId, state: 'canceled' } };
     },
 
-    async pushConfigSet({ taskId, caller, url, token }) {
+    async pushConfigSet({ taskId, caller, signature, url, token }) {
       const rec = await config.taskStore.get(taskId);
       if (!rec) return { ok: false, code: RPC_NOT_FOUND, message: 'unknown task' };
+      const authd = await verifyCaller('tasks/pushNotificationConfig/set', taskId, caller, signature);
+      if (!authd.ok) return authd;
       if (!eq(caller, rec.sender) && !eq(caller, rec.task.assignee)) {
         return { ok: false, code: RPC_UNAUTHORIZED, message: 'not a party to this task' };
       }

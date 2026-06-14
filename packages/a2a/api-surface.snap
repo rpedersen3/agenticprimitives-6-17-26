@@ -72,6 +72,7 @@ re-export formatSseEvent from ./sse.js
 re-export gateSkillPayment from ./payment-gate.js
 re-export handleA2aRpcBody from ./jsonrpc.js
 re-export hashA2aMessage from ./auth.js
+re-export hashA2aTaskRequest from ./auth.js
 re-export hashPushPayload from ./push.js
 re-export isStreamEnd from ./sse.js
 re-export isTerminal from ./types.js

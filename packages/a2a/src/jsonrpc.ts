@@ -23,7 +23,9 @@ const err = (id: string | number | null, code: number, message: string): JsonRpc
 const ok = (id: string | number | null, result: unknown): JsonRpcResponse => ({ jsonrpc: '2.0', id, result });
 
 /** Dispatch a single JSON-RPC request to the agent. `message/stream` is rejected here (handled by the
- *  SSE transport). The `caller` for tasks/get|cancel is taken from `params.caller`. */
+ *  SSE transport). AUDIT NEW-A2A-2: tasks/get|cancel|pushNotificationConfig/set carry `caller` + `signature`;
+ *  the agent verifies the signature (ERC-1271) against the request digest, so `caller` can't be spoofed —
+ *  an attacker passing a victim's address but no/own signature is rejected. */
 export async function dispatchA2aRpc(agent: A2aAgent, req: JsonRpcRequest): Promise<JsonRpcResponse> {
   const id = req.id ?? null;
   if (req.jsonrpc !== '2.0' || typeof req.method !== 'string') {
@@ -41,15 +43,15 @@ export async function dispatchA2aRpc(agent: A2aAgent, req: JsonRpcRequest): Prom
       return r.ok ? ok(id, r.result) : err(id, r.code, r.message);
     }
     case 'tasks/get': {
-      const r = await agent.tasksGet({ taskId: p.taskId as Hex, caller: p.caller as Address });
+      const r = await agent.tasksGet({ taskId: p.taskId as Hex, caller: p.caller as Address, signature: (p.signature ?? '0x') as Hex });
       return r.ok ? ok(id, r.result) : err(id, r.code, r.message);
     }
     case 'tasks/cancel': {
-      const r = await agent.tasksCancel({ taskId: p.taskId as Hex, caller: p.caller as Address });
+      const r = await agent.tasksCancel({ taskId: p.taskId as Hex, caller: p.caller as Address, signature: (p.signature ?? '0x') as Hex });
       return r.ok ? ok(id, r.result) : err(id, r.code, r.message);
     }
     case 'tasks/pushNotificationConfig/set': {
-      const r = await agent.pushConfigSet({ taskId: p.taskId as Hex, caller: p.caller as Address, url: p.url as string, token: p.token as string | undefined });
+      const r = await agent.pushConfigSet({ taskId: p.taskId as Hex, caller: p.caller as Address, signature: (p.signature ?? '0x') as Hex, url: p.url as string, token: p.token as string | undefined });
       return r.ok ? ok(id, r.result) : err(id, r.code, r.message);
     }
     case 'message/stream':

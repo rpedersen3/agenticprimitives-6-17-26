@@ -35,6 +35,22 @@ export function hashA2aMessage(m: Pick<A2aMessage, 'messageId' | 'sender' | 'ski
   );
 }
 
+/** AUDIT NEW-A2A-2: canonical digest the CALLER signs for a read/control request (tasks/get | cancel |
+ *  pushNotificationConfig/set). Authorization for these ops previously trusted a `caller` param the client
+ *  supplied — any attacker who knew a taskId could impersonate a party. The caller now PROVES control of
+ *  `caller` by signing this digest (verified via `OnChainChecks.verifyCallerSignature`). Bound to the
+ *  method (can't replay a `get` signature as a `cancel`), the taskId, the verifying agent, and the chain
+ *  (no cross-deployment replay). The agent re-derives it server-side — a client-supplied digest is never
+ *  trusted. */
+export function hashA2aTaskRequest(r: { method: string; taskId: Hex; agentSA: Address; chainId: number }): Hex {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: 'bytes32' }, { type: 'bytes32' }, { type: 'address' }, { type: 'uint256' }],
+      [keccak256(toBytes(`a2a:request:${r.method}`)), r.taskId, r.agentSA, BigInt(r.chainId)],
+    ),
+  );
+}
+
 /** On-chain + crypto verdicts injected by the consumer (viem-backed). All fail-closed. */
 export interface OnChainChecks {
   /** DelegationManager.isRevoked(hashDelegation(d)) — MUST throw or return true to deny. */
@@ -43,6 +59,9 @@ export interface OnChainChecks {
   verifyDelegationSignature(delegation: Delegation): Promise<boolean>;
   /** ERC-1271: the sender SA signed `hashA2aMessage(message)`. */
   verifyMessageSignature(message: A2aMessage, digest: Hex): Promise<boolean>;
+  /** AUDIT NEW-A2A-2 — ERC-1271: `caller` SA signed `hashA2aTaskRequest(...)`. Proves the read/control
+   *  caller controls the address it claims, so `caller` can no longer be spoofed. Fail-closed (throw/false). */
+  verifyCallerSignature(caller: Address, digest: Hex, signature: Hex): Promise<boolean>;
 }
 
 /** Single-use reservation seam (the TaskStore provides this; FR-4.3). */

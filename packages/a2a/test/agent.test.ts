@@ -24,7 +24,10 @@ const DM = ADDR('d');
 const enforcers: A2aEnforcers = { allowedTargets: ADDR('1'), allowedMethods: ADDR('2'), timestamp: ADDR('3') };
 const hashBody = (data: unknown) => keccak256(toBytes(JSON.stringify(data ?? null)));
 
-const okChecks = (): OnChainChecks => ({ isRevoked: async () => false, verifyDelegationSignature: async () => true, verifyMessageSignature: async () => true });
+const okChecks = (): OnChainChecks => ({ isRevoked: async () => false, verifyDelegationSignature: async () => true, verifyMessageSignature: async () => true, verifyCallerSignature: async () => true });
+// AUDIT NEW-A2A-2: tasks/get|cancel now require a caller signature. A non-empty placeholder passes the
+// not-empty guard; `okChecks().verifyCallerSignature` returns true, so the party-auth logic is still what's tested.
+const SIG = '0x01' as Hex;
 
 function grant(skill = 'echo'): Delegation {
   return {
@@ -75,7 +78,7 @@ describe('createA2aAgent — message/send', () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.result.state).toBe('submitted'); // not yet processed
-      const t = await agent.tasksGet({ taskId: r.result.taskId, caller: REQUESTER });
+      const t = await agent.tasksGet({ taskId: r.result.taskId, caller: REQUESTER, signature: SIG });
       expect(t.ok && t.result.state).toBe('submitted');
     }
   });
@@ -104,10 +107,10 @@ describe('createA2aAgent — processDue (the alarm body)', () => {
     const events = await agent.processDue();
     expect(events.map((e) => e.state)).toEqual(['working', 'completed']);
     if (send.ok) {
-      const t = await agent.tasksGet({ taskId: send.result.taskId, caller: DELEGATOR });
+      const t = await agent.tasksGet({ taskId: send.result.taskId, caller: DELEGATOR, signature: SIG });
       // wrong: DELEGATOR is not a party (sender=REQUESTER, assignee=AGENT)
       expect(t.ok).toBe(false);
-      const t2 = await agent.tasksGet({ taskId: send.result.taskId, caller: REQUESTER });
+      const t2 = await agent.tasksGet({ taskId: send.result.taskId, caller: REQUESTER, signature: SIG });
       expect(t2.ok && t2.result.state).toBe('completed');
       if (t2.ok) expect(t2.result.artifactRefs.length).toBe(1);
     }
@@ -117,16 +120,45 @@ describe('createA2aAgent — processDue (the alarm body)', () => {
 describe('createA2aAgent — tasks/get + tasks/cancel auth', () => {
   it('unknown task -> not found; non-party -> unauthorized; cancel by party works', async () => {
     const agent = makeAgent();
-    const nf = await agent.tasksGet({ taskId: (`0x${'ee'.repeat(32)}`) as Hex, caller: REQUESTER });
+    const nf = await agent.tasksGet({ taskId: (`0x${'ee'.repeat(32)}`) as Hex, caller: REQUESTER, signature: SIG });
     expect(nf.ok).toBe(false);
     const input = { a: 1 };
     const send = await agent.messageSend({ delegation: grant(), requester: REQUESTER, message: msg(input), input });
     if (send.ok) {
-      const np = await agent.tasksGet({ taskId: send.result.taskId, caller: ADDR('9') });
+      const np = await agent.tasksGet({ taskId: send.result.taskId, caller: ADDR('9'), signature: SIG });
       expect(np.ok).toBe(false);
-      const c = await agent.tasksCancel({ taskId: send.result.taskId, caller: REQUESTER });
+      const c = await agent.tasksCancel({ taskId: send.result.taskId, caller: REQUESTER, signature: SIG });
       expect(c.ok && c.result.state).toBe('canceled');
     }
+  });
+});
+
+describe('AUDIT NEW-A2A-2 — caller cannot be spoofed (signed-request auth)', () => {
+  it('tasks/get with an EMPTY signature is unauthorized even for a real party', async () => {
+    const agent = makeAgent();
+    const send = await agent.messageSend({ delegation: grant(), requester: REQUESTER, message: msg({ a: 1 }), input: { a: 1 } });
+    if (!send.ok) throw new Error('send failed');
+    const r = await agent.tasksGet({ taskId: send.result.taskId, caller: REQUESTER, signature: '0x' as Hex });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/signature required/);
+  });
+
+  it('an attacker who passes a victim address but a signature that does not verify is rejected', async () => {
+    // verifyCallerSignature returns false ⇒ the supplied (caller, signature) pair is not valid for caller.
+    const agent = makeAgent({ checks: { ...okChecks(), verifyCallerSignature: async () => false } });
+    const send = await agent.messageSend({ delegation: grant(), requester: REQUESTER, message: msg({ a: 1 }), input: { a: 1 } });
+    if (!send.ok) throw new Error('send failed');
+    const r = await agent.tasksGet({ taskId: send.result.taskId, caller: REQUESTER, signature: ('0x' + 'de'.repeat(65)) as Hex });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/signature invalid/);
+  });
+
+  it('a verifier that THROWS fails closed (denies)', async () => {
+    const agent = makeAgent({ checks: { ...okChecks(), verifyCallerSignature: async () => { throw new Error('rpc down'); } } });
+    const send = await agent.messageSend({ delegation: grant(), requester: REQUESTER, message: msg({ a: 1 }), input: { a: 1 } });
+    if (!send.ok) throw new Error('send failed');
+    const r = await agent.tasksCancel({ taskId: send.result.taskId, caller: REQUESTER, signature: SIG });
+    expect(r.ok).toBe(false);
   });
 });
 
@@ -162,7 +194,7 @@ describe('A2aWireAdapter (over an injected transport)', () => {
     const sub = await client.submitTask(AGENT, { message: msg(input), delegation: grant(), requester: REQUESTER, input });
     expect(sub.state).toBe('submitted');
     await agent.processDue();
-    const t = await client.getTask(AGENT, sub.taskId, REQUESTER);
+    const t = await client.getTask(AGENT, sub.taskId, REQUESTER, SIG);
     expect(t.state).toBe('completed');
   });
 

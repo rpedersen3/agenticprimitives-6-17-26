@@ -37,8 +37,9 @@ function sharedVault(): VaultClient & { store: Map<string, unknown> } {
 }
 
 const okChecks = (over: Partial<OnChainChecks> = {}): OnChainChecks => ({
-  isRevoked: async () => false, verifyDelegationSignature: async () => true, verifyMessageSignature: async () => true, ...over,
+  isRevoked: async () => false, verifyDelegationSignature: async () => true, verifyMessageSignature: async () => true, verifyCallerSignature: async () => true, ...over,
 });
+const SIG = '0x01' as Hex; // AUDIT NEW-A2A-2: non-empty caller signature; okChecks verifier returns true.
 
 let msgN = 0;
 const nextMsgId = () => (`0x${(++msgN).toString(16).padStart(64, '0')}`) as Hex;
@@ -80,7 +81,7 @@ describe('AC-1 — happy path: alice sends bob an echo task, polls the result', 
 
     await bob.processDue();
 
-    const got = await rpc(bob, 'tasks/get', { taskId, caller: ALICE });
+    const got = await rpc(bob, 'tasks/get', { taskId, caller: ALICE, signature: SIG });
     const task = (got as { result: { state: string; artifactRefs: { owner: string; recordType: string }[] } }).result;
     expect(task.state).toBe('completed');
     expect(task.artifactRefs.length).toBe(1);
@@ -135,7 +136,7 @@ describe('AC-3 — entitlement conversation: bob deposits a credential into alic
     const taskId = (send as { result: { taskId: Hex } }).result.taskId;
     await bob.processDue();
 
-    expect((await rpc(bob, 'tasks/get', { taskId, caller: ALICE }) as { result: { state: string } }).result.state).toBe('completed');
+    expect((await rpc(bob, 'tasks/get', { taskId, caller: ALICE, signature: SIG }) as { result: { state: string } }).result.state).toBe('completed');
     // The entitlement landed in ALICE's namespace; bob never wrote to his own.
     expect(await v.read({ owner: ALICE, recordType: 'entitlement:gold' })).toEqual({ tier: 'gold', by: BOB });
     expect(await v.read({ owner: BOB, recordType: 'entitlement:gold' })).toBeNull();
@@ -161,7 +162,7 @@ describe('AC-4 — auth-required round-trip: suspend, then resubmit with a fresh
     const send = await rpc(bob, 'message/send', { delegation: g1, requester: ALICE, message: message(ALICE, 'guarded', first), input: first });
     const taskId = (send as { result: { taskId: Hex } }).result.taskId;
     await bob.processDue();
-    expect((await rpc(bob, 'tasks/get', { taskId, caller: ALICE }) as { result: { state: string } }).result.state).toBe('auth-required');
+    expect((await rpc(bob, 'tasks/get', { taskId, caller: ALICE, signature: SIG }) as { result: { state: string } }).result.state).toBe('auth-required');
 
     // 2) resubmit — fresh grant + new signed message carrying the step-up token.
     const second = { authToken: 'stepped-up' };
@@ -170,7 +171,7 @@ describe('AC-4 — auth-required round-trip: suspend, then resubmit with a fresh
     expect((resub as { result: { state: string } }).result.state).toBe('submitted');
     await bob.processDue();
 
-    const done = (await rpc(bob, 'tasks/get', { taskId, caller: ALICE }) as { result: { state: string; artifactRefs: unknown[] } }).result;
+    const done = (await rpc(bob, 'tasks/get', { taskId, caller: ALICE, signature: SIG }) as { result: { state: string; artifactRefs: unknown[] } }).result;
     expect(isTerminal(done.state as never)).toBe(true);
     expect(done.state).toBe('completed');
     expect(done.artifactRefs.length).toBe(1);

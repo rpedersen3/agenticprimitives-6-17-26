@@ -760,14 +760,20 @@ findings:
   - id: NEW-A2A-2
     severity: high
     title: a2a tasks/get + tasks/cancel + pushNotificationConfig/set trust a user-supplied `caller` param for authorization
-    status: open
-    concerns: [packages/a2a/src/jsonrpc.ts, packages/a2a/src/agent.ts]
+    status: closed
+    anchor: hashA2aTaskRequest
+    enforcement: test-covered
+    concerns: [packages/a2a/src/jsonrpc.ts, packages/a2a/src/agent.ts, packages/a2a/src/auth.ts]
     origin: 2026-06-11-production-readiness-audit.md
+    tests:
+      - packages/a2a/test/agent.test.ts
     note: >
-      Caller identity is read from request params (jsonrpc.ts:45-53) and used directly in the task
-      authorization check (agent.ts:167-193) — an attacker supplies a victim address as `caller` plus a
-      known taskId to read, cancel, or re-route push notifications for another party's task. Fix: caller
-      identity must come from the authenticated transport principal (verified token/session), never params.
+      Fixed in harden/audit-2026-06-13. `caller` is no longer trusted on its own: the caller MUST sign
+      `hashA2aTaskRequest({ method, taskId, agentSA, chainId })` and pass `signature`; the agent verifies it
+      via the injected `OnChainChecks.verifyCallerSignature` (ERC-1271) BEFORE the party check, fail-closed
+      on missing/invalid signature or a throwing verifier. Digest is method/task/agent/chain-bound (no
+      cross-op or cross-deployment replay). demo-a2a wires the verifier; A2aWireAdapter takes a pre-signed
+      signature (key-less client). Regression: empty sig, non-verifying sig, and a throwing verifier all denied.
   - id: NEW-A2A-3
     severity: medium
     title: a2a default newTaskId falls back to a deterministic constant — task collision/poisoning when integrators omit it
@@ -784,20 +790,53 @@ findings:
   - id: NEW-RAG-1
     severity: medium
     title: spec-271 custody descriptor not validated at the storage boundary — raw client `custody` body persisted
-    status: open
+    status: closed
+    anchor: NEW-RAG-1
     concerns: [apps/demo-sso-next/server/connect/related-orgs.ts]
     origin: 2026-06-11-production-readiness-audit.md
     note: >
-      Persistence stores `body?.custody ?? null` without calling buildCustodyDescriptor, so RC-INV-3
-      (no owner identifiers at rest) is enforced at build/consume but not at rest — a client can store
-      iss/sub directly. Validate/rebuild the descriptor server-side at persist time.
+      Fixed in harden/audit-2026-06-13. The POST now runs a client-supplied `custody` through
+      buildCustodyDescriptor (RC-INV-3: revalidates + rebuilds field-by-field, dropping any smuggled
+      iss/sub) before persisting; bad input is rejected 400 (fail-closed) rather than stored raw.
   - id: NEW-RAG-2
     severity: medium
     title: custody-descriptor write auth is an ERC-1271 signature over a constant challenge — replayable forever (denial-of-recovery)
     status: open
     concerns: [apps/demo-sso-next/server/connect/related-orgs.ts]
     origin: 2026-06-11-production-readiness-audit.md
-    note: bind the signed challenge to org + payload hash + nonce + expiry.
+    note: >
+      Remediation pending (coordinated demo-jp change) — flagged at the code site in harden/audit-2026-06-13.
+      Bind the signed challenge to org + payload hash + nonce + expiry and add a one-shot nonce store. The
+      ERC-1271 path is the external-custodian (demo-jp operator) path; the home's OWN management uses the
+      nonce-protected session-token branch, which is unaffected. Do NOT widen the ERC-1271 path meanwhile.
+  - id: AUD-N1-CONNECT-AUTH-STUBS
+    severity: high
+    title: connect-auth/passkey ships 4 published public exports that throw "not implemented yet"
+    status: closed
+    anchor: "(AUDIT N-1)"
+    enforcement: code-present
+    concerns: [packages/connect-auth/src/methods/passkey.ts]
+    origin: 2026-06-13-hardening-audit
+    note: >
+      Fixed in harden/audit-2026-06-13. `beginSignup`/`completeSignup`/`beginLogin`/`completeLogin` were
+      dead public exports (no importers; the real WebAuthn challenge verification is on-chain in
+      AgentAccount._verifyWebAuthn) that threw at runtime from a published subpath. Removed (deletes >
+      deprecations); the pure crypto primitives the module legitimately provides are unchanged. 119 tests green.
+  - id: AUD-N2-AWS-KMS-DEFERRED-FAILURE
+    severity: high
+    title: key-custody aws-kms backend constructs cleanly and throws only on first use (deferred-failure footgun)
+    status: closed
+    anchor: AWS_KMS_NOT_IMPLEMENTED
+    enforcement: test-covered
+    concerns: [packages/key-custody/src/providers/aws.ts, packages/key-custody/src/factories.ts]
+    origin: 2026-06-13-hardening-audit
+    tests:
+      - packages/key-custody/test/unit/aws-fail-fast.test.ts
+    note: >
+      Fixed in harden/audit-2026-06-13. AwsKmsProvider/AwsKmsSigner constructors now throw (fail-fast at
+      construction, matching the package's fail-closed-at-boot invariant) instead of booting and exploding on
+      the first sign/encrypt. Only gcp-kms is production-ready (spec 214 §5); the misleading "aws-kms for real
+      deploys" hint was removed. Regression: factory + direct construction both throw; local-aes unaffected.
   - id: NEW-VC-2
     severity: medium
     title: verifyCredential does not enforce validFrom — not-yet-active credentials verify valid
