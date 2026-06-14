@@ -235,28 +235,13 @@ export function parseAuthData(authData: Uint8Array): ParsedAttestation {
   };
 }
 
-// ─── Login/signup stubs (real ceremony deferred to apps) ─────────────
-
-export interface PasskeySignupInput {
-  label: string;
-  challenge: Hex;
-}
-
-export async function beginSignup(_input: { label: string }): Promise<never> {
-  throw new Error('connect-auth/passkey: beginSignup not implemented yet.');
-}
-
-export async function completeSignup(_req: unknown): Promise<never> {
-  throw new Error('connect-auth/passkey: completeSignup not implemented yet.');
-}
-
-export async function beginLogin(_input: { credentialId: string }): Promise<never> {
-  throw new Error('connect-auth/passkey: beginLogin not implemented yet.');
-}
-
-export async function completeLogin(_req: unknown): Promise<never> {
-  throw new Error('connect-auth/passkey: completeLogin not implemented yet.');
-}
+// NOTE: the passkey signup/login CEREMONY (begin/complete) is deliberately NOT part of this
+// package's surface — the canonical WebAuthn challenge verification is enforced ON-CHAIN by
+// AgentAccount._verifyWebAuthn (binds challenge + rpIdHash + UV), and the ceremony orchestration
+// (registration options, attestation transport, origin checks) is app/transport territory. This
+// module provides only the pure cryptographic primitives above (DER/low-s, assertion build, attestation
+// parse). Earlier non-functional `beginSignup/completeSignup/beginLogin/completeLogin` stubs that threw
+// "not implemented" were removed (AUDIT N-1): a published package must not advertise an API that throws.
 
 // ─── Private helpers ─────────────────────────────────────────────────
 

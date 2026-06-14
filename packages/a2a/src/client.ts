@@ -39,17 +39,20 @@ export class A2aWireAdapter {
     return unwrap(res);
   }
 
-  /** Poll a task's current state + artifact refs. */
-  async getTask(targetAgent: Address, taskId: Hex, caller: Address): Promise<Task & { error?: string }> {
+  /** Poll a task's current state + artifact refs. AUDIT NEW-A2A-2: `caller` must sign
+   *  `hashA2aTaskRequest({ method:'tasks/get', taskId, agentSA: targetAgent, chainId })` and pass the
+   *  `signature` (the client holds no keys — sign externally, like `submitTask`'s message). */
+  async getTask(targetAgent: Address, taskId: Hex, caller: Address, signature: Hex): Promise<Task & { error?: string }> {
     const res = await this.transport.rpc(targetAgent, {
-      jsonrpc: '2.0', id: this.id(), method: 'tasks/get', params: { taskId, caller },
+      jsonrpc: '2.0', id: this.id(), method: 'tasks/get', params: { taskId, caller, signature },
     });
     return unwrap(res);
   }
 
-  async cancelTask(targetAgent: Address, taskId: Hex, caller: Address): Promise<{ taskId: Hex; state: Task['state'] }> {
+  /** Cancel a task. `caller` must sign `hashA2aTaskRequest({ method:'tasks/cancel', ... })` (NEW-A2A-2). */
+  async cancelTask(targetAgent: Address, taskId: Hex, caller: Address, signature: Hex): Promise<{ taskId: Hex; state: Task['state'] }> {
     const res = await this.transport.rpc(targetAgent, {
-      jsonrpc: '2.0', id: this.id(), method: 'tasks/cancel', params: { taskId, caller },
+      jsonrpc: '2.0', id: this.id(), method: 'tasks/cancel', params: { taskId, caller, signature },
     });
     return unwrap(res);
   }

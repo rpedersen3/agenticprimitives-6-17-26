@@ -25,7 +25,8 @@ const REQUESTER = ADDR('c');
 const DELEGATOR = ADDR('a');
 const enforcers: A2aEnforcers = { allowedTargets: ADDR('1'), allowedMethods: ADDR('2'), timestamp: ADDR('3') };
 const hashBody = (data: unknown) => keccak256(toBytes(JSON.stringify(data ?? null)));
-const okChecks = (): OnChainChecks => ({ isRevoked: async () => false, verifyDelegationSignature: async () => true, verifyMessageSignature: async () => true });
+const okChecks = (): OnChainChecks => ({ isRevoked: async () => false, verifyDelegationSignature: async () => true, verifyMessageSignature: async () => true, verifyCallerSignature: async () => true });
+const SIG = '0x01' as Hex; // AUDIT NEW-A2A-2: non-empty caller signature; okChecks verifier returns true.
 const grant = (): Delegation => ({ delegator: DELEGATOR, delegate: REQUESTER, authority: ROOT_AUTHORITY, caveats: buildA2aGrantCaveats({ recipientAgentSA: AGENT, skill: 'echo', enforcers, window: { validAfter: 0, validUntil: 9_999_999_999 } }), salt: 0n, signature: '0xsig' });
 const msg = (input: unknown): A2aMessage => ({ messageId: (`0x${'11'.repeat(32)}`) as Hex, sender: REQUESTER, skill: 'echo', bodyRef: { owner: AGENT, recordType: 'pending' }, bodyHash: hashBody(input), signature: '0xmsg', createdAt: 1000 });
 
@@ -109,9 +110,9 @@ describe('agent — vault residency + push on terminal (W4 e2e)', () => {
     const input = { a: 1 };
     const send = await agent.messageSend({ delegation: grant(), requester: REQUESTER, message: msg(input), input });
     if (send.ok) {
-      const stranger = await agent.pushConfigSet({ taskId: send.result.taskId, caller: ADDR('9'), url: 'https://x/p' });
+      const stranger = await agent.pushConfigSet({ taskId: send.result.taskId, caller: ADDR('9'), signature: SIG, url: 'https://x/p' });
       expect(stranger.ok).toBe(false);
-      const party = await agent.pushConfigSet({ taskId: send.result.taskId, caller: REQUESTER, url: 'https://x/p' });
+      const party = await agent.pushConfigSet({ taskId: send.result.taskId, caller: REQUESTER, signature: SIG, url: 'https://x/p' });
       expect(party.ok && party.result.registered).toBe(true);
     }
   });
