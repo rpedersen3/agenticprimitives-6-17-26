@@ -436,6 +436,9 @@ importers:
       '@agenticprimitives/identity-directory-adapters':
         specifier: workspace:*
         version: link:../../packages/identity-directory-adapters
+      '@agenticprimitives/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
       '@agenticprimitives/related-agents':
         specifier: workspace:*
         version: link:../../packages/related-agents
