@@ -114,6 +114,7 @@
     "A2aEnforcers",
     "authorizeA2aMessage",
     "hashA2aMessage",
+    "hashA2aTaskRequest",
     "decodeTimestampTerms",
     "decodeAllowedTargetsTerms",
     "decodeAllowedMethodsTerms",
