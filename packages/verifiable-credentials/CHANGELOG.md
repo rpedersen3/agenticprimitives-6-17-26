@@ -1,5 +1,13 @@
 # @agenticprimitives/verifiable-credentials
 
+## 0.0.0-alpha.6
+
+### Patch Changes
+
+- Issuer-delegated content signing (spec 266): optional `Eip712Signature2026Proof.delegatingSigner`
+  (carried in the proof, which is stripped from the credential hash — does not change the signed digest);
+  `signCredential` accepts it. Backward-compatible — optional; existing direct-issuer signing unchanged.
+
 ## 0.0.0-alpha.5
 
 ### Patch Changes
