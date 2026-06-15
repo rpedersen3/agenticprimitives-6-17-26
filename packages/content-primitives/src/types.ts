@@ -151,15 +151,28 @@ export interface ContentDescriptor {
   accessPolicy: AccessPolicy;
   /** Membership corpus (when proofPolicy is merkle-membership-v1). */
   corpusRef?: Hex;
-  /** Issuer ERC-1271 signature over descriptorHash(unsigned). */
+  /** Signature over descriptorHash(unsigned). Either the issuer's own ERC-1271 signature, OR — when
+   *  `delegatingSigner` is present — a signature by the delegated signing key the issuer authorized. */
   signature: Hex;
+  /** Present when the descriptor was signed by an issuer-AUTHORIZED operational key (e.g. a Cloud-KMS
+   *  key the issuer delegated) rather than the issuer's own custodian. Trust still roots in the issuer
+   *  SA (`delegatorIssuer` == `issuer.address`); the leaf proves the issuer authorized `delegateKey`. */
+  delegatingSigner?: DelegatingSigner;
 }
 
-/** Input to {@link buildContentDescriptor} (everything but the signature). */
-export type BuildDescriptorInput = Omit<ContentDescriptor, 'signature'>;
+/** An issuer's authorization of an operational signing key (spec 266 + spec 270 session-delegation). */
+export interface DelegatingSigner {
+  /** The canonical issuer SA the descriptor's trust roots in (e.g. lbsb.impact). Equals `issuer.address`. */
+  delegatorIssuer: Address;
+  /** The operational key that actually signed the descriptor — authorized by `delegatorIssuer`. */
+  delegateKey: Address;
+  /** The signed delegation binding `delegateKey` → `delegatorIssuer`. OPAQUE here; the app's injected
+   *  {@link DelegatedAuthorityVerifier} validates it (keeps content-primitives delegation-agnostic). */
+  delegationLeaf: unknown;
+}
 
 /**
- * Verifies an issuer signature. Apps inject one backed by an
+ * Verifies a signature over a hash by `signer`. Apps inject one backed by an
  * `AgentAccountClient.isValidSignature` (ERC-1271/6492); tests inject a fake.
  * Decoupled per ADR-0006's injected-context pattern.
  */
@@ -168,6 +181,17 @@ export type SignatureVerifier = (args: {
   hash: Hex;
   signature: Hex;
 }) => Promise<boolean> | boolean;
+
+/**
+ * Verifies that `delegatorIssuer` authorized `delegateKey` to sign content on its behalf, by validating
+ * the signed `delegationLeaf` (the leaf's delegator == delegatorIssuer, delegate == delegateKey, signed by
+ * delegatorIssuer's ERC-1271, within caveats). Injected (ADR-0006) so content-primitives stays free of the
+ * delegation package.
+ */
+export type DelegatedAuthorityVerifier = (args: DelegatingSigner) => Promise<boolean> | boolean;
+
+/** Input to {@link buildContentDescriptor} (everything but the signature + how-it-was-signed metadata). */
+export type BuildDescriptorInput = Omit<ContentDescriptor, 'signature' | 'delegatingSigner'>;
 
 /** A credential asserting a subject may access a corpus (apcnt:Entitlement). */
 export type Entitlement = VerifiableCredential<{

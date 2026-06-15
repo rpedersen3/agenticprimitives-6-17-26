@@ -26,6 +26,7 @@ export type {
   ISODate,
   ProofType,
   Eip712Signature2026Proof,
+  DelegatingSignerProof,
   Proof,
   CredentialStatus2021,
   VisibilityTier,

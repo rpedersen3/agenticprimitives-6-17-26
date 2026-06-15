@@ -53,6 +53,21 @@ export interface Eip712Signature2026Proof {
   };
   /** Optional canonical-hash receipt of the credential body (RFC 8785 JCS). */
   credentialHash?: Hex32;
+  /** Present when an issuer-AUTHORIZED operational key (e.g. Cloud KMS) signed this credential instead of
+   *  the issuer's own custodian. `proofValue` is then the delegate key's signature; trust still roots in
+   *  the issuer SA (`delegatorIssuer` == the credential's issuer). Lives in the proof (stripped from the
+   *  credential hash), so attaching it does NOT change the signed digest. The verifier checks the leaf. */
+  delegatingSigner?: DelegatingSignerProof;
+}
+
+/** Issuer authorization of an operational signing key (mirrors content-primitives' DelegatingSigner). */
+export interface DelegatingSignerProof {
+  /** The issuer SA the credential's trust roots in (== the credential issuer). */
+  delegatorIssuer: Address;
+  /** The operational key that actually signed (authorized by `delegatorIssuer`). */
+  delegateKey: Address;
+  /** The signed delegation binding `delegateKey` → `delegatorIssuer`. OPAQUE; the app validates it. */
+  delegationLeaf: unknown;
 }
 
 /** Discriminated union for all supported proof types (W1: Eip712Signature2026 only). */

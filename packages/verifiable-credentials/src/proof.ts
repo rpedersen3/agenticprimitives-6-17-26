@@ -92,7 +92,7 @@ export function isoToSeconds(iso: string | undefined): number {
 export async function signCredential<TSubject extends Record<string, unknown>>(
   unsigned: UnsignedCredential<TSubject>,
   signer: CredentialSigner,
-  opts: { proofPurpose?: Eip712Signature2026Proof['proofPurpose'] } = {},
+  opts: { proofPurpose?: Eip712Signature2026Proof['proofPurpose']; delegatingSigner?: Eip712Signature2026Proof['delegatingSigner'] } = {},
 ): Promise<VerifiableCredential<TSubject>> {
   const proofPurpose = opts.proofPurpose ?? 'assertionMethod';
   const bodyHash = credentialHash(unsigned);
@@ -120,6 +120,7 @@ export async function signCredential<TSubject extends Record<string, unknown>>(
       verifyingContract: signer.verifyingContract,
     },
     credentialHash: bodyHash,
+    ...(opts.delegatingSigner ? { delegatingSigner: opts.delegatingSigner } : {}),
   };
 
   return {

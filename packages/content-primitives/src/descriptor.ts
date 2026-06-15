@@ -1,6 +1,6 @@
 import { keccak256, sha256, concat, toBytes, type Hex } from 'viem';
 import { jcsCanonicalize } from '@agenticprimitives/verifiable-credentials';
-import type { BuildDescriptorInput, ContentCommitment, ContentDescriptor, SignatureVerifier } from './types.js';
+import type { BuildDescriptorInput, ContentCommitment, ContentDescriptor, DelegatingSigner, DelegatedAuthorityVerifier, SignatureVerifier } from './types.js';
 import { leafHash, verifyInclusion } from './merkle.js';
 import { CommitmentMismatchError } from './errors.js';
 
@@ -61,20 +61,26 @@ export function descriptorHash(d: BuildDescriptorInput): Hex {
 }
 
 /**
- * Build a signed {@link ContentDescriptor}. `sign` is the issuer's signer over
- * {@link descriptorHash} (its Smart Agent's ERC-1271 path).
+ * Build a signed {@link ContentDescriptor}. `sign` signs {@link descriptorHash} — either as the issuer's
+ * own Smart Agent (ERC-1271), or, when `delegatingSigner` is given, as the issuer-AUTHORIZED operational
+ * key (e.g. Cloud KMS). The attached `delegatingSigner` lets a verifier root trust in the issuer SA while
+ * the day-to-day signing key is delegated/rotatable (no issuer custodian key held).
  */
 export async function buildContentDescriptor(
   input: BuildDescriptorInput,
   sign: (hash: Hex) => Promise<Hex> | Hex,
+  delegatingSigner?: DelegatingSigner,
 ): Promise<ContentDescriptor> {
   const signature = await sign(descriptorHash(input));
-  return { ...input, signature };
+  return { ...input, signature, ...(delegatingSigner ? { delegatingSigner } : {}) };
 }
 
 export interface VerifyDescriptorOpts {
-  /** Verifies the issuer's ERC-1271 signature (injected; ADR-0006). */
+  /** Verifies an ERC-1271/ECDSA signature by a signer (injected; ADR-0006). */
   verifySignature: SignatureVerifier;
+  /** Verifies an issuer→delegate authorization leaf — REQUIRED when the descriptor carries
+   *  `delegatingSigner` (else delegate-signed descriptors fail closed). Injected (ADR-0006). */
+  verifyDelegatedAuthority?: DelegatedAuthorityVerifier;
   /** Required when proofPolicy is `merkle-membership-v1`. */
   corpusRoot?: Hex;
   inclusionProof?: Hex[];
@@ -108,14 +114,33 @@ export async function verifyContentDescriptor(
   const untilOk = !d.validUntil || Math.floor(new Date(d.validUntil).getTime() / 1000) >= now;
   const withinValidity = fromOk && untilOk;
 
-  const { signature, ...unsigned } = d;
+  const { signature, delegatingSigner, ...unsigned } = d;
   const hash = descriptorHash(unsigned);
-  const signatureVerified = await opts.verifySignature({ signer: d.issuer.address, hash, signature });
+  // Trust ALWAYS roots in the issuer SA. Either the issuer signed directly, or it authorized a delegate
+  // key (proven by the leaf) that signed — and even then the descriptor's issuer.address must equal the
+  // delegating issuer, so a delegate can never re-attribute a descriptor to a different issuer.
+  let signatureVerified: boolean;
+  let sigReason = 'issuer signature did not verify';
+  if (delegatingSigner) {
+    if (!opts.verifyDelegatedAuthority) {
+      signatureVerified = false; sigReason = 'descriptor is delegate-signed but no delegated-authority verifier was provided';
+    } else if (d.issuer.address.toLowerCase() !== delegatingSigner.delegatorIssuer.toLowerCase()) {
+      signatureVerified = false; sigReason = 'delegatingSigner.delegatorIssuer ≠ descriptor issuer';
+    } else {
+      const authOk = await opts.verifyDelegatedAuthority(delegatingSigner);
+      const sigOk = authOk && (await opts.verifySignature({ signer: delegatingSigner.delegateKey, hash, signature }));
+      signatureVerified = sigOk;
+      if (!authOk) sigReason = 'issuer did not authorize the delegate signing key';
+      else if (!sigOk) sigReason = 'delegate-key signature did not verify';
+    }
+  } else {
+    signatureVerified = await opts.verifySignature({ signer: d.issuer.address, hash, signature });
+  }
 
   const base: VerificationResult = { ok: false, signatureVerified, statusOk, withinValidity };
   if (!statusOk) return { ...base, reason: `descriptor status is ${d.status}` };
   if (!withinValidity) return { ...base, reason: 'descriptor outside its validity window' };
-  if (!signatureVerified) return { ...base, reason: 'issuer signature did not verify' };
+  if (!signatureVerified) return { ...base, reason: sigReason };
 
   switch (d.proofPolicy) {
     case 'issuer-signature-v1':
