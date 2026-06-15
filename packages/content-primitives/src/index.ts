@@ -30,6 +30,8 @@ export type {
   ContentDescriptor,
   BuildDescriptorInput,
   SignatureVerifier,
+  DelegatingSigner,
+  DelegatedAuthorityVerifier,
   Entitlement,
   CitationAssertion,
 } from './types.js';
