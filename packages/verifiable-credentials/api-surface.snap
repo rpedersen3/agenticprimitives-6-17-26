@@ -2,6 +2,7 @@ const PACKAGE_STATUS: "w1-foundational"
 re-export Caip10Eip155 from ./verifier.js
 re-export CredentialSigner from ./proof.js
 re-export CredentialStatus2021 from ./types.js
+re-export DelegatingSignerProof from ./types.js
 re-export DescriptionRef from ./situation.js
 re-export DisclosurePolicy from ./types.js
 re-export EIP712_SIG_2026_CONTEXT from ./types.js

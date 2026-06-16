@@ -124,13 +124,16 @@
     "InvalidReferenceError",
     "CommitmentMismatchError",
     "buildInclusionZkProof",
-    "bindPaymentMandate"
+    "bindPaymentMandate",
+    "DelegatingSigner",
+    "DelegatedAuthorityVerifier"
   ],
   "forbiddenTerms": [
     {
       "term": "Delegation",
-      "reason": "Belongs in @agenticprimitives/delegation. This substrate gates via injected entitlement/policy, not delegation.",
-      "owningPackage": "@agenticprimitives/delegation"
+      "reason": "Belongs in @agenticprimitives/delegation. This substrate gates via injected entitlement/policy, not delegation. Exception: src/types.ts documents the content-signing `DelegatingSigner` / `DelegatedAuthorityVerifier` abstraction (spec 266/270) — an issuer delegating to an operational signing key, validated by an INJECTED verifier (ADR-0006), so the package stays free of the delegation package.",
+      "owningPackage": "@agenticprimitives/delegation",
+      "allowInPaths": ["spec.md", "README.md", "src/types.ts"]
     },
     {
       "term": "Caveat",

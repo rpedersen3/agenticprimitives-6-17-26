@@ -12,6 +12,8 @@ re-export ContentCommitment from ./types.js
 re-export ContentDescriptor from ./types.js
 re-export CorpusManifest from ./types.js
 re-export CorpusTree from ./merkle.js
+re-export DelegatedAuthorityVerifier from ./types.js
+re-export DelegatingSigner from ./types.js
 re-export DescriptorStatus from ./types.js
 re-export Entitlement from ./types.js
 re-export EntitlementDecision from ./entitlement.js

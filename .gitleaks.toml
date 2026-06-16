@@ -37,4 +37,17 @@ paths = [
   # alphanumeric / colon / underscore mix trips the generic-api-key
   # entropy heuristic.
   '''tests/e2e/playwright\.config\.ts$''',
+
+  # GCP provisioning key-map test FIXTURE. The current source uses a benign
+  # placeholder string for `private_key`, but an earlier commit (617cdc8) carried
+  # a literal `-----BEGIN PRIVATE KEY-----\nabc\n...` placeholder that history
+  # scanning still flags. Synthetic fixture, never a real key (same rationale as
+  # the sibling gcp-provider / gcp-signer fixtures above).
+  '''packages/key-custody/test/unit/provision-gcp\.test\.ts$''',
+
+  # Changeset prose: a backtick-quoted identifier
+  # (`Eip712Signature2026Proof.delegatingSigner`) trips the generic-api-key
+  # entropy heuristic. Documentation, not a secret. (File already consumed; only
+  # present in release history.)
+  '''\.changeset/content-trust-delegated-signing\.md$''',
 ]
