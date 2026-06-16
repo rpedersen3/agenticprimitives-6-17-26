@@ -11,6 +11,7 @@ re-export Erc1271Verifier from ./verifier.js
 re-export Hex32 from ./types.js
 re-export ISODate from ./types.js
 re-export JcsError from ./canonical.js
+re-export KmsSigningBackend from ./proof.js
 re-export Proof from ./types.js
 re-export ProofType from ./types.js
 re-export RoleName from ./situation.js
@@ -33,6 +34,7 @@ re-export credentialHash from ./proof.js
 re-export eip712Digest from ./proof.js
 re-export isoToSeconds from ./proof.js
 re-export jcsCanonicalize from ./canonical.js
+re-export kmsCredentialSigner from ./proof.js
 re-export parseEip155Caip10 from ./verifier.js
 re-export parseShapeUri from ./schema.js
 re-export shapeHash from ./schema.js

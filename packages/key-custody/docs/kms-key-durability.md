@@ -20,7 +20,7 @@ Per the `@agenticprimitives/key-custody` security invariants (see [CLAUDE.md](..
 
 | Key | Used by | Lose this → |
 | --- | --- | --- |
-| **Master signer key** | Bundler relayer, paymaster envelope signer. `LocalSecp256k1Signer` / `GcpKmsSigner` / `AwsKmsSigner`. | Cannot submit new userOps; cannot sign paymaster envelopes. Existing on-chain state survives; UX halts. |
+| **Master signer key** | Bundler relayer, paymaster envelope signer. `LocalSecp256k1Signer` (dev) / `GcpKmsSigner` (prod). (`AwsKmsSigner` is not yet implemented — R11.3.) | Cannot submit new userOps; cannot sign paymaster envelopes. Existing on-chain state survives; UX halts. |
 | **Session data-key wrap key** | Envelope encryption for session keypairs at rest. `LocalAesProvider.generateSessionDataKey` / `GcpKmsProvider`. | Every in-flight session is dead; users must re-authenticate; existing delegations remain valid (they're standalone signed artifacts). |
 | **Service-MAC key** | HMAC between a2a-worker → mcp-worker (audit C1). `buildMacProvider`. | All a2a→mcp calls 401 until rotated. Recoverable in minutes; no data loss. |
 

@@ -2,8 +2,8 @@
 
 ## What this package owns
 - `A2AKeyProvider` interface (envelope encryption + asymmetric signing + HMAC, all optional methods).
-- Built-in providers: `LocalAesProvider` (dev), `AwsKmsProvider`, `GcpKmsProvider`.
-- Built-in signers: `LocalSecp256k1Signer` (dev), `AwsKmsSigner`, `GcpKmsSigner`.
+- Built-in providers: `LocalAesProvider` (dev), `GcpKmsProvider` (prod — its envelope encrypt/decrypt is a v0.2 stub). `AwsKmsProvider` exists but is a not-yet-implemented stub (every method throws) and is NOT exported — R11.3; see AUDIT.md M1.
+- Built-in signers: `LocalSecp256k1Signer` (dev), `GcpKmsSigner` (prod — secp256k1 asymmetric-sign, production path). `AwsKmsSigner` is a not-yet-implemented stub (throws) and is NOT exported.
 - Per-tool executor signers (`buildToolExecutorBackend(toolId, ...)`).
 - viem adapter (`createKmsAccount(backend) → KMSSigner`).
 - Relay-only signer (`getRelayOnlySigner` for Phase-B master-key safety).
@@ -37,7 +37,7 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 **Factories:** `buildKeyProvider`, `buildSignerBackend`, `buildToolExecutorBackend` (deprecated; throws — see below), `buildToolExecutorBackendNoIsolation` (gated dev-only), `buildMacProvider`, `getRelayOnlySigner`
 **Per-subject (spec 235):** `deriveSubjectSigner`, `subjectCanonicalMessage`, `SubjectId`, `DeriveSubjectOpts`
 **viem adapter:** `createKmsAccount`
-**Built-ins:** `LocalAesProvider`, `LocalSecp256k1Signer`, `AwsKmsProvider`, `AwsKmsSigner`, `GcpKmsProvider`, `GcpKmsSigner`
+**Built-ins (exported):** `LocalAesProvider`, `LocalSecp256k1Signer`, `GcpKmsProvider`, `GcpKmsSigner`. (`AwsKmsProvider` / `AwsKmsSigner` live in `providers/aws.ts` but throw `not yet implemented` and are intentionally NOT re-exported from the barrel — R11.3. `KmsBackend` keeps `'aws-kms'` as a future value only.)
 **AAD helpers:** `canonicalContextBytes`
 **NOT exported (intentional):** `deriveSubjectPrivateKeyHex` — returns the raw per-subject privkey as hex; module-internal so unit tests can verify the derivation, but never part of the public API. Closure of ARCH-006 / PKG-KEY-CUSTODY-002.
 
@@ -46,7 +46,11 @@ See [`docs/architecture/vocabulary-map.md`](../../docs/architecture/vocabulary-m
 - `deriveSubjectSigner({ subject: { iss, sub } })` — true per-OIDC-subject signer derived via HKDF (spec 235). Use when isolation is needed.
 
 ## Allowed imports
-`@agenticprimitives/types`, `@agenticprimitives/connect-auth` (`KMSSigner` type), `viem`, `@noble/curves`, `@noble/hashes`, `@aws-sdk/client-kms`, `@google-cloud/kms`.
+**Runtime deps:** `@noble/curves`, `@noble/hashes`. **Peer deps:** `viem`, `@agenticprimitives/types`, `@agenticprimitives/connect-auth` (`KMSSigner` type), `@agenticprimitives/audit` (audit sink on the GCP signing path).
+**No cloud SDKs:** the GCP signer drives the Cloud KMS REST API via `fetch` + Web Crypto (the `@google-cloud/kms` SDK needs gRPC, which won't run on Workers); AWS is unimplemented. Do NOT add `@aws-sdk/client-kms` or `@google-cloud/kms`.
+
+## Consumer-safe KMS core (`./kms-core`, spec 276)
+`src/kms/{secp256k1-core,gcp-transport,kms-core}.ts` is the **peer-dependency-free** signing surface (only `@noble/*` transitively — no `viem`/`audit`/`connect-auth`). External apps import `@agenticprimitives/key-custody/kms-core` (`signDigestWithKms`, `gcpSignDigest`, `createGcpKmsTransport`, `addressFromSpkiPem`, …) instead of inlining a KMS signer. `GcpKmsSigner` (`providers/gcp.ts`) is a thin audited/viem-typed wrapper over it — keep the crypto in the core, never duplicate it. Enforced by `test/unit/kms-core.test.ts` (import-graph guard).
 
 ## Forbidden imports
 - `apps/*`

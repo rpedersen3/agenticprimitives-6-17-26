@@ -1,0 +1,6 @@
+const PACKAGE_STATUS: "w1-foundational"
+function resolveDelegatedSigner(opts: ResolveDelegatedSignerOpts): Promise<ResolvedDelegatedSigner>
+interface ResolveDelegatedSignerOpts
+interface ResolvedDelegatedSigner
+type AccountVerifier = (sa: Address) => Promise<boolean>
+type NameResolver = (name: string) => Promise<Address | null>

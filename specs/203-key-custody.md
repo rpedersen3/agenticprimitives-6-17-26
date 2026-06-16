@@ -21,13 +21,13 @@ Pluggable KMS abstraction with four jobs, no more:
 
 ---
 
-## 2. Backends shipped in v0
+## 2. Backends
 
-| Backend | Use case | Provider classes |
-| --- | --- | --- |
-| `local-aes` | Local dev only (refuses to boot in `NODE_ENV=production`) | `LocalAesProvider`, `LocalSecp256k1Signer` |
-| `aws-kms` | Production AWS | `AwsKmsProvider`, `AwsKmsSigner` (ECC_SECG_P256K1) |
-| `gcp-kms` | Production GCP | `GcpKmsProvider`, `GcpKmsSigner` (EC_SIGN_SECP256K1_SHA256) |
+| Backend | Use case | Provider classes | Status |
+| --- | --- | --- | --- |
+| `local-aes` | Local dev only (refuses to boot in `NODE_ENV=production`) | `LocalAesProvider`, `LocalSecp256k1Signer` | **Shipped** |
+| `gcp-kms` | Production GCP | `GcpKmsProvider`, `GcpKmsSigner` (EC_SIGN_SECP256K1_SHA256) | **Signer shipped** (production path). `GcpKmsProvider` envelope encrypt/decrypt is a **v0.2 stub**. |
+| `aws-kms` | Production AWS (future) | `AwsKmsProvider`, `AwsKmsSigner` (ECC_SECG_P256K1) | **NOT implemented.** Classes exist in `providers/aws.ts` but every method throws `not yet implemented`; removed from the public barrel (R11.3). `KmsBackend` keeps `'aws-kms'` only as a future value. Selecting it fails closed (ADR-0013). Tracked: AUDIT.md M1 (implement-or-remove). |
 
 `vault-transit` is deliberately NOT shipped (smart-agent removed it in G-PR-1). Consumers needing Vault implement the `A2AKeyProvider` interface against it.
 
@@ -108,8 +108,9 @@ export interface SubjectId { iss: string; sub: string; rotation?: number }
 
 // Built-in implementations (also via subpaths)
 export { LocalAesProvider, LocalSecp256k1Signer } from './providers/local';
-export { AwsKmsProvider, AwsKmsSigner } from './providers/aws';
 export { GcpKmsProvider, GcpKmsSigner } from './providers/gcp';
+// NOTE: AwsKmsProvider / AwsKmsSigner are NOT re-exported (R11.3) — the v0
+// implementations throw `not yet implemented`. Re-add here only when AWS lands.
 
 // Signer wrapper for viem
 export interface KmsAccountBackend {

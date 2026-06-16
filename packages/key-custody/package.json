@@ -15,6 +15,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "ap-provision-gcp": "./bin/ap-provision-gcp.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -31,6 +34,14 @@
     "./gcp": {
       "types": "./dist/providers/gcp.d.ts",
       "import": "./dist/providers/gcp.js"
+    },
+    "./kms-core": {
+      "types": "./dist/kms/kms-core.d.ts",
+      "import": "./dist/kms/kms-core.js"
+    },
+    "./provision-gcp": {
+      "types": "./dist/kms/provision-gcp.d.ts",
+      "import": "./dist/kms/provision-gcp.js"
     },
     "./mac": {
       "types": "./dist/mac.d.ts",
@@ -51,6 +62,7 @@
   },
   "files": [
     "LICENSE",
+    "bin",
     "dist",
     "spec.md",
     "README.md"

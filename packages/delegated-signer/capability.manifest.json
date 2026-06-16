@@ -1,0 +1,65 @@
+{
+  "name": "@agenticprimitives/delegated-signer",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/276-kms-consumer-surface.md",
+  "summary": "Generic named delegated-signer resolution — resolve a name to a signer authorized by a delegation chain (naming/account injected; composes delegation + key-custody). Vertical-agnostic.",
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  },
+  "spineLayers": [],
+  "owns": {
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ],
+    "shapes": []
+  },
+  "imports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody"
+  ],
+  "allowedImports": [
+    "@agenticprimitives/types",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "viem"
+  ],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/mcp-runtime"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "GcpKmsProvider",
+      "reason": "Concrete KMS backend belongs in key-custody. Consume the KmsAccountBackend interface, not a provider class.",
+      "owningPackage": "@agenticprimitives/key-custody"
+    }
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "NameResolver",
+    "AccountVerifier",
+    "ResolveDelegatedSignerOpts",
+    "ResolvedDelegatedSigner",
+    "resolveDelegatedSigner"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**"
+  ]
+}

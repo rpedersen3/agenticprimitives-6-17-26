@@ -52,8 +52,9 @@ export {
   isoToSeconds,
   signCredential,
   viemSignerFromWallet,
+  kmsCredentialSigner,
 } from './proof.js';
-export type { CredentialSigner } from './proof.js';
+export type { CredentialSigner, KmsSigningBackend } from './proof.js';
 
 // Verifier
 export { verifyCredential, verifyCredentialStructural, parseEip155Caip10 } from './verifier.js';

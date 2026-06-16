@@ -6,7 +6,7 @@
  * Spec 242 §4.3 + ADR-0023 §D2.
  */
 
-import { hashTypedData, type Address, type Hex, type WalletClient } from 'viem';
+import { hashTypedData, hexToBytes, bytesToHex, type Address, type Hex, type WalletClient } from 'viem';
 
 import { canonicalHash } from './canonical.js';
 import {
@@ -95,12 +95,17 @@ export async function signCredential<TSubject extends Record<string, unknown>>(
   opts: { proofPurpose?: Eip712Signature2026Proof['proofPurpose']; delegatingSigner?: Eip712Signature2026Proof['delegatingSigner'] } = {},
 ): Promise<VerifiableCredential<TSubject>> {
   const proofPurpose = opts.proofPurpose ?? 'assertionMethod';
-  const bodyHash = credentialHash(unsigned);
+  // Expand `@context` BEFORE hashing so the emitted `credentialHash` matches the
+  // canonical hash of the emitted body. (Hashing the pre-expansion body and then
+  // adding the EIP-712 context to the output produced a VC whose stored hash never
+  // reconciled with its own body — structural verification would reject it.)
+  const contexted = { ...unsigned, '@context': ensureContexts(unsigned['@context']) } as UnsignedCredential<TSubject>;
+  const bodyHash = credentialHash(contexted);
   const digest = eip712Digest({
     credentialBodyHash: bodyHash,
-    issuer: unsigned.issuer,
-    validFrom: isoToSeconds(unsigned.validFrom),
-    validUntil: isoToSeconds(unsigned.validUntil),
+    issuer: contexted.issuer,
+    validFrom: isoToSeconds(contexted.validFrom),
+    validUntil: isoToSeconds(contexted.validUntil),
     proofPurpose,
     chainId: signer.chainId,
     verifyingContract: signer.verifyingContract,
@@ -124,8 +129,7 @@ export async function signCredential<TSubject extends Record<string, unknown>>(
   };
 
   return {
-    ...unsigned,
-    '@context': ensureContexts(unsigned['@context']),
+    ...contexted,
     proof,
   } as VerifiableCredential<TSubject>;
 }
@@ -146,6 +150,44 @@ export function viemSignerFromWallet(args: {
         method: 'eth_sign',
         params: [args.issuerAddress, digest],
       } as unknown as Parameters<WalletClient['request']>[0]) as unknown as Hex;
+    },
+  };
+}
+
+/**
+ * Minimal structural shape of a KMS signing backend (spec 276 KCS-D5). It is
+ * declared HERE — not imported from `@agenticprimitives/key-custody` — because
+ * `verifiable-credentials` is a leaf in the dependency graph (no `@agenticprimitives/*`
+ * imports beyond types/ontology). `key-custody`'s `KmsAccountBackend` structurally
+ * satisfies this, so `kmsCredentialSigner(kmsBackend, …)` just works without the
+ * cross-package edge.
+ */
+export interface KmsSigningBackend {
+  /** Sign a 32-byte digest; returns a 65-byte secp256k1 `(r,s,v)` signature. */
+  signA2AAction(input: { digest: Uint8Array }): Promise<{ signature: Uint8Array }>;
+  /** The signing key's EVM address (the credential the issuer SA validates via ERC-1271). */
+  getSignerAddress(): Promise<Address>;
+}
+
+/**
+ * Convenience: a `CredentialSigner` backed by a KMS-custodied secp256k1 key
+ * (the issuer SA's master / per-subject signer). Mirrors `viemSignerFromWallet`
+ * for the KMS path. `verifyingContract` defaults to the issuer SA itself (the
+ * ERC-1271 self-verification anchor).
+ */
+export function kmsCredentialSigner(args: {
+  backend: KmsSigningBackend;
+  issuerAddress: Address;
+  chainId: number;
+  verifyingContract?: Address;
+}): CredentialSigner {
+  return {
+    issuerAddress: args.issuerAddress,
+    chainId: args.chainId,
+    verifyingContract: args.verifyingContract ?? args.issuerAddress,
+    async signDigest(digest: Hex32): Promise<Hex> {
+      const { signature } = await args.backend.signA2AAction({ digest: hexToBytes(digest) });
+      return bytesToHex(signature);
     },
   };
 }
