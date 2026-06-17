@@ -21,7 +21,45 @@ function testWrapper(): DekWrapper & { lastAad?: Record<string, string> } {
   return w;
 }
 
+// Context-DERIVING wrapper: the DEK is derived FROM the aadContext (a SHA-256
+// stand-in for key-custody's HKDF LocalAesProvider). Unlike `testWrapper`, this
+// one re-derives on unwrap, so wrap + unwrap MUST be handed byte-identical
+// context — the realistic shape the mock above misses. Regression guard for the
+// keyVersion-in-wrap-context bug (seal wrapped under keyVersion='', open unwrapped
+// under the real keyVersion → different derived DEK → decrypt failure).
+function contextDerivingWrapper(): DekWrapper {
+  const enc = new TextEncoder();
+  async function deriveKey(aadContext: Record<string, string>): Promise<Uint8Array> {
+    const canonical = Object.keys(aadContext).sort().map((k) => `${k}=${aadContext[k]}`).join('\n');
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', enc.encode('master-secret|' + canonical) as unknown as ArrayBuffer);
+    return new Uint8Array(digest);
+  }
+  return {
+    async generateSessionDataKey({ aadContext }) {
+      return { plaintextDataKey: await deriveKey(aadContext), encryptedDataKey: new Uint8Array(0), keyId: 'ctx-kid', keyVersion: 'v1' };
+    },
+    async decryptSessionDataKey({ aadContext }) {
+      return deriveKey(aadContext);
+    },
+  };
+}
+
 describe('sealEnvelope / openEnvelope', () => {
+  it('round-trips with a context-DERIVING wrapper (DEK bound to aadContext)', async () => {
+    // Pre-fix this threw "Decryption failed" because seal wrapped the DEK under a
+    // keyVersion='' context while open unwrapped under keyVersion='v1'.
+    const w = contextDerivingWrapper();
+    const data = { grant: 'urn:ap:mcp-grant:1', scopes: ['mcp:invoke'] };
+    const sealed = await sealEnvelope({ owner: OWNER, resource: 'urn:ap:mcp-grant:1', classification: 'delegation.private', data, wrapper: w });
+    const out = await openEnvelope<typeof data>({
+      envelope: sealed.envelope,
+      ciphertext: sealed.ciphertext,
+      wrappedDek: sealed.wrappedDek,
+      wrapper: w,
+    });
+    expect(out).toEqual(data);
+  });
+
   it('round-trips an object through encrypt → decrypt', async () => {
     const w = testWrapper();
     const data = { email: 'a@b.c', phone: '+1', ssn_last4: '0000' };

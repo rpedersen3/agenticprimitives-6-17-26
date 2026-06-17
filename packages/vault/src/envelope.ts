@@ -60,6 +60,22 @@ function aadContext(owner: string, resource: string, classification: VaultClassi
   };
 }
 
+/** AAD context for the DEK WRAP step (the wrapper's EncryptionContext). keyVersion is
+ *  intentionally EXCLUDED: it is assigned BY the wrapper during `generateSessionDataKey`,
+ *  so seal can't know it before wrapping — binding it would force seal to wrap under
+ *  keyVersion='' while open unwraps under the real keyVersion, and a context-deriving
+ *  wrapper (e.g. key-custody's HKDF-based LocalAesProvider) would then derive a different
+ *  key and fail to decrypt. owner/resource/classification still bind the DEK to its object;
+ *  keyVersion is bound separately into the payload AES-GCM AAD (see `aadContext`). */
+function wrapContext(owner: string, resource: string, classification: VaultClassification): Record<string, string> {
+  return {
+    owner: owner.toLowerCase(),
+    resource,
+    classification,
+    profile: 'agentic-delegated-vault-v1',
+  };
+}
+
 function canonicalAadBytes(ctx: Record<string, string>): Uint8Array {
   const keys = Object.keys(ctx).sort();
   const canonical = keys.map((k) => `${k}=${ctx[k]}`).join('\n');
@@ -87,11 +103,12 @@ export async function sealEnvelope<T = unknown>(opts: {
   const owner = opts.owner.toLowerCase();
   const createdAt = now();
 
-  // 1. Generate + wrap a fresh DEK, bound to the AAD context (keyVersion known after).
-  //    We pass a provisional AAD without keyVersion to the wrapper, then bind the
-  //    real keyVersion into the AES-GCM AAD (the wrapper returns the version it used).
-  const provisional = aadContext(owner, opts.resource, opts.classification, '');
-  const dk = await opts.wrapper.generateSessionDataKey({ aadContext: provisional });
+  // 1. Generate + wrap a fresh DEK, bound to the (keyVersion-free) wrap context, then
+  //    bind the real keyVersion the wrapper assigned into the AES-GCM payload AAD. The
+  //    wrap context MUST match what `openEnvelope` passes to `decryptSessionDataKey`
+  //    (it does — both use `wrapContext`); keyVersion can't ride here (see wrapContext).
+  const wrapCtx = wrapContext(owner, opts.resource, opts.classification);
+  const dk = await opts.wrapper.generateSessionDataKey({ aadContext: wrapCtx });
   const ctx = aadContext(owner, opts.resource, opts.classification, dk.keyVersion);
   const aadBytes = canonicalAadBytes(ctx);
 
@@ -150,9 +167,12 @@ export async function openEnvelope<T = unknown>(opts: {
     throw new Error('openEnvelope: AAD hash mismatch (owner/resource/classification/keyVersion tampered)');
   }
 
+  // Unwrap with the SAME keyVersion-free wrap context seal used (see wrapContext) — a
+  // context-deriving wrapper (HKDF) must see byte-identical context on wrap + unwrap.
+  const wrapCtx = wrapContext(opts.envelope.owner, opts.envelope.resource, opts.envelope.classification);
   const plaintextDek = await opts.wrapper.decryptSessionDataKey({
     encryptedDataKey: opts.wrappedDek,
-    aadContext: ctx,
+    aadContext: wrapCtx,
     keyId: c.dekKid,
     keyVersion: c.keyVersion,
   });
