@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives-demo/web-payment",
-  "version": "0.0.1-alpha.3",
+  "version": "0.0.1-alpha.4",
   "private": true,
   "description": "x402 pay-per-use demo: a reader Person SA pays USDC into a provider's treasury Smart Agent to access a priced service, gated on-chain by the spec-272 PaymentEnforcer.",
   "type": "module",

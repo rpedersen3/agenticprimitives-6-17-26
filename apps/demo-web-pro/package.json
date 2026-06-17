@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives-demo/web-pro",
-  "version": "0.0.2-alpha.7",
+  "version": "0.0.2-alpha.8",
   "private": true,
   "description": "Pro demo web app: showcase of cross-cutting capabilities (multi-sig, recovery, treasury, …). One route per use case.",
   "type": "module",

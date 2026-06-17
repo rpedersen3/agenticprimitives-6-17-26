@@ -1,5 +1,42 @@
 # @agenticprimitives/key-custody
 
+## 1.0.0-alpha.10
+
+### Minor Changes
+
+- 75a24d9: KMS consumer surface (spec 276).
+  - **key-custody**: new peer-dependency-free signing surface at the `./kms-core` subpath
+    (`signDigestWithKms`, `gcpSignDigest`, `createGcpKmsTransport`, `addressFromSpkiPem`,
+    `parseServiceAccountJson`, `parseSignerKeyMap`, plus the secp256k1 DER/low-s/recovery
+    primitives) so consumers never inline a KMS signer. New `./provision-gcp` subpath +
+    `ap-provision-gcp` CLI (plan/execute GCP HSM secp256k1 key provisioning + per-key IAM).
+    `GcpKmsSigner` is now a thin wrapper over the core. `viem`, `@agenticprimitives/audit`,
+    and `@agenticprimitives/connect-auth` are now **optional** peers — a `./kms-core`-only
+    consumer no longer needs them.
+  - **verifiable-credentials**: `kmsCredentialSigner(backend, …)` — a `CredentialSigner`
+    backed by a KMS-custodied secp256k1 key (against a local structural `KmsSigningBackend`,
+    so VC stays dependency-light). Also fixes `signCredential` to hash the body after
+    `@context` expansion so the emitted `credentialHash` reconciles with its own body.
+
+### Patch Changes
+
+- 8f69514: Security hardening wave (harden/audit-2026-06-13).
+  - **a2a (NEW-A2A-2, high)**: `tasks/get` / `tasks/cancel` / `pushNotificationConfig/set` no longer trust a
+    client-supplied `caller`. The caller MUST sign `hashA2aTaskRequest({ method, taskId, agentSA, chainId })`
+    and pass `signature`; the agent verifies it via the new `OnChainChecks.verifyCallerSignature` (ERC-1271)
+    before the party check — fail-closed on missing/invalid signature or a throwing verifier. **Breaking**:
+    the three method params + `A2aWireAdapter.getTask/cancelTask` now take `signature`, and `OnChainChecks`
+    gains `verifyCallerSignature`. New export: `hashA2aTaskRequest`.
+  - **key-custody (N-2, high)**: `aws-kms` backend now FAILS FAST at construction instead of throwing on first
+    use (deferred-failure footgun). Only `gcp-kms` is production-ready.
+  - **connect-auth (N-1, high)**: removed four dead `passkey` exports (`beginSignup`/`completeSignup`/
+    `beginLogin`/`completeLogin`) that threw "not implemented" from a published subpath.
+
+- Updated dependencies [8f69514]
+  - @agenticprimitives/connect-auth@1.0.0-alpha.10
+  - @agenticprimitives/types@1.0.0-alpha.10
+  - @agenticprimitives/audit@1.0.0-alpha.10
+
 ## 1.0.0-alpha.9
 
 ### Patch Changes

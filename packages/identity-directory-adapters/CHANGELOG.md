@@ -1,5 +1,13 @@
 # @agenticprimitives/identity-directory-adapters
 
+## 1.0.0-alpha.10
+
+### Patch Changes
+
+- @agenticprimitives/agent-naming@1.0.0-alpha.10
+- @agenticprimitives/types@1.0.0-alpha.10
+- @agenticprimitives/identity-directory@1.0.0-alpha.10
+
 ## 1.0.0-alpha.9
 
 ### Patch Changes

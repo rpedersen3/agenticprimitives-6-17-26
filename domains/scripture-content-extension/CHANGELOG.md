@@ -1,5 +1,11 @@
 # @agenticprimitives/scripture-content-extension
 
+## 1.0.0-alpha.10
+
+### Patch Changes
+
+- @agenticprimitives/content-primitives@1.0.0-alpha.11
+
 ## 1.0.0-alpha.9
 
 ### Patch Changes

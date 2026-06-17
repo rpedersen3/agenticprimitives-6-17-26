@@ -1,5 +1,15 @@
 # @agenticprimitives/payments
 
+## 0.0.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [75a24d9]
+  - @agenticprimitives/verifiable-credentials@0.0.0-alpha.7
+  - @agenticprimitives/delegation@1.0.0-alpha.10
+  - @agenticprimitives/attestations@0.0.0-alpha.6
+  - @agenticprimitives/types@1.0.0-alpha.10
+
 ## 0.0.0-alpha.5
 
 ### Minor Changes

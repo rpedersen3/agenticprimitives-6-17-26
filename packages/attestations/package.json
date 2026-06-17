@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/attestations",
-  "version": "0.0.0-alpha.5",
+  "version": "0.0.0-alpha.6",
   "description": "AttestationRegistry SDK — EAS-aligned with bilateral consent. Owns Association + JointAgreement + Evidence + Outcome + Validation + TrustUpdate credential types asserted into a single on-chain registry per ADR-0023.",
   "license": "MIT",
   "repository": {

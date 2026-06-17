@@ -1,5 +1,17 @@
 # @agenticprimitives/delegation
 
+## 1.0.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [8f69514]
+- Updated dependencies [75a24d9]
+  - @agenticprimitives/key-custody@1.0.0-alpha.10
+  - @agenticprimitives/connect-auth@1.0.0-alpha.10
+  - @agenticprimitives/agent-account@1.0.0-alpha.10
+  - @agenticprimitives/types@1.0.0-alpha.10
+  - @agenticprimitives/audit@1.0.0-alpha.10
+
 ## 1.0.0-alpha.9
 
 ### Patch Changes

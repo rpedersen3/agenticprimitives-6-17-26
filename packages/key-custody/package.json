@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/key-custody",
-  "version": "1.0.0-alpha.9",
+  "version": "1.0.0-alpha.10",
   "description": "Pluggable envelope encryption + signers + HMAC providers (local-AES / AWS KMS / GCP KMS). Pure crypto primitives; no session lifecycle (that's in delegation).",
   "license": "MIT",
   "repository": {
@@ -90,9 +90,15 @@
     "viem": "^2.52.2"
   },
   "peerDependenciesMeta": {
-    "@agenticprimitives/audit": { "optional": true },
-    "@agenticprimitives/connect-auth": { "optional": true },
-    "viem": { "optional": true }
+    "@agenticprimitives/audit": {
+      "optional": true
+    },
+    "@agenticprimitives/connect-auth": {
+      "optional": true
+    },
+    "viem": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "vitest": "^4.1.8"

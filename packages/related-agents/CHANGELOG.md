@@ -1,5 +1,21 @@
 # @agenticprimitives/related-agents
 
+## 0.0.0-alpha.6
+
+### Minor Changes
+
+- bf725a9: NEW-RAG-2 (security): add `relatedAgentWriteContentHash` + `hashRelatedAgentWriteChallenge` — the bound,
+  one-shot challenge a person-SA custodian signs to authorize an external-custodian related-agent write
+  (replaces the replayable constant challenge in the demo-sso `related-orgs` write path). Client and server
+  derive the digest identically so they can't drift.
+
+### Patch Changes
+
+- Updated dependencies [75a24d9]
+  - @agenticprimitives/verifiable-credentials@0.0.0-alpha.7
+  - @agenticprimitives/delegation@1.0.0-alpha.10
+  - @agenticprimitives/types@1.0.0-alpha.10
+
 ## 0.0.0-alpha.5
 
 ### Patch Changes

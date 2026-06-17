@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/delegated-signer",
-  "version": "0.0.0-alpha.1",
+  "version": "0.0.0-alpha.2",
   "description": "Generic named delegated-signer resolution — compose agent-naming + agent-account + delegation + key-custody into a signer for a named identity, authorized by a delegation chain. Vertical-agnostic; naming/account are injected.",
   "license": "MIT",
   "repository": {
