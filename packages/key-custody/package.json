@@ -89,6 +89,11 @@
     "@agenticprimitives/types": "workspace:*",
     "viem": "^2.52.2"
   },
+  "peerDependenciesMeta": {
+    "@agenticprimitives/audit": { "optional": true },
+    "@agenticprimitives/connect-auth": { "optional": true },
+    "viem": { "optional": true }
+  },
   "devDependencies": {
     "vitest": "^4.1.8"
   },
