@@ -1,0 +1,25 @@
+{
+  "name": "@agenticprimitives/mcp-oauth",
+  "version": "0.0.0-alpha.1",
+  "description": "MCP OAuth compatibility adapter (spec 277 §6-§8,§15): protected-resource metadata, scopes, WWW-Authenticate, bearer-token claim validation, and the Agentic Grant Bundle bridge. OAuth is ingress-compat only, not the vault authority.",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git", "directory": "packages/mcp-oauth" },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/mcp-oauth",
+  "bugs": { "url": "https://github.com/agentictrustlabs/agenticprimitives/issues" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["LICENSE", "dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": { "access": "public" },
+  "devDependencies": { "vitest": "^4.1.8" },
+  "keywords": ["agentic", "primitives", "mcp", "oauth", "grant-bundle"]
+}

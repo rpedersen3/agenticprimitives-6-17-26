@@ -1,0 +1,79 @@
+{
+  "name": "@agenticprimitives/mcp-oauth",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/277-mcp-delegated-vault-authorization.md",
+  "summary": "MCP OAuth compatibility adapter + Agentic Grant Bundle bridge (spec 277): metadata, scopes, WWW-Authenticate, bearer claim validation, bundle resolve. Ingress-compat only, not the vault authority.",
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  },
+  "spineLayers": [],
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"],
+    "shapes": []
+  },
+  "imports": [],
+  "allowedImports": [],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/vault",
+    "@agenticprimitives/entitlements",
+    "@agenticprimitives/key-authorization",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/mcp-runtime",
+    "@modelcontextprotocol/sdk"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "Delegation",
+      "reason": "The grant bundle BINDS a delegationHash (a cross-reference by hash); delegation semantics belong in @agenticprimitives/delegation.",
+      "owningPackage": "@agenticprimitives/delegation",
+      "allowInPaths": ["spec.md", "README.md", "CLAUDE.md", "src/types.ts", "src/bundle.ts"]
+    }
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "Sha256",
+    "OAuthProtectedResourceMetadata",
+    "McpOAuthScope",
+    "AgenticMcpAuthorizationDetail",
+    "McpAccessTokenClaims",
+    "BearerRejectReason",
+    "BearerValidation",
+    "McpGrantBundleV1",
+    "GrantBundleStore",
+    "MCP_OAUTH_SCOPES",
+    "createProtectedResourceMetadata",
+    "serveProtectedResourceMetadata",
+    "createWwwAuthenticateChallenge",
+    "buildUnauthorizedResponse",
+    "buildInsufficientScopeResponse",
+    "ValidateMcpBearerOpts",
+    "parseBearer",
+    "scopesOf",
+    "requireMcpAudience",
+    "requireScopes",
+    "validateMcpBearerToken",
+    "buildAuthorizationDetailsRequest",
+    "parseAuthorizationDetails",
+    "GrantBundleResolution",
+    "sha256Hex",
+    "computeGrantBundleHash",
+    "createMcpGrantBundle",
+    "bindOAuthTokenToGrantBundle",
+    "resolveGrantBundleFromToken"
+  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**"]
+}

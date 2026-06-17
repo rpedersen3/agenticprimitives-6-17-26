@@ -30,17 +30,18 @@ This is the routing index for Claude (and other agents) starting work in this re
 | `@agenticprimitives/intent-marketplace` | capability | experimental | [239-intent-spine.md](../../specs/239-intent-spine.md) | `types`, `verifiable-credentials`, `delegation`, `intent-resolver` |
 | `@agenticprimitives/intent-resolver` | capability | experimental | [239-intent-spine.md](../../specs/239-intent-spine.md) | `types`, `verifiable-credentials` |
 | `@agenticprimitives/key-authorization` | capability | experimental | [277-mcp-delegated-vault-authorization.md](../../specs/277-mcp-delegated-vault-authorization.md) | _none_ |
+| `@agenticprimitives/mcp-oauth` | capability | experimental | [277-mcp-delegated-vault-authorization.md](../../specs/277-mcp-delegated-vault-authorization.md) | _none_ |
 | `@agenticprimitives/mcp-runtime` | capability | experimental | [205-mcp-runtime.md](../../specs/205-mcp-runtime.md) | `types`, `audit`, `delegation`, `key-custody`, `tool-policy` |
 | `@agenticprimitives/ontology` | capability | experimental | [225-ontology.md](../../specs/225-ontology.md) | _none_ |
-| `@agenticprimitives/payments` | capability | experimental | [243-payments.md](../../specs/243-payments.md) | `types`, `verifiable-credentials`, `attestations`, `delegation` |
+| `@agenticprimitives/related-agents` | capability | experimental | [246-related-agents-vault.md](../../specs/246-related-agents-vault.md) | `types`, `verifiable-credentials`, `delegation` |
 | `@agenticprimitives/tool-policy` | capability | experimental | [204-tool-policy.md](../../specs/204-tool-policy.md) | `types` |
-| `@agenticprimitives/vault` | capability | experimental | [277-mcp-delegated-vault-authorization.md](../../specs/277-mcp-delegated-vault-authorization.md) | _none_ |
+| `@agenticprimitives/verifiable-credentials` | capability | experimental | [242-trust-credentials-and-public-assertions.md](../../specs/242-trust-credentials-and-public-assertions.md) | `types`, `ontology` |
 | `@agenticprimitives/browser-identity` | adapter | experimental | [264-fedcm-idp-adapter.md](../../specs/264-fedcm-idp-adapter.md) | _none_ |
 | `@agenticprimitives/contracts` | contracts | experimental | [spec.md](../../packages/contracts/spec.md) | _none_ |
 | `@agenticprimitives/fulfillment` | capability | experimental | [244-fulfillment.md](../../specs/244-fulfillment.md) | `types`, `verifiable-credentials`, `attestations`, `agreements`, `delegation` |
 | `@agenticprimitives/key-custody` | capability | experimental | [203-key-custody.md](../../specs/203-key-custody.md) | `types`, `audit`, `connect-auth` |
-| `@agenticprimitives/related-agents` | capability | experimental | [246-related-agents-vault.md](../../specs/246-related-agents-vault.md) | `types`, `verifiable-credentials`, `delegation` |
-| `@agenticprimitives/verifiable-credentials` | capability | experimental | [242-trust-credentials-and-public-assertions.md](../../specs/242-trust-credentials-and-public-assertions.md) | `types`, `ontology` |
+| `@agenticprimitives/payments` | capability | experimental | [243-payments.md](../../specs/243-payments.md) | `types`, `verifiable-credentials`, `attestations`, `delegation` |
+| `@agenticprimitives/vault` | capability | experimental | [277-mcp-delegated-vault-authorization.md](../../specs/277-mcp-delegated-vault-authorization.md) | _none_ |
 | `@agenticprimitives/fedcm-idp` | adapter | experimental | [264-fedcm-idp-adapter.md](../../specs/264-fedcm-idp-adapter.md) | _none_ |
 | `@agenticprimitives/fedcm-rp` | adapter | experimental | [264-fedcm-idp-adapter.md](../../specs/264-fedcm-idp-adapter.md) | _none_ |
 | `@agenticprimitives/identity-directory-adapters` | adapter | experimental | [223-identity-directory.md](../../specs/223-identity-directory.md) | `types`, `identity-directory`, `agent-naming` |
@@ -223,6 +224,14 @@ Policy-bound one-time key release (spec 277 §14): DecryptGrant + fail-closed KA
 
 **Read first:** [`CLAUDE.md`](../../packages/key-authorization/CLAUDE.md) · [`capability.manifest.json`](../../packages/key-authorization/capability.manifest.json) · [`src/index.ts`](../../packages/key-authorization/src/index.ts)
 
+### `@agenticprimitives/mcp-oauth`
+
+MCP OAuth compatibility adapter + Agentic Grant Bundle bridge (spec 277): metadata, scopes, WWW-Authenticate, bearer claim validation, bundle resolve. OAuth is ingress-compat only, not the vault authority.
+
+**Public exports** (32): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `Sha256`, `OAuthProtectedResourceMetadata`, `McpOAuthScope`, `AgenticMcpAuthorizationDetail`, `McpAccessTokenClaims`, `BearerRejectReason`, `BearerValidation`, `McpGrantBundleV1`, `GrantBundleStore`, `MCP_OAUTH_SCOPES`, `createProtectedResourceMetadata`, `serveProtectedResourceMetadata`, `createWwwAuthenticateChallenge`, `buildUnauthorizedResponse`, `buildInsufficientScopeResponse`, `ValidateMcpBearerOpts`, `parseBearer`, `scopesOf`, `requireMcpAudience`, `requireScopes`, `validateMcpBearerToken`, `buildAuthorizationDetailsRequest`, `parseAuthorizationDetails`, `GrantBundleResolution`, `sha256Hex`, `computeGrantBundleHash`, `createMcpGrantBundle`, `bindOAuthTokenToGrantBundle`, `resolveGrantBundleFromToken`
+
+**Read first:** [`CLAUDE.md`](../../packages/mcp-oauth/CLAUDE.md) · [`capability.manifest.json`](../../packages/mcp-oauth/capability.manifest.json) · [`src/index.ts`](../../packages/mcp-oauth/src/index.ts)
+
 ### `@agenticprimitives/mcp-runtime`
 
 Authorization middleware around the official MCP SDK. withDelegation wrapper, JTI replay protection, classification routing. (withCrossDelegation removed in H7-B.8; resurfaces under ./experimental.)
@@ -239,13 +248,13 @@ Monorepo-wide formal vocabulary: T-box (RDFS/OWL) + C-box (SHACL/SKOS) + A-box. 
 
 **Read first:** [`CLAUDE.md`](../../packages/ontology/CLAUDE.md) · [`capability.manifest.json`](../../packages/ontology/capability.manifest.json) · [`src/index.ts`](../../packages/ontology/src/index.ts)
 
-### `@agenticprimitives/payments`
+### `@agenticprimitives/related-agents`
 
-PaymentMandate + ContextBinding + MandateConstraints + open/closed mode discrimination. Three W1 rails (x402, wallet, sponsored-userop). PaymentReceipt asserted into AttestationRegistry.
+Private, holder-resident related-agent credentials (person↔org links as vault situation credentials, never on-chain edges — ADR-0025) + scoped-delegation read caveats + list-query shapes.
 
-**Public exports** (57): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `Hex32`, `PaymentRail`, `AssetRef`, `AmountPolicy`, `MandateConstraints`, `ContextBinding`, `PaymentMandateMode`, `PaymentMandate`, `assertContextBindingValid`, `assertClosedMandateInvariants`, `computeMandateId`, `PaymentRailExecutor`, `registerRail`, `getRail`, `x402`, `PAYMENT_MANDATE_DOMAIN_NAME`, `PAYMENT_MANDATE_DOMAIN_VERSION`, `PAYMENT_MANDATE_EIP712_TYPES`, `ERC1271_MAGIC`, `mandateAmount`, `hashContextBinding`, `paymentMandateDomain`, `buildPaymentMandateTypedData`, `paymentMandateDigest`, `signPaymentMandate`, `verifyPaymentMandateSignature`, `MandateDomainOpts`, `MandateSigner`, `Erc1271Reader`, `PAYMENT_RECEIPT_TYPE`, `settlementEpochBucket`, `buildPaymentReceiptCredential`, `PaymentReceiptInput`, `entitlement`, `ERC20_TRANSFER_ABI`, `buildErc20Transfer`, `buildNativeTransfer`, `TransferPlan`, `buildClosedMandate`, `ClosedMandateInput`, `wallet`, `invoice`, `buildRefund`, `RefundInput`, `RefundPlan`, `buildSplitPayout`, `BPS_DENOMINATOR`, `SplitRecipient`, `SplitLeg`, `ERC20_APPROVE_ABI`, `buildErc20Approve`, `escrow`, `recurring`, `ops`
+**Public exports** (22): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `RELATED_AGENT_DESCRIPTION`, `RelatedAgentBody`, `CustodyKind`, `CustodyDescriptor`, `buildCustodyDescriptor`, `relatedAgentWriteContentHash`, `hashRelatedAgentWriteChallenge`, `RelatedAgentCredential`, `BuildRelatedAgentCredentialArgs`, `buildRelatedAgentCredential`, `relatedAgentProofHash`, `RelatedAgentReadCaveatArgs`, `relatedAgentReadCaveats`, `RelatedAgentLink`, `ListRelatedAgentsResponse`, `DelegatedAgentLink`, `ListDelegatedAgentsResponse`, `Address`, `Hex`
 
-**Read first:** [`CLAUDE.md`](../../packages/payments/CLAUDE.md) · [`capability.manifest.json`](../../packages/payments/capability.manifest.json) · [`src/index.ts`](../../packages/payments/src/index.ts)
+**Read first:** [`CLAUDE.md`](../../packages/related-agents/CLAUDE.md) · [`capability.manifest.json`](../../packages/related-agents/capability.manifest.json) · [`src/index.ts`](../../packages/related-agents/src/index.ts)
 
 ### `@agenticprimitives/tool-policy`
 
@@ -255,13 +264,13 @@ Protocol-agnostic classification taxonomy + risk tiers + exact-call DSL + decisi
 
 **Read first:** [`CLAUDE.md`](../../packages/tool-policy/CLAUDE.md) · [`capability.manifest.json`](../../packages/tool-policy/capability.manifest.json) · [`src/index.ts`](../../packages/tool-policy/src/index.ts)
 
-### `@agenticprimitives/vault`
+### `@agenticprimitives/verifiable-credentials`
 
-Agentic Delegated Data Vault seam (spec 277) — the Vault read/write/list interface + classification taxonomy + persisted envelope. Runtime-agnostic; storage/crypto/entitlement layers behind it.
+W3C VC 2.0 envelope + Eip712Signature2026 proof + DOLCE+DnS Situation bases + ontology-shape schema registration. Substrate for layers 12-15 credential types.
 
-**Public exports** (19): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `VaultClassification`, `VaultResource`, `VaultObject`, `VaultReadRequest`, `VaultWriteRequest`, `VaultRef`, `VaultObjectEnvelopeV1`, `SENSITIVE_CLASSIFICATIONS`, `isSensitiveClassification`, `Vault`, `createMemoryVault`, `projectFields`, `DekWrapper`, `SealedEnvelope`, `sealEnvelope`, `openEnvelope`
+**Public exports** (46): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `VC_CONTEXT_V2`, `EIP712_SIG_2026_CONTEXT`, `VC_DOMAIN_NAME`, `VC_DOMAIN_VERSION`, `VC_EIP712_TYPES`, `Hex32`, `ISODate`, `ProofType`, `Eip712Signature2026Proof`, `DelegatingSignerProof`, `Proof`, `CredentialStatus2021`, `VisibilityTier`, `DisclosurePolicy`, `VerifiableCredential`, `UnsignedCredential`, `jcsCanonicalize`, `canonicalHash`, `JcsError`, `assertSituationRolesPresent`, `buildSituation`, `Situation`, `DescriptionRef`, `RoleName`, `credentialHash`, `eip712Digest`, `isoToSeconds`, `signCredential`, `viemSignerFromWallet`, `kmsCredentialSigner`, `CredentialSigner`, `KmsSigningBackend`, `verifyCredentialStructural`, `VerificationResult`, `SHAPE_DID_PREFIX`, `buildShapeUri`, `parseShapeUri`, `shapeHash`, `verifyCredential`, `parseEip155Caip10`, `VerifyCredentialResult`, `Erc1271Verifier`, `Caip10Eip155`
 
-**Read first:** [`CLAUDE.md`](../../packages/vault/CLAUDE.md) · [`capability.manifest.json`](../../packages/vault/capability.manifest.json) · [`src/index.ts`](../../packages/vault/src/index.ts)
+**Read first:** [`CLAUDE.md`](../../packages/verifiable-credentials/CLAUDE.md) · [`capability.manifest.json`](../../packages/verifiable-credentials/capability.manifest.json) · [`src/index.ts`](../../packages/verifiable-credentials/src/index.ts)
 
 ### `@agenticprimitives/browser-identity`
 
@@ -295,21 +304,21 @@ Envelope encryption + signers + HMAC providers. local-AES/AWS-KMS/GCP-KMS backen
 
 **Read first:** [`CLAUDE.md`](../../packages/key-custody/CLAUDE.md) · [`capability.manifest.json`](../../packages/key-custody/capability.manifest.json) · [`src/index.ts`](../../packages/key-custody/src/index.ts)
 
-### `@agenticprimitives/related-agents`
+### `@agenticprimitives/payments`
 
-Private, holder-resident related-agent credentials (person↔org links as vault situation credentials, never on-chain edges — ADR-0025) + scoped-delegation read caveats + list-query shapes.
+PaymentMandate + ContextBinding + MandateConstraints + open/closed mode discrimination. Three W1 rails (x402, wallet, sponsored-userop). PaymentReceipt asserted into AttestationRegistry.
 
-**Public exports** (22): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `RELATED_AGENT_DESCRIPTION`, `RelatedAgentBody`, `CustodyKind`, `CustodyDescriptor`, `buildCustodyDescriptor`, `relatedAgentWriteContentHash`, `hashRelatedAgentWriteChallenge`, `RelatedAgentCredential`, `BuildRelatedAgentCredentialArgs`, `buildRelatedAgentCredential`, `relatedAgentProofHash`, `RelatedAgentReadCaveatArgs`, `relatedAgentReadCaveats`, `RelatedAgentLink`, `ListRelatedAgentsResponse`, `DelegatedAgentLink`, `ListDelegatedAgentsResponse`, `Address`, `Hex`
+**Public exports** (57): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `Hex32`, `PaymentRail`, `AssetRef`, `AmountPolicy`, `MandateConstraints`, `ContextBinding`, `PaymentMandateMode`, `PaymentMandate`, `assertContextBindingValid`, `assertClosedMandateInvariants`, `computeMandateId`, `PaymentRailExecutor`, `registerRail`, `getRail`, `x402`, `PAYMENT_MANDATE_DOMAIN_NAME`, `PAYMENT_MANDATE_DOMAIN_VERSION`, `PAYMENT_MANDATE_EIP712_TYPES`, `ERC1271_MAGIC`, `mandateAmount`, `hashContextBinding`, `paymentMandateDomain`, `buildPaymentMandateTypedData`, `paymentMandateDigest`, `signPaymentMandate`, `verifyPaymentMandateSignature`, `MandateDomainOpts`, `MandateSigner`, `Erc1271Reader`, `PAYMENT_RECEIPT_TYPE`, `settlementEpochBucket`, `buildPaymentReceiptCredential`, `PaymentReceiptInput`, `entitlement`, `ERC20_TRANSFER_ABI`, `buildErc20Transfer`, `buildNativeTransfer`, `TransferPlan`, `buildClosedMandate`, `ClosedMandateInput`, `wallet`, `invoice`, `buildRefund`, `RefundInput`, `RefundPlan`, `buildSplitPayout`, `BPS_DENOMINATOR`, `SplitRecipient`, `SplitLeg`, `ERC20_APPROVE_ABI`, `buildErc20Approve`, `escrow`, `recurring`, `ops`
 
-**Read first:** [`CLAUDE.md`](../../packages/related-agents/CLAUDE.md) · [`capability.manifest.json`](../../packages/related-agents/capability.manifest.json) · [`src/index.ts`](../../packages/related-agents/src/index.ts)
+**Read first:** [`CLAUDE.md`](../../packages/payments/CLAUDE.md) · [`capability.manifest.json`](../../packages/payments/capability.manifest.json) · [`src/index.ts`](../../packages/payments/src/index.ts)
 
-### `@agenticprimitives/verifiable-credentials`
+### `@agenticprimitives/vault`
 
-W3C VC 2.0 envelope + Eip712Signature2026 proof + DOLCE+DnS Situation bases + ontology-shape schema registration. Substrate for layers 12-15 credential types.
+Agentic Delegated Data Vault seam (spec 277) — the Vault read/write/list interface + classification taxonomy + persisted envelope. Runtime-agnostic; storage/crypto/entitlement layers behind it.
 
-**Public exports** (46): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `VC_CONTEXT_V2`, `EIP712_SIG_2026_CONTEXT`, `VC_DOMAIN_NAME`, `VC_DOMAIN_VERSION`, `VC_EIP712_TYPES`, `Hex32`, `ISODate`, `ProofType`, `Eip712Signature2026Proof`, `DelegatingSignerProof`, `Proof`, `CredentialStatus2021`, `VisibilityTier`, `DisclosurePolicy`, `VerifiableCredential`, `UnsignedCredential`, `jcsCanonicalize`, `canonicalHash`, `JcsError`, `assertSituationRolesPresent`, `buildSituation`, `Situation`, `DescriptionRef`, `RoleName`, `credentialHash`, `eip712Digest`, `isoToSeconds`, `signCredential`, `viemSignerFromWallet`, `kmsCredentialSigner`, `CredentialSigner`, `KmsSigningBackend`, `verifyCredentialStructural`, `VerificationResult`, `SHAPE_DID_PREFIX`, `buildShapeUri`, `parseShapeUri`, `shapeHash`, `verifyCredential`, `parseEip155Caip10`, `VerifyCredentialResult`, `Erc1271Verifier`, `Caip10Eip155`
+**Public exports** (19): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `VaultClassification`, `VaultResource`, `VaultObject`, `VaultReadRequest`, `VaultWriteRequest`, `VaultRef`, `VaultObjectEnvelopeV1`, `SENSITIVE_CLASSIFICATIONS`, `isSensitiveClassification`, `Vault`, `createMemoryVault`, `projectFields`, `DekWrapper`, `SealedEnvelope`, `sealEnvelope`, `openEnvelope`
 
-**Read first:** [`CLAUDE.md`](../../packages/verifiable-credentials/CLAUDE.md) · [`capability.manifest.json`](../../packages/verifiable-credentials/capability.manifest.json) · [`src/index.ts`](../../packages/verifiable-credentials/src/index.ts)
+**Read first:** [`CLAUDE.md`](../../packages/vault/CLAUDE.md) · [`capability.manifest.json`](../../packages/vault/capability.manifest.json) · [`src/index.ts`](../../packages/vault/src/index.ts)
 
 ### `@agenticprimitives/fedcm-idp`
 
@@ -360,17 +369,18 @@ identity-directory   → types, audit, ontology
 intent-marketplace   → types, verifiable-credentials, delegation, intent-resolver
 intent-resolver      → types, verifiable-credentials
 key-authorization    (leaf)
+mcp-oauth            (leaf)
 mcp-runtime          → types, audit, delegation, key-custody, tool-policy
 ontology             (leaf)
-payments             → types, verifiable-credentials, attestations, delegation
+related-agents       → types, verifiable-credentials, delegation
 tool-policy          → types
-vault                (leaf)
+verifiable-credentials → types, ontology
 browser-identity     (leaf)
 contracts            (leaf)
 fulfillment          → types, verifiable-credentials, attestations, agreements, delegation
 key-custody          → types, audit, connect-auth
-related-agents       → types, verifiable-credentials, delegation
-verifiable-credentials → types, ontology
+payments             → types, verifiable-credentials, attestations, delegation
+vault                (leaf)
 fedcm-idp            (leaf)
 fedcm-rp             (leaf)
 identity-directory-adapters → types, identity-directory, agent-naming
