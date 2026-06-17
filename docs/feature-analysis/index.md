@@ -20,6 +20,7 @@
 | 10 | [Audit, forensics & indexing](10-audit-forensics-indexing.md) | Evidence trails, indexers, agent tracing, compliance | `mcp-runtime` audit, `attestations`, ADR-0012 indexer |
 | 11 | [Ontology, skills, semantics & entitlements](11-ontology-skills-entitlements.md) | Vocabularies, skill taxonomies, SHACL validation, entitlements | `ontology`, `agent-skills`, `geo-features`, `tool-policy` |
 | 12 | [**Agent registry, discovery & intents**](12-agent-registry-discovery-intents.md) | ERC-8004, GoDaddy ANS, DNS-AID, agent cards, intent protocols | `agent-naming`, `agent-profile`, `identity-directory`, `attestations` |
+| 13 | [**Agentic delegated vaults**](13-agentic-delegated-vault.md) | PII/private data vaults, field encryption, key release, entitlements, MCP/A2A sensitive storage | planned `vault`, planned `key-authorization`, planned `entitlements`, `key-custody`, `mcp-runtime`, `delegation`, `audit` |
 | 90 | [**Prioritized feature gaps — substrate roadmap**](90-prioritized-feature-gaps.md) | Consolidated, prioritized gap list across all focus areas | all |
 | 91 | [**Next push: discovery → intent → outcome**](91-next-push-discovery-to-outcomes.md) | The recommended next feature wave (signed cards, skills, intents, budget enforcers) under ADR-0037 venue rules | `agent-profile`, `agent-skills`, `intent-*`, `fulfillment`, `delegation`, `contracts` |
 

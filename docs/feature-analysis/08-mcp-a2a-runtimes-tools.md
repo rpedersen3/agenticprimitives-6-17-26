@@ -34,9 +34,9 @@
 - **Feature inventory:** tools/resources/prompts; OAuth 2.1-based authorization spec (resource servers, protected-resource metadata, dynamic client registration); official MCP Registry for server discovery; SDKs in every major language; elicitation, sampling, structured output.
 - **Overlap with AP:** `mcp-runtime` is an MCP server runtime; AP layers delegation tokens on top of MCP transport.
 - **AP lacks:**
-  - `[SDK]` full MCP Authorization-spec conformance (OAuth 2.1 resource-server metadata + token endpoints) so standard MCP clients can negotiate auth with AP servers without custom glue; MCP Registry publication of AP servers; sampling/elicitation support in the runtime.
-- **MCP spec lacks:** any notion of *delegated, caveat-scoped, cryptographically-verifiable* authority — its auth model is OAuth scopes. No identity anchor, no on-chain redemption, no audit binding. This is exactly AP's extension surface.
-- **Verdict:** conform (the OAuth layer is table stakes for interop) + extend (delegation tokens as a richer grant type). Publish the "delegated-authority profile for MCP" as a spec — first-mover position.
+  - `[SDK]` full MCP Authorization-spec conformance (OAuth protected-resource metadata + token validation) so standard MCP clients can reach AP servers without custom glue; MCP Registry publication of AP servers; sampling/elicitation support in the runtime.
+- **MCP spec lacks:** any notion of *delegated, caveat-scoped, cryptographically-verifiable* authority — its auth model is OAuth scopes. No identity anchor, no on-chain redemption, no field-level vault/key-release audit binding. The vault-first extension is in [doc 13](13-agentic-delegated-vault.md) and [spec 277](../../specs/277-mcp-delegated-vault-authorization.md).
+- **Verdict:** conform on public HTTP MCP ingress. Do not let OAuth become the sensitive-data authority model; it should resolve into Agentic delegation/entitlement/vault authorization.
 
 ### Google A2A protocol — conform
 
@@ -95,8 +95,8 @@
 | Gap | Evidence | Roadmap ID | Priority |
 | --- | --- | --- | --- |
 | **AP agent-skills repo + AP CLI (structured JSON)** | MetaMask agent-skills, skills.sh | FG-SDK-1 | **P1 (elevated)** |
-| MCP Authorization-spec (OAuth 2.1) conformance + Registry publication | MCP spec | FG-MCP-1 | P1 |
-| Delegated-authority profile for MCP (spec + reference impl) | MCP spec gap | FG-MCP-2 | P1 |
+| MCP Authorization-spec (OAuth 2.1) conformance + Registry publication | MCP spec | FG-MCP-1 | P2 (after delegated vault P1; see doc 13) |
+| Delegated-authority profile for MCP (spec + reference impl) | MCP spec gap | FG-MCP-2 | P2 (vault authority is P1 in doc 13) |
 | A2A agent-card extension schema + card↔SA binding verification | A2A, ERC-8004 | FG-MCP-3 | P1 |
 | Framework adapters (LangChain/LangGraph, AI SDK, OpenAI Agents) | LangChain, Vercel | FG-MCP-4 | P2 |
 | External OAuth token-vault adapter for third-party SaaS tools | Composio, Arcade | FG-MCP-5 | P2 |

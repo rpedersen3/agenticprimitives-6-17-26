@@ -1,0 +1,14 @@
+const PACKAGE_STATUS: "w1-matching"
+re-export AgenticEntitlementCredentialV1 from ./types.js
+re-export CLASSIFICATION_ORDER from ./types.js
+re-export EntitlementAction from ./types.js
+re-export EntitlementClassification from ./types.js
+re-export EntitlementConstraints from ./types.js
+re-export EntitlementDecision from ./types.js
+re-export EntitlementQuery from ./types.js
+re-export EntitlementReason from ./types.js
+re-export EntitlementResolver from ./types.js
+re-export InMemoryEntitlementResolver from ./match.js
+re-export SingleMatch from ./match.js
+re-export matchesEntitlement from ./match.js
+re-export resolveEntitlements from ./match.js

@@ -1,0 +1,71 @@
+{
+  "name": "@agenticprimitives/vault",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/277-mcp-delegated-vault-authorization.md",
+  "summary": "Agentic Delegated Data Vault seam (spec 277) — the Vault read/write/list interface + classification taxonomy + persisted envelope. Runtime-agnostic; storage/crypto/entitlement layers behind it.",
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  },
+  "spineLayers": [],
+  "owns": {
+    "source": [
+      "src/**"
+    ],
+    "tests": [
+      "test/**"
+    ],
+    "shapes": []
+  },
+  "imports": [],
+  "allowedImports": [],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/mcp-runtime",
+    "@agenticprimitives/tool-policy",
+    "@modelcontextprotocol/sdk"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "@modelcontextprotocol",
+      "reason": "Transport-specific; the vault seam is transport-agnostic. MCP/A2A wiring lives in mcp-runtime + apps.",
+      "owningPackage": "@agenticprimitives/mcp-runtime"
+    }
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "VaultClassification",
+    "VaultResource",
+    "VaultObject",
+    "VaultReadRequest",
+    "VaultWriteRequest",
+    "VaultRef",
+    "VaultObjectEnvelopeV1",
+    "SENSITIVE_CLASSIFICATIONS",
+    "isSensitiveClassification",
+    "Vault",
+    "createMemoryVault",
+    "projectFields",
+    "DekWrapper",
+    "SealedEnvelope",
+    "sealEnvelope",
+    "openEnvelope"
+  ],
+  "ignoreForAgentContext": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**"
+  ]
+}

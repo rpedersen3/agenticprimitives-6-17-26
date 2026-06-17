@@ -1,7 +1,7 @@
 # 11 — Ontology, skills, semantic data & entitlements
 
 **Focus area:** structured vocabularies, skill/capability description, semantic validation, and entitlement/licensing models for agents.
-**AP packages in scope:** `ontology` (`OntologyTermRegistry`, `ShapeRegistry`, `AttributeStorage`), `agent-skills` (`SkillDefinitionRegistry`), `geo-features`, `tool-policy` (entitlement checks); app `demo-bible-ontology` (vertical consumer).
+**AP packages in scope:** `ontology` (`OntologyTermRegistry`, `ShapeRegistry`, `AttributeStorage`), `agent-skills` (`SkillDefinitionRegistry`), `geo-features`, `tool-policy` (entitlement checks), planned `entitlements`; app `demo-bible-ontology` (vertical consumer).
 **AP capability today:** on-chain ontology term + shape registries (SHACL-flavored validation against caller-supplied stores); skill definition registry with self-claims; attribute storage base (auth delegated to subclasses); geo feature registry. Generic by doctrine (ADR-0021) — verticals consume via apps.
 
 > Gap layers: `[Contracts]` Solidity surface · `[SDK]` TS packages/backends · `[UX]` product surface (**deferred**). See [index](index.md#gap-layers-every-gap-is-classified-into-exactly-one).
@@ -48,7 +48,7 @@
 - **Feature inventory:** plan/feature entitlement models, usage metering, license keys, entitlement checks at runtime.
 - **Overlap with AP:** `tool-policy` already gates tools; agreements/attestations can encode purchased entitlements.
 - **AP lacks:**
-  - `[SDK]` an entitlement vocabulary + check API ("does subject hold entitlement E under agreement A?") layered on agreements/attestations; usage metering tied to delegated tool calls (pairs with x402, doc 09).
+  - `[SDK]` an entitlement vocabulary + check API ("does subject hold entitlement E under agreement A?") layered on agreements/attestations; resource/action/field/purpose/classification matching for delegated vault reads; usage metering tied to delegated tool calls (pairs with x402, doc 09, and vault doc 13).
 - **Verdict:** adopt patterns — entitlements-as-attestations is a natural substrate extension; don't build a billing product.
 
 ---
@@ -68,6 +68,7 @@
 | JSON-LD/schema.org vocabulary publication + SHACL conformance | W3C stack | FG-ONT-2 | P2 |
 | Skill mapping: registry → A2A card skills → OASF taxonomy | OASF, A2A | FG-ONT-3 | P2 |
 | Entitlement check API over agreements/attestations + usage metering | Stigg, Keygen | FG-ONT-4 | P2 |
+| Entitlement credential/check package for vault resource/action/field/purpose/classification access | W3C VC/status lists; delegated vault doc 13 | FG-ENT-5 | **P1** |
 | Off-chain validator matching on-chain shape semantics | SHACL tooling | FG-ONT-5 | P3 |
 
 ### `[UX]` gaps — **deferred (recorded, not current focus)**

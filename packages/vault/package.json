@@ -1,0 +1,52 @@
+{
+  "name": "@agenticprimitives/vault",
+  "version": "0.0.0-alpha.1",
+  "description": "Agentic Delegated Data Vault seam (spec 277) — the Vault read/write/list interface + data-classification taxonomy + persisted object envelope. Storage/runtime-agnostic; adapters (D1/R2/KMS) layer in behind it.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git",
+    "directory": "packages/vault"
+  },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/vault",
+  "bugs": {
+    "url": "https://github.com/agentictrustlabs/agenticprimitives/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "spec.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.8"
+  },
+  "keywords": [
+    "agentic",
+    "primitives",
+    "vault",
+    "pii",
+    "encrypted-storage",
+    "delegation"
+  ]
+}

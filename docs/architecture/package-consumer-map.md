@@ -30,6 +30,7 @@ selective external review for the package + contract authority substrate.
 | Mint / verify a delegation token, session rows             | `delegation`                                    |
 | Classify tools, risk tiers, exact-call policy              | `tool-policy`                                   |
 | Wrap MCP tools with delegation enforcement                 | `mcp-runtime`                                   |
+| Add encrypted vault objects, field projection, entitlements, key-release grants, or MCP OAuth ingress | Planned: `vault`, `key-authorization`, `entitlements`, `mcp-oauth` per [`specs/277`](../../specs/277-mcp-delegated-vault-authorization.md) |
 | (A2A tool wrapping)                                        | `a2a-runtime` — *planned, mirrors mcp-runtime*  |
 | `.agent` name → address (and records)                      | `agent-naming`                                  |
 | Public profile / `AgentCard` for an agent                  | `agent-profile`       |
@@ -49,6 +50,7 @@ Each package sits in one layer; dependencies only ever point *up* the list
 | **Govern**   | `account-custody` (was `custody`)                | Who controls the account: custodians, trustees, quorum, `RecoverAccount`. |
 | **Authorize**| `delegation`, `tool-policy`                  | What an agent may do: delegation tokens + caveats; tool risk policy. |
 | **Operate**  | `mcp-runtime` (+ planned `a2a-runtime`)      | Enforce authorization at a transport boundary.                  |
+| **Vault Authorization** | Planned `vault`, `key-authorization`, `entitlements`, `mcp-oauth` | Delegated encrypted vault authorization; OAuth is a public-MCP ingress adapter. |
 | **Discover** | `agent-naming`, `agent-profile` (was `agent-profile`), `agent-relationships` | **Facet** registries + the trust **graph** that point AT the canonical address. |
 | **Secrets**  | `key-custody`                                | KMS / envelope encryption / HMAC. ("key" custody, *not* account custody.) |
 | **Observe**  | `audit`                                      | Audit-event schema + sinks (durable persistence wired by apps). |

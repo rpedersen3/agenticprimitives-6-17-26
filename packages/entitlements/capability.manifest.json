@@ -1,0 +1,61 @@
+{
+  "name": "@agenticprimitives/entitlements",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/277-mcp-delegated-vault-authorization.md",
+  "summary": "Resource/action/field/purpose/classification authorization over VC-compatible entitlement credentials (spec 277 §10) — fail-closed matching engine + resolver. VC-proof/status/cache layers additive.",
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  },
+  "spineLayers": [],
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"],
+    "shapes": []
+  },
+  "imports": [],
+  "allowedImports": [],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/key-custody",
+    "@agenticprimitives/vault",
+    "@agenticprimitives/mcp-runtime",
+    "@modelcontextprotocol/sdk"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "Delegation",
+      "reason": "Entitlements are durable grants, not per-call delegation tokens; delegation semantics belong in @agenticprimitives/delegation.",
+      "owningPackage": "@agenticprimitives/delegation",
+      "allowInPaths": ["spec.md", "README.md", "CLAUDE.md"]
+    }
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "EntitlementAction",
+    "EntitlementClassification",
+    "EntitlementConstraints",
+    "AgenticEntitlementCredentialV1",
+    "EntitlementQuery",
+    "EntitlementReason",
+    "EntitlementDecision",
+    "EntitlementResolver",
+    "CLASSIFICATION_ORDER",
+    "SingleMatch",
+    "matchesEntitlement",
+    "resolveEntitlements",
+    "InMemoryEntitlementResolver"
+  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**"]
+}

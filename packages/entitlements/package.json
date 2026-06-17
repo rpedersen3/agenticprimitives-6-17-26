@@ -1,0 +1,25 @@
+{
+  "name": "@agenticprimitives/entitlements",
+  "version": "0.0.0-alpha.1",
+  "description": "Durable resource/action/field/purpose/classification authorization over VC-compatible entitlement credentials (spec 277 §10). Matching engine + resolver; VC-proof/status layer is additive.",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git", "directory": "packages/entitlements" },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/entitlements",
+  "bugs": { "url": "https://github.com/agentictrustlabs/agenticprimitives/issues" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["LICENSE", "dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": { "access": "public" },
+  "devDependencies": { "vitest": "^4.1.8" },
+  "keywords": ["agentic", "primitives", "entitlements", "authorization", "verifiable-credentials"]
+}

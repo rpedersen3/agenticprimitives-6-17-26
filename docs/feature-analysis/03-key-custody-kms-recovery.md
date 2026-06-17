@@ -5,6 +5,8 @@
 **AP capability today:** custody-policy module with tier-graded approvals (T1–T6) + safety delays; trustee/guardian quorums; multi-credential self-recovery; credential rotation as a custody operation that never changes the SA address (ADR-0011); passkey/WebAuthn on-chain verification.
 **Known production gap (from contract audits):** production KMS/HSM-backed per-subject derivation + session signing is not finished; local signer/envelope paths must be blocked in production. This is the **P0** custody gap.
 
+**Vault boundary:** `key-custody` is the cryptographic floor for the planned delegated vault, not the vault product. KMS/HSM protects keys, wraps/unwraps data keys, signs, MACs, and binds caller-supplied AAD. The vault decides what data exists, which fields are sensitive, which delegation/entitlement/purpose permits release, and when a `DecryptGrant` may be honored. See [doc 13](13-agentic-delegated-vault.md) and [spec 277](../../specs/277-mcp-delegated-vault-authorization.md).
+
 > Gap layers: `[Contracts]` Solidity surface · `[SDK]` TS packages/backends · `[UX]` product surface (**deferred**). See [index](index.md#gap-layers-every-gap-is-classified-into-exactly-one).
 
 ---
@@ -69,6 +71,7 @@
 
 - **Feature inventory:** managed key protection, IAM-gated key use, key rotation, audit logging (CloudTrail / Cloud Audit Logs / Vault audit devices), HSM-backed key tiers; Vault adds transit signing, dynamic secrets, self-host.
 - **Overlap with AP:** these ARE the intended backends for the unfinished `key-custody` production path.
+- **Vault relationship:** these backends should protect KEKs/DEKs and produce key-use evidence. They should not become the AP PII/agent-memory data store. HashiCorp Vault/OpenBao Transit are especially useful as crypto backends because transit handles cryptographic operations while application data lives elsewhere.
 - **AP lacks (= the P0 closure work):**
   - `[SDK]` workload-identity-based KMS access (no static creds); per-subject key derivation; session-signing through KMS; key-rotation runbook; IAM least-privilege evidence; CloudTrail/audit-log export into the AP audit sink; **fail-closed enforcement blocking `LocalAesProvider`/env-var signer when `NODE_ENV=production`**.
 - **They lack:** everything above the key layer; they're infrastructure, not identity (no `[Contracts]`/`[SDK]` identity or delegation surface).

@@ -11,6 +11,7 @@ real, connectable person Smart Agents.
 (SA address is the canonical id), [ADR-0013](../docs/architecture/decisions/0013-no-silent-fallbacks.md)
 (one mechanism per read path), [ADR-0021](../docs/architecture/decisions/0021-generic-packages-vs-white-label-apps.md)
 (generic packages vs white-label apps), [spec 246](246-related-agents-vault.md) (related-agents vault),
+[spec 277](277-mcp-delegated-vault-authorization.md) (delegated encrypted vault authorization + MCP compatibility adapter),
 [spec 236](236-jp-adoption-pilot.md) (JP is the data custodian).
 
 ## 1. Problem

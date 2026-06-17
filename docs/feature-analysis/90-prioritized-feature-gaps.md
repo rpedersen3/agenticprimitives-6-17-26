@@ -1,6 +1,6 @@
 # 90 — Prioritized feature gaps: substrate roadmap
 
-> Consolidated from docs 01–12. Organized **by layer**: `[Contracts]` and `[SDK]` are active and prioritized for execution; `[UX]` gaps are **recorded but parked** (deliberately not a current focus). Priorities: **P0** = production blocker, **P1** = strategic (this/next quarter), **P2** = important (on trigger or after P1), **P3** = watch.
+> Consolidated from docs 01–13. Organized **by layer**: `[Contracts]` and `[SDK]` are active and prioritized for execution; `[UX]` gaps are **recorded but parked** (deliberately not a current focus). Priorities: **P0** = production blocker, **P1** = strategic (this/next quarter), **P2** = important (on trigger or after P1), **P3** = watch.
 >
 > **Execution venue ([ADR-0037](../architecture/decisions/0037-primitives-pure-repo-external-integration-and-ux-layers.md)):** this repo ships primitives only; integration layers (protocol bridges, registry sync, indexers, discovery APIs) and product/UX layers are built in **external repos** (`agentic-trust`, `agent-indexer`, `agent-explorer`, `oasf`, …). Gaps below marked **⤴ external** stay on this roadmap as ecosystem priorities, but their code lands outside this repo — what lands *here* is only their Ring 0 prerequisites (expressive schemas, SA-signed payloads, complete events, stable read interfaces). All `[UX]` gaps are external by definition.
 >
@@ -18,7 +18,7 @@
 | 6 | **GoDaddy ANS bridge** ⤴ external — cross-proof *attestation schema* here; DNS/X.509 plumbing outside | `[SDK]` | ANS is winning enterprise discovery (MuleSoft); dual-rooted identity is a unique position (doc 12) |
 | 7 | **AP indexer** ⤴ external (`agent-indexer`) — this repo ships event completeness (FG-AUD-4) + ABIs | `[SDK]` | Closes ADR-0012's open half; prerequisite for explorers, timelines, reputation (doc 10) |
 | 8 | **Cumulative budget enforcer** + quorum nonces | `[Contracts]` | Per-call-vs-cumulative is the delegation model's biggest semantic hole (DM-1/DM-2/EN-22); prerequisite for agent payments (docs 04/09) |
-| 9 | **MCP Authorization conformance + delegated-authority MCP profile** | `[SDK]` | Conform on OAuth table stakes, then publish the spec that makes AP the delegation layer for MCP (doc 08) |
+| 9 | **Agentic delegated vault** (`vault` + key-release + entitlements + runtime wrapper) | `[SDK]` | PII/private authority data needs a real encrypted vault before public MCP compatibility (doc 13, spec 277) |
 | 10 | **x402 integration** under spend caveats | `[SDK]` | Delegation-scoped machine payments is a combination no one ships (doc 09) |
 
 ---
@@ -91,8 +91,6 @@
 | FG-REG-2 | **Signed agent-card bundle** (A2A + 8004 + ANS from one SA-attested card) | 12 | A2A, ERC-8004, GoDaddy ANS |
 | FG-REG-3 | **GoDaddy ANS bridge** (X.509 ↔ SA cross-proof, DNS publication) | 12 | ANS + MuleSoft Agent Fabric |
 | FG-AUD-1 | **AP indexer** (Ponder/subgraph) for all registries — closes ADR-0012 | 10 | The Graph, Ponder |
-| FG-MCP-1 | MCP Authorization (OAuth 2.1) conformance + MCP Registry publication | 08 | MCP spec |
-| FG-MCP-2 | Delegated-authority profile for MCP (spec + reference impl) | 08 | MCP spec gap |
 | FG-MCP-3 | A2A agent-card extension schema + card↔SA binding verification | 08 | A2A, ERC-8004 |
 | FG-AUD-2 | OTel GenAI tracing + evidence correlation (trace ↔ JTI ↔ grant) | 10 | OTel, LangFuse |
 | FG-POL-1 / FG-SEC-5 | Policy simulation + testable bundles + decision logs | 03, 04 | Cerbos, Cedar, Turnkey |
@@ -107,6 +105,11 @@
 | FG-SEC-6 | Verifiable custody attestation (keys never leave hardware) | 03 | Turnkey, Lit |
 | FG-OPS-1 | Declarative sponsorship rules + budget telemetry | 05 | Alchemy Gas Manager |
 | FG-PM-3 | Bundler-client integration parity (permissionless.js-grade) | 05 | Pimlico |
+| FG-VAULT-1 | **EDV-style encrypted vault** — object/field envelopes, encrypted tags, masking/tokenization, D1/R2 + Postgres/S3 adapters, plaintext scanners | 13, [spec 277](../../specs/277-mcp-delegated-vault-authorization.md) | OPV, DataBunker, Acra, EDV, Skyflow, Piiano |
+| FG-KAUTH-1 | **DecryptGrant / key authorization** — one-time, field-scoped, purpose-bound, delegation/entitlement/policy-bound key release | 13, spec 277 | Evervault dual custody; HashiCorp/OpenBao Transit; AWS/GCP KMS |
+| FG-ENT-5 | **Entitlement credential/check API** — resource/action/field/purpose/classification matching with VC/status support | 11, 13, spec 277 | W3C VC/status lists; Stigg/Keygen; UCAN/ZCAP/Biscuit caveat lineage |
+| FG-MCP-VLT-1 | **MCP runtime vault authorization wrapper** — exact args hash, field projection, purpose, replay, key-release, fail-hard audit | 13, spec 277 | Arcade, Composio, agentgateway, TrueFoundry as gateway comparators |
+| FG-AUD-5 | **Required audit for vault/key release** — PII read/write/decrypt fails closed if audit precommit/commit fails | 10, 13, spec 277 | Piiano/Skyflow/DataBunker-style privacy vault audit benchmarks |
 
 ### P2 — important
 
@@ -125,6 +128,9 @@
 | FG-SDK-10 | Multi-chain deployment / chain-abstraction story | 02 |
 | FG-MCP-4 | Framework adapters (LangChain/LangGraph, AI SDK, OpenAI Agents) | 08 |
 | FG-MCP-5 | External OAuth token-vault adapter (third-party SaaS tools) | 08 |
+| FG-MCP-1 | MCP Authorization (OAuth 2.1) conformance + MCP Registry publication | 08 |
+| FG-MCP-2 | Delegated-authority profile for MCP (spec + reference impl) | 08, 13 |
+| FG-MCP-OAUTH-1 | MCP OAuth compatibility adapter for public HTTP clients (protected-resource metadata, token verifier, grant-bundle resolver) | 08, 13, spec 277 |
 | FG-POL-2 | Off-chain ReBAC adapter (org/directory permissions) | 04 |
 | FG-POL-4 | Formal policy language (Cedar-style) for tool-policy | 04 |
 | FG-DIR-1 | Agent discovery/distribution surface (cards findable + interactive) | 06, 12 |
@@ -185,6 +191,7 @@ Kept for completeness; no IDs, no priorities. Revisit when UX becomes a focus.
 1. **P0 first, both layers in parallel** — contract fixes (items 1) and custody closure (item 2) are independent workstreams.
 2. **Distribution + registry next (items 3–6)** — the agent-registry/discovery layer is being settled in the market *now* (ERC-8004 mainnet Jan 2026, ANS/MuleSoft Feb 2026, MetaMask skills Jun 2026); presence there compounds, lateness doesn't.
 3. **Indexer (item 7) unlocks** attestation queries, explorers, reputation adapters, and audit timelines — schedule before the VC/attestation P1s that ride on it.
-4. **Delegation semantics (item 8) before payments (item 10)** — cumulative budgets are a prerequisite for credible agent spending.
+4. **Delegated vault (item 9) before OAuth-heavy MCP compatibility** — sensitive data needs encrypted storage, entitlements, key release, and fail-hard audit before public MCP ingress is useful.
+5. **Delegation semantics (item 8) before payments (item 10)** — cumulative budgets are a prerequisite for credible agent spending.
 5. Re-baseline quarterly or on market events (next likely trigger: MetaMask Agent Wallet GA, summer 2026).
 

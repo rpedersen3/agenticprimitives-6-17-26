@@ -21,6 +21,7 @@ actual design in specs and package docs; this file is only a routing map.
 | Envelope encryption, KMS providers, HMAC/MAC helpers       | `packages/key-custody/CLAUDE.md`              | No session lifecycle.                             |
 | Tool classification, risk tiers, exact-call policy         | `packages/tool-policy/CLAUDE.md`              | Protocol-agnostic; no MCP imports.                |
 | MCP authorization middleware and tool runtime glue         | `packages/mcp-runtime/CLAUDE.md`              | Transport-specific MCP layer.                     |
+| Delegated encrypted vault authorization and MCP compatibility | `specs/277-mcp-delegated-vault-authorization.md` | Planned split: `vault`, `key-authorization`, `entitlements`, `mcp-oauth`; apps only wire adapters. |
 | Audit event schema and sink interface                      | `packages/audit/CLAUDE.md`                    | Concrete persistence stays in apps.               |
 | `.agent` names, namehash, resolver records                 | `packages/agent-naming/CLAUDE.md`             | Hierarchical naming only.                          |
 | AgentCard/profile JSON, CAIP-10 native IDs                 | `packages/agent-profile/CLAUDE.md`           | Off-chain profile schema and verification.        |
