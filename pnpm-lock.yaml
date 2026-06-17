@@ -266,6 +266,9 @@ importers:
       '@agenticprimitives/key-custody':
         specifier: workspace:*
         version: link:../../packages/key-custody
+      '@agenticprimitives/mcp-oauth':
+        specifier: workspace:*
+        version: link:../../packages/mcp-oauth
       '@agenticprimitives/mcp-runtime':
         specifier: workspace:*
         version: link:../../packages/mcp-runtime
