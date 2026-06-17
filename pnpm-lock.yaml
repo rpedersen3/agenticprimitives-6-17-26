@@ -260,6 +260,9 @@ importers:
       '@agenticprimitives/entitlements':
         specifier: workspace:*
         version: link:../../packages/entitlements
+      '@agenticprimitives/key-authorization':
+        specifier: workspace:*
+        version: link:../../packages/key-authorization
       '@agenticprimitives/key-custody':
         specifier: workspace:*
         version: link:../../packages/key-custody
