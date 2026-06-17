@@ -340,6 +340,36 @@ export function Act6OrgDashboard() {
 
         <section className="card" style={{ gridColumn: '1 / -1' }}>
           <p className="eyebrow">
+            OAuth ingress · public MCP client over <code>/mcp</code>{' '}
+            <LiveStatusBadge status="live" />
+          </p>
+          <h3>Same data, via the OAuth ingress (spec 277 Phase 6)</h3>
+          <p className="muted small">
+            The other way in. Instead of the demo-a2a relay + delegation envelope, the browser acts
+            as a <strong>public HTTP MCP client</strong>: it mints a demo bearer token straight from
+            demo-mcp&apos;s <code>/oauth/token</code> and presents it to <code>POST /mcp</code>. The
+            token carries only a <em>reference + hash</em> to an Agentic Grant Bundle (stored
+            encrypted in the vault); demo-mcp re-runs the real authority chain — entitlement → one-time
+            DecryptGrant/KAS → required fail-hard audit → projected decrypt — server-side off the
+            bundle&apos;s principal. OAuth is ingress only, never the authority.
+          </p>
+          <OAuthMcpActions
+            aliceClaim={aliceClaim}
+            bobClaim={bobClaim}
+            org={org}
+            aliceSeat={aliceSeat}
+            bobSeat={bobSeat}
+            fetchInFlight={fetchInFlight}
+            setFetchInFlight={setFetchInFlight}
+            fetchedRecords={fetchedRecords}
+            setFetchedRecords={setFetchedRecords}
+            fetchErrors={fetchErrors}
+            setFetchErrors={setFetchErrors}
+          />
+        </section>
+
+        <section className="card" style={{ gridColumn: '1 / -1' }}>
+          <p className="eyebrow">
             Active permissions · Act 5 output{' '}
             <LiveStatusBadge status="live" />
           </p>
@@ -726,6 +756,135 @@ function DelegationActions(p: DelegationActionsProps) {
         from the subject exists for the principal. That\'s spec 212\'s "every access flows
         through a delegation" rule in practice.
       </p>
+    </div>
+  );
+}
+
+// ─── OAuth ingress actions panel (spec 277 Phase 6) ───────────────────
+//
+// The SAME PII/org data, fetched the OTHER way: as a public HTTP MCP client over
+// the OAuth ingress, NOT through the demo-a2a relay + delegation envelope. The
+// browser mints a demo token straight from demo-mcp's `/oauth/token` (the
+// authorization-server stand-in) and presents it as a Bearer to `POST /mcp`. The
+// token only carries a ref+hash to a grant bundle; demo-mcp re-runs the real
+// authority chain (entitlement → KAS → required audit → decrypt) server-side off
+// the bundle's principal. No delegation, no MAC, no session cookie — it talks to
+// demo-mcp cross-origin (CORS), which is exactly what an external MCP client does.
+
+interface OAuthMcpActionsProps {
+  aliceClaim?: SeatLite;
+  bobClaim?: SeatLite;
+  org: { address: Address };
+  aliceSeat: { name: string };
+  bobSeat: { name: string };
+  fetchInFlight: string | null;
+  setFetchInFlight: (k: string | null) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fetchedRecords: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  setFetchedRecords: (m: Record<string, any>) => void;
+  fetchErrors: Record<string, string>;
+  setFetchErrors: (m: Record<string, string>) => void;
+}
+
+function OAuthMcpActions(p: OAuthMcpActionsProps) {
+  if (!p.aliceClaim || !p.bobClaim) {
+    return <p className="muted">Need both seats claimed first.</p>;
+  }
+  const callOAuthMcp = async (args: {
+    label: string;
+    principal: Address;
+    tool: 'get_pii' | 'get_org_sensitive';
+    fields?: string[];
+  }) => {
+    const mcpUrl = config.demoMcpUrl;
+    if (!mcpUrl) {
+      p.setFetchErrors({ ...p.fetchErrors, [args.label]: 'demo-mcp URL not configured (VITE_DEMO_MCP_URL)' });
+      return;
+    }
+    const base = mcpUrl.replace(/\/$/, '');
+    p.setFetchInFlight(args.label);
+    p.setFetchErrors({ ...p.fetchErrors, [args.label]: '' });
+    try {
+      // 1. Mint a demo bearer token for the principal (authorization-server stand-in).
+      const tokRes = await fetch(`${base}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ principal: args.principal, scope: 'mcp:invoke vault:read vault:pii:read' }),
+      });
+      const tok = (await tokRes.json().catch(() => ({}))) as { access_token?: string; error?: string; error_description?: string };
+      if (!tokRes.ok || !tok.access_token) {
+        p.setFetchErrors({ ...p.fetchErrors, [args.label]: `mint failed: ${tok.error_description ?? tok.error ?? `HTTP ${tokRes.status}`}` });
+        return;
+      }
+      // 2. Call the bearer-gated /mcp route (no relay, no MAC, no cookie).
+      const res = await fetch(`${base}/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok.access_token}` },
+        body: JSON.stringify({ tool: args.tool, args: args.fields ? { fields: args.fields } : {} }),
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const parsed = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok || parsed.ok !== true) {
+        p.setFetchErrors({
+          ...p.fetchErrors,
+          [args.label]: typeof parsed.error === 'string' ? parsed.error : `HTTP ${res.status}`,
+        });
+        return;
+      }
+      p.setFetchedRecords({ ...p.fetchedRecords, [args.label]: parsed });
+    } catch (e) {
+      p.setFetchErrors({ ...p.fetchErrors, [args.label]: e instanceof Error ? e.message : String(e) });
+    } finally {
+      p.setFetchInFlight(null);
+    }
+  };
+
+  const buttons = [
+    {
+      key: 'oauth-alice-pii',
+      label: `Read ${p.aliceSeat.name}'s PII via OAuth /mcp`,
+      description: `public MCP client · mint token for ${p.aliceSeat.name}.PSA → POST /mcp get_pii`,
+      go: () => callOAuthMcp({ label: `OAuth · ${p.aliceSeat.name} PII`, principal: p.aliceClaim!.personAgent, tool: 'get_pii' }),
+      recordKey: `OAuth · ${p.aliceSeat.name} PII`,
+    },
+    {
+      key: 'oauth-bob-pii',
+      label: `Read ${p.bobSeat.name}'s PII via OAuth /mcp`,
+      description: `public MCP client · mint token for ${p.bobSeat.name}.PSA → POST /mcp get_pii`,
+      go: () => callOAuthMcp({ label: `OAuth · ${p.bobSeat.name} PII`, principal: p.bobClaim!.personAgent, tool: 'get_pii' }),
+      recordKey: `OAuth · ${p.bobSeat.name} PII`,
+    },
+    {
+      key: 'oauth-org',
+      label: 'Read Org sensitive data via OAuth /mcp',
+      description: 'public MCP client · mint token for Org → POST /mcp get_org_sensitive',
+      go: () => callOAuthMcp({ label: 'OAuth · Org data', principal: p.org.address, tool: 'get_org_sensitive' }),
+      recordKey: 'OAuth · Org data',
+    },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+      {buttons.map((b) => {
+        const busy = p.fetchInFlight === b.label;
+        const record = p.fetchedRecords[b.recordKey];
+        const err = p.fetchErrors[b.recordKey];
+        return (
+          <div key={b.key} style={{ padding: 10, background: '#fafafa', borderRadius: 8, border: '1px solid #e6e6ea' }}>
+            <p className="muted small" style={{ margin: 0 }}>{b.description}</p>
+            <button type="button" disabled={busy} onClick={() => void b.go()} style={{ marginTop: 6 }}>
+              {busy ? 'Minting + calling…' : b.label}
+            </button>
+            {err && <p className="err" style={{ marginTop: 6, fontSize: '0.8rem' }}>{err}</p>}
+            {record && (
+              <pre style={{ marginTop: 6, fontSize: '0.75rem', background: '#fff', padding: 8, borderRadius: 6, overflowX: 'auto', maxHeight: 220 }}>
+                {JSON.stringify(record.record, null, 2)}
+              </pre>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
