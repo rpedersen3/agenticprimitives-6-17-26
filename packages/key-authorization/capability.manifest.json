@@ -1,0 +1,63 @@
+{
+  "name": "@agenticprimitives/key-authorization",
+  "kind": "capability",
+  "stability": "experimental",
+  "agentEntry": "CLAUDE.md",
+  "publicEntry": "src/index.ts",
+  "specEntry": "../../specs/277-mcp-delegated-vault-authorization.md",
+  "summary": "Policy-bound one-time key release (spec 277 §14): DecryptGrant + fail-closed KAS verification + one-time replay store. Authority stays delegation/entitlement/policy; key-custody unwraps the DEK.",
+  "contextBudget": {
+    "claudeMdMaxWords": 900,
+    "readmeMaxWords": 1800,
+    "architectureMaxWords": 3000
+  },
+  "spineLayers": [],
+  "owns": {
+    "source": ["src/**"],
+    "tests": ["test/**"],
+    "shapes": []
+  },
+  "imports": [],
+  "allowedImports": [],
+  "forbiddenImports": [
+    "apps/*",
+    "@agenticprimitives/agent-naming",
+    "@agenticprimitives/agent-account",
+    "@agenticprimitives/agent-profile",
+    "@agenticprimitives/agent-relationships",
+    "@agenticprimitives/delegation",
+    "@agenticprimitives/vault",
+    "@agenticprimitives/entitlements",
+    "@agenticprimitives/mcp-runtime",
+    "@modelcontextprotocol/sdk"
+  ],
+  "forbiddenTerms": [
+    {
+      "term": "Delegation",
+      "reason": "The grant BINDS a delegationHash (a cross-reference by hash) but does not implement delegation semantics; those belong in @agenticprimitives/delegation.",
+      "owningPackage": "@agenticprimitives/delegation",
+      "allowInPaths": ["spec.md", "README.md", "CLAUDE.md", "src/types.ts", "src/index.ts", "src/verify.ts"]
+    }
+  ],
+  "publicExports": [
+    "PACKAGE_NAME",
+    "PACKAGE_STATUS",
+    "SPEC_REF",
+    "Sha256",
+    "DecryptGrantReason",
+    "DecryptGrantV1",
+    "DecryptGrantExpectation",
+    "KeyReleaseDecision",
+    "ReplayStore",
+    "canonicalize",
+    "sha256Hex",
+    "computeGrantHash",
+    "createDecryptGrant",
+    "VerifyDecryptGrantOpts",
+    "KeyAuthorizationService",
+    "verifyDecryptGrant",
+    "createInMemoryReplayStore",
+    "createLocalDevKeyAuthorizationService"
+  ],
+  "ignoreForAgentContext": ["dist/**", "node_modules/**", "coverage/**"]
+}

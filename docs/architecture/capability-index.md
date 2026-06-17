@@ -29,17 +29,18 @@ This is the routing index for Claude (and other agents) starting work in this re
 | `@agenticprimitives/identity-directory` | capability | experimental | [223-identity-directory.md](../../specs/223-identity-directory.md) | `types`, `audit`, `ontology` |
 | `@agenticprimitives/intent-marketplace` | capability | experimental | [239-intent-spine.md](../../specs/239-intent-spine.md) | `types`, `verifiable-credentials`, `delegation`, `intent-resolver` |
 | `@agenticprimitives/intent-resolver` | capability | experimental | [239-intent-spine.md](../../specs/239-intent-spine.md) | `types`, `verifiable-credentials` |
-| `@agenticprimitives/key-custody` | capability | experimental | [203-key-custody.md](../../specs/203-key-custody.md) | `types`, `audit`, `connect-auth` |
+| `@agenticprimitives/key-authorization` | capability | experimental | [277-mcp-delegated-vault-authorization.md](../../specs/277-mcp-delegated-vault-authorization.md) | _none_ |
+| `@agenticprimitives/mcp-runtime` | capability | experimental | [205-mcp-runtime.md](../../specs/205-mcp-runtime.md) | `types`, `audit`, `delegation`, `key-custody`, `tool-policy` |
 | `@agenticprimitives/ontology` | capability | experimental | [225-ontology.md](../../specs/225-ontology.md) | _none_ |
 | `@agenticprimitives/payments` | capability | experimental | [243-payments.md](../../specs/243-payments.md) | `types`, `verifiable-credentials`, `attestations`, `delegation` |
-| `@agenticprimitives/related-agents` | capability | experimental | [246-related-agents-vault.md](../../specs/246-related-agents-vault.md) | `types`, `verifiable-credentials`, `delegation` |
+| `@agenticprimitives/tool-policy` | capability | experimental | [204-tool-policy.md](../../specs/204-tool-policy.md) | `types` |
 | `@agenticprimitives/vault` | capability | experimental | [277-mcp-delegated-vault-authorization.md](../../specs/277-mcp-delegated-vault-authorization.md) | _none_ |
-| `@agenticprimitives/verifiable-credentials` | capability | experimental | [242-trust-credentials-and-public-assertions.md](../../specs/242-trust-credentials-and-public-assertions.md) | `types`, `ontology` |
 | `@agenticprimitives/browser-identity` | adapter | experimental | [264-fedcm-idp-adapter.md](../../specs/264-fedcm-idp-adapter.md) | _none_ |
 | `@agenticprimitives/contracts` | contracts | experimental | [spec.md](../../packages/contracts/spec.md) | _none_ |
 | `@agenticprimitives/fulfillment` | capability | experimental | [244-fulfillment.md](../../specs/244-fulfillment.md) | `types`, `verifiable-credentials`, `attestations`, `agreements`, `delegation` |
-| `@agenticprimitives/mcp-runtime` | capability | experimental | [205-mcp-runtime.md](../../specs/205-mcp-runtime.md) | `types`, `audit`, `delegation`, `key-custody`, `tool-policy` |
-| `@agenticprimitives/tool-policy` | capability | experimental | [204-tool-policy.md](../../specs/204-tool-policy.md) | `types` |
+| `@agenticprimitives/key-custody` | capability | experimental | [203-key-custody.md](../../specs/203-key-custody.md) | `types`, `audit`, `connect-auth` |
+| `@agenticprimitives/related-agents` | capability | experimental | [246-related-agents-vault.md](../../specs/246-related-agents-vault.md) | `types`, `verifiable-credentials`, `delegation` |
+| `@agenticprimitives/verifiable-credentials` | capability | experimental | [242-trust-credentials-and-public-assertions.md](../../specs/242-trust-credentials-and-public-assertions.md) | `types`, `ontology` |
 | `@agenticprimitives/fedcm-idp` | adapter | experimental | [264-fedcm-idp-adapter.md](../../specs/264-fedcm-idp-adapter.md) | _none_ |
 | `@agenticprimitives/fedcm-rp` | adapter | experimental | [264-fedcm-idp-adapter.md](../../specs/264-fedcm-idp-adapter.md) | _none_ |
 | `@agenticprimitives/identity-directory-adapters` | adapter | experimental | [223-identity-directory.md](../../specs/223-identity-directory.md) | `types`, `identity-directory`, `agent-naming` |
@@ -176,7 +177,7 @@ EIP-712 delegations spanning web app → agent → MCP. Caveats, token envelope,
 
 ### `@agenticprimitives/entitlements`
 
-Resource/action/field/purpose/classification authorization over VC-compatible entitlement credentials (spec 277 §10) — fail-closed matching engine + in-memory resolver. VC-proof/status/cache layers are additive.
+Resource/action/field/purpose/classification authorization over VC-compatible entitlement credentials (spec 277 §10) — fail-closed matching engine + resolver. VC-proof/status/cache layers additive.
 
 **Public exports** (16): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `EntitlementAction`, `EntitlementClassification`, `EntitlementConstraints`, `AgenticEntitlementCredentialV1`, `EntitlementQuery`, `EntitlementReason`, `EntitlementDecision`, `EntitlementResolver`, `CLASSIFICATION_ORDER`, `SingleMatch`, `matchesEntitlement`, `resolveEntitlements`, `InMemoryEntitlementResolver`
 
@@ -214,13 +215,21 @@ Resolver layer skeleton (W1) — IIntentResolver + ResolvedOrder + PassThroughRe
 
 **Read first:** [`CLAUDE.md`](../../packages/intent-resolver/CLAUDE.md) · [`capability.manifest.json`](../../packages/intent-resolver/capability.manifest.json) · [`src/index.ts`](../../packages/intent-resolver/src/index.ts)
 
-### `@agenticprimitives/key-custody`
+### `@agenticprimitives/key-authorization`
 
-Envelope encryption + signers + HMAC providers. local-AES/AWS-KMS/GCP-KMS backends behind one A2AKeyProvider interface. No session lifecycle (that's delegation's).
+Policy-bound one-time key release (spec 277 §14): DecryptGrant + fail-closed KAS verification + one-time replay store. Authority stays delegation/entitlement/policy; key-custody unwraps the DEK.
 
-**Public exports** (32): `A2AKeyProvider`, `KmsAccountBackend`, `KmsBackend`, `BuildOpts`, `Secret`, `loadSecret`, `loadSecretFromEnv`, `unwrapSecret`, `isSecret`, `buildKeyProvider`, `buildSignerBackend`, `buildToolExecutorBackendNoIsolation`, `buildMacProvider`, `deriveSubjectSigner`, `subjectCanonicalMessage`, `SubjectId`, `DeriveSubjectOpts`, `getRelayOnlySigner`, `createKmsAccount`, `createKmsViemAccount`, `createRelayerAccount`, `CreateRelayerAccountOpts`, `createSpendCappedAccount`, `SpendCapExceededError`, `CreateSpendCappedAccountOpts`, `canonicalContextBytes`, `LocalAesProvider`, `LocalSecp256k1Signer`, `GcpKmsProvider`, `GcpKmsSigner`, `Address`, `Hex`
+**Public exports** (18): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `Sha256`, `DecryptGrantReason`, `DecryptGrantV1`, `DecryptGrantExpectation`, `KeyReleaseDecision`, `ReplayStore`, `canonicalize`, `sha256Hex`, `computeGrantHash`, `createDecryptGrant`, `VerifyDecryptGrantOpts`, `KeyAuthorizationService`, `verifyDecryptGrant`, `createInMemoryReplayStore`, `createLocalDevKeyAuthorizationService`
 
-**Read first:** [`CLAUDE.md`](../../packages/key-custody/CLAUDE.md) · [`capability.manifest.json`](../../packages/key-custody/capability.manifest.json) · [`src/index.ts`](../../packages/key-custody/src/index.ts)
+**Read first:** [`CLAUDE.md`](../../packages/key-authorization/CLAUDE.md) · [`capability.manifest.json`](../../packages/key-authorization/capability.manifest.json) · [`src/index.ts`](../../packages/key-authorization/src/index.ts)
+
+### `@agenticprimitives/mcp-runtime`
+
+Authorization middleware around the official MCP SDK. withDelegation wrapper, JTI replay protection, classification routing. (withCrossDelegation removed in H7-B.8; resurfaces under ./experimental.)
+
+**Public exports** (32): `withDelegation`, `declareResource`, `createSqliteJtiStore`, `createPostgresJtiStore`, `createMemoryJtiStore`, `MigratableJtiStore`, `verifyDelegationForResource`, `VerifyDelegationForResourceOpts`, `WithDelegationOpts`, `ProductionWithDelegationOpts`, `DevelopmentWithDelegationOpts`, `McpResourceVerifyConfig`, `ResourceDefinition`, `BetterSqlite3DatabaseLike`, `PgPoolLike`, `Address`, `Hex`, `Caveat`, `DataScopeGrant`, `Delegation`, `EnforcerAddressMap`, `JtiStore`, `ToolClassification`, `McpAuthError`, `McpAuthErrorCode`, `PrivateAuthFailureContext`, `generateServiceMac`, `verifyServiceMac`, `bodyDigestHex`, `MacProviderLike`, `ServiceMacContext`, `ServiceMacHeaders`
+
+**Read first:** [`CLAUDE.md`](../../packages/mcp-runtime/CLAUDE.md) · [`capability.manifest.json`](../../packages/mcp-runtime/capability.manifest.json) · [`src/index.ts`](../../packages/mcp-runtime/src/index.ts)
 
 ### `@agenticprimitives/ontology`
 
@@ -238,13 +247,13 @@ PaymentMandate + ContextBinding + MandateConstraints + open/closed mode discrimi
 
 **Read first:** [`CLAUDE.md`](../../packages/payments/CLAUDE.md) · [`capability.manifest.json`](../../packages/payments/capability.manifest.json) · [`src/index.ts`](../../packages/payments/src/index.ts)
 
-### `@agenticprimitives/related-agents`
+### `@agenticprimitives/tool-policy`
 
-Private, holder-resident related-agent credentials (person↔org links as vault situation credentials, never on-chain edges — ADR-0025) + scoped-delegation read caveats + list-query shapes.
+Protocol-agnostic classification taxonomy + risk tiers + exact-call DSL + decision engine. Consumable by any tool runtime.
 
-**Public exports** (22): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `RELATED_AGENT_DESCRIPTION`, `RelatedAgentBody`, `CustodyKind`, `CustodyDescriptor`, `buildCustodyDescriptor`, `relatedAgentWriteContentHash`, `hashRelatedAgentWriteChallenge`, `RelatedAgentCredential`, `BuildRelatedAgentCredentialArgs`, `buildRelatedAgentCredential`, `relatedAgentProofHash`, `RelatedAgentReadCaveatArgs`, `relatedAgentReadCaveats`, `RelatedAgentLink`, `ListRelatedAgentsResponse`, `DelegatedAgentLink`, `ListDelegatedAgentsResponse`, `Address`, `Hex`
+**Public exports** (22): `RiskTier`, `ToolClassification`, `ExactCallPolicy`, `PolicyContext`, `PolicyDecision`, `CaveatContext`, `CaveatLike`, `DelegationLike`, `declareTool`, `exactCall`, `matchesExactCall`, `evaluatePolicy`, `clampTtlForRiskTier`, `requiredCaveatsForRiskTier`, `lintClassification`, `LintResult`, `Address`, `Hex`, `ThresholdTier`, `ThresholdPolicyDecision`, `evaluateThresholdPolicy`, `RISK_TIER_REQUIREMENTS`
 
-**Read first:** [`CLAUDE.md`](../../packages/related-agents/CLAUDE.md) · [`capability.manifest.json`](../../packages/related-agents/capability.manifest.json) · [`src/index.ts`](../../packages/related-agents/src/index.ts)
+**Read first:** [`CLAUDE.md`](../../packages/tool-policy/CLAUDE.md) · [`capability.manifest.json`](../../packages/tool-policy/capability.manifest.json) · [`src/index.ts`](../../packages/tool-policy/src/index.ts)
 
 ### `@agenticprimitives/vault`
 
@@ -253,14 +262,6 @@ Agentic Delegated Data Vault seam (spec 277) — the Vault read/write/list inter
 **Public exports** (19): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `VaultClassification`, `VaultResource`, `VaultObject`, `VaultReadRequest`, `VaultWriteRequest`, `VaultRef`, `VaultObjectEnvelopeV1`, `SENSITIVE_CLASSIFICATIONS`, `isSensitiveClassification`, `Vault`, `createMemoryVault`, `projectFields`, `DekWrapper`, `SealedEnvelope`, `sealEnvelope`, `openEnvelope`
 
 **Read first:** [`CLAUDE.md`](../../packages/vault/CLAUDE.md) · [`capability.manifest.json`](../../packages/vault/capability.manifest.json) · [`src/index.ts`](../../packages/vault/src/index.ts)
-
-### `@agenticprimitives/verifiable-credentials`
-
-W3C VC 2.0 envelope + Eip712Signature2026 proof + DOLCE+DnS Situation bases + ontology-shape schema registration. Substrate for layers 12-15 credential types.
-
-**Public exports** (46): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `VC_CONTEXT_V2`, `EIP712_SIG_2026_CONTEXT`, `VC_DOMAIN_NAME`, `VC_DOMAIN_VERSION`, `VC_EIP712_TYPES`, `Hex32`, `ISODate`, `ProofType`, `Eip712Signature2026Proof`, `DelegatingSignerProof`, `Proof`, `CredentialStatus2021`, `VisibilityTier`, `DisclosurePolicy`, `VerifiableCredential`, `UnsignedCredential`, `jcsCanonicalize`, `canonicalHash`, `JcsError`, `assertSituationRolesPresent`, `buildSituation`, `Situation`, `DescriptionRef`, `RoleName`, `credentialHash`, `eip712Digest`, `isoToSeconds`, `signCredential`, `viemSignerFromWallet`, `kmsCredentialSigner`, `CredentialSigner`, `KmsSigningBackend`, `verifyCredentialStructural`, `VerificationResult`, `SHAPE_DID_PREFIX`, `buildShapeUri`, `parseShapeUri`, `shapeHash`, `verifyCredential`, `parseEip155Caip10`, `VerifyCredentialResult`, `Erc1271Verifier`, `Caip10Eip155`
-
-**Read first:** [`CLAUDE.md`](../../packages/verifiable-credentials/CLAUDE.md) · [`capability.manifest.json`](../../packages/verifiable-credentials/capability.manifest.json) · [`src/index.ts`](../../packages/verifiable-credentials/src/index.ts)
 
 ### `@agenticprimitives/browser-identity`
 
@@ -286,21 +287,29 @@ FulfillmentCase lifecycle + Task/Message/Artifact (re-exported from mcp-runtime/
 
 **Read first:** [`CLAUDE.md`](../../packages/fulfillment/CLAUDE.md) · [`capability.manifest.json`](../../packages/fulfillment/capability.manifest.json) · [`src/index.ts`](../../packages/fulfillment/src/index.ts)
 
-### `@agenticprimitives/mcp-runtime`
+### `@agenticprimitives/key-custody`
 
-Authorization middleware around the official MCP SDK. withDelegation wrapper, JTI replay protection, classification routing. (withCrossDelegation removed in H7-B.8; resurfaces under ./experimental.)
+Envelope encryption + signers + HMAC providers. local-AES/AWS-KMS/GCP-KMS backends behind one A2AKeyProvider interface. No session lifecycle (that's delegation's).
 
-**Public exports** (32): `withDelegation`, `declareResource`, `createSqliteJtiStore`, `createPostgresJtiStore`, `createMemoryJtiStore`, `MigratableJtiStore`, `verifyDelegationForResource`, `VerifyDelegationForResourceOpts`, `WithDelegationOpts`, `ProductionWithDelegationOpts`, `DevelopmentWithDelegationOpts`, `McpResourceVerifyConfig`, `ResourceDefinition`, `BetterSqlite3DatabaseLike`, `PgPoolLike`, `Address`, `Hex`, `Caveat`, `DataScopeGrant`, `Delegation`, `EnforcerAddressMap`, `JtiStore`, `ToolClassification`, `McpAuthError`, `McpAuthErrorCode`, `PrivateAuthFailureContext`, `generateServiceMac`, `verifyServiceMac`, `bodyDigestHex`, `MacProviderLike`, `ServiceMacContext`, `ServiceMacHeaders`
+**Public exports** (32): `A2AKeyProvider`, `KmsAccountBackend`, `KmsBackend`, `BuildOpts`, `Secret`, `loadSecret`, `loadSecretFromEnv`, `unwrapSecret`, `isSecret`, `buildKeyProvider`, `buildSignerBackend`, `buildToolExecutorBackendNoIsolation`, `buildMacProvider`, `deriveSubjectSigner`, `subjectCanonicalMessage`, `SubjectId`, `DeriveSubjectOpts`, `getRelayOnlySigner`, `createKmsAccount`, `createKmsViemAccount`, `createRelayerAccount`, `CreateRelayerAccountOpts`, `createSpendCappedAccount`, `SpendCapExceededError`, `CreateSpendCappedAccountOpts`, `canonicalContextBytes`, `LocalAesProvider`, `LocalSecp256k1Signer`, `GcpKmsProvider`, `GcpKmsSigner`, `Address`, `Hex`
 
-**Read first:** [`CLAUDE.md`](../../packages/mcp-runtime/CLAUDE.md) · [`capability.manifest.json`](../../packages/mcp-runtime/capability.manifest.json) · [`src/index.ts`](../../packages/mcp-runtime/src/index.ts)
+**Read first:** [`CLAUDE.md`](../../packages/key-custody/CLAUDE.md) · [`capability.manifest.json`](../../packages/key-custody/capability.manifest.json) · [`src/index.ts`](../../packages/key-custody/src/index.ts)
 
-### `@agenticprimitives/tool-policy`
+### `@agenticprimitives/related-agents`
 
-Protocol-agnostic classification taxonomy + risk tiers + exact-call DSL + decision engine. Consumable by any tool runtime.
+Private, holder-resident related-agent credentials (person↔org links as vault situation credentials, never on-chain edges — ADR-0025) + scoped-delegation read caveats + list-query shapes.
 
-**Public exports** (22): `RiskTier`, `ToolClassification`, `ExactCallPolicy`, `PolicyContext`, `PolicyDecision`, `CaveatContext`, `CaveatLike`, `DelegationLike`, `declareTool`, `exactCall`, `matchesExactCall`, `evaluatePolicy`, `clampTtlForRiskTier`, `requiredCaveatsForRiskTier`, `lintClassification`, `LintResult`, `Address`, `Hex`, `ThresholdTier`, `ThresholdPolicyDecision`, `evaluateThresholdPolicy`, `RISK_TIER_REQUIREMENTS`
+**Public exports** (22): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `RELATED_AGENT_DESCRIPTION`, `RelatedAgentBody`, `CustodyKind`, `CustodyDescriptor`, `buildCustodyDescriptor`, `relatedAgentWriteContentHash`, `hashRelatedAgentWriteChallenge`, `RelatedAgentCredential`, `BuildRelatedAgentCredentialArgs`, `buildRelatedAgentCredential`, `relatedAgentProofHash`, `RelatedAgentReadCaveatArgs`, `relatedAgentReadCaveats`, `RelatedAgentLink`, `ListRelatedAgentsResponse`, `DelegatedAgentLink`, `ListDelegatedAgentsResponse`, `Address`, `Hex`
 
-**Read first:** [`CLAUDE.md`](../../packages/tool-policy/CLAUDE.md) · [`capability.manifest.json`](../../packages/tool-policy/capability.manifest.json) · [`src/index.ts`](../../packages/tool-policy/src/index.ts)
+**Read first:** [`CLAUDE.md`](../../packages/related-agents/CLAUDE.md) · [`capability.manifest.json`](../../packages/related-agents/capability.manifest.json) · [`src/index.ts`](../../packages/related-agents/src/index.ts)
+
+### `@agenticprimitives/verifiable-credentials`
+
+W3C VC 2.0 envelope + Eip712Signature2026 proof + DOLCE+DnS Situation bases + ontology-shape schema registration. Substrate for layers 12-15 credential types.
+
+**Public exports** (46): `PACKAGE_NAME`, `PACKAGE_STATUS`, `SPEC_REF`, `VC_CONTEXT_V2`, `EIP712_SIG_2026_CONTEXT`, `VC_DOMAIN_NAME`, `VC_DOMAIN_VERSION`, `VC_EIP712_TYPES`, `Hex32`, `ISODate`, `ProofType`, `Eip712Signature2026Proof`, `DelegatingSignerProof`, `Proof`, `CredentialStatus2021`, `VisibilityTier`, `DisclosurePolicy`, `VerifiableCredential`, `UnsignedCredential`, `jcsCanonicalize`, `canonicalHash`, `JcsError`, `assertSituationRolesPresent`, `buildSituation`, `Situation`, `DescriptionRef`, `RoleName`, `credentialHash`, `eip712Digest`, `isoToSeconds`, `signCredential`, `viemSignerFromWallet`, `kmsCredentialSigner`, `CredentialSigner`, `KmsSigningBackend`, `verifyCredentialStructural`, `VerificationResult`, `SHAPE_DID_PREFIX`, `buildShapeUri`, `parseShapeUri`, `shapeHash`, `verifyCredential`, `parseEip155Caip10`, `VerifyCredentialResult`, `Erc1271Verifier`, `Caip10Eip155`
+
+**Read first:** [`CLAUDE.md`](../../packages/verifiable-credentials/CLAUDE.md) · [`capability.manifest.json`](../../packages/verifiable-credentials/capability.manifest.json) · [`src/index.ts`](../../packages/verifiable-credentials/src/index.ts)
 
 ### `@agenticprimitives/fedcm-idp`
 
@@ -350,17 +359,18 @@ geo-features         → types, verifiable-credentials
 identity-directory   → types, audit, ontology
 intent-marketplace   → types, verifiable-credentials, delegation, intent-resolver
 intent-resolver      → types, verifiable-credentials
-key-custody          → types, audit, connect-auth
+key-authorization    (leaf)
+mcp-runtime          → types, audit, delegation, key-custody, tool-policy
 ontology             (leaf)
 payments             → types, verifiable-credentials, attestations, delegation
-related-agents       → types, verifiable-credentials, delegation
+tool-policy          → types
 vault                (leaf)
-verifiable-credentials → types, ontology
 browser-identity     (leaf)
 contracts            (leaf)
 fulfillment          → types, verifiable-credentials, attestations, agreements, delegation
-mcp-runtime          → types, audit, delegation, key-custody, tool-policy
-tool-policy          → types
+key-custody          → types, audit, connect-auth
+related-agents       → types, verifiable-credentials, delegation
+verifiable-credentials → types, ontology
 fedcm-idp            (leaf)
 fedcm-rp             (leaf)
 identity-directory-adapters → types, identity-directory, agent-naming

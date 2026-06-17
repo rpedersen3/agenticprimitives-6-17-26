@@ -1,0 +1,25 @@
+{
+  "name": "@agenticprimitives/key-authorization",
+  "version": "0.0.0-alpha.1",
+  "description": "Policy-bound one-time key release (spec 277 §14): DecryptGrant construction + KAS verification + one-time replay store. Authority stays delegation/entitlement/policy; key-custody does the DEK unwrap.",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/agentictrustlabs/agenticprimitives.git", "directory": "packages/key-authorization" },
+  "homepage": "https://github.com/agentictrustlabs/agenticprimitives/tree/master/packages/key-authorization",
+  "bugs": { "url": "https://github.com/agentictrustlabs/agenticprimitives/issues" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["LICENSE", "dist", "spec.md", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "publishConfig": { "access": "public" },
+  "devDependencies": { "vitest": "^4.1.8" },
+  "keywords": ["agentic", "primitives", "key-authorization", "decrypt-grant", "kas", "vault"]
+}
