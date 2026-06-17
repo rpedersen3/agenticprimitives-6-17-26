@@ -1,5 +1,7 @@
 # @agenticprimitives/types
 
+## 1.0.0-alpha.10
+
 ## 1.0.0-alpha.9
 
 ## 1.0.0-alpha.8

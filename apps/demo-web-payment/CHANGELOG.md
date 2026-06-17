@@ -1,5 +1,20 @@
 # @agenticprimitives-demo/web-payment
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [8f69514]
+  - @agenticprimitives/connect-auth@1.0.0-alpha.10
+  - @agenticprimitives/delegation@1.0.0-alpha.10
+  - @agenticprimitives/agent-account@1.0.0-alpha.10
+  - @agenticprimitives/agreements@0.0.0-alpha.7
+  - @agenticprimitives/fulfillment@0.0.0-alpha.7
+  - @agenticprimitives/intent-marketplace@0.0.0-alpha.6
+  - @agenticprimitives/payments@0.0.0-alpha.6
+  - @agenticprimitives/types@1.0.0-alpha.10
+  - @agenticprimitives/account-custody@1.0.0-alpha.10
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes

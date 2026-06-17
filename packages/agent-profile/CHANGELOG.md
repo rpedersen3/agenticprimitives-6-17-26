@@ -1,5 +1,14 @@
 # @agenticprimitives/agent-profile
 
+## 1.0.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [8f69514]
+  - @agenticprimitives/connect-auth@1.0.0-alpha.10
+  - @agenticprimitives/agent-account@1.0.0-alpha.10
+  - @agenticprimitives/types@1.0.0-alpha.10
+
 ## 1.0.0-alpha.9
 
 ### Patch Changes

@@ -46,7 +46,8 @@
     "@agenticprimitives/content-primitives": "1.0.0-alpha.6",
     "@agenticprimitives/fedcm-idp": "1.0.0-alpha.6",
     "@agenticprimitives/fedcm-rp": "1.0.0-alpha.6",
-    "@agenticprimitives-demo/web-payment": "0.0.1-alpha.1"
+    "@agenticprimitives-demo/web-payment": "0.0.1-alpha.1",
+    "@agenticprimitives/delegated-signer": "0.0.0-alpha.1"
   },
   "changesets": [
     "audit-ca1-upgrade-timelock",
@@ -55,6 +56,9 @@
     "audit-gov1-guardian",
     "audit-webauthn-wa1-wa2",
     "content-primitives-scripture-manual-release",
+    "harden-audit-2026-06-13",
+    "harden-rag2",
+    "kms-consumer-surface-276",
     "payment-stack-spec-alignment",
     "r1-cross-stack-typehash-convergence",
     "r12-forge-coverage",

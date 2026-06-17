@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives/a2a",
-  "version": "0.0.0-alpha.5",
+  "version": "0.0.0-alpha.6",
   "description": "Async, delegation-authorized Agent-to-Agent (A2A) task transport: Task/Message/Artifact runtime over a TaskStore port, JSON-RPC method handlers, SkillHandler dispatch, the A2aWireAdapter client, and scoped-grant caveat builders. Transport-agnostic core (spec 269 / ADR-0034); the Cloudflare TaskStoreDO ships as the ./cloudflare adapter subpath.",
   "license": "MIT",
   "repository": {

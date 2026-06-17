@@ -1,5 +1,15 @@
 # @agenticprimitives-demo/gs
 
+## 0.0.1-alpha.6
+
+### Patch Changes
+
+- @agenticprimitives/delegation@1.0.0-alpha.10
+- @agenticprimitives/agent-skills@0.0.0-alpha.7
+- @agenticprimitives/geo-features@0.0.0-alpha.6
+- @agenticprimitives/types@1.0.0-alpha.10
+- @agenticprimitives/contracts@1.0.0-alpha.10
+
 ## 0.0.1-alpha.5
 
 ### Patch Changes
